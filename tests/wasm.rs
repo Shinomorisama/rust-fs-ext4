@@ -187,3 +187,59 @@ fn an_audit_of_a_written_volume_is_clean() {
     );
     fs.finish().expect("unmount");
 }
+
+/// A device as large as it claims, reading as zeros: nothing is stored.
+struct Sparse;
+
+impl BlockDevice for Sparse {
+    fn read_at(&self, _offset: u64, buf: &mut [u8]) -> Result<()> {
+        buf.fill(0);
+        Ok(())
+    }
+    fn size_bytes(&self) -> u64 {
+        1 << 40
+    }
+    fn write_at(&self, _offset: u64, _buf: &[u8]) -> Result<()> {
+        panic!("nothing writes here")
+    }
+    fn flush(&self) -> Result<()> {
+        Ok(())
+    }
+    fn is_writable(&self) -> bool {
+        false
+    }
+}
+
+/// 2^32 groups on a 32-bit target, whose `usize` cannot count them (#327).
+///
+/// `group_count as usize` truncated 2^32 to 0, so the table came back
+/// empty and every later index into it panicked. One-block groups on a
+/// 1 KiB-block volume of 2^32 + 1 blocks: a 128 GiB table, which fits the
+/// device this claims to be.
+#[wasm_bindgen_test]
+fn a_group_count_past_usize_is_refused_not_truncated() {
+    let mut raw = vec![0u8; 1024];
+    raw[0x00..0x04].copy_from_slice(&16u32.to_le_bytes()); // inodes_count
+    raw[0x04..0x08].copy_from_slice(&1u32.to_le_bytes()); // blocks_count_lo
+    raw[0x150..0x154].copy_from_slice(&1u32.to_le_bytes()); // blocks_count_hi
+    raw[0x14..0x18].copy_from_slice(&1u32.to_le_bytes()); // first_data_block
+    raw[0x20..0x24].copy_from_slice(&1u32.to_le_bytes()); // blocks_per_group
+    raw[0x28..0x2C].copy_from_slice(&1u32.to_le_bytes()); // inodes_per_group
+    raw[0x38..0x3A].copy_from_slice(&0xEF53u16.to_le_bytes()); // magic
+    raw[0x4C..0x50].copy_from_slice(&1u32.to_le_bytes()); // rev_level
+    raw[0x58..0x5A].copy_from_slice(&256u16.to_le_bytes()); // inode_size
+    let sb = fs_ext4::superblock::Superblock::parse(raw).expect("the superblock parses");
+    assert_eq!(
+        sb.block_group_count(),
+        1 << 32,
+        "the fixture's own geometry"
+    );
+
+    let csum = fs_ext4::checksum::Checksummer::from_superblock(&sb);
+    let got = fs_ext4::bgd::read_all(&Sparse, &sb, &csum);
+    assert!(
+        got.is_err(),
+        "2^32 groups read as a table of {} descriptors",
+        got.map(|t| t.len()).unwrap_or_default()
+    );
+}

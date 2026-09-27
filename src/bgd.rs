@@ -141,8 +141,9 @@ pub fn read_all<D: BlockDevice + ?Sized>(
     // the superblock, or under META_BG a block per meta group (#73). A
     // block is read once for all the descriptors it holds.
     let mut table_block: Option<(u64, Vec<u8>)> = None;
-    let mut groups = Vec::with_capacity(group_count as usize);
-    for i in 0..(group_count as usize) {
+    let group_count: usize = table_len(group_count)?;
+    let mut groups = Vec::with_capacity(group_count);
+    for i in 0..group_count {
         let (block, off) = sb.descriptor_location(i as u64);
         if table_block.as_ref().map(|(b, _)| *b) != Some(block) {
             let end = block
@@ -262,6 +263,17 @@ fn check_pointers_within(
     Ok(())
 }
 
+/// The group count as a table length on this target.
+///
+/// `group_count as usize` truncated on a 32-bit target: 2^32 groups became
+/// an empty table, and every later index into it panicked (#327). Generic
+/// so the conversion can be tested at 32 bits on any host.
+fn table_len<T: TryFrom<u64>>(group_count: u64) -> Result<T> {
+    T::try_from(group_count).map_err(|_| {
+        Error::Corrupt("superblock: the group count does not fit in this target's address space")
+    })
+}
+
 /// Locate the inode table block + offset for a given inode number.
 /// Returns (physical block containing the inode, byte offset within block).
 pub fn locate_inode(
@@ -303,4 +315,21 @@ pub fn locate_inode(
         .map_err(|_| Error::Corrupt("inode offset exceeds u32"))?;
 
     Ok((block, offset_in_block))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The group count is a `u64`; `as usize` truncated it on a 32-bit
+    /// target, so a device of 2^32 groups built an empty table (#327).
+    /// Generic over the target width so a 64-bit host checks the 32-bit
+    /// case: `u32` stands in for a 32-bit `usize`.
+    #[test]
+    fn a_group_count_past_the_target_width_is_refused() {
+        assert!(table_len::<u32>(u64::from(u32::MAX) + 1).is_err());
+        assert!(table_len::<u32>(u64::MAX).is_err());
+        assert_eq!(table_len::<u32>(u64::from(u32::MAX)).unwrap(), u32::MAX);
+        assert_eq!(table_len::<usize>(3).unwrap(), 3);
+    }
 }
