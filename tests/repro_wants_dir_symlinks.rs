@@ -1,21 +1,25 @@
-//! Repro: the "enable systemd units" symlink edit that corrupted a Raspberry
-//! Pi OS (Bookworm) root fs when applied through the DiskJockey ext4 driver.
+//! Repro: a systemd-style `*.wants/` edit — one new directory filled with
+//! symlinks, one of them removed again — must leave a checksummed journal
+//! clean and valid.
 //!
-//! Field op set, verbatim: one `mkdir`, five `symlink` creations, one `unlink`
-//! (the pre-existing dangling `inpace.service`). On the real card the kernel
-//! then failed to mount with `JBD2: journal checksum error`.
+//! Operation sequence, in order, through the write path: one `mkdir`
+//! (`/wants`), one `symlink` to a unit that does not exist (a dangling link),
+//! four more `symlink`s to `../<unit>.service`, then `unlink` of the dangling
+//! one. Every link target is relative and short, so each is a fast symlink.
+//! Before the fix this sequence left the JBD2 superblock checksum stale, and a
+//! kernel then refused the mount with `JBD2: journal checksum error`.
 //!
 //! Structure mirrors `journal_writer_create_mkdir_link_symlink.rs`: copy a
 //! fixture, run the ops through `apply_*`, then reopen read-only and assert the
 //! journal returned to clean and every link resolves. First fixture is
-//! `ext4-csum-seed.img` (metadata_csum_seed — "the flag that broke lwext4 on
-//! the Pi SD card"); `ext4-basic.img` is the control.
+//! `ext4-csum-seed.img` (metadata_csum_seed on top of metadata_csum and
+//! has_journal); `ext4-basic.img` is the control.
 //!
 //! The mutated image is intentionally left in the selected scratch directory
 //! (path is printed) so `e2fsck -fn` on the host can validate it against a
 //! real Linux ext4 — the
 //! in-process `is_clean()` check cannot catch a bad-checksum-but-marked-clean
-//! journal, which is exactly the field symptom.
+//! journal, which is exactly the symptom.
 
 use fs_ext4::block_io::FileDevice;
 use fs_ext4::Filesystem;
@@ -88,14 +92,9 @@ fn assert_jsb_checksum_valid(path: &str, tag: &str) {
     );
 }
 
-/// The four units enabled in the field, plus the dangling `inpace.service`
-/// that was removed first.
-const UNITS: &[&str] = &[
-    "inpace-usbdisk",
-    "inpace-app",
-    "inpace-wifi",
-    "inpace-timesync",
-];
+/// The four units the sequence enables. The dangling link is `stale.service`,
+/// created first and removed last.
+const UNITS: &[&str] = &["unit-usbdisk", "unit-app", "unit-wifi", "unit-timesync"];
 
 fn run_field_ops(img: &str, tag: &str) {
     let path = copy_to_tmp(img, tag);
@@ -106,14 +105,14 @@ fn run_field_ops(img: &str, tag: &str) {
 
         fs.apply_mkdir("/wants", 0o755).expect("mkdir /wants");
         // the pre-existing dangling link, then the four real ones, then remove it
-        fs.apply_symlink("../inpace.service", "/wants/inpace.service")
-            .expect("symlink inpace.service");
+        fs.apply_symlink("../stale.service", "/wants/stale.service")
+            .expect("symlink stale.service");
         for u in UNITS {
             fs.apply_symlink(&format!("../{u}.service"), &format!("/wants/{u}.service"))
                 .unwrap_or_else(|e| panic!("[{tag}] symlink {u}: {e:?}"));
         }
-        fs.apply_unlink("/wants/inpace.service")
-            .expect("unlink inpace.service");
+        fs.apply_unlink("/wants/stale.service")
+            .expect("unlink stale.service");
         // fs drops here -> unmount/flush
     }
 
