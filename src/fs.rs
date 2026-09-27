@@ -2926,14 +2926,11 @@ impl Filesystem {
     /// writer when one is available (crash-safe four-fence protocol);
     /// falls back to direct device writes + flush otherwise.
     ///
-    /// In journaled mode, writes go to the **journal log** on disk —
-    /// the *data area* on disk doesn't see them until journal replay
-    /// (checkpointing). To make those bytes visible to subsequent reads
-    /// **before** checkpoint (the read-after-write coherence Linux's
-    /// buffer cache guarantees), every committed block is `populate`'d
-    /// into the device-layer cache after the journal commit succeeds.
-    /// Without this hook, allocators (inode/block bitmap) would re-read
-    /// pre-commit on-disk bytes and produce duplicate allocations.
+    /// In journaled mode, writes go to the **journal log** on disk and
+    /// are then checkpointed to their final locations before the journal
+    /// writer's `commit` returns, so later reads — the allocators' bitmap
+    /// scans included — see the committed bytes from the device or from
+    /// the cache's clean, write-through entries. No block is pinned.
     pub(crate) fn commit_block_buffer(&self, buf: BlockBuffer) -> Result<()> {
         if buf.dirty.is_empty() {
             return Ok(());
@@ -2954,12 +2951,12 @@ impl Filesystem {
                 tx.add_write(*block, bytes.clone())?;
             }
             jw.commit(self.dev.as_ref(), &tx)?;
-            // Populate the buffer cache with the post-commit bytes so
-            // any read (this thread or another) sees them before the
-            // journal is checkpointed back to the data area.
-            for (block, bytes) in buf.dirty {
-                self.dev.populate_cache(block, bytes);
-            }
+            // Nothing is pinned: `commit` checkpoints every block to its
+            // final location before it returns, through this same cache,
+            // whose write-through leaves each one a clean LRU entry that
+            // matches the device. Pinning them as well held every block a
+            // write had ever touched until unmount, whatever the capacity
+            // (#328).
             publish(self);
             Ok(())
         } else {
