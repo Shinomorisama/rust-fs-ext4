@@ -28,6 +28,12 @@ on:
   schedule:
     - cron: "0 3 * * *"
 
+# Declared, so the job does not inherit whatever the repository's default
+# token grants: tests/scripts/test-write-jobs-pinned.sh treats a workflow
+# with no `permissions` as one that may write.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
