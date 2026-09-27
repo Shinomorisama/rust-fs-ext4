@@ -45,7 +45,7 @@ impl BlockDevice for MemDev {
 
 struct Fixed;
 impl Runtime for Fixed {
-    fn now_unix_seconds(&self) -> u32 {
+    fn now_unix_seconds(&self) -> i64 {
         1_700_000_123
     }
     fn next_inode_generation(&self) -> u32 {
@@ -79,8 +79,8 @@ impl Clock {
     }
 }
 impl Runtime for Clock {
-    fn now_unix_seconds(&self) -> u32 {
-        self.0.load(std::sync::atomic::Ordering::SeqCst) as u32
+    fn now_unix_seconds(&self) -> i64 {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
     }
     fn next_inode_generation(&self) -> u32 {
         1

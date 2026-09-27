@@ -25,8 +25,8 @@ const PAST_2038: i64 = (1i64 << 31) + 10;
 
 struct PastClock;
 impl Runtime for PastClock {
-    fn now_unix_seconds(&self) -> u32 {
-        PAST_2038 as u32
+    fn now_unix_seconds(&self) -> i64 {
+        PAST_2038
     }
     fn next_inode_generation(&self) -> u32 {
         1

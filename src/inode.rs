@@ -51,6 +51,7 @@ pub(crate) const OFF_CRTIME: usize = 0x90;
 /// nsec timestamps, and i_crtime (32 bytes beyond the 128-byte base).
 pub(crate) const EXTRA_ISIZE_DEFAULT: u16 = 32;
 /// Minimum inode buffer length for i_crtime (offset 0x90) to be present.
+#[cfg(test)]
 pub(crate) const INODE_SIZE_WITH_CRTIME: usize = 0x94;
 /// Minimum inode buffer length for i_extra_isize + i_checksum_hi.
 pub(crate) const INODE_SIZE_WITH_EXTRA: usize = 0x84;
@@ -199,6 +200,78 @@ pub(crate) fn encode_extra_time(secs: i64) -> (u32, u32) {
 /// format cannot hold.
 pub(crate) const MIN_ENCODABLE_TIME: i64 = i32::MIN as i64;
 pub(crate) const MAX_ENCODABLE_TIME: i64 = i32::MAX as i64 + (3i64 << 32);
+
+/// One of an inode's four timestamps, by where its base and its
+/// `*_extra` word live.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InodeTime {
+    Atime,
+    Ctime,
+    Mtime,
+    Crtime,
+}
+
+impl InodeTime {
+    /// Offset of the 32-bit base.
+    fn base_offset(self) -> usize {
+        match self {
+            InodeTime::Atime => OFF_ATIME,
+            InodeTime::Ctime => OFF_CTIME,
+            InodeTime::Mtime => OFF_MTIME,
+            InodeTime::Crtime => OFF_CRTIME,
+        }
+    }
+
+    /// Offset of the `*_extra` word (nanoseconds << 2 | epoch bits).
+    fn extra_offset(self) -> usize {
+        match self {
+            InodeTime::Ctime => 0x84,
+            InodeTime::Mtime => 0x88,
+            InodeTime::Atime => 0x8C,
+            InodeTime::Crtime => 0x94,
+        }
+    }
+}
+
+/// Whether `raw` carries the byte range `[offset, offset + 4)` inside
+/// its extra section: both the buffer and `i_extra_isize` must reach it.
+/// This is the kernel's `EXT4_FITS_IN_INODE`.
+fn extra_field_fits(raw: &[u8], offset: usize) -> bool {
+    if raw.len() < OFF_EXTRA_ISIZE + 2 {
+        return false;
+    }
+    let i_extra_isize = u16::from_le_bytes(
+        raw[OFF_EXTRA_ISIZE..OFF_EXTRA_ISIZE + 2]
+            .try_into()
+            .unwrap(),
+    ) as usize;
+    let end = offset + 4;
+    raw.len() >= end && INODE_EXTRA_OFFSET + i_extra_isize >= end
+}
+
+/// Store `secs` (whole seconds; nanoseconds zero) as `field`, the way
+/// the kernel's `EXT4_INODE_SET_XTIME` / `EXT4_EINODE_SET_XTIME` do.
+///
+/// - With the field's `*_extra` word present: the base and the two
+///   epoch bits, via [`encode_extra_time`], after clamping to what those
+///   34 bits can hold.
+/// - Without it (a 128-byte inode, or an `i_extra_isize` too small): the
+///   base alone, **clamped** to the signed 32-bit range. A time past 2038
+///   becomes 2038-01-19 03:14:07 rather than wrapping to 1901.
+/// - `crtime`'s base is itself in the extra section; without room for
+///   it, nothing is written.
+pub(crate) fn set_inode_time(raw: &mut [u8], field: InodeTime, secs: i64) {
+    let base_off = field.base_offset();
+    let extra_off = field.extra_offset();
+    if extra_field_fits(raw, extra_off) {
+        let (base, epoch) = encode_extra_time(secs.clamp(MIN_ENCODABLE_TIME, MAX_ENCODABLE_TIME));
+        raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
+        raw[extra_off..extra_off + 4].copy_from_slice(&epoch.to_le_bytes());
+    } else if field != InodeTime::Crtime || extra_field_fits(raw, base_off) {
+        let base = secs.clamp(i32::MIN as i64, i32::MAX as i64) as i32 as u32;
+        raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
+    }
+}
 
 impl Inode {
     /// Parse an inode from its on-disk bytes.
@@ -553,5 +626,96 @@ mod tests {
         assert_eq!(inode.mode, 0x81A4);
         assert_eq!(inode.links_count, 3);
         assert!(inode.is_file());
+    }
+}
+
+/// `set_inode_time` stores what the kernel's `EXT4_INODE_SET_XTIME`
+/// stores: epoch bits where the inode has room for them, a clamp where
+/// it does not.
+#[cfg(test)]
+mod set_inode_time_tests {
+    use super::{set_inode_time, Inode, InodeTime, OFF_ATIME, OFF_CRTIME, OFF_EXTRA_ISIZE};
+
+    const PAST_2038: i64 = (1i64 << 31) + 10;
+
+    fn inode(len: usize, extra_isize: u16) -> Vec<u8> {
+        let mut raw = vec![0u8; len];
+        if len >= OFF_EXTRA_ISIZE + 2 {
+            raw[OFF_EXTRA_ISIZE..OFF_EXTRA_ISIZE + 2].copy_from_slice(&extra_isize.to_le_bytes());
+        }
+        raw
+    }
+
+    fn le32(raw: &[u8], off: usize) -> u32 {
+        u32::from_le_bytes(raw[off..off + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn a_large_inode_keeps_the_epoch_bits() {
+        let mut raw = inode(256, 32);
+        for field in [
+            InodeTime::Atime,
+            InodeTime::Ctime,
+            InodeTime::Mtime,
+            InodeTime::Crtime,
+        ] {
+            set_inode_time(&mut raw, field, PAST_2038);
+        }
+        let parsed = Inode::parse(&raw).unwrap();
+        assert_eq!(parsed.atime, PAST_2038);
+        assert_eq!(parsed.ctime, PAST_2038);
+        assert_eq!(parsed.mtime, PAST_2038);
+        assert_eq!(parsed.crtime, PAST_2038);
+        // The kernel's own encoding: negative base, epoch 1, no nsec.
+        assert_eq!(le32(&raw, OFF_ATIME), 0x8000_000A);
+        assert_eq!(le32(&raw, 0x8C), 1);
+    }
+
+    #[test]
+    fn a_new_stamp_clears_the_old_nanoseconds() {
+        let mut raw = inode(256, 32);
+        raw[0x88..0x8C].copy_from_slice(&(123u32 << 2).to_le_bytes());
+        set_inode_time(&mut raw, InodeTime::Mtime, 1_700_000_000);
+        let parsed = Inode::parse(&raw).unwrap();
+        assert_eq!(parsed.mtime, 1_700_000_000);
+        assert_eq!(parsed.mtime_nsec, 0);
+    }
+
+    #[test]
+    fn a_small_inode_clamps_instead_of_wrapping() {
+        let mut raw = inode(128, 0);
+        set_inode_time(&mut raw, InodeTime::Mtime, PAST_2038);
+        assert_eq!(Inode::parse(&raw).unwrap().mtime, i32::MAX as i64);
+        set_inode_time(&mut raw, InodeTime::Mtime, i32::MIN as i64 - 10);
+        assert_eq!(Inode::parse(&raw).unwrap().mtime, i32::MIN as i64);
+    }
+
+    #[test]
+    fn an_extra_isize_too_small_for_the_field_clamps_it() {
+        // 12 covers ctime_extra and mtime_extra, not atime_extra.
+        let mut raw = inode(256, 12);
+        set_inode_time(&mut raw, InodeTime::Mtime, PAST_2038);
+        set_inode_time(&mut raw, InodeTime::Atime, PAST_2038);
+        let parsed = Inode::parse(&raw).unwrap();
+        assert_eq!(parsed.mtime, PAST_2038);
+        assert_eq!(parsed.atime, i32::MAX as i64);
+        assert_eq!(le32(&raw, 0x8C), 0, "atime_extra is outside i_extra_isize");
+    }
+
+    #[test]
+    fn crtime_is_not_written_where_the_inode_has_no_room_for_it() {
+        let mut raw = inode(128, 0);
+        set_inode_time(&mut raw, InodeTime::Crtime, 1_700_000_000);
+        assert!(raw.iter().all(|&b| b == 0));
+        let mut raw = inode(256, 16);
+        set_inode_time(&mut raw, InodeTime::Crtime, 1_700_000_000);
+        assert_eq!(le32(&raw, OFF_CRTIME), 0);
+    }
+
+    #[test]
+    fn past_the_format_ceiling_is_clamped_to_it() {
+        let mut raw = inode(256, 32);
+        set_inode_time(&mut raw, InodeTime::Mtime, i64::MAX);
+        assert_eq!(Inode::parse(&raw).unwrap().mtime, super::MAX_ENCODABLE_TIME);
     }
 }
