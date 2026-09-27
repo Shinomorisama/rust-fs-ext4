@@ -5037,7 +5037,7 @@ impl Filesystem {
     /// decides it. A kernel-grown dx_root keeps the bytes of the dirent tail
     /// the directory had before it was indexed, so it ends in what looks
     /// exactly like one (#233).
-    fn is_htree_index_block(dir: &Inode, logical: u64, block: &[u8]) -> bool {
+    pub(crate) fn is_htree_index_block(dir: &Inode, logical: u64, block: &[u8]) -> bool {
         if dir.flags & crate::inode::InodeFlags::INDEX.bits() == 0 || block.len() < 8 {
             return false;
         }

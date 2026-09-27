@@ -116,12 +116,9 @@ fn dirent_inode(block: &[u8], name: &[u8]) -> u32 {
 }
 
 fn is_checksum_finding(a: &Anomaly, ino: u32, logical: u64, htree: bool) -> bool {
-    // Matched on the Debug form until the variant exists (#344).
-    let d = format!("{a:?}");
-    d.starts_with("DirBlockChecksumMismatch")
-        && d.contains(&format!("dir_ino: {ino},"))
-        && d.contains(&format!("logical_block: {logical},"))
-        && d.contains(&format!("htree: {htree}"))
+    matches!(a,
+        Anomaly::DirBlockChecksumMismatch { dir_ino, logical_block, htree: h }
+            if *dir_ino == ino && *logical_block == logical && *h == htree)
 }
 
 /// Run the repair pass, returning its report and every finding it streamed
@@ -211,6 +208,55 @@ fn a_wrong_dotdot_repair_reports_the_checksum_it_restamps() {
     );
     let clean = fsck::audit(&fs, u32::MAX, u32::MAX).expect("audit");
     assert!(clean.is_clean(), "re-audit: {:#?}", clean.anomalies);
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A block whose checksum fails and which does not pass the structural
+/// checks is not one e2fsck would restamp as it stands, and neither may
+/// this: a repair that wants to edit it must leave it alone.
+#[test]
+fn a_repair_never_restamps_a_block_whose_checksum_it_is_not_repairing() {
+    let path = fresh_volume("refuse");
+    let (other, sub) = {
+        let fs = mount(&path);
+        let other = fs.apply_mkdir("/other", 0o755).expect("mkdir other");
+        let sub = fs.apply_mkdir("/sub", 0o755).expect("mkdir sub");
+        fs.apply_create("/sub/file", 0o644).expect("create");
+        (other, sub)
+    };
+    let (phys, bs, _) = dir_block(&mount(&path), sub, 0);
+    let block = read_raw(&path, phys, bs);
+    write_raw(
+        &path,
+        phys,
+        bs,
+        dirent_offset(&block, b".."),
+        &other.to_le_bytes(),
+    );
+    // A rec_len no record may have: the block no longer passes the checks.
+    let file = dirent_offset(&block, b"file");
+    write_raw(&path, phys, bs, file + 4, &3u16.to_le_bytes());
+    let before = read_raw(&path, phys, bs);
+
+    let (report, found) = repair(&path);
+    assert!(
+        found.iter().any(|a| is_checksum_finding(a, sub, 0, false)),
+        "the checksum mismatch must be reported; the audit found {found:#?}"
+    );
+    assert_eq!(
+        read_raw(&path, phys, bs),
+        before,
+        "the repair pass rewrote a block whose checksum it had not verified and \
+         was not repairing"
+    );
+    assert!(
+        report
+            .anomalies
+            .iter()
+            .any(|a| is_checksum_finding(a, sub, 0, false)),
+        "the unrepaired mismatch must still be reported after the pass; got {:#?}",
+        report.anomalies
+    );
     let _ = std::fs::remove_file(&path);
 }
 

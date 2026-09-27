@@ -295,6 +295,24 @@ Not caught by the compiler — the same source builds and behaves differently:
   `tests/htree_split_write_cut.rs` cuts the writes of a splitting create
   after each index and requires `e2fsck -fn` to accept every remounted
   image; 29 of 46 cuts were rejected before.
+- **fsck verifies directory-block checksums and never restamps one it did
+  not verify (#344).** The audit had no directory checksum check, and the
+  `..`, bogus-entry and duplicate-dirent repairs recomputed a block's
+  checksum without checking the old one, so a repair laundered a corrupt
+  block with a fresh checksum and the damage was never reported. The audit
+  now reports `Anomaly::DirBlockChecksumMismatch` (C ABI kind
+  `dir_block_checksum`) with the directory inode and logical block, for a
+  linear block's dirent tail and an htree index's `dx_tail`, as e2fsck's
+  pass 2 does. The repair pass fixes a linear block's checksum when the
+  block passes the structural checks, leaves an htree index reported, and
+  every other repair refuses to restamp a block whose checksum still
+  fails. A `..` repair in an htree root now restamps the root's `dx_tail`
+  rather than a dirent tail. Repairs run in e2fsck's order, with link
+  counts re-counted after the dirent edits, so fixing a wrong `..` no
+  longer "repairs" two link counts to match the mistake. The audit also
+  no longer loops forever on a malformed record in a directory's first
+  block. Adding the variant is a breaking change for an exhaustive
+  `match` on `Anomaly`.
 
 - **A revoke block's record count is bounded by the block, not clamped to
   it.** Replay read records up to `min(r_count, block length)`, so on a

@@ -141,14 +141,9 @@ fn a_wrong_dotdot_under_a_bad_checksum_is_repaired_as_e2fsck_repairs_it() {
         (report, found)
     };
     assert!(
-        found.iter().any(|a| {
-            // Matched on the Debug form until the variant exists (#344).
-            let d = format!("{a:?}");
-            d.starts_with("DirBlockChecksumMismatch")
-                && d.contains(&format!("dir_ino: {sub},"))
-                && d.contains("logical_block: 0,")
-                && d.contains("htree: false")
-        }),
+        found.iter().any(|a| matches!(a,
+            Anomaly::DirBlockChecksumMismatch { dir_ino, logical_block: 0, htree: false }
+                if *dir_ino == sub)),
         "the audit must report what e2fsck reports: {found:#?}"
     );
     assert!(
