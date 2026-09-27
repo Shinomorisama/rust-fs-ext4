@@ -620,6 +620,12 @@ tasks:
       # THIS PATH AND THE cp MUST AGREE, and nothing checks that they do —
       # it is the same path Cargo.toml resolves am-fs-core from.
       - '../rust-fs-core/include/fs_core.h'
+      # The build reads the lock and every line of core it links, so each is a
+      # source: a lock-only bump, or a sibling re-pinned under an unchanged
+      # header, otherwise leaves an old archive standing as up to date.
+      - Cargo.lock
+      - '../rust-fs-core/Cargo.toml'
+      - '../rust-fs-core/src/**/*.rs'
 
     # Templated, which is fine here where it is not fine above: the check
     # renders these correctly, and every entry is an exact path rather than a
@@ -627,13 +633,18 @@ tasks:
     generates:
       - '{{.OUT}}/lib{{.LIBNAME}}.a'
       - '{{.OUT}}/include/{{.LIBNAME}}.h'
+      # Shipped, so generated: {{.LIBNAME}}.h #includes it, and a dist/
+      # without it is a broken artifact that must not count as up to date.
+      - '{{.OUT}}/include/fs_core.h'
 
     cmds:
       # Idempotent, and it replaces a 25-line "is the target installed" dance:
       # rustup answers "up to date" without touching the network when it is.
       # It runs here rather than in the consumer because the triple is ours.
       - 'rustup target add {{.TRIPLE}}'
-      - 'cargo build --release --target {{.TRIPLE}}'
+      # --locked for the reason `lint` gives: a build that may re-resolve
+      # ships dependency versions CI never tested.
+      - 'cargo build --locked --release --target {{.TRIPLE}}'
       - 'mkdir -p "{{.OUT}}/include"'
       - 'cp target/{{.TRIPLE}}/release/lib{{.LIBNAME}}.a "{{.OUT}}/lib{{.LIBNAME}}.a"'
       - 'cp include/{{.LIBNAME}}.h "{{.OUT}}/include/{{.LIBNAME}}.h"'
