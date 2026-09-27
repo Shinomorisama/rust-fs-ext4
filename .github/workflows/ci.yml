@@ -50,11 +50,13 @@ name: CI
 # by default, --verbose on request". Nothing extra is needed in this file:
 # every job already runs chore tasks, which is the whole point of them.
 #
-# The logs themselves are NOT uploaded as artefacts yet, though the
-# harness contract asks for it: tests/ci_profile.rs refuses any step-level
-# `if:` in these jobs, and an upload worth having is `if: always()`. A
-# failure still prints the tail of its log into this log. #264 tracks
-# narrowing that guard so the whole file can be kept.
+# The logs are uploaded as artefacts (tier-logs-<job>), `if: always()`
+# because the run worth reading is the one that failed -- AND only once
+# the job's first tier step has run (`steps.tier.outcome != 'skipped'`).
+# A job that dies in setup, the sibling checkout, the fixture download
+# or lint has written no tmp/logs/*.log, and an upload refusing an
+# empty path would add a second red step hiding the real cause (#306).
+# tests/ci_profile.rs holds every such upload to that.
 
 on:
   push:
@@ -115,13 +117,16 @@ jobs:
             exit 1
           fi
       - name: chore test:unit
+        id: tier
         run: chore test:unit
       - name: Keep the tier logs
         # A quiet tier writes its detail to tmp/logs/<tier>.log and prints a
         # verdict; without this the detail dies with the runner and the only
         # record left is the one line the terminal got. `if: always()` because
-        # the run worth reading is the one that failed.
-        if: always()
+        # the run worth reading is the one that failed; not before the tier
+        # ran, though, or there is no log and this step's red hides the real
+        # one (#306).
+        if: always() && steps.tier.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: tier-logs-unit
@@ -215,13 +220,16 @@ jobs:
       - name: chore lint
         run: chore lint
       - name: chore test
+        id: tier
         run: chore test
       - name: Keep the tier logs
         # A quiet tier writes its detail to tmp/logs/<tier>.log and prints a
         # verdict; without this the detail dies with the runner and the only
         # record left is the one line the terminal got. `if: always()` because
-        # the run worth reading is the one that failed.
-        if: always()
+        # the run worth reading is the one that failed; not before the tier
+        # ran, though, or there is no log and this step's red hides the real
+        # one (#306).
+        if: always() && steps.tier.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: tier-logs-x86_64
@@ -260,6 +268,7 @@ jobs:
       - name: chore lint
         run: chore lint
       - name: chore test:unit
+        id: tier
         run: chore test:unit
       # Everything that reads a fixture but needs no VM. The oracle and
       # kernel tiers cannot run here — GitHub's arm64 runners have no
@@ -271,8 +280,10 @@ jobs:
         # A quiet tier writes its detail to tmp/logs/<tier>.log and prints a
         # verdict; without this the detail dies with the runner and the only
         # record left is the one line the terminal got. `if: always()` because
-        # the run worth reading is the one that failed.
-        if: always()
+        # the run worth reading is the one that failed; not before the tier
+        # ran, though, or there is no log and this step's red hides the real
+        # one (#306).
+        if: always() && steps.tier.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: tier-logs-aarch64
@@ -307,13 +318,16 @@ jobs:
       # job — on a Mac there is no usable host toolchain for these tests
       # either.
       - name: chore test:vm
+        id: tier
         run: chore test:vm
       - name: Keep the tier logs
         # A quiet tier writes its detail to tmp/logs/<tier>.log and prints a
         # verdict; without this the detail dies with the runner and the only
         # record left is the one line the terminal got. `if: always()` because
-        # the run worth reading is the one that failed.
-        if: always()
+        # the run worth reading is the one that failed; not before the tier
+        # ran, though, or there is no log and this step's red hides the real
+        # one (#306).
+        if: always() && steps.tier.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: tier-logs-suite-in-vm
@@ -351,9 +365,10 @@ jobs:
         # wasm-bindgen version Cargo.lock resolved.
         run: chore tools:wasm
       - name: chore test:wasm
+        id: tier
         run: chore test:wasm
       - name: Keep the tier logs
-        if: always()
+        if: always() && steps.tier.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: tier-logs-wasm
@@ -395,9 +410,12 @@ jobs:
             target
           key: ${{ runner.os }}-semver-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: chore check:semver
+        id: tier
         run: chore check:semver
       - name: Keep the tier logs
-        if: always()
+        # Not before the tier ran: there is no log then, and this step's red
+        # would hide the real one (#306).
+        if: always() && steps.tier.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: tier-logs-semver

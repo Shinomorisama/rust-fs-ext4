@@ -980,6 +980,134 @@ fn runs_chore(steps: &[Yaml], task: &str) -> bool {
         .any(|step| chore_invocations(run_of(step)).iter().any(|t| t == task))
 }
 
+/// Whether running `chore <task>` reaches `scripts/tier.sh` -- the one
+/// thing that writes `tmp/logs/<tier>.log` -- following `task:` items
+/// and `"{{.CHORE_EXE}}" <task>` commands down. A task naming itself
+/// does not loop.
+fn chore_writes_a_tier_log(
+    tasks: &std::collections::BTreeMap<String, ChoreTask>,
+    task: &str,
+    path: &mut Vec<String>,
+) -> bool {
+    if path.iter().any(|on_path| on_path == task) {
+        return false;
+    }
+    let Some(body) = tasks.get(task) else {
+        panic!(
+            "`chore {task}` names no task in chores.yml. Its tasks: {:?}",
+            tasks.keys().collect::<Vec<_>>()
+        );
+    };
+    path.push(task.to_string());
+    let writes = body.cmds.iter().any(|cmd| match cmd {
+        ChoreCmd::Shell { command, .. } => {
+            command.contains("scripts/tier.sh")
+                // A task re-entering chore spells it `"{{.CHORE_EXE}}"`.
+                || chore_invocations(&command.replace("\"{{.CHORE_EXE}}\"", "chore"))
+                    .iter()
+                    .any(|next| chore_writes_a_tier_log(tasks, next, path))
+        }
+        ChoreCmd::Task { name, .. } => chore_writes_a_tier_log(tasks, name, path),
+        ChoreCmd::Other => false,
+    });
+    path.pop();
+    writes
+}
+
+/// UPLOADS THAT REFUSE AN EMPTY PATH MUST WAIT FOR THE STEP THAT FILLS
+/// IT (#306).
+///
+/// Every conditional `actions/upload-artifact` step in `workflow` with
+/// `if-no-files-found: error`, whose `if:` does not require an EARLIER
+/// step of the same job -- one that writes a tier log, directly or
+/// through a `chore` task in `chores` -- to have run:
+/// `steps.<id>.outcome != 'skipped'` (or `.conclusion`).
+///
+/// `if: always()` alone uploads after a job that died in setup, the
+/// sibling checkout, the fixture download or lint, before any tier
+/// wrote `tmp/logs/*.log`. The upload then finds nothing and adds a
+/// second red step that hides the first -- the real cause. An upload
+/// with no `if:` runs only when every earlier step succeeded, so it
+/// cannot reach that state and is not reported.
+fn unguarded_log_uploads(workflow: &str, chores: &str) -> Vec<String> {
+    let tasks = parse_chores(chores);
+    let document = load_document(workflow, Path::new("workflow"));
+    let mut found = Vec::new();
+    let Some(jobs) = field(&document, "jobs").and_then(Yaml::as_mapping) else {
+        return found;
+    };
+    for (name, job) in jobs.iter() {
+        let Some(name) = name.as_str() else { continue };
+        let Some(steps) = field(job, "steps").and_then(Yaml::as_sequence) else {
+            continue;
+        };
+        for (at, step) in steps.iter().enumerate() {
+            let is_upload = field(step, "uses")
+                .and_then(Yaml::as_str)
+                .is_some_and(|uses| uses.starts_with("actions/upload-artifact@"));
+            let refuses_empty = field(step, "with")
+                .and_then(|with| field(with, "if-no-files-found"))
+                .and_then(Yaml::as_str)
+                == Some("error");
+            let Some(condition) = field(step, "if").and_then(Yaml::as_str) else {
+                continue;
+            };
+            if !is_upload || !refuses_empty {
+                continue;
+            }
+            let condition: String = condition.split_whitespace().collect();
+            let waits = steps[..at].iter().any(|earlier| {
+                let Some(id) = field(earlier, "id").and_then(Yaml::as_str) else {
+                    return false;
+                };
+                let script = run_of(earlier);
+                let writes = script.contains("scripts/tier.sh")
+                    || chore_invocations(script)
+                        .iter()
+                        .any(|task| chore_writes_a_tier_log(&tasks, task, &mut Vec::new()));
+                writes
+                    && ["outcome", "conclusion"].iter().any(|result| {
+                        condition.contains(&format!("steps.{id}.{result}!='skipped'"))
+                    })
+            });
+            if !waits {
+                found.push(format!(
+                    "jobs.{name} step {at} ({}) uploads with `if-no-files-found: error` under \
+                     `if: {}` without waiting for a tier step to have run",
+                    field(step, "name")
+                        .and_then(Yaml::as_str)
+                        .unwrap_or("unnamed"),
+                    field(step, "if").and_then(Yaml::as_str).unwrap_or("")
+                ));
+            }
+        }
+    }
+    found
+}
+
+/// Every workflow's tier-log uploads wait for their tier (#306).
+#[test]
+fn a_log_upload_that_refuses_an_empty_path_waits_for_its_tier_to_run() {
+    let chores = read_or_panic(&manifest_dir().join("chores.yml"));
+    let mut offending = Vec::new();
+    for workflow in ["ci.yml", "release.yml", "fuzz.yml"] {
+        let path = workflow_path(workflow);
+        let text = read_or_panic(&path);
+        offending.extend(
+            unguarded_log_uploads(&text, &chores)
+                .into_iter()
+                .map(|found| format!("{workflow}: {found}")),
+        );
+    }
+    assert!(
+        offending.is_empty(),
+        "a job that fails before any tier runs has no tmp/logs/*.log, so these uploads add \
+         a second red step that hides the real failure. Give the tier step an `id:` and \
+         upload `if: always() && steps.<id>.outcome != 'skipped'`:\n{}",
+        offending.join("\n")
+    );
+}
+
 /// THE PULL-REQUEST GATE'S SHAPE, now that every job runs chore tasks.
 ///
 /// - `fixtures` builds the kernel-made images ONCE, in the
@@ -2652,5 +2780,120 @@ mod dispatch_inputs {
         assert!(inputs_interpolated("./scripts/fuzz-all.sh \"$SECONDS_PER_TARGET\"").is_empty());
         assert!(inputs_interpolated("echo ${{ matrix.os }} ${{ runner.arch }}").is_empty());
         assert!(inputs_interpolated("echo ${{ steps.myinputs.outputs.x }}").is_empty());
+    }
+}
+
+/// The #306 rule, proved on small workflows rather than the real one.
+mod tier_log_uploads {
+    use super::unguarded_log_uploads as unguarded;
+
+    const CHORES: &str = "\
+tasks:
+  lint:
+    cmds: ['cargo fmt --check']
+  test:unit:
+    cmds: ['scripts/tier.sh test:unit unit 1 1 -- cargo test']
+  test:
+    cmds:
+      - task: test:unit
+";
+
+    fn job(steps: &str) -> String {
+        format!(
+            "on:\n  pull_request:\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n{steps}"
+        )
+    }
+
+    fn upload(condition: &str, missing: &str) -> String {
+        format!(
+            "      - uses: actions/upload-artifact@v4\n        if: {condition}\n        with:\n          \
+             name: logs\n          path: tmp/logs/*.log\n          if-no-files-found: {missing}\n"
+        )
+    }
+
+    const TIER: &str =
+        "      - run: chore lint\n        id: lint\n      - run: chore test\n        id: tier\n";
+
+    #[test]
+    fn always_alone_is_reported() {
+        let found = unguarded(
+            &job(&format!("{TIER}{}", upload("always()", "error"))),
+            CHORES,
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+    }
+
+    #[test]
+    fn waiting_for_the_tier_passes() {
+        for condition in [
+            "always() && steps.tier.outcome != 'skipped'",
+            "${{ always() && steps.tier.conclusion != 'skipped' }}",
+        ] {
+            let found = unguarded(
+                &job(&format!("{TIER}{}", upload(condition, "error"))),
+                CHORES,
+            );
+            assert_eq!(found, Vec::<String>::new(), "{condition}");
+        }
+    }
+
+    /// Lint writes no log, so it having run proves nothing is there.
+    #[test]
+    fn waiting_for_a_step_that_writes_no_log_is_reported() {
+        let condition = "always() && steps.lint.outcome != 'skipped'";
+        let found = unguarded(
+            &job(&format!("{TIER}{}", upload(condition, "error"))),
+            CHORES,
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+    }
+
+    /// A step after the upload cannot have filled the path it reads.
+    #[test]
+    fn waiting_for_a_later_step_is_reported() {
+        let condition = "always() && steps.tier.outcome != 'skipped'";
+        let found = unguarded(
+            &job(&format!("{}{TIER}", upload(condition, "error"))),
+            CHORES,
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+    }
+
+    /// `chore test` reaches its tiers by re-entering chore, as the real
+    /// chores.yml does, not through a `task:` item.
+    #[test]
+    fn a_tier_reached_by_re_entering_chore_counts() {
+        let chores = "\
+tasks:
+  lint:
+    cmds: ['cargo fmt --check']
+  test:unit:
+    cmds: ['scripts/tier.sh test:unit unit 1 1 -- cargo test']
+  test:
+    cmds:
+      - |
+        set -eu
+        \"{{.CHORE_EXE}}\" test:unit
+";
+        let condition = "always() && steps.tier.outcome != 'skipped'";
+        let found = unguarded(
+            &job(&format!("{TIER}{}", upload(condition, "error"))),
+            chores,
+        );
+        assert_eq!(found, Vec::<String>::new());
+    }
+
+    #[test]
+    fn an_upload_that_tolerates_an_empty_path_or_has_no_condition_is_not_reported() {
+        let warn = unguarded(
+            &job(&format!("{TIER}{}", upload("always()", "warn"))),
+            CHORES,
+        );
+        assert_eq!(warn, Vec::<String>::new());
+        let plain = format!(
+            "{TIER}      - uses: actions/upload-artifact@v4\n        with:\n          name: logs\n          \
+             path: tmp/logs/*.log\n          if-no-files-found: error\n"
+        );
+        assert_eq!(unguarded(&job(&plain), CHORES), Vec::<String>::new());
     }
 }
