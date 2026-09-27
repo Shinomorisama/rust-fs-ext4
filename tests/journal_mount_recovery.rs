@@ -61,6 +61,17 @@ struct Fixture {
 
 impl Fixture {
     fn new(tail_revoke: bool) -> Self {
+        Self::build(tail_revoke, false)
+    }
+
+    /// The journaled superblock carries `s_state` without `EXT4_VALID_FS`,
+    /// as a kernel mount leaves it: replay then writes the volume back to
+    /// "not clean", and only the release puts the found state back.
+    fn kernel_mounted() -> Self {
+        Self::build(false, true)
+    }
+
+    fn build(tail_revoke: bool, journaled_not_clean: bool) -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let dir = fs_ext4_test_support::temp_dir().join(format!(
             "jbd2-oracle-{}-{}",
@@ -132,6 +143,12 @@ impl Fixture {
         let mut superblock = image[..BLOCK].to_vec();
         superblock[1024 + 120..1024 + 136].fill(0);
         superblock[1024 + 120..1024 + 120 + LABEL.len()].copy_from_slice(LABEL.as_bytes());
+        if journaled_not_clean {
+            let state =
+                u16::from_le_bytes(superblock[1024 + 0x3a..1024 + 0x3c].try_into().unwrap());
+            assert_eq!(state & 1, 1, "mkfs leaves the volume clean");
+            superblock[1024 + 0x3a..1024 + 0x3c].copy_from_slice(&(state & !1).to_le_bytes());
+        }
 
         // First tag carries the UUID; the second uses SAME_UUID | LAST_TAG.
         let mut descriptor = header(1, SEQUENCE);
@@ -447,4 +464,85 @@ fn finish_after_a_failed_journal_operation_issues_no_device_io() {
         "finish must stop before further device reads"
     );
     fixture.linux_recover(&image);
+}
+
+/// `dumpe2fs -h`'s verdict on the two flags a release changes: whether
+/// `needs_recovery` is set, and whether the state reads `clean`.
+fn release_flags(path: &Path) -> (bool, bool) {
+    let header = successful("dumpe2fs", &["-h", path.to_str().unwrap()]);
+    let field = |name: &str| {
+        header
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .unwrap_or_else(|| panic!("dumpe2fs -h printed no {name}: {header}"))
+            .trim()
+            .to_string()
+    };
+    let features = field("Filesystem features:");
+    let state = field("Filesystem state:");
+    (
+        features.split_whitespace().any(|f| f == "needs_recovery"),
+        state == "clean",
+    )
+}
+
+/// Mount, write (which clears the volume's clean state), then `finish` on a
+/// device that fails from the `fail_at`-th device event of `finish` onward.
+/// Returns whether `finish` succeeded and how many events it issued.
+fn interrupted_finish(path: &Path, fail_at: usize, writeback: bool) -> (bool, usize) {
+    let device = Arc::new(InterruptedDevice {
+        inner: FileDevice::open_rw(path.to_str().unwrap()).unwrap(),
+        fail_at: AtomicUsize::new(usize::MAX),
+        event: AtomicUsize::new(0),
+        reads: AtomicUsize::new(0),
+        writeback,
+        pending: Mutex::new(Vec::new()),
+    });
+    let mut mounted = Filesystem::mount_recovering(device.clone()).expect("checked mount");
+    mounted.apply_pwrite("/oracle", 0, b"release").unwrap();
+    mounted.flush().unwrap();
+    let start = device.event.load(Ordering::SeqCst);
+    device
+        .fail_at
+        .store(start.saturating_add(fail_at), Ordering::SeqCst);
+    let result = mounted.finish();
+    (result.is_ok(), device.event.load(Ordering::SeqCst) - start)
+}
+
+/// The recovery marker is the commit point of a release (#299): while it is
+/// clear, the next owner takes the volume as properly put away. So a
+/// `finish` that fails at any write or flush must leave either the marker
+/// still set or the release complete, never the marker clear over a state
+/// that was not restored. Both durability models, flags read by dumpe2fs.
+#[test]
+fn a_failed_finish_never_clears_the_recovery_marker_before_the_release_is_complete() {
+    let fixture = Fixture::kernel_mounted();
+    for writeback in [false, true] {
+        let baseline = fixture.copy(&format!("release-baseline-{writeback}"));
+        let (success, events) = interrupted_finish(&baseline, usize::MAX, writeback);
+        assert!(success, "uninterrupted finish");
+        assert!(events >= 4, "finish must write and flush both flags");
+        assert_eq!(
+            release_flags(&baseline),
+            (false, true),
+            "a completed release: marker clear, state clean"
+        );
+        fixture.linux_check(&baseline);
+        for fail_at in 0..events {
+            let image = fixture.copy(&format!("release-interrupted-{writeback}-{fail_at}"));
+            let (success, _) = interrupted_finish(&image, fail_at, writeback);
+            assert!(
+                !success,
+                "I/O failure at finish event {fail_at} must not claim a clean release"
+            );
+            let (needs_recovery, clean) = release_flags(&image);
+            assert!(
+                needs_recovery || clean,
+                "finish failed at event {fail_at} (writeback={writeback}) and left \
+                 needs_recovery clear over a state that is not clean: the next owner \
+                 cannot tell the release was incomplete"
+            );
+            fixture.linux_recover(&image);
+        }
+    }
 }
