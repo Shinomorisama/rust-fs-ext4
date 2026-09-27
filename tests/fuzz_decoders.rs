@@ -440,3 +440,64 @@ fn the_gate_covers_every_explorer_target() {
         );
     }
 }
+
+/// `EXT4_INDEX_FL`, the inode flag that sends a directory lookup through
+/// the htree rather than a linear scan.
+const EXT4_INDEX_FL: u32 = 0x1000;
+
+/// The corpus seeds the htree decoder, and keeps a linear directory too.
+///
+/// `mke2fs -d` writes every directory as a linear list however many
+/// entries it holds, so a corpus built by it alone never hands the
+/// explorer a real `dx_root`: the htree decoder only ever sees what a
+/// mutation of a linear block happens to look like. The script indexes
+/// the ext4 filesystems after populating them; this is what says it did.
+#[test]
+fn the_corpus_seeds_an_indexed_directory_and_a_linear_one() {
+    let root_flags = |bytes: &[u8]| u32::from_le_bytes(bytes[32..36].try_into().unwrap());
+
+    let roots = seeds("inode");
+    let indexed: Vec<&str> = roots
+        .iter()
+        .filter(|(name, _)| name.starts_with("ext4"))
+        .filter(|(_, bytes)| root_flags(bytes) & EXT4_INDEX_FL != 0)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert!(
+        !indexed.is_empty(),
+        "no ext4 root inode in fuzz/corpus/inode has EXT4_INDEX_FL, so the htree decoder \
+         is never seeded -- rebuild the corpus with scripts/make-fuzz-corpus.sh",
+    );
+    let linear = roots
+        .iter()
+        .any(|(name, bytes)| name.starts_with("ext2") && root_flags(bytes) & EXT4_INDEX_FL == 0);
+    assert!(
+        linear,
+        "the ext2 root in fuzz/corpus/inode is gone or indexed; it is kept linear on purpose",
+    );
+
+    let dx_roots: Vec<String> = seeds("dir_block")
+        .into_iter()
+        .filter(|(_, block)| {
+            let Ok(info) = fs_ext4::htree::parse_root_info(block) else {
+                return false;
+            };
+            let Ok((cl, _)) = fs_ext4::htree::parse_root_entries(block) else {
+                return false;
+            };
+            // Eight-byte dx_entry records after the 32-byte header, less
+            // an optional 8-byte checksum tail.
+            let most = ((block.len() - 32) / 8) as u16;
+            info.info_length == 8
+                && info.indirect_levels <= 2
+                && (most.saturating_sub(1)..=most).contains(&cl.limit)
+                && (1..=cl.limit).contains(&cl.count)
+        })
+        .map(|(name, _)| name)
+        .collect();
+    assert!(
+        !dx_roots.is_empty(),
+        "no block in fuzz/corpus/dir_block parses as a dx_root, so the htree decoder is \
+         never seeded -- rebuild the corpus with scripts/make-fuzz-corpus.sh",
+    );
+}
