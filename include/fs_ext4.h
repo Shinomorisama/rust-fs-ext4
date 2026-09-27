@@ -683,11 +683,28 @@ int fs_ext4_removexattr(fs_ext4_fs_t *fs, const char *path,
  * symbol is then simply absent on the Swift side. */
 static const int64_t FS_EXT4_TIME_OMIT = INT64_MIN;
 
+/* utimensat(2)'s sentinels, passed in a `*_nsec` field of
+ * fs_ext4_utimens. They are SUPPORTED, per field, with utimensat's
+ * meaning -- the `*_sec` beside either is ignored:
+ *   FS_EXT4_UTIME_NOW   set that timestamp to the current time, read
+ *                       from the mount's clock (whole seconds, so its
+ *                       nanoseconds are stored as 0);
+ *   FS_EXT4_UTIME_OMIT  leave that timestamp unchanged.
+ * The values are Linux's UTIME_NOW / UTIME_OMIT, (1 << 30) - 1 and
+ * (1 << 30) - 2. Other platforms spell them differently (macOS: -1 and
+ * -2), and those values are refused with EINVAL like any other
+ * nanosecond count of 1e9 or more -- use these names, not the
+ * platform's. `static const` for Swift, as above. */
+static const uint32_t FS_EXT4_UTIME_NOW = 0x3fffffffu;
+static const uint32_t FS_EXT4_UTIME_OMIT = 0x3ffffffeu;
+
 /* Set the access + modification times on `path`. Each `*_sec` is a
  * POSIX seconds-since-epoch value; passing FS_EXT4_TIME_OMIT leaves that
  * pair unchanged (so `atime_sec == FS_EXT4_TIME_OMIT` touches only
- * mtime, etc). `*_nsec` is sub-second nanoseconds, only written when the
- * inode's i_extra_isize region can hold them. Bumps i_ctime.
+ * mtime, etc). `*_nsec` is sub-second nanoseconds, 0..999999999, only
+ * written when the inode's i_extra_isize region can hold them; it also
+ * takes FS_EXT4_UTIME_NOW / FS_EXT4_UTIME_OMIT, above. Bumps i_ctime,
+ * unless both pairs are omitted, in which case nothing is written.
  *
  * The seconds are int64_t (widened from uint32_t in 0.5.0) because ext4
  * stores a SIGNED 32-bit base extended by two epoch bits in the matching
@@ -697,8 +714,10 @@ static const int64_t FS_EXT4_TIME_OMIT = INT64_MIN;
  * 136 years early.
  *
  * Returns 0 on success, -1 on failure. Fails with EINVAL for a time
- * outside that range, or for one needing the epoch bits on an inode too
- * small to hold an `*_extra` field (128-byte inodes). */
+ * outside that range, for one needing the epoch bits on an inode too
+ * small to hold an `*_extra` field (128-byte inodes), or for a `*_nsec`
+ * of 1e9 or more that is neither sentinel -- in every case before
+ * anything is written. */
 int fs_ext4_utimens(fs_ext4_fs_t *fs, const char *path,
                     int64_t atime_sec, uint32_t atime_nsec,
                     int64_t mtime_sec, uint32_t mtime_nsec);

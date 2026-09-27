@@ -254,10 +254,9 @@ fn utimens_round_trips_a_pre_1970_date() {
     let _ = fs::remove_file(&img);
 }
 
-/// `utimensat(2)`'s sentinels as Linux defines them; the header names
-/// them `FS_EXT4_UTIME_NOW` / `FS_EXT4_UTIME_OMIT`.
-const C_UTIME_NOW: u32 = 0x3fff_ffff;
-const C_UTIME_OMIT: u32 = 0x3fff_fffe;
+/// The header's `FS_EXT4_UTIME_NOW` / `FS_EXT4_UTIME_OMIT`.
+const C_UTIME_NOW: u32 = fs_ext4::fs::UTIME_NOW;
+const C_UTIME_OMIT: u32 = fs_ext4::fs::UTIME_OMIT;
 
 /// A nanosecond count of one billion or more is EINVAL, and the inode
 /// is left exactly as it was (#326). Before, 1e9..2^30-1 was stored

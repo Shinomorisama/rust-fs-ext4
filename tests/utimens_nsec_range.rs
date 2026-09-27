@@ -15,9 +15,7 @@
 use fs_ext4::{block_io::BlockDevice, error::Error, error::Result, runtime::Runtime, Filesystem};
 use std::sync::{Arc, Mutex};
 
-/// `utimensat(2)`'s sentinels as Linux defines them.
-const UTIME_NOW: u32 = (1 << 30) - 1;
-const UTIME_OMIT: u32 = (1 << 30) - 2;
+use fs_ext4::fs::{UTIME_NOW, UTIME_OMIT};
 
 const NOW: i64 = 1_700_000_123;
 
@@ -152,4 +150,13 @@ fn utime_omit_on_both_fields_writes_nothing() {
     fs.apply_utimens("/f", 0, UTIME_OMIT, 0, UTIME_OMIT)
         .unwrap();
     assert_eq!(raw(&fs, ino), before);
+}
+
+/// The sentinels carry the values `utimensat(2)` gives them on Linux, so
+/// a caller passing the platform's own `UTIME_NOW` / `UTIME_OMIT` there
+/// gets the same meaning.
+#[test]
+fn the_sentinels_are_linuxs_utimensat_values() {
+    assert_eq!(UTIME_NOW, 0x3fff_ffff);
+    assert_eq!(UTIME_OMIT, 0x3fff_fffe);
 }

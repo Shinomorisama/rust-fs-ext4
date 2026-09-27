@@ -519,6 +519,16 @@ Not caught by the compiler — the same source builds and behaves differently:
   `tests/scripts/test-write-jobs-pinned.sh`,
   `tests/scripts/test-release-outside-matrix.sh` and
   `tests/scripts/test-crates-io-check.sh` hold each of the three.
+- **`utimens` refuses a nanosecond count of one billion or more, and
+  honours `UTIME_NOW` / `UTIME_OMIT`.** `apply_utimens` and
+  `fs_ext4_utimens` stored 1e9..2^30-1 verbatim, which reads back as an
+  impossible `tv_nsec`, and masked anything larger into an unrelated
+  value. Such a count is now `InvalidArgument` (EINVAL), refused before
+  the inode is touched. The two values `utimensat(2)` defines in that
+  range are supported per field with Linux's numbering: `UTIME_NOW`
+  (`FS_EXT4_UTIME_NOW`) takes the mount's clock and `UTIME_OMIT`
+  (`FS_EXT4_UTIME_OMIT`) leaves the field alone, the seconds beside
+  either being ignored; omitting both writes nothing (#326).
 
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
