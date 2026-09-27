@@ -2,6 +2,13 @@
 name = "am-fs-ext4"
 version = "0.6.0"
 edition = "2021"
+# The oldest toolchain the library and the binaries build on, so an older
+# one gets cargo's "requires rustc" message rather than a wall of E0658.
+# Measured, not guessed: 1.87 is where `is_multiple_of` on unsigned
+# integers stabilised, and 1.86 refuses seven uses of it. The dev-
+# dependencies need newer (ordered-float, via saphyr, wants 1.90); they
+# never reach a consumer. `chore check:msrv` builds at exactly this version.
+rust-version = "1.87"
 license = "MIT"
 description = "Pure-Rust ext4 filesystem driver. Exposes a C ABI (fs_ext4_*) suitable for FFI from C/C++/Go/etc."
 repository = "https://github.com/christhomas/rust-fs-ext4"

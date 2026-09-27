@@ -38,6 +38,9 @@ name: CI
 #   semver       `chore check:semver`: the public API against the newest
 #                crates.io release, refusing a break Cargo.toml's version
 #                does not declare (#120).
+#   msrv         `chore check:msrv`: the library and the binaries built on
+#                the toolchain Cargo.toml's `rust-version` names, so the
+#                declared minimum stays the true one.
 #   ci-ok        the one required check: green only when every job above
 #                ran and succeeded (failed, cancelled OR skipped fails it).
 #
@@ -422,10 +425,32 @@ jobs:
           path: tmp/logs/*.log
           if-no-files-found: error
 
+  msrv:
+    name: msrv (Cargo.toml rust-version)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/msrv
+          key: ${{ runner.os }}-msrv-cargo-${{ hashFiles('**/Cargo.lock', 'Cargo.toml') }}
+      - name: chore check:msrv
+        # The script installs the toolchain rust-version names; the runner's
+        # rustup is all it needs.
+        run: chore check:msrv
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [unit, fixtures, test, test-arm64, suite-in-vm, wasm, semver]
+    needs: [unit, fixtures, test, test-arm64, suite-in-vm, wasm, semver, msrv]
     runs-on: ubuntu-latest
     steps:
       - name: Every job ran and succeeded
