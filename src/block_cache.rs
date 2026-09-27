@@ -171,6 +171,13 @@ impl CachedDevice {
         let s = self.state.lock().expect("cache mutex poisoned");
         (s.hits, s.misses)
     }
+
+    /// How many blocks are pinned: held whatever the capacity, because their
+    /// bytes are not yet at their final location on the device.
+    pub fn pinned_blocks(&self) -> usize {
+        let s = self.state.lock().expect("cache mutex poisoned");
+        s.pinned.len()
+    }
 }
 
 impl BlockDevice for CachedDevice {

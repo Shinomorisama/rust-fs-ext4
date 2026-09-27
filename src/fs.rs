@@ -199,6 +199,8 @@ fn write_inode_extra_isize(raw: &mut [u8]) {
 pub struct Filesystem {
     runtime: Arc<dyn crate::runtime::Runtime>,
     managed_recovery: bool,
+    /// The buffer cache `dev` routes through, kept typed for its statistics.
+    cache: Arc<crate::block_cache::CachedDevice>,
     pub dev: Arc<dyn BlockDevice>,
     pub sb: Superblock,
     pub groups: Vec<BlockGroupDescriptor>,
@@ -411,6 +413,14 @@ impl Filesystem {
         Ok(())
     }
 
+    /// How many blocks the buffer cache holds pinned: bytes not yet at their
+    /// final location on the device, which no capacity bound can evict. A
+    /// read-only mount that replayed a dirty journal pins what it replayed;
+    /// a writable mount checkpoints every commit, so it pins nothing.
+    pub fn cache_pinned_blocks(&self) -> usize {
+        self.cache.pinned_blocks()
+    }
+
     /// Flush and discard checkpointed read caches before physical readback.
     /// The mount remains owned and usable. This is not concurrent-writer support:
     /// callers must serialize all filesystem access and retire on I/O failure.
@@ -544,21 +554,21 @@ impl Filesystem {
         sb.check_fits_device(dev.size_bytes())?;
         // Wrap the raw device in a write-through buffer cache. All
         // reads and writes for the rest of this mount session route
-        // through the cache; `commit_block_buffer` populates pinned
-        // entries with journaled-but-not-yet-checkpointed bytes so
-        // allocator scans don't re-read stale on-disk bitmaps. This is
-        // the role Linux's buffer cache plays for journaled
-        // filesystems. The clean capacity is `DEFAULT_CACHE_BLOCKS` unless the
-        // caller chose; pinned entries are unbounded until journal replay
-        // calls `unpin_all`.
-        let dev: Arc<dyn BlockDevice> = Arc::new(crate::block_cache::CachedDevice::new(
+        // through the cache. A read-only mount that replays a dirty
+        // journal pins the replayed blocks here, since they never reach
+        // the device. The clean capacity is `DEFAULT_CACHE_BLOCKS` unless
+        // the caller chose; pinned entries are unbounded until journal
+        // replay calls `unpin_all`.
+        let cache = Arc::new(crate::block_cache::CachedDevice::new(
             dev,
             sb.block_size(),
             cache_blocks,
         ));
+        let dev: Arc<dyn BlockDevice> = cache.clone();
         let mut fs = Self {
             runtime,
             managed_recovery: false,
+            cache,
             dev,
             sb,
             groups,
