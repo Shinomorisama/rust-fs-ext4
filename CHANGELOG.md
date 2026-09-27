@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Breaking
+
+- **`fs_ext4_readlink` returns the target's length, and refuses a buffer
+  it would have to truncate.** It returned 0 on success, so a caller
+  slicing its buffer by the return value, as `readlink(2)` callers do, got
+  an empty target for every symlink (#290). On success it now writes the
+  target and a NUL and returns the target's length in bytes, not counting
+  the NUL. A buffer smaller than length + 1 fails with -1 and errno
+  `ERANGE`, and nothing is written to it. The message names the size
+  needed. Unlike `readlink(2)`, the target is never silently truncated.
+  A `bufsize` of 0 with a non-NULL buffer is also `ERANGE`. Only a NULL
+  fs, path or buffer is `EINVAL`.
+  Every other failure is -1 with the errno set, including a target
+  declared longer than any path, which used to set only the message.
+  **Callers that test `== 0` for success must test `>= 0`**, and a caller
+  that relied on truncation must size its buffer or handle `ERANGE`.
+  The target is also available from Rust as `Filesystem::read_link`.
+  `tests/readlink_oracle.rs` checks it against what `debugfs` reports,
+  for fast and slow links on either side of the 60-byte `i_block` boundary.
+
 ### Added
 
 - **The parsers are fuzzed, on two tiers.** ext4 is the widest parser

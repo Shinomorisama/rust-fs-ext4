@@ -371,8 +371,19 @@ int64_t fs_ext4_read_file(fs_ext4_fs_t *fs, const char *path,
 
 /*
  * Read symlink target.
- * Writes null-terminated target into buf (max bufsize bytes).
- * Returns 0 on success.
+ *
+ * On success writes the target followed by a NUL terminator into buf and
+ * returns the target's length in bytes, not counting the NUL, as Linux
+ * readlink(2) does.
+ *
+ * If bufsize < length + 1 it returns -1 with fs_ext4_last_errno() ==
+ * ERANGE, fs_ext4_last_error() naming the size needed, and writes nothing
+ * into buf. The target is never silently truncated (unlike readlink(2)).
+ *
+ * bufsize 0 with a non-NULL buf is only too small: ERANGE as above.
+ * NULL fs, path or buf: -1, EINVAL. Any other failure: -1
+ * with fs_ext4_last_errno() set (ENOENT, EINVAL when not a symlink, EIO,
+ * ENOTSUP for an encrypted target, ...).
  */
 int fs_ext4_readlink(fs_ext4_fs_t *fs, const char *path,
                          char *buf, size_t bufsize);
