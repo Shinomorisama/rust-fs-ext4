@@ -376,6 +376,12 @@ Not caught by the compiler — the same source builds and behaves differently:
   rather than wrapped. `i_dtime` stays the kernel's unsigned 32 bits.
   Checked by `debugfs stat` in the harness VM
   (`tests/timestamps_past_2038_oracle.rs`).
+- **fsck reports every Directory-typed dirent that names a non-directory.**
+  The audit marked an inode visited before checking its type, so when two
+  such dirents named one regular file only the first was a `BogusEntry`;
+  repair fixed that one and the rescan reported the other, so one pass did
+  not converge and `initial - repaired != remaining`. An inode is now
+  marked visited only once it is known to be a directory (#325).
 
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
