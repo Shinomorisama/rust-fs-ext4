@@ -529,6 +529,18 @@ Not caught by the compiler — the same source builds and behaves differently:
   (`FS_EXT4_UTIME_NOW`) takes the mount's clock and `UTIME_OMIT`
   (`FS_EXT4_UTIME_OMIT`) leaves the field alone, the seconds beside
   either being ignored; omitting both writes nothing (#326).
+- **Four unchecked sizes no longer panic or overwrite a neighbouring
+  block (#327).** The deep extent-insert descent sliced index entries
+  without a bounds check, so a root or child node claiming more entries
+  than it holds panicked; it now returns `CorruptExtentTree`. A journal
+  commit refuses, before any I/O, a transaction whose block size or any
+  write's length is not the volume's block — `writes` is public, so a
+  2x-block entry bypassed `add_write` and overwrote the next block, and a
+  short superblock entry panicked. The group-descriptor table's length is
+  converted with `try_from`, so 2^32 groups on a 32-bit target are refused
+  rather than truncated to an empty table. And the reserved-inode floor
+  reaches past group 0: with `s_first_ino > inodes_per_group + 1`, group 1
+  no longer hands out reserved inodes.
 
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
