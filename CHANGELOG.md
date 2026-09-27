@@ -211,6 +211,19 @@ Not caught by the compiler — the same source builds and behaves differently:
   how to get the git hooks. The 0.4.1 section below gains the two
   allocator fixes it shipped without listing.
 
+- **The minimum supported Rust is declared: 1.87** (`rust-version` in
+  `Cargo.toml`), so an older toolchain gets cargo's "requires rustc 1.87"
+  refusal instead of seven `E0658` errors about `is_multiple_of`. The
+  library and binaries are built at exactly that version by
+  `chore check:msrv` and by a CI job `ci-ok` requires (#333).
+- Small internal cleanups (#333): a directory-block allocation is committed
+  from its plan alone and a plan for more than one block is refused rather
+  than marking one and applying the counters of all of them; the uninit
+  flag bits come from `BgdFlags`; the descriptors the allocators plan
+  against are cached once an uninit flag is cleared, instead of cloned on
+  every allocation, and the cache is dropped whenever a transaction
+  publishes a clear or the descriptors are re-read; the two `fs_core`
+  mount entry points share one body.
 - **The test contract is chore tasks, and the first consumer of
   [fs-linux-test-harness](https://github.com/antimatter-studios/fs-linux-test-harness).**
   `chore tools` verifies what the HOST needs, `chore fixtures` builds the
