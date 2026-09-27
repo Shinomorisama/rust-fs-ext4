@@ -14,9 +14,10 @@ name: fuzz
 # reproducer is uploaded. That reproducer belongs in fuzz/corpus/, where
 # the gate replays it on every pull request from then on.
 #
-# EROFS is read-only and mounted from sources the reader did not
-# produce -- a container image, an appliance, an OTA payload -- which is
-# exactly the threat model a fuzzer is for.
+# ext4 is mounted from disks and images this reader did not write -- a
+# USB stick, a VM image, a card out of a device -- and every structure
+# on it is read from an offset the structure before it supplied, which
+# is exactly the threat model a fuzzer is for.
 on:
   workflow_dispatch:
     inputs:
@@ -75,16 +76,25 @@ jobs:
           find fuzz/corpus -type f | sort
           echo "total: $(find fuzz/corpus -type f | wc -l) seeds"
 
+      # The input arrives through env:, never pasted into the script: an
+      # expression in `run:` is substituted before the shell parses it,
+      # so `1; curl ... | sh` would be commands. scripts/fuzz-all.sh then
+      # refuses anything but a whole number of seconds that fits the
+      # job's timeout, before anything is fuzzed.
       - name: Fuzz
-        run: ./scripts/fuzz-all.sh "${{ inputs.seconds || '120' }}"
+        env:
+          SECONDS_PER_TARGET: ${{ inputs.seconds || '120' }}
+        run: ./scripts/fuzz-all.sh "$SECONDS_PER_TARGET"
 
       # WITHOUT THIS THE FINDING IS LOST. A crash reproducer lives in
       # fuzz/artifacts/<target>/ on the runner, and the runner is thrown
       # away. The log would say a target crashed and the bytes that
       # caused it would be gone, leaving the next person to re-derive an
-      # input the fuzzer had already found.
+      # input the fuzzer had already found. `cancelled()` too: a run
+      # stopped at its timeout still holds every crash the earlier
+      # targets found.
       - name: Keep the reproducers
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-artifacts
