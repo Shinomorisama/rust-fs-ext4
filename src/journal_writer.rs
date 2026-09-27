@@ -273,6 +273,26 @@ impl JournalWriter {
             ));
         }
 
+        // EVERY WRITE IS ONE BLOCK OF THIS VOLUME (#327). `writes` and
+        // `block_size` are public, so `add_write`'s length check can be
+        // bypassed: a 2x-block entry overwrote the block after its target,
+        // and a short superblock entry panicked below. Checked before any
+        // I/O, so a refusal leaves the device untouched.
+        if tx.block_size != self.block_size {
+            return Err(Error::InvalidArgument(
+                "journal_writer: transaction block size does not match the volume",
+            ));
+        }
+        if tx
+            .writes
+            .iter()
+            .any(|w| w.bytes.len() != self.block_size as usize)
+        {
+            return Err(Error::InvalidArgument(
+                "journal_writer: a journaled write is not exactly one block",
+            ));
+        }
+
         // The superblock block, if journaled, keeps `needs_recovery` set
         // until step 4 clears it (#228) -- in every write to it, since a
         // transaction may carry more than one and step 3 applies them all
@@ -581,6 +601,78 @@ mod tests {
             writer
                 .commit(fs.dev.as_ref(), &small)
                 .expect("the next transaction commits");
+        }
+
+        /// A journal writer on a freshly formatted ext3 volume, with the
+        /// device kept so its bytes can be compared.
+        fn writer_on_ext3() -> (Arc<MemDev>, Filesystem, JournalWriter) {
+            let dev = MemDev::new();
+            crate::mkfs::format_filesystem_with_flavor(
+                dev.as_ref(),
+                None,
+                None,
+                VOL,
+                BS,
+                FsFlavor::Ext3,
+            )
+            .expect("format");
+            let fs = Filesystem::mount(dev.clone()).expect("mount");
+            let writer = JournalWriter::open(&fs).expect("open").expect("writer");
+            (dev, fs, writer)
+        }
+
+        /// Commits `tx` and asserts it is refused with the device untouched
+        /// and the writer still usable.
+        fn assert_refused_untouched(tx: &Transaction, what: &str) {
+            let (dev, fs, mut writer) = writer_on_ext3();
+            let mut tx = tx.clone();
+            tx.sequence = writer.begin().sequence;
+            let before = dev.bytes.lock().unwrap().clone();
+            let got = writer.commit(fs.dev.as_ref(), &tx);
+            assert!(got.is_err(), "{what}: committed ({got:?})");
+            assert!(
+                *dev.bytes.lock().unwrap() == before,
+                "{what}: the refused commit wrote to the device"
+            );
+            assert!(
+                writer.is_healthy(),
+                "{what}: the refusal retired the writer"
+            );
+        }
+
+        /// `writes` is public, so an entry can bypass `add_write`'s length
+        /// check; a 2x-block entry overwrote the block after its target
+        /// (#327).
+        #[test]
+        fn a_write_longer_than_a_block_is_refused_before_any_write() {
+            let mut tx = Transaction::begin(0, BS, false, false);
+            tx.writes.push(crate::transaction::JournaledBlock {
+                fs_block: 100,
+                bytes: vec![0xA5; 2 * BS as usize],
+            });
+            assert_refused_untouched(&tx, "a 2x-block entry");
+        }
+
+        /// A superblock entry shorter than a block panicked slicing
+        /// `bytes[off..off + 1024]` (#327).
+        #[test]
+        fn a_short_superblock_write_is_refused_not_a_panic() {
+            let mut tx = Transaction::begin(0, BS, false, false);
+            tx.writes.push(crate::transaction::JournaledBlock {
+                fs_block: 1, // the superblock at 1 KiB
+                bytes: vec![0u8; 16],
+            });
+            assert_refused_untouched(&tx, "a 16-byte superblock entry");
+        }
+
+        /// A transaction begun for another block size is refused whole
+        /// (#327).
+        #[test]
+        fn a_transaction_for_another_block_size_is_refused() {
+            let mut tx = Transaction::begin(0, 2 * BS, false, false);
+            tx.add_write(100, vec![0xA5; 2 * BS as usize])
+                .expect("add_write at the transaction's own size");
+            assert_refused_untouched(&tx, "a 2 KiB transaction on a 1 KiB volume");
         }
 
         /// Drops every write after the first `budget`: a power cut.
