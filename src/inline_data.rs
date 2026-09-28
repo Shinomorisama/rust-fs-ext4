@@ -15,9 +15,14 @@
 //!     get the full file content.
 //!   - Maximum inline file size = 60 + (in-inode-xattr-region-size minus
 //!     headers and other entries). Typically 60–~150 bytes for inode_size=256.
+//!
+//! A directory uses the same two areas with one difference: the first 4
+//! bytes of `i_block` are its parent's inode number, and its entries start
+//! at byte 4 (see [`dir_entries`]).
 
 use crate::block_io::BlockDevice;
-use crate::error::Result;
+use crate::dir::{DirBlockIter, DirEntry, DirEntryType};
+use crate::error::{Error, Result};
 use crate::inode::Inode;
 use crate::xattr;
 
@@ -71,6 +76,100 @@ pub fn read_all(
     out.extend_from_slice(&extra[..need]);
 
     Ok(out)
+}
+
+/// Bytes at the head of an inline directory's `i_block` that are not
+/// entries: the parent directory's inode number, the implicit `..`
+/// (`EXT4_INLINE_DOTDOT_SIZE` in the kernel's `fs/ext4/inline.c`).
+pub const INLINE_DOTDOT_SIZE: usize = 4;
+
+/// Size of the `i_block` area that holds inline data.
+pub const INLINE_BLOCK_SIZE: usize = 60;
+
+/// The entries of an inline-data directory, in the order the kernel's
+/// readdir reports them: `.` (the directory itself), `..` (read from
+/// bytes 0..4 of `i_block`), the entries in `i_block[4..60]`, then those
+/// in `continuation` -- the `system.data` xattr value, empty when the
+/// directory fits in `i_block`.
+///
+/// An inline directory holds no `.` or `..` records: `.` is implicit, and
+/// `..` is a bare inode number. Entries start at byte 4, so parsing from
+/// byte 0 reads the parent's inode number as a record and fails with
+/// `bad rec_len` (#427).
+pub fn dir_entries(
+    dir_ino: u32,
+    inode: &Inode,
+    continuation: &[u8],
+    has_filetype: bool,
+) -> Result<Vec<DirEntry>> {
+    let parent = u32::from_le_bytes(inode.block[..INLINE_DOTDOT_SIZE].try_into().unwrap());
+    if parent == 0 {
+        return Err(Error::CorruptDirEntry(
+            "inline directory: parent inode number is 0",
+        ));
+    }
+    let mut out = vec![
+        DirEntry {
+            inode: dir_ino,
+            name: b".".to_vec(),
+            file_type: DirEntryType::Directory,
+        },
+        DirEntry {
+            inode: parent,
+            name: b"..".to_vec(),
+            file_type: DirEntryType::Directory,
+        },
+    ];
+    for area in [&inode.block[INLINE_DOTDOT_SIZE..], continuation] {
+        for entry in DirBlockIter::new(area, has_filetype) {
+            out.push(entry?);
+        }
+    }
+    Ok(out)
+}
+
+/// The `system.data` bytes an inline directory's entries continue into,
+/// or an empty vector when `i_size` says it fits in `i_block`. A size
+/// past 60 with no such xattr, or a shorter one, is corruption -- the
+/// same rule [`read_all`] applies to a file.
+pub fn dir_continuation(
+    dev: &dyn BlockDevice,
+    inode: &Inode,
+    inode_raw: &[u8],
+    inode_size: u16,
+    block_size: u32,
+) -> Result<Vec<u8>> {
+    let total = inode.size as usize;
+    if total <= INLINE_BLOCK_SIZE {
+        return Ok(Vec::new());
+    }
+    let need = total - INLINE_BLOCK_SIZE;
+    let mut extra = xattr::get(dev, inode, inode_raw, inode_size, block_size, "system.data")?
+        .ok_or(Error::Corrupt(
+            "inline directory larger than 60 bytes has no system.data xattr",
+        ))?;
+    if extra.len() < need {
+        return Err(Error::Corrupt(
+            "inline directory's system.data xattr is shorter than its size claims",
+        ));
+    }
+    extra.truncate(need);
+    Ok(extra)
+}
+
+/// Every entry of the inline-data directory `dir_ino`: [`dir_entries`]
+/// over `i_block` and its [`dir_continuation`].
+pub fn read_dir(
+    dev: &dyn BlockDevice,
+    dir_ino: u32,
+    inode: &Inode,
+    inode_raw: &[u8],
+    inode_size: u16,
+    block_size: u32,
+    has_filetype: bool,
+) -> Result<Vec<DirEntry>> {
+    let continuation = dir_continuation(dev, inode, inode_raw, inode_size, block_size)?;
+    dir_entries(dir_ino, inode, &continuation, has_filetype)
 }
 
 /// Read a range from an inline-data file.

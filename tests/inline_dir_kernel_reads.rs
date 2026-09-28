@@ -92,6 +92,11 @@ fn kernel_made_inline_directories_resolve_and_list_as_the_kernel_sees_them() {
         let got = fs_ext4::path::lookup(fs.dev.as_ref(), &fs.sb, &mut reader, path);
         assert_eq!(got.map_err(|e| format!("{e:?}")), Ok(*ino), "lookup {path}");
     }
+
+    // The audit walks the inline directories too, and finds the kernel's
+    // link counts right.
+    let report = fs.audit(u32::MAX, u32::MAX).expect("audit");
+    assert!(report.is_clean(), "audit: {:?}", report.anomalies);
     drop(fs);
 
     // Readdir: exactly the kernel's children, plus `.` and `..`.

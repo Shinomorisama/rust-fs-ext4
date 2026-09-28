@@ -1788,19 +1788,43 @@ impl Filesystem {
     /// Every entry of directory `dir`, `.` and `..` included, in on-disk
     /// order. Directory listing by path resolves and calls this.
     pub fn read_dir_ino(&self, dir: impl Into<InodeRef>) -> Result<Vec<crate::dir::DirEntry>> {
-        let (inode, _) = self.live_dir(dir.into())?;
-        self.dir_entries(&inode)
+        let dir = dir.into();
+        let (inode, raw) = self.live_dir(dir)?;
+        self.dir_entries(dir.ino, &inode, &raw)
     }
 
-    /// Collect the entries of the directory `inode`.
-    fn dir_entries(&self, inode: &Inode) -> Result<Vec<crate::dir::DirEntry>> {
+    /// Collect the entries of the directory `inode`, number `ino`, whose
+    /// on-disk bytes are `inode_raw`.
+    fn dir_entries(
+        &self,
+        ino: u32,
+        inode: &Inode,
+        inode_raw: &[u8],
+    ) -> Result<Vec<crate::dir::DirEntry>> {
         use crate::dir::DirBlockIter;
         crate::file_io::refuse_encrypted_names(inode)?;
+        let block_size = self.sb.block_size();
+        let has_filetype = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+
+        // Inline-data dirs (tiny dirs stored inside the inode itself).
+        // Checked before the extent test: an inline directory has no extent
+        // tree, and was refused as a legacy one. `.` and `..` synthesised,
+        // entries from byte 4 and then from the `system.data` continuation
+        // (#427).
+        if inode.has_inline_data() {
+            return crate::inline_data::read_dir(
+                self.dev.as_ref(),
+                ino,
+                inode,
+                inode_raw,
+                self.sb.inode_size,
+                block_size,
+                has_filetype,
+            );
+        }
         if !inode.has_extents() {
             return Err(Error::Corrupt("legacy (non-extent) dirs not yet supported"));
         }
-        let block_size = self.sb.block_size();
-        let has_filetype = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
 
         // Bound on entries buffered per listing. A crafted image with
         // `inode.size` claiming gigabytes would otherwise allocate
@@ -1815,14 +1839,6 @@ impl Filesystem {
             entries.push(e);
             Ok(())
         };
-
-        // Inline-data dirs: tiny dirs stored inside the inode itself.
-        if inode.has_inline_data() {
-            for entry in DirBlockIter::new(&inode.block, has_filetype) {
-                push(&mut entries, entry?)?;
-            }
-            return Ok(entries);
-        }
 
         let total_blocks = inode.size.div_ceil(block_size as u64);
         let mut block_buf = vec![0u8; block_size as usize];
