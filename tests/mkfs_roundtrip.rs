@@ -240,3 +240,82 @@ fn the_hash_seed_is_at_0xec_and_nothing_is_written_before_it() {
         );
     }
 }
+
+/// A sparse R/W device: only the 4 KiB pages that were written take memory,
+/// so a volume of several GiB can be formatted and mounted in a test.
+struct SparseDev {
+    pages: Mutex<std::collections::HashMap<u64, Vec<u8>>>,
+    size: u64,
+}
+
+const PAGE: u64 = 4096;
+
+impl BlockDevice for SparseDev {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
+        assert!(offset + buf.len() as u64 <= self.size, "read past EOF");
+        let pages = self.pages.lock().unwrap();
+        for (i, byte) in buf.iter_mut().enumerate() {
+            let at = offset + i as u64;
+            *byte = pages
+                .get(&(at / PAGE))
+                .map_or(0, |p| p[(at % PAGE) as usize]);
+        }
+        Ok(())
+    }
+    fn write_at(&self, offset: u64, buf: &[u8]) -> Result<()> {
+        assert!(offset + buf.len() as u64 <= self.size, "write past EOF");
+        let mut pages = self.pages.lock().unwrap();
+        for (i, byte) in buf.iter().enumerate() {
+            let at = offset + i as u64;
+            pages
+                .entry(at / PAGE)
+                .or_insert_with(|| vec![0u8; PAGE as usize])[(at % PAGE) as usize] = *byte;
+        }
+        Ok(())
+    }
+    fn size_bytes(&self) -> u64 {
+        self.size
+    }
+    fn flush(&self) -> Result<()> {
+        Ok(())
+    }
+    fn is_writable(&self) -> bool {
+        true
+    }
+}
+
+/// The format's ceiling on a block group: `EXT2_MAX_BLOCKS_PER_GROUP`,
+/// 2^16 - 8, which e2fsprogs' `ext2fs_open2` enforces and `mke2fs` caps at.
+const MAX_BLOCKS_PER_GROUP: u32 = 65528;
+
+/// At 16 KiB blocks and larger, `8 * block_size` is more blocks than a group
+/// may hold (#429): the formatter wrote 131072 and up, which e2fsprogs
+/// refuses as a corrupt superblock. The group is capped at 65528 blocks,
+/// what `mke2fs -b <size>` chooses. 98304 blocks is one group under the old
+/// geometry and two, one full and one short, under the capped one.
+#[test]
+fn large_blocks_cap_the_group_at_the_formats_limit() {
+    for block_size in [16384u32, 32768, 65536] {
+        let size = 98_304 * u64::from(block_size);
+        let dev = Arc::new(SparseDev {
+            pages: Mutex::new(std::collections::HashMap::new()),
+            size,
+        });
+        mkfs::format_filesystem(dev.as_ref(), None, None, size, block_size)
+            .unwrap_or_else(|e| panic!("{block_size}: format: {e:?}"));
+        let dev_dyn: Arc<dyn BlockDevice> = dev.clone();
+        let fs =
+            Filesystem::mount(dev_dyn).unwrap_or_else(|e| panic!("{block_size}: mount: {e:?}"));
+        assert_eq!(
+            fs.sb.blocks_per_group, MAX_BLOCKS_PER_GROUP,
+            "{block_size}-byte blocks: blocks per group"
+        );
+        assert_eq!(fs.groups.len(), 2, "{block_size}-byte blocks: groups");
+        let report = fs_ext4::fsck::audit(&fs, u32::MAX, u32::MAX).expect("audit");
+        assert!(
+            report.is_clean(),
+            "{block_size}-byte blocks: {:?}",
+            report.anomalies
+        );
+    }
+}
