@@ -2090,8 +2090,9 @@ impl Filesystem {
     }
 
     /// Phase 2.3 — `fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)`.
-    /// Frees the data blocks underlying `[offset, offset+len)`, splitting
-    /// straddling extents as needed. Reads of the punched range return
+    /// Frees the data blocks wholly inside `[offset, offset+len)`, splitting
+    /// straddling extents as needed, and zeroes the part of a block at
+    /// either end that the range covers only in part. Reads of the punched range return
     /// zeros (sparse hole) thereafter; `i_size` is unchanged.
     ///
     /// Extent trees of any depth. The surviving extents are laid out
@@ -2113,11 +2114,15 @@ impl Filesystem {
         }
         let bs = self.sb.block_size() as u64;
         let bs_u32 = self.sb.block_size();
-        let punch_first = offset / bs;
-        let punch_last_excl = offset
+        let end = offset
             .checked_add(len)
-            .ok_or(Error::InvalidArgument("punch_hole: offset+len overflow"))?
-            .div_ceil(bs);
+            .ok_or(Error::InvalidArgument("punch_hole: offset+len overflow"))?;
+        // ONLY THE BLOCKS WHOLLY INSIDE THE RANGE ARE FREED (#388). A block
+        // the range covers in part keeps its other bytes, so it stays mapped
+        // and the covered part is zeroed in place, as the kernel does. This
+        // rounded outward once, and `punch(100, 100)` zeroed bytes 0..4096.
+        let punch_first = offset.div_ceil(bs);
+        let punch_last_excl = end / bs;
 
         let (inode, mut raw) = self.read_inode_verified(ino)?;
         if !inode.is_file() {
@@ -2135,7 +2140,34 @@ impl Filesystem {
         let mut freed_blocks: u64 = 0;
         let mut buf = BlockBuffer::new(bs_u32);
 
-        for e in &extents {
+        // The partial edge blocks: zeroed in the same transaction. A hole or
+        // an uninitialized extent already reads as zeros and is left alone.
+        let (head_block, tail_block) = (offset / bs, end / bs);
+        let edges = if head_block == tail_block {
+            vec![head_block]
+        } else {
+            vec![head_block, tail_block]
+        };
+        for lb in edges {
+            let lo = offset.max(lb * bs);
+            let hi = end.min((lb + 1) * bs);
+            if lo >= hi || hi - lo == bs {
+                continue; // outside the range, or wholly inside it
+            }
+            let Some(phys) =
+                crate::extent::map_logical(&inode.block, self.dev.as_ref(), bs_u32, lb)?
+            else {
+                continue;
+            };
+            let block = buf.get_mut(self, phys)?;
+            let (from, to) = ((lo - lb * bs) as usize, (hi - lb * bs) as usize);
+            block[from..to].fill(0);
+        }
+
+        // A range inside one block, or across two with no whole block
+        // between, frees nothing: the tree is left exactly as it is.
+        let frees_blocks = punch_first < punch_last_excl;
+        for e in extents.iter().filter(|_| frees_blocks) {
             let el = e.logical_block as u64;
             let er = el + e.length as u64;
 
@@ -2188,26 +2220,35 @@ impl Filesystem {
         // need no blocks at all and go in the inode, which is all this used
         // to do: every file with more than four surviving extents — that is,
         // every large file, which is what a punch is for — was refused.
-        let gen = u32::from_le_bytes(inode.block[8..12].try_into().unwrap());
-        let repacked = {
-            let mut alloc = || self.buffer_allocate_block(&mut buf, ino);
-            crate::extent_mut::plan_repack_tree(gen, &new_entries, bs_u32, &tree_nodes, &mut alloc)?
-        };
-        let allocated_blocks = repacked.allocated_blocks.len() as u64;
-        for (block, mut bytes) in repacked.block_writes {
-            if self.csum.enabled {
-                self.csum
-                    .patch_extent_tail(ino, inode.generation, &mut bytes);
+        let mut allocated_blocks = 0;
+        if frees_blocks {
+            let gen = u32::from_le_bytes(inode.block[8..12].try_into().unwrap());
+            let repacked = {
+                let mut alloc = || self.buffer_allocate_block(&mut buf, ino);
+                crate::extent_mut::plan_repack_tree(
+                    gen,
+                    &new_entries,
+                    bs_u32,
+                    &tree_nodes,
+                    &mut alloc,
+                )?
+            };
+            allocated_blocks = repacked.allocated_blocks.len() as u64;
+            for (block, mut bytes) in repacked.block_writes {
+                if self.csum.enabled {
+                    self.csum
+                        .patch_extent_tail(ino, inode.generation, &mut bytes);
+                }
+                buf.put(block, bytes);
             }
-            buf.put(block, bytes);
-        }
-        for &node in &tree_nodes {
-            if repacked.used_nodes.contains(&node) {
-                continue;
+            for &node in &tree_nodes {
+                if repacked.used_nodes.contains(&node) {
+                    continue;
+                }
+                freed_blocks += self.buffer_free_block_run_and_bgd(&mut buf, node, 1)?;
             }
-            freed_blocks += self.buffer_free_block_run_and_bgd(&mut buf, node, 1)?;
+            Self::patch_inode_block_area(&mut raw, &repacked.new_root)?;
         }
-        Self::patch_inode_block_area(&mut raw, &repacked.new_root)?;
 
         // i_blocks decreases; i_size unchanged (KEEP_SIZE semantics
         // built in — punch always preserves size).
@@ -2231,10 +2272,11 @@ impl Filesystem {
     }
 
     /// Phase 2.4 — `fallocate(FALLOC_FL_ZERO_RANGE)`. Logically zero the
-    /// byte range `[offset, offset+len)` without writing actual data.
-    /// Implemented as punch-hole + KEEP_SIZE preallocate of the same
-    /// range, so reads return zeros (uninitialized-extent semantics) and
-    /// future writes don't need an allocation.
+    /// byte range `[offset, offset+len)`. Implemented as punch-hole, which
+    /// zeroes the partial edge blocks in place, + KEEP_SIZE preallocate of
+    /// the whole blocks between them, so reads return zeros
+    /// (uninitialized-extent semantics) and future writes don't need an
+    /// allocation.
     ///
     /// Two separate transactions today (punch then alloc); a future
     /// optimization could fold them into one.
@@ -2243,7 +2285,17 @@ impl Filesystem {
             return Ok(());
         }
         self.apply_fallocate_punch_hole(ino, offset, len)?;
-        self.apply_fallocate_keep_size(ino, offset, len)
+        // Only the whole blocks the punch freed are preallocated again: the
+        // partial ones at the edges stay mapped, their range zeroed (#388).
+        let bs = self.sb.block_size() as u64;
+        let end = offset
+            .checked_add(len)
+            .ok_or(Error::InvalidArgument("zero_range: offset+len overflow"))?;
+        let (first, last) = (offset.div_ceil(bs) * bs, end / bs * bs);
+        if first >= last {
+            return Ok(());
+        }
+        self.apply_fallocate_keep_size(ino, first, last - first)
     }
 
     /// Change the permission bits on `path`. Only the low 12 bits of `mode`
@@ -7318,6 +7370,108 @@ mod tests {
 
     fn mount(dev: &std::sync::Arc<MemDev>) -> Filesystem {
         Filesystem::mount(dev.clone()).expect("mount")
+    }
+
+    /// `/f` holding `len` bytes of 0xAA; returns its inode number.
+    fn file_of_aa(fs: &Filesystem, len: usize) -> u32 {
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        fs.apply_replace_file_content("/f", &vec![0xAAu8; len])
+            .unwrap();
+        ino
+    }
+
+    /// The file's bytes, and how many of them disagree with "0xAA outside
+    /// `zeroed`, 0 inside it".
+    fn bytes_wrong_after_zeroing(
+        fs: &Filesystem,
+        ino: u32,
+        zeroed: std::ops::Range<usize>,
+    ) -> usize {
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let data = crate::file_io::read_all(fs, &inode).unwrap();
+        data.iter()
+            .enumerate()
+            .filter(|(i, b)| **b != if zeroed.contains(i) { 0 } else { 0xAA })
+            .count()
+    }
+
+    /// An unaligned punch keeps the bytes outside its range (#388): the
+    /// edge blocks are zeroed in part, not freed whole.
+    #[test]
+    fn an_unaligned_punch_keeps_the_bytes_around_it() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 8192);
+        fs.apply_fallocate_punch_hole(ino, 100, 100).unwrap();
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, 100..200), 0);
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(
+            bytes_wrong_after_zeroing(&fs, ino, 100..200),
+            0,
+            "after a remount"
+        );
+    }
+
+    /// A punch spanning whole blocks frees those and zeroes the partial
+    /// ones at each end in place (#388).
+    #[test]
+    fn a_punch_frees_the_whole_blocks_and_zeroes_the_edges() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 3 * BS as usize);
+        drop(fs);
+        let fs = mount(&dev); // `fs.sb` is the superblock as mounted
+        let free_before = fs.sb.free_blocks_count;
+        let (lo, hi) = (100usize, 2 * BS as usize + 100);
+        fs.apply_fallocate_punch_hole(ino, lo as u64, (hi - lo) as u64)
+            .unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, lo..hi), 0);
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let mapped: Vec<bool> = (0..3)
+            .map(|lb| fs.map_inode_logical(&inode, lb).unwrap().is_some())
+            .collect();
+        assert_eq!(
+            mapped,
+            [true, false, true],
+            "only the middle block is freed"
+        );
+        assert_eq!(fs.sb.free_blocks_count, free_before + 1, "one block freed");
+    }
+
+    /// A punch inside one block frees nothing.
+    #[test]
+    fn a_punch_inside_one_block_frees_nothing() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 2 * BS as usize);
+        drop(fs);
+        let fs = mount(&dev); // `fs.sb` is the superblock as mounted
+        let free_before = fs.sb.free_blocks_count;
+        fs.apply_fallocate_punch_hole(ino, BS as u64 + 1, BS as u64 - 2)
+            .unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        let (lo, hi) = (BS as usize + 1, 2 * BS as usize - 1);
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, lo..hi), 0);
+        assert_eq!(fs.sb.free_blocks_count, free_before);
+    }
+
+    /// An unaligned zero-range zeroes exactly its range (#388): it is a
+    /// punch plus a preallocation, and inherited the punch's rounding.
+    #[test]
+    fn an_unaligned_zero_range_keeps_the_bytes_around_it() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 3 * BS as usize);
+        let (lo, hi) = (100usize, 2 * BS as usize + 100);
+        fs.apply_fallocate_zero_range(ino, lo as u64, (hi - lo) as u64)
+            .unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, lo..hi), 0);
     }
 
     /// `/f` with one block written at every other logical block from 0 to
