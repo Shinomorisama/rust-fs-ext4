@@ -56,6 +56,24 @@ Not caught by the compiler — the same source builds and behaves differently:
   `METADATA_CSUM` is no longer counted as maintained (#92).
 - `features::READ_BREAKING_RO_COMPAT` is now `0`: `BIGALLOC` volumes mount
   and read rather than being refused (#237).
+- **`cfg->block_size` is honoured on the callback mounts** (#373). It was
+  documented as the device's physical block size, but no mount path read
+  it, so a host whose block resource accepts only sector-aligned I/O had
+  its first request — the superblock, 1024 bytes at offset 1024 — refused
+  and the mount returned NULL. With `block_size` greater than 1,
+  `fs_ext4_mount_with_callbacks`, `fs_ext4_mount_rw_with_callbacks` and
+  `fs_ext4_mount_rw_with_callbacks_lazy` now send the callbacks only
+  requests whose offset and length are multiples of it: an unaligned read
+  is widened into a bounce buffer, an unaligned write becomes a
+  read-modify-write of its first and last sectors, and an aligned request
+  passes straight through (`block_io::AlignedDevice`). A `block_size` that
+  is not a power of two, does not divide `size_bytes`, or is larger than
+  the filesystem block size is `EINVAL`. **A caller that already set it —
+  512 is common — now receives 512-aligned requests**; 0 or 1 keeps the
+  byte-granular requests. On `fs_ext4_mkfs` the field still means the
+  filesystem block size. `tests/capi_callback_alignment.rs` mounts,
+  writes and reads through a device that refuses unaligned I/O, and
+  `tests/capi_callback_alignment_oracle.rs` has e2fsck check the result.
 
 - **`Runtime::now_unix_seconds` returns `i64`, not `u32`.** The clock the
   driver stamps inodes from could not express a time past 2038 as ext4
