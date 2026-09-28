@@ -10123,6 +10123,94 @@ mod tests {
         );
     }
 
+    /// Make the regular file `ino` an inline-data file whose 4 content
+    /// bytes, held in `i_block`, are `content` — the way the kernel keeps a
+    /// file that fits in the inode.
+    fn make_inline_file(fs: &Filesystem, ino: u32, content: u32) {
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        let mut flags = u32::from_le_bytes(raw[0x20..0x24].try_into().unwrap());
+        flags &= !crate::inode::InodeFlags::EXTENTS.bits();
+        flags |= crate::inode::InodeFlags::INLINE_DATA.bits();
+        raw[0x20..0x24].copy_from_slice(&flags.to_le_bytes());
+        raw[0x28..0x64].fill(0);
+        raw[0x28..0x2C].copy_from_slice(&content.to_le_bytes());
+        raw[0x04..0x08].copy_from_slice(&4u32.to_le_bytes());
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
+    }
+
+    /// Whether `block` is marked in use in its group's bitmap.
+    fn block_in_use(fs: &Filesystem, block: u64) -> bool {
+        let rel = block - fs.sb.first_data_block as u64;
+        let gi = (rel / fs.sb.blocks_per_group as u64) as usize;
+        let bit = (rel % fs.sb.blocks_per_group as u64) as usize;
+        let bm = fs.read_block(fs.groups[gi].block_bitmap).unwrap();
+        bm[bit / 8] & (1 << (bit % 8)) != 0
+    }
+
+    /// #383: replacing the content of an inline-data file must not read its
+    /// data bytes as block pointers and free them.
+    #[test]
+    fn replacing_an_inline_file_does_not_free_its_bytes_as_blocks() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let victim = fs.map_inode_logical(&root, 0).unwrap().unwrap(); // root dir's block
+        make_inline_file(&fs, ino, victim as u32);
+        drop(fs);
+        let fs = mount(&dev);
+        let r = fs.apply_replace_file_content("/f", b"new content");
+        drop(fs);
+        let fs = mount(&dev);
+        assert!(
+            block_in_use(&fs, victim),
+            "root directory block {victim} was freed: {r:?}"
+        );
+        assert!(
+            matches!(r, Err(Error::Unsupported(_))),
+            "replace of an inline file: {r:?}"
+        );
+    }
+
+    /// #383: truncate and pwrite of an inline-data file are refused and
+    /// leave it as it was; a grow used to patch only `i_size`, past what
+    /// the inline area holds, which the reader then rejects as corrupt.
+    #[test]
+    fn truncating_or_writing_an_inline_file_is_refused_and_leaves_it_whole() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        make_inline_file(&fs, ino, u32::from_le_bytes(*b"abc\n"));
+        drop(fs);
+        let fs = mount(&dev);
+        let before = fs.read_inode_verified(ino).unwrap().1;
+        let grow = fs.apply_truncate_grow(ino, 4096);
+        let shrink = fs.apply_truncate_shrink(ino, 1);
+        let pwrite = fs.apply_pwrite("/f", 1, b"x");
+        drop(fs);
+        let fs = mount(&dev);
+        for (name, r) in [
+            ("grow", grow),
+            ("shrink", shrink),
+            ("pwrite", pwrite.map(drop)),
+        ] {
+            assert!(
+                matches!(r, Err(Error::Unsupported(_))),
+                "{name} of an inline file: {r:?}"
+            );
+        }
+        let (inode, after) = fs.read_inode_verified(ino).unwrap();
+        assert!(after == before, "a refused write changed the inline inode");
+        assert_eq!(
+            crate::file_io::read_inline(&fs, &inode, &after).unwrap(),
+            b"abc\n"
+        );
+    }
+
     /// Tests that run an oracle tool (they run in the harness VM): mkfs.ext4, e2fsck.
     mod needs_host {
         use super::*;
