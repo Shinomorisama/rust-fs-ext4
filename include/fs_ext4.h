@@ -508,7 +508,8 @@ const char *fs_ext4_last_error(void);
 /*
  * Get POSIX errno for the last failed FFI call (thread-local).
  * Returns 0 if the last call succeeded (or no call has been made yet).
- * Codes: ENOENT, EIO, ENOTDIR, EINVAL, ENOTSUP — or any errno surfaced
+ * Codes: ENOENT, EIO, ENOTDIR, EINVAL, ENOTSUP, ESTALE (an inode-addressed
+ * call on an inode that no longer names the file) — or any errno surfaced
  * by the underlying I/O layer (e.g. EACCES from the block device).
  * Use this alongside fs_ext4_last_error() to produce an NSError
  * with the correct POSIXErrorDomain code for FSKit.
@@ -727,6 +728,136 @@ static const uint32_t FS_EXT4_UTIME_OMIT = 0x3ffffffeu;
 int fs_ext4_utimens(fs_ext4_fs_t *fs, const char *path,
                     int64_t atime_sec, uint32_t atime_nsec,
                     int64_t mtime_sec, uint32_t mtime_nsec);
+
+/* ---- Inode-addressed entry points ---- */
+
+/*
+ * The path functions above, with the path replaced by what a handle-based
+ * host holds instead: an inode number for an item, and a (directory inode,
+ * name) pair for a mutation. Each calls the same implementation as its path
+ * twin, so the two behave identically -- same attributes, entries, bytes
+ * and errors. A path is the wrong key for such a host: a hard link gives
+ * one inode several, and renaming a directory changes every one beneath it.
+ *
+ * GENERATIONS. Every inode argument is followed by a generation: the
+ * `generation` field of the fs_ext4_attr_t the caller read the inode number
+ * from, or FS_EXT4_GEN_ANY. A call on an inode that has been freed -- or
+ * freed and reused for a different file, whose generation differs -- or
+ * on a number that never named a file (0, past the inode table, a reserved
+ * inode other than the root 2) fails with ESTALE instead of reaching
+ * whatever occupies the slot now. With FS_EXT4_GEN_ANY only the reuse case
+ * goes undetected. A generation of exactly 0xFFFFFFFF cannot be pinned.
+ *
+ * NAMES are counted byte buffers (`name`, `name_len`), not C strings, and
+ * need not be UTF-8: a name round-trips byte for byte. A name is one
+ * directory entry: empty, or containing '/' or NUL, is EINVAL; longer than
+ * 255 bytes is ENAMETOOLONG. `.` and `..` are ordinary entries to
+ * fs_ext4_lookup_at; fs_ext4_rmdir_at refuses them (EINVAL for `.`,
+ * ENOTEMPTY for `..`) and fs_ext4_rename_at refuses them on either side
+ * (EINVAL).
+ *
+ * Return values follow the path twins where those return 0 / -1; the calls
+ * that make an inode return 0 / -1 too, and fill an optional `attr`
+ * out-parameter (NULL to skip) with the new inode's attributes, from which
+ * the caller takes its handle (`attr->inode`, `attr->generation`).
+ * Errors are reported through fs_ext4_last_error / fs_ext4_last_errno.
+ */
+#define FS_EXT4_GEN_ANY 0xFFFFFFFFu
+
+/* Look up `name` in directory `dir_ino`; fill `attr` for the inode it
+ * names. 0 on success, -1 on failure (ENOENT, ENOTDIR, ESTALE, ...). */
+int fs_ext4_lookup_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                      uint32_t dir_generation, const char *name,
+                      size_t name_len, fs_ext4_attr_t *attr);
+
+/* fs_ext4_stat of inode `ino`. 0 on success, -1 on failure. */
+int fs_ext4_stat_ino(fs_ext4_fs_t *fs, uint32_t ino, uint32_t generation,
+                     fs_ext4_attr_t *attr);
+
+/* fs_ext4_dir_open of directory `ino`; iterate and close it with
+ * fs_ext4_dir_next / fs_ext4_dir_close. NULL on failure. */
+fs_ext4_dir_iter_t *fs_ext4_dir_open_ino(fs_ext4_fs_t *fs, uint32_t ino,
+                                         uint32_t generation);
+
+/* fs_ext4_read_file of inode `ino`: up to `length` bytes from `offset`.
+ * Returns the bytes read, or -1. */
+int64_t fs_ext4_pread_ino(fs_ext4_fs_t *fs, uint32_t ino,
+                          uint32_t generation, void *buf, uint64_t offset,
+                          uint64_t length);
+
+/* fs_ext4_readlink of inode `ino`, under the same contract: the target and
+ * a NUL written into `buf`, the target's length returned; -1 with ERANGE,
+ * nothing written, when bufsize < length + 1. */
+int fs_ext4_readlink_ino(fs_ext4_fs_t *fs, uint32_t ino,
+                         uint32_t generation, char *buf, size_t bufsize);
+
+/* fs_ext4_pwrite to inode `ino`. Returns the new size, or -1. */
+int64_t fs_ext4_pwrite_ino(fs_ext4_fs_t *fs, uint32_t ino,
+                           uint32_t generation, const void *data,
+                           uint64_t len, uint64_t offset);
+
+/* fs_ext4_truncate of inode `ino`. 0 on success, -1 on failure. */
+int fs_ext4_truncate_ino(fs_ext4_fs_t *fs, uint32_t ino,
+                         uint32_t generation, uint64_t new_size);
+
+/* fs_ext4_chmod / fs_ext4_chown / fs_ext4_utimens of inode `ino`.
+ * 0 on success, -1 on failure. */
+int fs_ext4_chmod_ino(fs_ext4_fs_t *fs, uint32_t ino, uint32_t generation,
+                      uint16_t mode);
+int fs_ext4_chown_ino(fs_ext4_fs_t *fs, uint32_t ino, uint32_t generation,
+                      uint32_t uid, uint32_t gid);
+int fs_ext4_utimens_ino(fs_ext4_fs_t *fs, uint32_t ino, uint32_t generation,
+                        int64_t atime_sec, uint32_t atime_nsec,
+                        int64_t mtime_sec, uint32_t mtime_nsec);
+
+/* fs_ext4_create / fs_ext4_mkdir / fs_ext4_mknod of entry `name` in
+ * directory `dir_ino`. 0 on success with `attr` (may be NULL) filled for
+ * the new inode, -1 on failure. */
+int fs_ext4_create_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                      uint32_t dir_generation, const char *name,
+                      size_t name_len, uint16_t mode, fs_ext4_attr_t *attr);
+int fs_ext4_mkdir_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                     uint32_t dir_generation, const char *name,
+                     size_t name_len, uint16_t mode, fs_ext4_attr_t *attr);
+int fs_ext4_mknod_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                     uint32_t dir_generation, const char *name,
+                     size_t name_len, uint16_t mode, uint32_t major,
+                     uint32_t minor, fs_ext4_attr_t *attr);
+
+/* fs_ext4_symlink: entry `name` in directory `dir_ino` pointing at the
+ * NUL-terminated `target` (bytes; need not be UTF-8). 0 on success with
+ * `attr` (may be NULL) filled for the new symlink, -1 on failure. */
+int fs_ext4_symlink_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                       uint32_t dir_generation, const char *name,
+                       size_t name_len, const char *target,
+                       fs_ext4_attr_t *attr);
+
+/* fs_ext4_link: a new entry `name` in directory `dir_ino` for inode
+ * `ino`. 0 on success with `attr` (may be NULL) filled for `ino`, -1 on
+ * failure (EISDIR for a directory). */
+int fs_ext4_link_at(fs_ext4_fs_t *fs, uint32_t ino, uint32_t generation,
+                    uint32_t dir_ino, uint32_t dir_generation,
+                    const char *name, size_t name_len, fs_ext4_attr_t *attr);
+
+/* fs_ext4_unlink / fs_ext4_rmdir of entry `name` in directory `dir_ino`.
+ * 0 on success, -1 on failure. */
+int fs_ext4_unlink_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                      uint32_t dir_generation, const char *name,
+                      size_t name_len);
+int fs_ext4_rmdir_at(fs_ext4_fs_t *fs, uint32_t dir_ino,
+                     uint32_t dir_generation, const char *name,
+                     size_t name_len);
+
+/* fs_ext4_rename2 of entry `src_name` in directory `src_dir_ino` to entry
+ * `dst_name` in directory `dst_dir_ino`, with the same `flags`
+ * (FS_EXT4_RENAME_REPLACE). Renaming an entry to itself succeeds and
+ * writes nothing; moving a directory into its own subtree is EINVAL.
+ * 0 on success, -1 on failure. */
+int fs_ext4_rename_at(fs_ext4_fs_t *fs, uint32_t src_dir_ino,
+                      uint32_t src_dir_generation, const char *src_name,
+                      size_t src_name_len, uint32_t dst_dir_ino,
+                      uint32_t dst_dir_generation, const char *dst_name,
+                      size_t dst_name_len, int flags);
 
 /* ---- Volume creation (mkfs) ---- */
 

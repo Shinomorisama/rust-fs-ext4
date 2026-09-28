@@ -121,6 +121,18 @@ Not caught by the compiler — the same source builds and behaves differently:
   (ESTALE) once its inode is freed or reused for another file; so is a
   number that never named a file. `tests/inode_api_e2fsck.rs` has e2fsck
   judge a volume written only through them.
+- **The same entry points in the C ABI** (#372): `fs_ext4_lookup_at`,
+  `fs_ext4_stat_ino`, `fs_ext4_dir_open_ino`, `fs_ext4_pread_ino`,
+  `fs_ext4_readlink_ino` (the `fs_ext4_readlink` contract: length
+  returned, NUL-terminated, ERANGE when too small),
+  `fs_ext4_{create,mkdir,mknod,symlink,unlink,rmdir}_at`,
+  `fs_ext4_link_at`, `fs_ext4_rename_at` and
+  `fs_ext4_{pwrite,truncate,chmod,chown,utimens}_ino`. Every inode
+  argument is followed by the generation read with it, or
+  `FS_EXT4_GEN_ANY`; names are counted byte buffers; the calls that make
+  an inode fill an optional `fs_ext4_attr_t` for it. The path exports and
+  these share their read, list, readlink, truncate and argument checks,
+  and `tests/capi_ino_api.rs` holds each to its path twin.
 - **The parsers are fuzzed, on two tiers.** ext4 is the widest parser
   surface in the family — a superblock, group descriptors, an inode
   table, extent trees, htree indexes and a jbd2 journal, each read from
