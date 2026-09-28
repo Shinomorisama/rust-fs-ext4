@@ -85,6 +85,31 @@ fn patch_counter_u32(buf: &mut [u8], lo_off: usize, hi_off: Option<usize>, delta
     }
 }
 
+/// Apply counter deltas to the descriptor at `off` inside `block`: free
+/// blocks, free inodes and used directories, each a u16 low half plus, when
+/// `desc_size >= 64`, a u16 high half at the offsets `bgd::parse` reads.
+fn patch_bgd_counter_fields(
+    block: &mut [u8],
+    off: usize,
+    desc_size: u16,
+    free_blocks_delta: i32,
+    free_inodes_delta: i32,
+    used_dirs_delta: i32,
+) {
+    use crate::bgd::{
+        OFF_FREE_BLOCKS_HI, OFF_FREE_BLOCKS_LO, OFF_FREE_INODES_HI, OFF_FREE_INODES_LO,
+        OFF_USED_DIRS_HI, OFF_USED_DIRS_LO,
+    };
+    let has_hi = desc_size >= 64;
+    for (lo, hi, delta) in [
+        (OFF_FREE_BLOCKS_LO, OFF_FREE_BLOCKS_HI, free_blocks_delta),
+        (OFF_FREE_INODES_LO, OFF_FREE_INODES_HI, free_inodes_delta),
+        (OFF_USED_DIRS_LO, OFF_USED_DIRS_HI, used_dirs_delta),
+    ] {
+        patch_counter_u32(block, off + lo, has_hi.then_some(off + hi), delta);
+    }
+}
+
 /// Pack the low bits of an ext4 nanosecond timestamp field.
 ///
 /// ext4 stores extra precision in a 32-bit extra field: bits [31:2] hold the
@@ -2704,39 +2729,16 @@ impl Filesystem {
         free_inodes_delta: i32,
         used_dirs_delta: i32,
     ) -> Result<()> {
-        let desc_size = self.sb.desc_size as u64;
         // Where the descriptor lives, META_BG or not (#73).
         let (bgt_block, off_in_block) = self.sb.descriptor_location(gi as u64);
 
         let block = buf.get_mut(self, bgt_block)?;
-        patch_counter_u32(
+        patch_bgd_counter_fields(
             block,
-            off_in_block + 0x0C,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2A)
-            } else {
-                None
-            },
+            off_in_block,
+            self.sb.desc_size,
             free_blocks_delta,
-        );
-        patch_counter_u32(
-            block,
-            off_in_block + 0x0E,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2C)
-            } else {
-                None
-            },
             free_inodes_delta,
-        );
-        patch_counter_u32(
-            block,
-            off_in_block + 0x10,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2E)
-            } else {
-                None
-            },
             used_dirs_delta,
         );
 
@@ -5401,44 +5403,16 @@ impl Filesystem {
         used_dirs_delta: i32,
     ) -> Result<()> {
         let bs = self.sb.block_size() as u64;
-        let desc_size = self.sb.desc_size as u64;
         // Where the descriptor lives, META_BG or not (#73).
         let (bgt_block, off_in_block) = self.sb.descriptor_location(gi as u64);
 
         let mut block = self.read_block(bgt_block)?;
-
-        // Free-blocks: 16-bit at 0x0C, hi at 0x2A when 64-bit
-        patch_counter_u32(
+        patch_bgd_counter_fields(
             &mut block,
-            off_in_block + 0x0C,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2A)
-            } else {
-                None
-            },
+            off_in_block,
+            self.sb.desc_size,
             free_blocks_delta,
-        );
-        // Free-inodes: 16-bit at 0x0E, hi at 0x2C when 64-bit
-        patch_counter_u32(
-            &mut block,
-            off_in_block + 0x0E,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2C)
-            } else {
-                None
-            },
             free_inodes_delta,
-        );
-        // Used-dirs: 16-bit only (kernel defines u16+u16 hi at 0x2E too, but
-        // dirs per group realistically fit in u16 — handle both anyway).
-        patch_counter_u32(
-            &mut block,
-            off_in_block + 0x10,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2E)
-            } else {
-                None
-            },
             used_dirs_delta,
         );
 

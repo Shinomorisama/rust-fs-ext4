@@ -367,6 +367,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   less `EXTENTS`, `DAX` and `CASEFOLD` — now fails with `InvalidArgument`
   and writes nothing; a bit already set may be passed back unchanged. The
   header's `EXT4_NOATIME_FL` value is corrected to `0x80`.
+- **A group descriptor counter that crosses 65536 carries into its own high
+  half** (#390). The counter patch wrote the high halves of free blocks, free
+  inodes and used directories at 0x2A/0x2C/0x2E, while the format (and the
+  parser) has them at 0x2C/0x2E/0x30. A carry or borrow across 65536 then
+  wrote into the top of the inode table pointer or into the neighbouring
+  counter. It bites groups with more than 65535 free blocks or inodes, which
+  16 KiB and larger blocks allow. The offsets are now named constants the
+  parser and both writers share.
+
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
