@@ -566,11 +566,15 @@ where
         // which is read as an all-zero bitmap without being read at
         // all) handed out inode 2. `apply_create` then writes the new
         // file's inode image over the root directory's.
-        let floor = if gi == 0 {
-            sb.first_inode.saturating_sub(1)
-        } else {
-            0
-        };
+        //
+        // The reserved range is inode NUMBERS, so it reaches past group 0
+        // whenever `s_first_ino` exceeds `inodes_per_group + 1`: with eight
+        // inodes a group, 9 and 10 are group 1's first bits (#327). The
+        // floor is the reserved range less the inodes before this group,
+        // in u64 because `gi * inodes_per_group` can pass u32.
+        let before_group = u64::from(gi) * u64::from(sb.inodes_per_group);
+        let floor = u64::from(sb.first_inode.saturating_sub(1)).saturating_sub(before_group);
+        let floor = u32::try_from(floor).unwrap_or(u32::MAX);
         let Some(bit_start) = find_first_free(&bitmap_bytes, floor, max_bits) else {
             continue;
         };
@@ -872,6 +876,39 @@ mod tests {
         ];
         let plan = plan_inode_allocation(&sb, &groups, false, 1, |_| unreachable!()).unwrap();
         assert_eq!(plan.inode, 128 + 1);
+    }
+
+    /// The reserved range is inode numbers, not group 0's bits: with
+    /// eight inodes a group and `s_first_ino` 11, group 0 is all reserved
+    /// and group 1's first two (9 and 10) are too. The floor applied to
+    /// group 0 only, so group 1 handed out inode 9 (#327).
+    #[test]
+    fn the_reserved_range_reaches_past_group_0() {
+        let sb = mk_sb(1024, 8192, 8, 1024);
+        assert_eq!((sb.inodes_per_group, sb.first_inode), (8, 11));
+        let groups = vec![
+            mk_bgd(100, 0, 0, 0),
+            mk_bgd(100, 8, 0, BgdFlags::INODE_UNINIT.bits()),
+        ];
+        let plan = plan_inode_allocation(&sb, &groups, false, 0, |_| {
+            panic!("group 0 is full and group 1 uninitialised: nothing is read")
+        })
+        .expect("group 1 has free inodes");
+        assert_eq!(
+            plan.inode, 11,
+            "inodes 9 and 10 are below s_first_ino, in group 1"
+        );
+        assert_eq!((plan.bgd.group_idx, plan.bitmap.bit_start), (1, 2));
+
+        // A group wholly below s_first_ino has nothing to give.
+        let groups = vec![
+            mk_bgd(100, 0, 0, 0),
+            mk_bgd(100, 8, 0, BgdFlags::INODE_UNINIT.bits()),
+        ];
+        let mut sb = sb;
+        sb.first_inode = 17;
+        let plan = plan_inode_allocation(&sb, &groups, false, 1, |_| unreachable!());
+        assert!(plan.is_err(), "inodes 9..=16 are all reserved: {plan:?}");
     }
 
     #[test]

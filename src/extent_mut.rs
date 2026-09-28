@@ -718,25 +718,19 @@ fn descend_to_leaf(
         }
         // Find largest index entry whose ei_block <= target_logical (mirrors
         // the read-side descent in extent::lookup_verified).
-        let mut chosen_idx: Option<ExtentIdx> = None;
-        for i in 0..header.entries {
-            let off = extent_entry_offset(i as usize);
-            let idx = ExtentIdx::parse(&frame.bytes[off..off + EXT4_EXT_NODE_SIZE])?;
-            if idx.logical_block <= target_logical {
-                chosen_idx = Some(idx);
-            } else {
-                break;
-            }
-        }
+        //
+        // `ExtentHeader::parse` bounds `entries` by `max` but nothing bounds
+        // `max` by the node, so every entry is range-checked here: a root
+        // claiming five index entries in its four-entry area, or a child
+        // block claiming more than the block holds, is corrupt (#327).
+        let entries = parse_index_entries(&frame.bytes, &header)?;
+        let chosen_idx = entries
+            .iter()
+            .take_while(|idx| idx.logical_block <= target_logical)
+            .last();
         // If target is below the smallest index entry, descend into the
         // first child (the new extent will sort into the leftmost subtree).
-        let idx = match chosen_idx {
-            Some(i) => i,
-            None => {
-                let off = extent_entry_offset(0);
-                ExtentIdx::parse(&frame.bytes[off..off + EXT4_EXT_NODE_SIZE])?
-            }
-        };
+        let idx = *chosen_idx.unwrap_or(&entries[0]);
         let mut child_buf = vec![0u8; block_size as usize];
         reader.read_block(idx.leaf_block, &mut child_buf)?;
         path.push(PathFrame {
@@ -1681,5 +1675,63 @@ mod tests {
             (35015, false),
             "{entries:?}"
         );
+    }
+
+    /// Index node bytes: `entries` index entries (all at logical 0, all
+    /// pointing at `child`) under a header claiming `max`, at `depth`.
+    fn index_node(len: usize, entries: u16, max: u16, depth: u16, child: u64) -> Vec<u8> {
+        let mut buf = vec![0u8; len];
+        buf[0..2].copy_from_slice(&EXT4_EXT_MAGIC.to_le_bytes());
+        buf[2..4].copy_from_slice(&entries.to_le_bytes());
+        buf[4..6].copy_from_slice(&max.to_le_bytes());
+        buf[6..8].copy_from_slice(&depth.to_le_bytes());
+        for i in 0..entries as usize {
+            let off = extent_entry_offset(i);
+            if off + EXT4_EXT_NODE_SIZE > len {
+                break;
+            }
+            let (hi, lo) = split_phys_block(child);
+            buf[off + 4..off + 8].copy_from_slice(&lo.to_le_bytes());
+            buf[off + 8..off + 10].copy_from_slice(&hi.to_le_bytes());
+        }
+        buf
+    }
+
+    /// Serves one block for every read.
+    struct OneBlock(Vec<u8>);
+
+    impl DeepReader for OneBlock {
+        fn read_block(&self, _block: u64, out: &mut [u8]) -> Result<()> {
+            out.copy_from_slice(&self.0);
+            Ok(())
+        }
+    }
+
+    /// `ExtentHeader::parse` checks `entries <= max` but not `max` against
+    /// the node, so a 60-byte root claiming five index entries sent the
+    /// descent slicing `[60..72]` (#327).
+    #[test]
+    fn a_root_claiming_more_index_entries_than_it_holds_is_refused() {
+        let root = index_node(60, 5, 5, 1, 7000);
+        let reader = OneBlock(vec![0u8; 1024]);
+        let mut alloc = || -> Result<u64> { panic!("nothing is allocated") };
+        let err =
+            plan_insert_extent_deep(&root, ext(1000, 1, 9000, false), 1024, &reader, &mut alloc)
+                .expect_err("a root with five index entries in a four-entry area");
+        assert!(matches!(err, Error::CorruptExtentTree(_)), "{err:?}");
+    }
+
+    /// The same through a child block whose header claims more entries
+    /// than the block holds (#327).
+    #[test]
+    fn a_child_claiming_more_index_entries_than_its_block_holds_is_refused() {
+        let root = index_node(60, 1, 4, 2, 7000);
+        // 100 entries of 12 bytes after a 12-byte header: 1212 > 1024.
+        let reader = OneBlock(index_node(1024, 100, 100, 1, 7001));
+        let mut alloc = || -> Result<u64> { panic!("nothing is allocated") };
+        let err =
+            plan_insert_extent_deep(&root, ext(1000, 1, 9000, false), 1024, &reader, &mut alloc)
+                .expect_err("a child with a hundred index entries in a 1 KiB block");
+        assert!(matches!(err, Error::CorruptExtentTree(_)), "{err:?}");
     }
 }
