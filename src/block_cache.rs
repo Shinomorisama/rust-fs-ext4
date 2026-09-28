@@ -16,10 +16,12 @@
 //!   disk still has the pre-commit content. Pinned entries are
 //!   NEVER evicted, since evicting them would lose the only
 //!   in-memory copy and the next allocator scan would re-read stale
-//!   bytes from disk. `Filesystem::commit_block_buffer` populates
-//!   `pinned` after a successful journal commit; the
+//!   bytes from disk. A read-only mount's journal replay
+//!   (`journal_apply::replay_into_cache`) populates `pinned`; the
 //!   `Filesystem::replay_journal_if_dirty` hook calls `unpin_all`
-//!   when the journal has been checkpointed.
+//!   when the journal has been checkpointed. A journaled commit pins
+//!   nothing: it checkpoints before returning, and its write-through
+//!   leaves clean entries (#328).
 //! - **Write-through update** — `write_at` UPDATES the cache (not
 //!   invalidates) and forwards to the inner device. This keeps the
 //!   cache consistent with disk for direct writes (e.g.
@@ -28,8 +30,8 @@
 //! - **Block-aligned reads only.** Multi-block reads bypass the
 //!   cache and pass through.
 //! - **Crash safety unchanged.** Pinned bytes are also persisted in
-//!   the journal log (the caller invoked `populate_cache` after a
-//!   journal commit); on crash, replay applies them. Clean LRU
+//!   the journal log (the caller replayed them from it); on crash,
+//!   replay applies them. Clean LRU
 //!   entries match disk by construction.
 //! - **No external LRU crate** — hand-rolled to avoid pulling in
 //!   GPL/LGPL deps and to keep the cache logic auditable.
@@ -170,6 +172,13 @@ impl CachedDevice {
     pub fn stats(&self) -> (u64, u64) {
         let s = self.state.lock().expect("cache mutex poisoned");
         (s.hits, s.misses)
+    }
+
+    /// How many blocks are pinned: held whatever the capacity, because their
+    /// bytes are not yet at their final location on the device.
+    pub fn pinned_blocks(&self) -> usize {
+        let s = self.state.lock().expect("cache mutex poisoned");
+        s.pinned.len()
     }
 }
 

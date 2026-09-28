@@ -43,9 +43,9 @@ pub trait BlockDevice: Send + Sync {
 
     /// Buffer-cache hook: stash `bytes` for `block` so a subsequent
     /// `read_at` returns those bytes instead of reading from physical
-    /// storage. Used by `commit_block_buffer` to make journaled
-    /// metadata visible to readers before the journal is checkpointed
-    /// back to the data area on disk.
+    /// storage. Used by a read-only mount's journal replay to make
+    /// committed metadata visible to readers without writing it back to
+    /// the data area on disk.
     ///
     /// Pinned entries inserted via `populate_cache` MUST NOT be evicted
     /// — they're the only place those bytes exist until `unpin_all`

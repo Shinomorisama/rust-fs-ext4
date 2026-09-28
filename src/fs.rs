@@ -199,6 +199,8 @@ fn write_inode_extra_isize(raw: &mut [u8]) {
 pub struct Filesystem {
     runtime: Arc<dyn crate::runtime::Runtime>,
     managed_recovery: bool,
+    /// The buffer cache `dev` routes through, kept typed for its statistics.
+    cache: Arc<crate::block_cache::CachedDevice>,
     pub dev: Arc<dyn BlockDevice>,
     pub sb: Superblock,
     pub groups: Vec<BlockGroupDescriptor>,
@@ -411,6 +413,14 @@ impl Filesystem {
         Ok(())
     }
 
+    /// How many blocks the buffer cache holds pinned: bytes not yet at their
+    /// final location on the device, which no capacity bound can evict. A
+    /// read-only mount that replayed a dirty journal pins what it replayed;
+    /// a writable mount checkpoints every commit, so it pins nothing.
+    pub fn cache_pinned_blocks(&self) -> usize {
+        self.cache.pinned_blocks()
+    }
+
     /// Flush and discard checkpointed read caches before physical readback.
     /// The mount remains owned and usable. This is not concurrent-writer support:
     /// callers must serialize all filesystem access and retire on I/O failure.
@@ -544,21 +554,21 @@ impl Filesystem {
         sb.check_fits_device(dev.size_bytes())?;
         // Wrap the raw device in a write-through buffer cache. All
         // reads and writes for the rest of this mount session route
-        // through the cache; `commit_block_buffer` populates pinned
-        // entries with journaled-but-not-yet-checkpointed bytes so
-        // allocator scans don't re-read stale on-disk bitmaps. This is
-        // the role Linux's buffer cache plays for journaled
-        // filesystems. The clean capacity is `DEFAULT_CACHE_BLOCKS` unless the
-        // caller chose; pinned entries are unbounded until journal replay
-        // calls `unpin_all`.
-        let dev: Arc<dyn BlockDevice> = Arc::new(crate::block_cache::CachedDevice::new(
+        // through the cache. A read-only mount that replays a dirty
+        // journal pins the replayed blocks here, since they never reach
+        // the device. The clean capacity is `DEFAULT_CACHE_BLOCKS` unless
+        // the caller chose; pinned entries are unbounded until journal
+        // replay calls `unpin_all`.
+        let cache = Arc::new(crate::block_cache::CachedDevice::new(
             dev,
             sb.block_size(),
             cache_blocks,
         ));
+        let dev: Arc<dyn BlockDevice> = cache.clone();
         let mut fs = Self {
             runtime,
             managed_recovery: false,
+            cache,
             dev,
             sb,
             groups,
@@ -2916,14 +2926,11 @@ impl Filesystem {
     /// writer when one is available (crash-safe four-fence protocol);
     /// falls back to direct device writes + flush otherwise.
     ///
-    /// In journaled mode, writes go to the **journal log** on disk —
-    /// the *data area* on disk doesn't see them until journal replay
-    /// (checkpointing). To make those bytes visible to subsequent reads
-    /// **before** checkpoint (the read-after-write coherence Linux's
-    /// buffer cache guarantees), every committed block is `populate`'d
-    /// into the device-layer cache after the journal commit succeeds.
-    /// Without this hook, allocators (inode/block bitmap) would re-read
-    /// pre-commit on-disk bytes and produce duplicate allocations.
+    /// In journaled mode, writes go to the **journal log** on disk and
+    /// are then checkpointed to their final locations before the journal
+    /// writer's `commit` returns, so later reads — the allocators' bitmap
+    /// scans included — see the committed bytes from the device or from
+    /// the cache's clean, write-through entries. No block is pinned.
     pub(crate) fn commit_block_buffer(&self, buf: BlockBuffer) -> Result<()> {
         if buf.dirty.is_empty() {
             return Ok(());
@@ -2944,12 +2951,12 @@ impl Filesystem {
                 tx.add_write(*block, bytes.clone())?;
             }
             jw.commit(self.dev.as_ref(), &tx)?;
-            // Populate the buffer cache with the post-commit bytes so
-            // any read (this thread or another) sees them before the
-            // journal is checkpointed back to the data area.
-            for (block, bytes) in buf.dirty {
-                self.dev.populate_cache(block, bytes);
-            }
+            // Nothing is pinned: `commit` checkpoints every block to its
+            // final location before it returns, through this same cache,
+            // whose write-through leaves each one a clean LRU entry that
+            // matches the device. Pinning them as well held every block a
+            // write had ever touched until unmount, whatever the capacity
+            // (#328).
             publish(self);
             Ok(())
         } else {

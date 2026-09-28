@@ -393,6 +393,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   cancelled()`. A target with no seed corpus, or a fuzzer that exited
   non-zero without leaving a reproducer, is now reported as what it is
   rather than as a crash.
+- **A read-write mount no longer holds every block it has written.** Each
+  journaled commit pinned its blocks in the buffer cache, where nothing
+  released them until unmount, so a long mount doing a bulk copy or a large
+  repair grew without bound whatever the cache capacity. The journal writer
+  checkpoints before `commit` returns, so the pin bought nothing: the
+  commit's write-through now leaves ordinary clean entries. A read-only
+  mount's replayed journal blocks, which are not on the device, stay pinned.
+  `Filesystem::cache_pinned_blocks` reports the pinned count (#328).
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
   entries and freed every node below, so a punch leaving more than four
