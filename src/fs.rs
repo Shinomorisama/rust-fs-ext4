@@ -10086,4 +10086,75 @@ mod tests {
         assert_eq!(after.free_inodes_count, 0x1_0000);
         assert_eq!(after.used_dirs_count, 0x1_0000);
     }
+
+    // --- one copy of an attribute, wherever it lives (#377) -----------
+
+    /// The value length of every copy of `name` on `ino`, in the order the
+    /// reader finds them: in-inode first, then the external block.
+    fn xattr_copies(fs: &Filesystem, ino: u32, name: &str) -> Vec<usize> {
+        let (inode, raw) = fs.read_inode_verified(ino).expect("read inode");
+        crate::xattr::read_all_resolved(fs, &inode, &raw)
+            .expect("read xattrs")
+            .into_iter()
+            .filter(|e| e.name == name)
+            .map(|e| e.value.len())
+            .collect()
+    }
+
+    /// Replacing an in-inode attribute with a value too big for the inode
+    /// leaves exactly one copy, holding the new value. The in-inode copy
+    /// used to stay, and the reader, which returns the first match, went
+    /// on answering with the old value.
+    #[test]
+    fn growing_an_in_inode_attribute_past_the_inode_leaves_one_copy() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/f", 0o644).expect("create");
+        fs.apply_setxattr("/f", "user.a", &[1u8; 40])
+            .expect("set small");
+        assert_eq!(xattr_copies(&fs, ino, "user.a"), vec![40]);
+        fs.apply_setxattr("/f", "user.a", &[2u8; 200])
+            .expect("set big");
+        assert_eq!(
+            xattr_copies(&fs, ino, "user.a"),
+            vec![200],
+            "one copy, the new value"
+        );
+        let (inode, raw) = fs.read_inode_verified(ino).unwrap();
+        assert_eq!(
+            crate::xattr::get_resolved(&fs, &inode, &raw, "user.a").unwrap(),
+            Some(vec![2u8; 200]),
+            "the value read back is the one written last"
+        );
+        // Removing it removes it.
+        fs.apply_removexattr("/f", "user.a").expect("remove");
+        assert_eq!(xattr_copies(&fs, ino, "user.a"), Vec::<usize>::new());
+    }
+
+    /// Replacing an attribute that lives in the external block with a value
+    /// that now fits in the inode does not leave the block's copy behind,
+    /// and a remove then leaves no copy anywhere. The block's copy used to
+    /// stay, and came back as the value once the in-inode one was removed.
+    #[test]
+    fn shrinking_an_external_attribute_into_the_inode_leaves_one_copy() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/f", 0o644).expect("create");
+        fs.apply_setxattr("/f", "user.big", &[1u8; 200])
+            .expect("set big");
+        assert_eq!(xattr_copies(&fs, ino, "user.big"), vec![200]);
+        fs.apply_setxattr("/f", "user.big", &[2u8; 8])
+            .expect("set small");
+        assert_eq!(
+            xattr_copies(&fs, ino, "user.big"),
+            vec![8],
+            "one copy, the new value"
+        );
+        fs.apply_removexattr("/f", "user.big").expect("remove");
+        assert_eq!(
+            xattr_copies(&fs, ino, "user.big"),
+            Vec::<usize>::new(),
+            "removed means gone"
+        );
+    }
 }
