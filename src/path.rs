@@ -103,7 +103,7 @@ where
 ///
 /// Routes through the htree fast path when the directory has the
 /// `EXT4_INDEX_FL` flag, falling back to a full linear scan otherwise.
-fn find_entry(
+pub(crate) fn find_entry(
     dev: &dyn BlockDevice,
     sb: &Superblock,
     dir_ino: u32,

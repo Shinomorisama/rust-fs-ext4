@@ -175,6 +175,92 @@ impl TimeUpdate {
         }
         Ok(Self::Set(sec, nsec))
     }
+
+    /// [`resolve`](Self::resolve)'s refusals alone, without a clock: the
+    /// time `UTIME_NOW` stands for is always storable.
+    fn check(sec: i64, nsec: u32) -> Result<()> {
+        Self::resolve(sec, nsec, 0).map(|_| ())
+    }
+}
+
+/// An inode named by number, for the inode-addressed entry points
+/// (`lookup_at`, `stat_ino`, `apply_*_at`, `apply_*_ino`).
+///
+/// A handle-based host holds one of these per item instead of a path: a
+/// path is the wrong key for a driver, because a hard link gives one inode
+/// several, and renaming a directory changes every one beneath it.
+///
+/// `generation` is the `i_generation` the caller read alongside the number
+/// (every attribute read returns it). With it, a handle to an inode that
+/// was freed and then reused for a different file is refused as
+/// [`Error::Stale`] instead of reaching the new file. Without it (`None`,
+/// or a bare `u32` converted with `into()`) only a freed or never-used
+/// inode is refused, which is what a caller that has not read the
+/// generation yet can ask for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct InodeRef {
+    /// Inode number (1-based).
+    pub ino: u32,
+    /// Expected `i_generation`, or `None` to accept any.
+    pub generation: Option<u32>,
+}
+
+impl InodeRef {
+    /// Inode `ino`, which must still carry `generation`.
+    pub const fn new(ino: u32, generation: u32) -> Self {
+        Self {
+            ino,
+            generation: Some(generation),
+        }
+    }
+
+    /// Inode `ino`, whatever its generation.
+    pub const fn any(ino: u32) -> Self {
+        Self {
+            ino,
+            generation: None,
+        }
+    }
+}
+
+impl From<u32> for InodeRef {
+    fn from(ino: u32) -> Self {
+        Self::any(ino)
+    }
+}
+
+/// Refuse a name that cannot be one directory entry: empty, or holding a
+/// `/` or a NUL. A path-addressed call never reaches these (its split
+/// cannot produce them); an inode-addressed one is handed the name as-is.
+fn check_entry_name(name: &[u8]) -> Result<()> {
+    if name.is_empty() {
+        return Err(Error::InvalidArgument("empty name"));
+    }
+    if name.contains(&b'/') {
+        return Err(Error::InvalidArgument("a name cannot contain '/'"));
+    }
+    // See `split_parent_and_base`: the format would store it, e2fsck
+    // reports it, and the kernel never files one.
+    if name.contains(&0) {
+        return Err(Error::InvalidArgument("a name cannot contain a NUL byte"));
+    }
+    Ok(())
+}
+
+/// [`check_entry_name`] for a name about to be filed, which must also fit
+/// the entry's one-byte length.
+fn check_new_entry_name(name: &[u8]) -> Result<()> {
+    check_entry_name(name)?;
+    if name.len() > 255 {
+        return Err(Error::NameTooLong);
+    }
+    Ok(())
+}
+
+/// `.` and `..` name the directory and its parent, not entries that can
+/// be removed or moved; rmdir(2) and rename(2) refuse them.
+fn is_dot_or_dotdot(name: &[u8]) -> bool {
+    name == b"." || name == b".."
 }
 
 /// Split a `/a/b/c` path into (`/a/b`, `c`). Returns an error for empty or
@@ -478,8 +564,6 @@ struct NewInodePlan {
     parent_inode: crate::inode::Inode,
     /// Staged write buffer (bitmap + counter deltas already applied).
     buf: BlockBuffer,
-    /// Final component of `path` — the name to add as a dir entry.
-    base_name: String,
 }
 
 /// Which BGD "uninit" flag a bitmap-marking call is about — see
@@ -1610,6 +1694,206 @@ impl Filesystem {
         Ok(bytes.min(self.dev.size_bytes()))
     }
 
+    // ----------------------------------------------------------------------
+    // Inode-addressed entry points (#372)
+    // ----------------------------------------------------------------------
+    //
+    // Every path-addressed operation resolves its path and then calls one
+    // of these; they are the implementation, and the path functions are a
+    // resolve step in front of them. A handle-based host calls them
+    // directly with the inode numbers it holds.
+
+    /// Resolve `path` to an inode number, verifying directory blocks.
+    fn resolve(&self, path: &str) -> Result<u32> {
+        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
+        crate::path::lookup_with_csum(self.dev.as_ref(), &self.sb, &mut reader, path, &self.csum)
+    }
+
+    /// Resolve the parent of `path`, for an operation on its final name.
+    fn resolve_parent(&self, path: &str) -> Result<(u32, String)> {
+        let (parent, base) = split_parent_and_base(path)?;
+        Ok((self.resolve(&parent)?, base))
+    }
+
+    /// [`resolve_parent`](Self::resolve_parent) for an operation that files
+    /// the final name, which is refused as too long before anything is
+    /// resolved.
+    fn resolve_new_parent(&self, path: &str) -> Result<(u32, String)> {
+        let (parent, base) = split_parent_and_base(path)?;
+        if base.len() > 255 {
+            return Err(Error::NameTooLong);
+        }
+        Ok((self.resolve(&parent)?, base))
+    }
+
+    /// Read the inode `r` names, refusing a handle that no longer names a
+    /// file with [`Error::Stale`]: a number outside the inode table or in
+    /// its reserved range (other than the root), an inode not marked in use
+    /// in its bitmap or with no links or no mode (freed, or never used), or
+    /// one whose generation is not the
+    /// one `r` carries (freed and reused).
+    pub(crate) fn live_inode(&self, r: InodeRef) -> Result<(Inode, Vec<u8>)> {
+        let ino = r.ino;
+        let reserved = ino < self.sb.first_inode && ino != crate::path::EXT4_ROOT_INODE;
+        if ino == 0 || ino > self.sb.inodes_count || reserved {
+            return Err(Error::Stale);
+        }
+        // Checked before the inode is read: a slot that was never used can
+        // hold anything, including a checksum that does not verify.
+        if !self.inode_bit_is_set(ino)? {
+            return Err(Error::Stale);
+        }
+        let (inode, raw) = self.read_inode_verified(ino)?;
+        if inode.links_count == 0 || inode.mode == 0 {
+            return Err(Error::Stale);
+        }
+        if r.generation.is_some_and(|g| g != inode.generation) {
+            return Err(Error::Stale);
+        }
+        Ok((inode, raw))
+    }
+
+    /// [`live_inode`](Self::live_inode) for a directory.
+    fn live_dir(&self, r: InodeRef) -> Result<(Inode, Vec<u8>)> {
+        let (inode, raw) = self.live_inode(r)?;
+        if !inode.is_dir() {
+            return Err(Error::NotADirectory);
+        }
+        Ok((inode, raw))
+    }
+
+    /// The attributes of the inode `r` names; [`Error::Stale`] if it no
+    /// longer names a file (see [`InodeRef`]).
+    pub fn stat_ino(&self, r: impl Into<InodeRef>) -> Result<Inode> {
+        Ok(self.live_inode(r.into())?.0)
+    }
+
+    /// The inode number `name` has in directory `dir` — one step of a path
+    /// walk. `name` is bytes, compared exactly, so a name that is not UTF-8
+    /// is found. `.` and `..` are ordinary entries here.
+    pub fn lookup_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<u32> {
+        check_entry_name(name)?;
+        let dir = dir.into();
+        let (dir_inode, _) = self.live_dir(dir)?;
+        crate::path::find_entry(
+            self.dev.as_ref(),
+            &self.sb,
+            dir.ino,
+            &dir_inode,
+            name,
+            &self.csum,
+        )
+    }
+
+    /// Every entry of directory `dir`, `.` and `..` included, in on-disk
+    /// order. Directory listing by path resolves and calls this.
+    pub fn read_dir_ino(&self, dir: impl Into<InodeRef>) -> Result<Vec<crate::dir::DirEntry>> {
+        let (inode, _) = self.live_dir(dir.into())?;
+        self.dir_entries(&inode)
+    }
+
+    /// Collect the entries of the directory `inode`.
+    fn dir_entries(&self, inode: &Inode) -> Result<Vec<crate::dir::DirEntry>> {
+        use crate::dir::DirBlockIter;
+        crate::file_io::refuse_encrypted_names(inode)?;
+        if !inode.has_extents() {
+            return Err(Error::Corrupt("legacy (non-extent) dirs not yet supported"));
+        }
+        let block_size = self.sb.block_size();
+        let has_filetype = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+
+        // Bound on entries buffered per listing. A crafted image with
+        // `inode.size` claiming gigabytes would otherwise allocate
+        // proportionally, since the loop grows `entries` straight from
+        // on-disk content.
+        const MAX_DIR_ENTRIES: usize = 1_000_000;
+        let mut entries = Vec::new();
+        let push = |entries: &mut Vec<crate::dir::DirEntry>, e| {
+            if entries.len() >= MAX_DIR_ENTRIES {
+                return Err(Error::Corrupt("dir entries exceed MAX_DIR_ENTRIES"));
+            }
+            entries.push(e);
+            Ok(())
+        };
+
+        // Inline-data dirs: tiny dirs stored inside the inode itself.
+        if inode.has_inline_data() {
+            for entry in DirBlockIter::new(&inode.block, has_filetype) {
+                push(&mut entries, entry?)?;
+            }
+            return Ok(entries);
+        }
+
+        let total_blocks = inode.size.div_ceil(block_size as u64);
+        let mut block_buf = vec![0u8; block_size as usize];
+        for logical in 0..total_blocks {
+            let Some(phys) =
+                crate::extent::map_logical(&inode.block, self.dev.as_ref(), block_size, logical)?
+            else {
+                continue; // sparse hole
+            };
+            self.dev.read_at(phys * block_size as u64, &mut block_buf)?;
+            for entry in DirBlockIter::new(&block_buf, has_filetype) {
+                push(&mut entries, entry?)?;
+            }
+        }
+        Ok(entries)
+    }
+
+    /// Read up to `out.len()` bytes of the regular file `r` names, from
+    /// byte `offset`. Returns the number of bytes read, short at the end
+    /// of the file.
+    pub fn read_ino(&self, r: impl Into<InodeRef>, offset: u64, out: &mut [u8]) -> Result<usize> {
+        let r = r.into();
+        let (inode, raw) = self.live_inode(r)?;
+        if !inode.is_file() {
+            return Err(Error::InvalidArgument("not a regular file"));
+        }
+        let length = (out.len() as u64).min(inode.size);
+        crate::file_io::read_with_raw_verified(
+            self,
+            &inode,
+            &raw,
+            r.ino,
+            offset,
+            length,
+            &mut out[..length as usize],
+        )
+        .map(|n| n as usize)
+    }
+
+    /// The target of the symlink `r` names; see [`read_link`](Self::read_link).
+    pub fn read_link_ino(&self, r: impl Into<InodeRef>) -> Result<Vec<u8>> {
+        let r = r.into();
+        self.live_inode(r)?;
+        self.read_link(r.ino)
+    }
+
+    /// Set the size of the regular file `r` names, freeing what a shrink
+    /// drops; a grow is sparse. `Error::IsADirectory` for a directory and
+    /// `Error::InvalidArgument` for any other non-regular file.
+    pub fn apply_truncate_ino(&self, r: impl Into<InodeRef>, new_size: u64) -> Result<()> {
+        self.refuse_write()?;
+        let r = r.into();
+        let (inode, _) = self.live_inode(r)?;
+        // Truncating a directory frees its blocks and loses `.` and `..`;
+        // POSIX truncate(2) says EISDIR. Symlinks and devices: EINVAL.
+        if inode.is_dir() {
+            return Err(Error::IsADirectory);
+        }
+        if !inode.is_file() {
+            return Err(Error::InvalidArgument(
+                "truncate target is not a regular file",
+            ));
+        }
+        // At equality either works; grow only bumps timestamps.
+        if new_size >= inode.size {
+            self.apply_truncate_grow(r.ino, new_size)
+        } else {
+            self.apply_truncate_shrink(r.ino, new_size)
+        }
+    }
+
     /// Map a logical block within `inode` to its physical block, choosing
     /// between the extent tree and the legacy direct/indirect scheme based
     /// on `EXT4_EXTENTS_FL`. Returns `None` for sparse holes and (for the
@@ -2337,15 +2621,16 @@ impl Filesystem {
     /// `Error::ReadOnly` on a RO mount.
     pub fn apply_chmod(&self, path: &str, mode: u16) -> Result<()> {
         self.refuse_write()?;
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            path,
-            &self.csum,
-        )?;
-        let (inode, mut raw) = self.read_inode_verified(ino)?;
+        let ino = self.resolve(path)?;
+        self.apply_chmod_ino(ino, mode)
+    }
+
+    /// [`apply_chmod`](Self::apply_chmod) on the inode `r` names.
+    pub fn apply_chmod_ino(&self, r: impl Into<InodeRef>, mode: u16) -> Result<()> {
+        self.refuse_write()?;
+        let r = r.into();
+        let ino = r.ino;
+        let (inode, mut raw) = self.live_inode(r)?;
 
         // Preserve file-type bits (high 4 bits of i_mode); only the low 12
         // permission/suid/sgid/sticky bits are user-settable.
@@ -3419,15 +3704,16 @@ impl Filesystem {
     /// csum-enabled mounts.
     pub fn apply_chown(&self, path: &str, uid: u32, gid: u32) -> Result<()> {
         self.refuse_write()?;
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            path,
-            &self.csum,
-        )?;
-        let (inode, mut raw) = self.read_inode_verified(ino)?;
+        let ino = self.resolve(path)?;
+        self.apply_chown_ino(ino, uid, gid)
+    }
+
+    /// [`apply_chown`](Self::apply_chown) on the inode `r` names.
+    pub fn apply_chown_ino(&self, r: impl Into<InodeRef>, uid: u32, gid: u32) -> Result<()> {
+        self.refuse_write()?;
+        let r = r.into();
+        let ino = r.ino;
+        let (inode, mut raw) = self.live_inode(r)?;
 
         if uid != u32::MAX {
             let lo = (uid & 0xFFFF) as u16;
@@ -3946,19 +4232,31 @@ impl Filesystem {
         mtime_nsec: u32,
     ) -> Result<()> {
         self.refuse_write()?;
+        // Before resolving, so an unstorable time or nanosecond count is
+        // refused as EINVAL whether or not the path exists.
+        TimeUpdate::check(atime_sec, atime_nsec)?;
+        TimeUpdate::check(mtime_sec, mtime_nsec)?;
+        let ino = self.resolve(path)?;
+        self.apply_utimens_ino(ino, atime_sec, atime_nsec, mtime_sec, mtime_nsec)
+    }
+
+    /// [`apply_utimens`](Self::apply_utimens) on the inode `r` names.
+    pub fn apply_utimens_ino(
+        &self,
+        r: impl Into<InodeRef>,
+        atime_sec: i64,
+        atime_nsec: u32,
+        mtime_sec: i64,
+        mtime_nsec: u32,
+    ) -> Result<()> {
+        self.refuse_write()?;
         // One reading of the clock serves UTIME_NOW and the ctime bump.
         let now = self.runtime.now_unix_seconds();
         let atime = TimeUpdate::resolve(atime_sec, atime_nsec, now)?;
         let mtime = TimeUpdate::resolve(mtime_sec, mtime_nsec, now)?;
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            path,
-            &self.csum,
-        )?;
-        let (inode, mut raw) = self.read_inode_verified(ino)?;
+        let r = r.into();
+        let ino = r.ino;
+        let (inode, mut raw) = self.live_inode(r)?;
 
         if let (TimeUpdate::Omit, TimeUpdate::Omit) = (atime, mtime) {
             return Ok(());
@@ -4037,36 +4335,43 @@ impl Filesystem {
         // POSIX: a trailing slash asserts the path refers to a directory,
         // which is incompatible with `unlink(2)` no matter what kind of file
         // the path resolves to. `split_parent_and_base` swallows the slash,
-        // so snapshot the flag first and fail-fast on non-dirs below.
+        // so snapshot the flag first.
         let trailing_slash = path.len() > 1 && path.ends_with('/');
-        let (parent_ino, base_name) = split_parent_and_base(path)?;
-
-        // Resolve parent + target inodes.
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let parent_ino_num = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &parent_ino,
-            &self.csum,
-        )?;
-        let (parent_inode, _parent_raw) = self.read_inode_verified(parent_ino_num)?;
-        if !parent_inode.is_dir() {
-            return Err(Error::NotADirectory);
+        let (parent_path, base_name) = split_parent_and_base(path)?;
+        let parent_ino = self.resolve(&parent_path)?;
+        if trailing_slash {
+            // The call fails either way; only the errno depends on what the
+            // name is: a directory is EISDIR, as unlink(2) says of any
+            // directory, and anything else ENOTDIR, the slash having
+            // asserted a directory.
+            let (parent_inode, _) = self.live_dir(parent_ino.into())?;
+            let target_ino =
+                self.find_entry_in_dir(parent_ino, &parent_inode, base_name.as_bytes())?;
+            let (target_inode, _) = self.live_inode(target_ino.into())?;
+            return Err(if target_inode.is_dir() {
+                Error::IsADirectory
+            } else {
+                Error::NotADirectory
+            });
         }
+        self.apply_unlink_at(parent_ino, base_name.as_bytes())
+    }
 
-        let target_ino =
-            self.find_entry_in_dir(parent_ino_num, &parent_inode, base_name.as_bytes())?;
-        let (target_inode, mut target_raw) = self.read_inode_verified(target_ino)?;
+    /// [`apply_unlink`](Self::apply_unlink) of entry `name` in directory
+    /// `dir`.
+    pub fn apply_unlink_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<()> {
+        self.refuse_write()?;
+        check_entry_name(name)?;
+        let dir = dir.into();
+        let parent_ino_num = dir.ino;
+        let (parent_inode, _parent_raw) = self.live_dir(dir)?;
+
+        let target_ino = self.find_entry_in_dir(parent_ino_num, &parent_inode, name)?;
+        let (target_inode, mut target_raw) = self.live_inode(target_ino.into())?;
         if target_inode.is_dir() {
             // POSIX: unlink(2) on a directory must fail with EISDIR; the
             // caller should use rmdir(2) instead.
             return Err(Error::IsADirectory);
-        }
-        if trailing_slash {
-            // `unlink("/foo/")` where /foo is a regular file → ENOTDIR per
-            // POSIX: the trailing slash tells us the caller expected a dir.
-            return Err(Error::NotADirectory);
         }
 
         // All mutations land in this buffer and commit as one transaction.
@@ -4096,12 +4401,7 @@ impl Filesystem {
             } else {
                 0
             };
-            if crate::dir::remove_entry_from_block(
-                block,
-                base_name.as_bytes(),
-                has_ft,
-                reserved_tail,
-            )? {
+            if crate::dir::remove_entry_from_block(block, name, has_ft, reserved_tail)? {
                 // Recompute the tail csum if present — entry-list shape changed.
                 if self.csum.enabled && reserved_tail == 12 {
                     self.csum
@@ -4175,25 +4475,11 @@ impl Filesystem {
     /// the parent, checks preconditions, allocates an inode, and stages the
     /// bitmap + counter updates into a fresh `BlockBuffer`. The caller then
     /// builds the inode bytes and adds the dir entry.
-    fn plan_new_inode_in_dir(&self, path: &str) -> Result<NewInodePlan> {
-        let (parent_path, base_name) = split_parent_and_base(path)?;
-        if base_name.len() > 255 {
-            return Err(Error::NameTooLong);
-        }
-
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let parent_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &parent_path,
-            &self.csum,
-        )?;
-        let (parent_inode, _) = self.read_inode_verified(parent_ino)?;
-        if !parent_inode.is_dir() {
-            return Err(Error::NotADirectory);
-        }
-        if self.entry_exists(parent_ino, &parent_inode, base_name.as_bytes())? {
+    fn plan_new_inode_in_dir(&self, dir: InodeRef, name: &[u8]) -> Result<NewInodePlan> {
+        check_new_entry_name(name)?;
+        let parent_ino = dir.ino;
+        let (parent_inode, _) = self.live_dir(dir)?;
+        if self.entry_exists(parent_ino, &parent_inode, name)? {
             return Err(Error::AlreadyExists);
         }
 
@@ -4229,7 +4515,6 @@ impl Filesystem {
             parent_ino,
             parent_inode,
             buf,
-            base_name,
         })
     }
 
@@ -4249,13 +4534,21 @@ impl Filesystem {
     ///   applies.
     pub fn apply_create(&self, path: &str, mode: u16) -> Result<u32> {
         self.refuse_write()?;
+        let (parent, name) = self.resolve_new_parent(path)?;
+        self.apply_create_at(parent, name.as_bytes(), mode)
+    }
+
+    /// [`apply_create`](Self::apply_create) of entry `name` in directory
+    /// `dir`. `name` is bytes and need not be UTF-8.
+    pub fn apply_create_at(&self, dir: impl Into<InodeRef>, name: &[u8], mode: u16) -> Result<u32> {
+        self.refuse_write()?;
+        let dir = dir.into();
         let NewInodePlan {
             new_ino,
             parent_ino,
             parent_inode,
             mut buf,
-            base_name,
-        } = self.plan_new_inode_in_dir(path)?;
+        } = self.plan_new_inode_in_dir(dir, name)?;
 
         let raw = self.build_regular_file_inode(new_ino, mode)?;
         self.buffer_write_inode(&mut buf, new_ino, &raw)?;
@@ -4268,7 +4561,7 @@ impl Filesystem {
             &mut buf,
             parent_ino,
             &parent_inode,
-            base_name.as_bytes(),
+            name,
             new_ino,
             crate::dir::DirEntryType::RegFile,
         ) {
@@ -4282,7 +4575,7 @@ impl Filesystem {
                 self.extend_dir_and_add_entry(
                     &mut buf,
                     parent_ino,
-                    base_name.as_bytes(),
+                    name,
                     new_ino,
                     crate::dir::DirEntryType::RegFile,
                 )?;
@@ -4299,25 +4592,44 @@ impl Filesystem {
     /// device numbers (both 0 for FIFOs and sockets). Mirrors POSIX `mknod`.
     pub fn apply_mknod(&self, path: &str, mode: u16, major: u32, minor: u32) -> Result<u32> {
         self.refuse_write()?;
-        let file_type = mode & crate::inode::S_IFMT;
-        let dir_entry_type = match file_type {
-            crate::inode::S_IFCHR => crate::dir::DirEntryType::CharDev,
-            crate::inode::S_IFBLK => crate::dir::DirEntryType::BlockDev,
-            crate::inode::S_IFIFO => crate::dir::DirEntryType::Fifo,
-            crate::inode::S_IFSOCK => crate::dir::DirEntryType::Socket,
-            _ => {
-                return Err(Error::InvalidArgument(
-                    "mknod: unsupported type; use create/mkdir for reg/dir",
-                ))
-            }
-        };
+        Self::mknod_entry_type(mode)?;
+        let (parent, name) = self.resolve_new_parent(path)?;
+        self.apply_mknod_at(parent, name.as_bytes(), mode, major, minor)
+    }
+
+    /// The directory-entry type for a special file of `mode`, or the
+    /// refusal of a mode that is not one.
+    fn mknod_entry_type(mode: u16) -> Result<crate::dir::DirEntryType> {
+        match mode & crate::inode::S_IFMT {
+            crate::inode::S_IFCHR => Ok(crate::dir::DirEntryType::CharDev),
+            crate::inode::S_IFBLK => Ok(crate::dir::DirEntryType::BlockDev),
+            crate::inode::S_IFIFO => Ok(crate::dir::DirEntryType::Fifo),
+            crate::inode::S_IFSOCK => Ok(crate::dir::DirEntryType::Socket),
+            _ => Err(Error::InvalidArgument(
+                "mknod: unsupported type; use create/mkdir for reg/dir",
+            )),
+        }
+    }
+
+    /// [`apply_mknod`](Self::apply_mknod) of entry `name` in directory
+    /// `dir`.
+    pub fn apply_mknod_at(
+        &self,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+        mode: u16,
+        major: u32,
+        minor: u32,
+    ) -> Result<u32> {
+        self.refuse_write()?;
+        let dir = dir.into();
+        let dir_entry_type = Self::mknod_entry_type(mode)?;
         let NewInodePlan {
             new_ino,
             parent_ino,
             parent_inode,
             mut buf,
-            base_name,
-        } = self.plan_new_inode_in_dir(path)?;
+        } = self.plan_new_inode_in_dir(dir, name)?;
 
         let raw = self.build_special_file_inode(new_ino, mode, major, minor)?;
         self.buffer_write_inode(&mut buf, new_ino, &raw)?;
@@ -4326,7 +4638,7 @@ impl Filesystem {
             &mut buf,
             parent_ino,
             &parent_inode,
-            base_name.as_bytes(),
+            name,
             new_ino,
             dir_entry_type,
         ) {
@@ -4335,13 +4647,7 @@ impl Filesystem {
                 Ok(new_ino)
             }
             Err(Error::OutOfBounds) => {
-                self.extend_dir_and_add_entry(
-                    &mut buf,
-                    parent_ino,
-                    base_name.as_bytes(),
-                    new_ino,
-                    dir_entry_type,
-                )?;
+                self.extend_dir_and_add_entry(&mut buf, parent_ino, name, new_ino, dir_entry_type)?;
                 self.commit_block_buffer(buf)?;
                 Ok(new_ino)
             }
@@ -4407,8 +4713,20 @@ impl Filesystem {
     /// macOS). Longer returns `Error::NameTooLong` → ENAMETOOLONG.
     pub fn apply_symlink(&self, target: &str, linkpath: &str) -> Result<u32> {
         self.refuse_write()?;
+        self.check_symlink_target(target.as_bytes())?;
+        let (parent, name) = self.resolve_new_parent(linkpath)?;
+        self.apply_symlink_at(parent, name.as_bytes(), target.as_bytes())
+    }
+
+    fn check_symlink_target(&self, target: &[u8]) -> Result<()> {
         if target.is_empty() {
             return Err(Error::InvalidArgument("symlink target is empty"));
+        }
+        // A C string cannot carry one, and readlink(2) would stop at it.
+        if target.contains(&0) {
+            return Err(Error::InvalidArgument(
+                "a symlink target cannot contain a NUL byte",
+            ));
         }
         // PATH_MAX cap (matches Linux). Slow path allocates exactly one fs
         // block, so we additionally require target.len() <= block_size — the
@@ -4417,14 +4735,27 @@ impl Filesystem {
         if target.len() > max_target {
             return Err(Error::NameTooLong);
         }
+        Ok(())
+    }
+
+    /// [`apply_symlink`](Self::apply_symlink): entry `name` in directory
+    /// `dir`, pointing at `target`. Both are bytes and need not be UTF-8.
+    pub fn apply_symlink_at(
+        &self,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+        target: &[u8],
+    ) -> Result<u32> {
+        self.refuse_write()?;
+        let dir = dir.into();
+        self.check_symlink_target(target)?;
 
         let NewInodePlan {
             new_ino,
             parent_ino,
             parent_inode,
             mut buf,
-            base_name,
-        } = self.plan_new_inode_in_dir(linkpath)?;
+        } = self.plan_new_inode_in_dir(dir, name)?;
 
         let parent_group = (parent_ino - 1) / self.sb.inodes_per_group;
         let bs = self.sb.block_size();
@@ -4435,7 +4766,7 @@ impl Filesystem {
         // `target.len() >= sizeof(i_block)` (i.e. >= 60), and our readlink
         // path mirrors that boundary, so we match here.
         let raw = if target.len() < 60 {
-            self.build_fast_symlink_inode(new_ino, target.as_bytes())?
+            self.build_fast_symlink_inode(new_ino, target)?
         } else {
             let mut bitmap_reader = |block: u64| self.read_block(block);
             let bplan = crate::alloc::plan_block_allocation(
@@ -4462,10 +4793,10 @@ impl Filesystem {
             )?;
 
             let mut block = vec![0u8; bs as usize];
-            block[..target.len()].copy_from_slice(target.as_bytes());
+            block[..target.len()].copy_from_slice(target);
             buf.put(data_phys, block);
 
-            self.build_slow_symlink_inode(new_ino, target.as_bytes(), data_phys)?
+            self.build_slow_symlink_inode(new_ino, target, data_phys)?
         };
         self.buffer_write_inode(&mut buf, new_ino, &raw)?;
 
@@ -4473,7 +4804,7 @@ impl Filesystem {
             &mut buf,
             parent_ino,
             &parent_inode,
-            base_name.as_bytes(),
+            name,
             new_ino,
             crate::dir::DirEntryType::Symlink,
         ) {
@@ -4485,7 +4816,7 @@ impl Filesystem {
                 self.extend_dir_and_add_entry(
                     &mut buf,
                     parent_ino,
-                    base_name.as_bytes(),
+                    name,
                     new_ino,
                     crate::dir::DirEntryType::Symlink,
                 )?;
@@ -5076,15 +5407,21 @@ impl Filesystem {
     ///   copy path doesn't trigger this.
     pub fn apply_pwrite(&self, path: &str, offset: u64, data: &[u8]) -> Result<u64> {
         self.refuse_write()?;
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            path,
-            &self.csum,
-        )?;
-        let (inode, mut raw) = self.read_inode_verified(ino)?;
+        let ino = self.resolve(path)?;
+        self.apply_pwrite_ino(ino, offset, data)
+    }
+
+    /// [`apply_pwrite`](Self::apply_pwrite) on the inode `r` names.
+    pub fn apply_pwrite_ino(
+        &self,
+        r: impl Into<InodeRef>,
+        offset: u64,
+        data: &[u8],
+    ) -> Result<u64> {
+        self.refuse_write()?;
+        let r = r.into();
+        let ino = r.ino;
+        let (inode, mut raw) = self.live_inode(r)?;
         if !inode.is_file() {
             return Err(Error::InvalidArgument(
                 "pwrite target is not a regular file",
@@ -5130,7 +5467,7 @@ impl Filesystem {
                 let take = max_chunk.min(len - chunk_off);
                 let s = chunk_off as usize;
                 let e = (chunk_off + take) as usize;
-                self.apply_pwrite(path, offset + chunk_off, &data[s..e])?;
+                self.apply_pwrite_ino(r, offset + chunk_off, &data[s..e])?;
                 chunk_off += take;
             }
             let (after, _) = self.read_inode_verified(ino)?;
@@ -5147,7 +5484,7 @@ impl Filesystem {
             std::collections::BTreeMap::new();
 
         let mut buf = BlockBuffer::new(self.sb.block_size());
-        let group_idx_of_inode = ((ino - 1) / self.sb.inodes_per_group) as u32;
+        let group_idx_of_inode = (ino - 1) / self.sb.inodes_per_group;
 
         // Track which logical blocks were freshly allocated by this call.
         // Phase-2 writes for these MUST NOT read from disk (the prior
@@ -5771,24 +6108,19 @@ impl Filesystem {
     /// wrapping lands.
     pub fn apply_mkdir(&self, path: &str, mode: u16) -> Result<u32> {
         self.refuse_write()?;
-        let (parent_path, base_name) = split_parent_and_base(path)?;
-        if base_name.len() > 255 {
-            return Err(Error::NameTooLong);
-        }
+        let (parent, name) = self.resolve_new_parent(path)?;
+        self.apply_mkdir_at(parent, name.as_bytes(), mode)
+    }
 
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let parent_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &parent_path,
-            &self.csum,
-        )?;
-        let (parent_inode, mut parent_raw) = self.read_inode_verified(parent_ino)?;
-        if !parent_inode.is_dir() {
-            return Err(Error::NotADirectory);
-        }
-        if self.entry_exists(parent_ino, &parent_inode, base_name.as_bytes())? {
+    /// [`apply_mkdir`](Self::apply_mkdir) of entry `name` in directory
+    /// `dir`. `name` is bytes and need not be UTF-8.
+    pub fn apply_mkdir_at(&self, dir: impl Into<InodeRef>, name: &[u8], mode: u16) -> Result<u32> {
+        self.refuse_write()?;
+        check_new_entry_name(name)?;
+        let dir = dir.into();
+        let parent_ino = dir.ino;
+        let (parent_inode, mut parent_raw) = self.live_dir(dir)?;
+        if self.entry_exists(parent_ino, &parent_inode, name)? {
             return Err(Error::AlreadyExists);
         }
 
@@ -5861,7 +6193,7 @@ impl Filesystem {
             &mut buf,
             parent_ino,
             &parent_inode,
-            base_name.as_bytes(),
+            name,
             new_ino,
             crate::dir::DirEntryType::Directory,
         ) {
@@ -5882,7 +6214,7 @@ impl Filesystem {
             self.extend_dir_and_add_entry(
                 &mut buf,
                 parent_ino,
-                base_name.as_bytes(),
+                name,
                 new_ino,
                 crate::dir::DirEntryType::Directory,
             )?;
@@ -5911,34 +6243,39 @@ impl Filesystem {
         if dst_name.len() > 255 {
             return Err(Error::NameTooLong);
         }
+        let src_ino = self.resolve(src)?;
+        // Before the destination is resolved, as it always was: linking a
+        // directory is EISDIR wherever it was to go.
+        if self.live_inode(src_ino.into())?.0.is_dir() {
+            return Err(Error::IsADirectory);
+        }
+        let dst_parent = self.resolve(&dst_parent_path)?;
+        self.apply_link_at(src_ino, dst_parent, dst_name.as_bytes())
+    }
 
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let src_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            src,
-            &self.csum,
-        )?;
-        let (src_inode, mut src_raw) = self.read_inode_verified(src_ino)?;
+    /// [`apply_link`](Self::apply_link): a new entry `dst_name` in
+    /// directory `dir` for the inode `target` names.
+    pub fn apply_link_at(
+        &self,
+        target: impl Into<InodeRef>,
+        dir: impl Into<InodeRef>,
+        dst_name: &[u8],
+    ) -> Result<()> {
+        self.refuse_write()?;
+        check_new_entry_name(dst_name)?;
+        let target = target.into();
+        let src_ino = target.ino;
+        let (src_inode, mut src_raw) = self.live_inode(target)?;
         if src_inode.is_dir() {
             // POSIX: hard-linking a directory is forbidden. Map to EISDIR
             // (rather than EPERM) — matches our IsADirectory convention.
             return Err(Error::IsADirectory);
         }
 
-        let dst_parent_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &dst_parent_path,
-            &self.csum,
-        )?;
-        let (dst_parent_inode, _) = self.read_inode_verified(dst_parent_ino)?;
-        if !dst_parent_inode.is_dir() {
-            return Err(Error::NotADirectory);
-        }
-        if self.entry_exists(dst_parent_ino, &dst_parent_inode, dst_name.as_bytes())? {
+        let dir = dir.into();
+        let dst_parent_ino = dir.ino;
+        let (dst_parent_inode, _) = self.live_dir(dir)?;
+        if self.entry_exists(dst_parent_ino, &dst_parent_inode, dst_name)? {
             return Err(Error::AlreadyExists);
         }
 
@@ -5963,7 +6300,7 @@ impl Filesystem {
             &mut buf,
             dst_parent_ino,
             &dst_parent_inode,
-            dst_name.as_bytes(),
+            dst_name,
             src_ino,
             dir_type,
         ) {
@@ -5974,7 +6311,7 @@ impl Filesystem {
                 self.extend_dir_and_add_entry(
                     &mut buf,
                     dst_parent_ino,
-                    dst_name.as_bytes(),
+                    dst_name,
                     src_ino,
                     dir_type,
                 )?;
@@ -6015,43 +6352,59 @@ impl Filesystem {
     /// directory, splitting a full leaf of its htree index (#302), and
     /// dropping that index when it has no room to route a new leaf (#347).
     pub fn apply_rename(&self, src: &str, dst: &str, replace_if_exists: bool) -> Result<()> {
-        // The verdict only: the volume is marked not clean below, once the
-        // paths are known good and the rename is known to write (#303).
+        // The verdict only: the volume is marked not clean once the rename
+        // is known to write (#303), in `apply_rename_at`.
         self.write_refusal()?;
         let (src_parent_path, src_name) = split_parent_and_base(src)?;
         let (dst_parent_path, dst_name) = split_parent_and_base(dst)?;
         if dst_name.len() > 255 {
             return Err(Error::NameTooLong);
         }
+        let src_parent = self.resolve(&src_parent_path)?;
+        let dst_parent = self.resolve(&dst_parent_path)?;
+        self.apply_rename_at(
+            src_parent,
+            src_name.as_bytes(),
+            dst_parent,
+            dst_name.as_bytes(),
+            replace_if_exists,
+        )
+    }
 
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let src_parent_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &src_parent_path,
-            &self.csum,
-        )?;
-        let dst_parent_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &dst_parent_path,
-            &self.csum,
-        )?;
-        let (src_parent_inode, _) = self.read_inode_verified(src_parent_ino)?;
-        let (dst_parent_inode, _) = self.read_inode_verified(dst_parent_ino)?;
-        if !src_parent_inode.is_dir() || !dst_parent_inode.is_dir() {
-            return Err(Error::NotADirectory);
+    /// [`apply_rename`](Self::apply_rename) of entry `src_name` in directory
+    /// `src_dir` to entry `dst_name` in directory `dst_dir`. Renaming an
+    /// entry to itself succeeds and writes nothing; `.` and `..` cannot be
+    /// renamed or replaced (`Error::InvalidArgument`).
+    pub fn apply_rename_at(
+        &self,
+        src_dir: impl Into<InodeRef>,
+        src_name: &[u8],
+        dst_dir: impl Into<InodeRef>,
+        dst_name: &[u8],
+        replace_if_exists: bool,
+    ) -> Result<()> {
+        // The verdict only; the volume is marked not clean below, once the
+        // rename is known to write (#303).
+        self.write_refusal()?;
+        check_entry_name(src_name)?;
+        check_new_entry_name(dst_name)?;
+        // Renaming `.` removed the directory's own entry for itself and
+        // filed the directory a second time elsewhere.
+        if is_dot_or_dotdot(src_name) || is_dot_or_dotdot(dst_name) {
+            return Err(Error::InvalidArgument("rename: cannot rename . or .."));
         }
 
-        let src_ino =
-            self.find_entry_in_dir(src_parent_ino, &src_parent_inode, src_name.as_bytes())?;
-        // rename(2) of an existing path onto itself succeeds and changes
-        // nothing. Only after both paths are validated and the source is
-        // found: a NUL name is still refused and a missing path is still
+        let (src_dir, dst_dir) = (src_dir.into(), dst_dir.into());
+        let (src_parent_ino, dst_parent_ino) = (src_dir.ino, dst_dir.ino);
+        let (src_parent_inode, _) = self.live_dir(src_dir)?;
+        let (dst_parent_inode, _) = self.live_dir(dst_dir)?;
+
+        let src_ino = self.find_entry_in_dir(src_parent_ino, &src_parent_inode, src_name)?;
+        // rename(2) of an existing name onto itself succeeds and changes
+        // nothing. Only after both names are validated and the source is
+        // found: a NUL name is still refused and a missing one is still
         // ENOENT (#303).
-        if src == dst {
+        if src_parent_ino == dst_parent_ino && src_name == dst_name {
             return Ok(());
         }
         self.mark_not_clean_once()?;
@@ -6059,7 +6412,7 @@ impl Filesystem {
         // a refusal to read the block into "dst does not exist", and rename
         // then created it and re-stamped the block.
         let existing_dst_ino =
-            match self.find_entry_in_dir(dst_parent_ino, &dst_parent_inode, dst_name.as_bytes()) {
+            match self.find_entry_in_dir(dst_parent_ino, &dst_parent_inode, dst_name) {
                 Ok(ino) => Some(ino),
                 Err(Error::NotFound) => None,
                 Err(e) => return Err(e),
@@ -6068,18 +6421,16 @@ impl Filesystem {
             return Err(Error::AlreadyExists);
         }
 
-        let (src_inode, _) = self.read_inode_verified(src_ino)?;
+        let (src_inode, _) = self.live_inode(src_ino.into())?;
         let src_is_dir = src_inode.is_dir();
 
-        // Cycle check: moving a dir INTO itself is illegal. Simple prefix
-        // check on normalised paths — rejects rename /a /a/b/c.
-        if src_is_dir {
-            let src_slash = format!("{}/", src.trim_end_matches('/'));
-            if dst == src || dst.starts_with(&src_slash) {
-                return Err(Error::InvalidArgument(
-                    "rename: cannot move directory into its own subtree",
-                ));
-            }
+        // Cycle check: moving a directory into its own subtree would cut
+        // that subtree off from the root. Walked up the destination's `..`
+        // chain, so it holds however the caller named the two directories.
+        if src_is_dir && self.is_ancestor_or_self(src_ino, dst_parent_ino)? {
+            return Err(Error::InvalidArgument(
+                "rename: cannot move directory into its own subtree",
+            ));
         }
 
         // Map POSIX mode bits to the directory-entry file-type byte.
@@ -6176,12 +6527,7 @@ impl Filesystem {
 
             // 1. Pop the existing dst entry from dst_parent so the
             //    in-place add below has somewhere to land.
-            self.buffer_remove_dir_entry(
-                &mut buf,
-                dst_parent_ino,
-                &dst_parent_inode,
-                dst_name.as_bytes(),
-            )?;
+            self.buffer_remove_dir_entry(&mut buf, dst_parent_ino, &dst_parent_inode, dst_name)?;
 
             // 2. Add the new dst entry pointing at src_ino. Try in-place
             //    first; if no block has room, mirror the dst_extends
@@ -6190,7 +6536,7 @@ impl Filesystem {
                 &mut buf,
                 dst_parent_ino,
                 &dst_parent_inode,
-                dst_name.as_bytes(),
+                dst_name,
                 src_ino,
                 dir_type,
             ) {
@@ -6202,7 +6548,7 @@ impl Filesystem {
                 self.extend_dir_and_add_entry(
                     &mut buf,
                     dst_parent_ino,
-                    dst_name.as_bytes(),
+                    dst_name,
                     src_ino,
                     dir_type,
                 )?;
@@ -6211,12 +6557,7 @@ impl Filesystem {
             // 3. Remove src entry from its parent, as step 2 left it: read
             //    through the buffer, for the same reason as below (#392).
             let (src_parent_now, _) = self.buffered_inode_verified(&buf, src_parent_ino)?;
-            self.buffer_remove_dir_entry(
-                &mut buf,
-                src_parent_ino,
-                &src_parent_now,
-                src_name.as_bytes(),
-            )?;
+            self.buffer_remove_dir_entry(&mut buf, src_parent_ino, &src_parent_now, src_name)?;
 
             // 4. Cross-parent dir move: fix `..` + parent nlinks.
             //    For dir-replaces-dir the dst_parent gains the moved
@@ -6305,7 +6646,7 @@ impl Filesystem {
             &mut buf,
             dst_parent_ino,
             &dst_parent_inode,
-            dst_name.as_bytes(),
+            dst_name,
             src_ino,
             dir_type,
         ) {
@@ -6316,13 +6657,7 @@ impl Filesystem {
 
         if dst_extends {
             // Dest parent full → grow it in this transaction.
-            self.extend_dir_and_add_entry(
-                &mut buf,
-                dst_parent_ino,
-                dst_name.as_bytes(),
-                src_ino,
-                dir_type,
-            )?;
+            self.extend_dir_and_add_entry(&mut buf, dst_parent_ino, dst_name, src_ino, dir_type)?;
         }
 
         // The source parent as the add above left it, read through the
@@ -6333,12 +6668,7 @@ impl Filesystem {
         // rename failed with NotFound (#392). When the add dropped the index
         // instead (#347), the stale inode still called it indexed.
         let (src_parent_now, _) = self.buffered_inode_verified(&buf, src_parent_ino)?;
-        self.buffer_remove_dir_entry(
-            &mut buf,
-            src_parent_ino,
-            &src_parent_now,
-            src_name.as_bytes(),
-        )?;
+        self.buffer_remove_dir_entry(&mut buf, src_parent_ino, &src_parent_now, src_name)?;
 
         if src_is_dir && src_parent_ino != dst_parent_ino {
             self.buffer_update_dotdot(&mut buf, src_ino, &src_inode, dst_parent_ino)?;
@@ -6350,6 +6680,33 @@ impl Filesystem {
         // come from what is actually on disk now.
         self.apply_parent_nlink_deltas(&mut buf, &parent_nlink)?;
         self.commit_block_buffer(buf)
+    }
+
+    /// True if directory `ancestor` is `dir` or lies on its `..` chain to
+    /// the root.
+    fn is_ancestor_or_self(&self, ancestor: u32, dir: u32) -> Result<bool> {
+        let mut cur = dir;
+        // A `..` chain longer than the inode table is a loop, not a tree.
+        for _ in 0..=self.sb.inodes_count {
+            if cur == ancestor {
+                return Ok(true);
+            }
+            if cur == crate::path::EXT4_ROOT_INODE {
+                return Ok(false);
+            }
+            let (inode, _) = self.read_inode_verified(cur)?;
+            cur = crate::path::find_entry(
+                self.dev.as_ref(),
+                &self.sb,
+                cur,
+                &inode,
+                b"..",
+                &self.csum,
+            )?;
+        }
+        Err(Error::Corrupt(
+            "directory `..` chain does not reach the root",
+        ))
     }
 
     /// Apply accumulated `i_links_count` deltas, one read and one write
@@ -7081,21 +7438,29 @@ impl Filesystem {
     /// entry from the parent, decrements parent's `i_links_count`.
     pub fn apply_rmdir(&self, path: &str) -> Result<()> {
         self.refuse_write()?;
-        let (parent_path, base_name) = split_parent_and_base(path)?;
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        let parent_ino = crate::path::lookup_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            &parent_path,
-            &self.csum,
-        )?;
-        let (parent_inode, mut parent_raw) = self.read_inode_verified(parent_ino)?;
-        if !parent_inode.is_dir() {
-            return Err(Error::NotADirectory);
+        let (parent, name) = self.resolve_parent(path)?;
+        self.apply_rmdir_at(parent, name.as_bytes())
+    }
+
+    /// [`apply_rmdir`](Self::apply_rmdir) of entry `name` in directory
+    /// `dir`. `.` is refused with `Error::InvalidArgument` and `..` with
+    /// `Error::DirectoryNotEmpty`, as rmdir(2) does.
+    pub fn apply_rmdir_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<()> {
+        self.refuse_write()?;
+        check_entry_name(name)?;
+        // `.` is the directory itself: removing it freed the directory
+        // while its parent's entry still pointed at it.
+        if name == b"." {
+            return Err(Error::InvalidArgument("rmdir: cannot remove ."));
         }
-        let target_ino = self.find_entry_in_dir(parent_ino, &parent_inode, base_name.as_bytes())?;
-        let (target_inode, _) = self.read_inode_verified(target_ino)?;
+        if name == b".." {
+            return Err(Error::DirectoryNotEmpty);
+        }
+        let dir = dir.into();
+        let parent_ino = dir.ino;
+        let (parent_inode, mut parent_raw) = self.live_dir(dir)?;
+        let target_ino = self.find_entry_in_dir(parent_ino, &parent_inode, name)?;
+        let (target_inode, _) = self.live_inode(target_ino.into())?;
         if !target_inode.is_dir() {
             return Err(Error::NotADirectory);
         }
@@ -7183,12 +7548,7 @@ impl Filesystem {
             } else {
                 0
             };
-            if crate::dir::remove_entry_from_block(
-                block,
-                base_name.as_bytes(),
-                has_ft,
-                reserved_tail,
-            )? {
+            if crate::dir::remove_entry_from_block(block, name, has_ft, reserved_tail)? {
                 if self.csum.enabled && reserved_tail == 12 {
                     self.csum
                         .patch_dir_entry_tail(parent_ino, parent_inode.generation, block);
