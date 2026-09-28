@@ -4,7 +4,7 @@
 //! An inline file's `i_block` holds its first 60 bytes. Replacing its
 //! content read those bytes as block pointers and freed the blocks they
 //! named; growing it patched only `i_size`. The files here are the kernel's
-//! own, in `ext4-inline.img`; `debugfs cat` reads them back and
+//! own, in `ext4-inline.img`; `debugfs stat` and `cat` read them back and
 //! `e2fsck -fn` judges the volume. The e2fsprogs tools run in the harness
 //! VM; a test fails when it cannot reach them.
 
@@ -19,13 +19,26 @@ fn inode_of(fs: &Filesystem, path: &str) -> (u32, fs_ext4::inode::Inode) {
     (ino, fs.read_inode_verified(ino).unwrap().0)
 }
 
+/// What debugfs reads for `path`: its `i_size` from `stat`, and `cat`'s
+/// bytes. For an inline file `cat` prints the whole inline area, zeros past
+/// `i_size` included, so the two are compared as a pair before and after.
 #[track_caller]
-fn debugfs_cat(image: &str, path: &str) -> Vec<u8> {
-    let out = fs_ext4_test_support::oracle("debugfs")
+fn debugfs_view(image: &str, path: &str) -> (u64, Vec<u8>) {
+    let stat = fs_ext4_test_support::oracle("debugfs")
+        .args(["-R", &format!("stat {path}"), image])
+        .output();
+    let text = String::from_utf8_lossy(&stat.stdout);
+    let size = text
+        .split_whitespace()
+        .skip_while(|w| *w != "Size:")
+        .nth(1)
+        .and_then(|w| w.parse().ok())
+        .unwrap_or_else(|| panic!("no Size: in debugfs stat {path}:\n{text}"));
+    let cat = fs_ext4_test_support::oracle("debugfs")
         .args(["-R", &format!("cat {path}"), image])
         .output();
-    assert!(out.status.success(), "debugfs cat {path}");
-    out.stdout
+    assert!(cat.status.success(), "debugfs cat {path}");
+    (size, cat.stdout)
 }
 
 #[test]
@@ -40,6 +53,13 @@ fn writes_to_the_kernels_inline_files_are_refused_and_leave_them_whole() {
         ("/medium.txt", vec![b'A'; 100]),
     ];
     for (path, content) in &files {
+        let before = debugfs_view(&image, path);
+        assert_eq!(before.0, content.len() as u64, "{path}: debugfs size");
+        assert!(
+            before.1.starts_with(content),
+            "{path}: debugfs cat {:?}",
+            before.1
+        );
         let fs = Filesystem::mount(Arc::new(FileDevice::open_rw(&image).unwrap())).unwrap();
         let (ino, inode) = inode_of(&fs, path);
         assert!(
@@ -63,7 +83,11 @@ fn writes_to_the_kernels_inline_files_are_refused_and_leave_them_whole() {
                 "{name} of {path}: {r:?}"
             );
         }
-        assert_eq!(&debugfs_cat(&image, path), content, "{path}: debugfs cat");
+        assert_eq!(
+            debugfs_view(&image, path),
+            before,
+            "{path}: debugfs size and cat"
+        );
     }
     fs_ext4_test_support::assert_e2fsck_clean(&image, "refused writes to inline files");
     let _ = std::fs::remove_file(&image);
