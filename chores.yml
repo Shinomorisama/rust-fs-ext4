@@ -677,10 +677,15 @@ tasks:
     #
     # This exists so the CI gate can be reproduced locally. If the two
     # ever differ, this is the copy that is wrong.
+    #
+    # `--all` is what reaches the local path dependencies: without it
+    # `tests/support` -- the crate every test reaches its oracles
+    # through -- is never checked (#367). `tests/ci_profile.rs` holds
+    # this line to it.
     cmds:
       - scripts/agents-core-check.sh
       - scripts/ci-gate.sh
-      - cargo fmt --check
+      - cargo fmt --all --check
       - cargo clippy --locked --all-targets -- -D warnings
 
   build:
