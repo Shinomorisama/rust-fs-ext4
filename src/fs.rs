@@ -6049,11 +6049,13 @@ impl Filesystem {
                 )?;
             }
 
-            // 3. Remove src entry from its parent.
+            // 3. Remove src entry from its parent, as step 2 left it: read
+            //    through the buffer, for the same reason as below (#392).
+            let (src_parent_now, _) = self.buffered_inode_verified(&buf, src_parent_ino)?;
             self.buffer_remove_dir_entry(
                 &mut buf,
                 src_parent_ino,
-                &src_parent_inode,
+                &src_parent_now,
                 src_name.as_bytes(),
             )?;
 
@@ -6164,10 +6166,18 @@ impl Filesystem {
             )?;
         }
 
+        // The source parent as the add above left it, read through the
+        // buffer. When it is also the destination and the add split a full
+        // htree leaf, the upper half of that leaf -- the source entry among
+        // it, perhaps -- now lives in a block past the size read before the
+        // add, and removing through that stale inode missed it: a legal
+        // rename failed with NotFound (#392). When the add dropped the index
+        // instead (#347), the stale inode still called it indexed.
+        let (src_parent_now, _) = self.buffered_inode_verified(&buf, src_parent_ino)?;
         self.buffer_remove_dir_entry(
             &mut buf,
             src_parent_ino,
-            &src_parent_inode,
+            &src_parent_now,
             src_name.as_bytes(),
         )?;
 
