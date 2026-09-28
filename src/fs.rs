@@ -10182,4 +10182,137 @@ mod tests {
             "removed means gone"
         );
     }
+
+    // --- the external xattr block is checked before it is edited (#378) ---
+
+    /// Point `f`'s `i_file_acl` at `block_nr`, re-checksummed, as a stale
+    /// or bit-rotted pointer would leave it.
+    fn point_file_acl_at(fs: &Filesystem, ino: u32, block_nr: u64) {
+        let (inode, mut raw) = fs.read_inode_verified(ino).expect("read inode");
+        Filesystem::write_file_acl(&mut raw, block_nr).expect("write_file_acl");
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .expect("finalize");
+        fs.write_inode_raw(ino, &raw).expect("write inode");
+    }
+
+    /// `/g`, one block of 0x5A, and the number of that block.
+    fn a_data_block(fs: &Filesystem) -> u64 {
+        let g = fs.apply_create("/g", 0o644).expect("create g");
+        fs.apply_replace_file_content("/g", &[0x5Au8; 4096])
+            .expect("write g");
+        let (gi, _) = fs.read_inode_verified(g).expect("read g");
+        fs.extent_tree_runs(g, &gi).expect("g's extents")[0].0
+    }
+
+    fn block_bytes(dev: &std::sync::Arc<MemDev>, block_nr: u64) -> Vec<u8> {
+        use crate::block_io::BlockDevice;
+        let mut b = vec![0u8; BS as usize];
+        dev.read_at(block_nr * BS as u64, &mut b)
+            .expect("read block");
+        b
+    }
+
+    /// An `i_file_acl` naming a block without the xattr magic does not name
+    /// an xattr block: setxattr refuses it rather than formatting another
+    /// file's data as one and reporting success.
+    #[test]
+    fn setxattr_refuses_an_external_block_without_the_xattr_magic() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let f = fs.apply_create("/f", 0o644).expect("create f");
+        let gblk = a_data_block(&fs);
+        point_file_acl_at(&fs, f, gblk);
+        let r = fs.apply_setxattr("/f", "user.big", &[1u8; 200]);
+        assert!(
+            matches!(r, Err(Error::Corrupt(_))),
+            "setxattr on a non-xattr block must be refused as corrupt, got {r:?}"
+        );
+        assert!(
+            block_bytes(&dev, gblk).iter().all(|&x| x == 0x5A),
+            "g's data must be untouched"
+        );
+    }
+
+    /// The same for removexattr and for the release an unlink does: neither
+    /// edits nor frees a block that is not an xattr block.
+    #[test]
+    fn removexattr_and_unlink_refuse_an_external_block_without_the_xattr_magic() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let f = fs.apply_create("/f", 0o644).expect("create f");
+        let gblk = a_data_block(&fs);
+        point_file_acl_at(&fs, f, gblk);
+        let r = fs.apply_removexattr("/f", "user.anything");
+        assert!(matches!(r, Err(Error::Corrupt(_))), "removexattr: {r:?}");
+        let r = fs.apply_unlink("/f");
+        assert!(matches!(r, Err(Error::Corrupt(_))), "unlink: {r:?}");
+        assert!(
+            block_bytes(&dev, gblk).iter().all(|&x| x == 0x5A),
+            "g's data must be untouched"
+        );
+    }
+
+    /// A metadata_csum xattr block whose checksum does not verify is not
+    /// edited, and so not restamped as if it did.
+    #[test]
+    fn setxattr_refuses_an_external_block_that_fails_its_checksum() {
+        use crate::block_io::BlockDevice;
+        let dev = formatted();
+        let fs = mount(&dev);
+        assert!(fs.csum.enabled, "fixture: a metadata_csum volume");
+        let f = fs.apply_create("/f", 0o644).expect("create f");
+        fs.apply_setxattr("/f", "user.big", &[1u8; 200])
+            .expect("set big");
+        let (fi, _) = fs.read_inode_verified(f).unwrap();
+        assert_ne!(fi.file_acl, 0, "fixture: the value is in the block");
+        let mut b = block_bytes(&dev, fi.file_acl);
+        assert!(
+            fs.csum.verify_xattr_block(fi.file_acl, &b),
+            "fixture: valid"
+        );
+        b[BS as usize - 1] ^= 0xFF; // a byte of the value area
+        dev.write_at(fi.file_acl * BS as u64, &b).unwrap();
+        let fs = mount(&dev);
+        let r = fs.apply_setxattr("/f", "user.other", &[2u8; 200]);
+        assert!(
+            matches!(r, Err(Error::BadChecksum { .. })),
+            "an edit of a block that fails its checksum must be refused, got {r:?}"
+        );
+        assert_eq!(block_bytes(&dev, fi.file_acl), b, "the block is untouched");
+        let r = fs.apply_removexattr("/f", "user.big");
+        assert!(
+            matches!(r, Err(Error::BadChecksum { .. })),
+            "removexattr: {r:?}"
+        );
+        assert_eq!(block_bytes(&dev, fi.file_acl), b, "the block is untouched");
+        // The read path says so too, rather than returning what may be
+        // another attribute's bytes.
+        let (fi, raw) = fs.read_inode_verified(f).unwrap();
+        let r = crate::xattr::get_resolved(&fs, &fi, &raw, "user.big");
+        assert!(
+            matches!(r, Err(Error::BadChecksum { .. })),
+            "getxattr: {r:?}"
+        );
+    }
+
+    /// `h_blocks` is 1 for every xattr block ext4 has ever written; a block
+    /// claiming more is not one this crate or the kernel can edit.
+    #[test]
+    fn setxattr_refuses_an_external_block_with_h_blocks_other_than_one() {
+        use crate::block_io::BlockDevice;
+        let dev = formatted();
+        let fs = mount(&dev);
+        let f = fs.apply_create("/f", 0o644).expect("create f");
+        fs.apply_setxattr("/f", "user.big", &[1u8; 200])
+            .expect("set big");
+        let (fi, _) = fs.read_inode_verified(f).unwrap();
+        let mut b = block_bytes(&dev, fi.file_acl);
+        b[8..12].copy_from_slice(&2u32.to_le_bytes());
+        fs.csum.patch_xattr_block(fi.file_acl, &mut b);
+        dev.write_at(fi.file_acl * BS as u64, &b).unwrap();
+        let fs = mount(&dev);
+        let r = fs.apply_setxattr("/f", "user.other", &[2u8; 200]);
+        assert!(matches!(r, Err(Error::Corrupt(_))), "setxattr: {r:?}");
+        assert_eq!(block_bytes(&dev, fi.file_acl), b, "the block is untouched");
+    }
 }
