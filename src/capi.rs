@@ -6,6 +6,7 @@
 //! - fs_ext4_mount(device_path) -> *mut fs_ext4_fs_t
 //! - fs_ext4_mount_with_callbacks(cfg) -> *mut fs_ext4_fs_t
 //! - fs_ext4_umount(fs)
+//! - fs_ext4_flush(fs) -> int / fs_ext4_fresh_read(fs) -> int
 //! - fs_ext4_get_volume_info(fs, info) -> int
 //! - fs_ext4_stat(fs, path, attr) -> int
 //! - fs_ext4_dir_open(fs, path) -> *mut iter
@@ -897,6 +898,58 @@ pub unsafe extern "C" fn fs_ext4_replay_journal_if_dirty(fs: *mut fs_ext4_fs_t) 
                 Ok(_) => 0,
                 Err(e) => {
                     set_err_from(&e, "replay_journal_if_dirty");
+                    -1
+                }
+            }
+        }),
+    )
+}
+
+/// Durability barrier for a live mount: flush the device and check that
+/// nothing is left in flight, without releasing the handle. Returns 0 on
+/// success, -1 with `fs_ext4_last_errno` set on failure: `EIO` when an
+/// earlier mutation's device write or journal operation failed (the mount
+/// must then be retired), or whatever errno the host's flush callback
+/// surfaced. Safe to call while other calls on the same handle run.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_flush(fs: *mut fs_ext4_fs_t) -> c_int {
+    ffi_guard(
+        -1,
+        AssertUnwindSafe(|| {
+            clear_last_error();
+            if fs.is_null() {
+                set_err_msg("null fs handle", EINVAL);
+                return -1;
+            }
+            match (*fs).fs.flush() {
+                Ok(()) => 0,
+                Err(e) => {
+                    set_err_from(&e, "flush");
+                    -1
+                }
+            }
+        }),
+    )
+}
+
+/// Flush, then drop the mount's read caches and re-read its metadata from
+/// the device, for a host that changed the device underneath. Returns 0 on
+/// success, -1 with `fs_ext4_last_errno` set on failure. The caller must
+/// serialise: no other call on this handle may be in flight.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_fresh_read(fs: *mut fs_ext4_fs_t) -> c_int {
+    ffi_guard(
+        -1,
+        AssertUnwindSafe(|| {
+            clear_last_error();
+            if fs.is_null() {
+                set_err_msg("null fs handle", EINVAL);
+                return -1;
+            }
+            match (*fs).fs.fresh_read() {
+                Ok(()) => 0,
+                Err(e) => {
+                    set_err_from(&e, "fresh_read");
                     -1
                 }
             }

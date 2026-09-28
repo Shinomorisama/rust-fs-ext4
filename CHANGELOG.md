@@ -84,6 +84,22 @@ Not caught by the compiler — the same source builds and behaves differently:
 
 ### Added
 
+- **`fs_ext4_flush` and `fs_ext4_fresh_read` in the C API** (#374). A host
+  embedding the engine through C had no durability barrier on a live mount,
+  so it could not tell "every change so far is on the device" from "the
+  mount has been released", and unmounted after every mutation. Every
+  mutating call already reaches its final on-disk location before it
+  returns; `fs_ext4_flush` issues one more device flush and checks nothing
+  is left in flight, returning -1 with `EIO` after an earlier failed write
+  or journal operation. `fs_ext4_fresh_read` also drops the read caches for
+  a host that changed the device underneath, and refuses with `EIO` on a
+  read-only mount holding a journal replayed only into its cache, keeping
+  that view. The header no longer names a `synchronize()` that never
+  existed; `tests/capi_header_names_real_functions.rs` fails when it names
+  a function it does not declare, or declares one the library does not
+  export. `Filesystem::flush` now takes `&self`, holding the journal writer
+  for the whole check, so a shared handle can flush while other calls run.
+
 - **The parsers are fuzzed, on two tiers.** ext4 is the widest parser
   surface in the family — a superblock, group descriptors, an inode
   table, extent trees, htree indexes and a jbd2 journal, each read from
