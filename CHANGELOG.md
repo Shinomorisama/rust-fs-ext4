@@ -266,6 +266,13 @@ Not caught by the compiler — the same source builds and behaves differently:
 
 ### Fixed
 
+- **An extent merge stops at the extent length limit.** Contiguous extents
+  were merged with no cap on the sum. An initialized extent longer than 32768
+  blocks encodes as an uninitialized one of `len - 32768`, so a file grown
+  past 128 MiB in physically contiguous pieces read back as zeros and leaked
+  its tail blocks; two uninitialized extents past 32767 overflowed `ee_len`.
+  Every merge now refuses a pair over 32768 initialized or 32767
+  uninitialized blocks, as the kernel does (#387).
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

@@ -129,10 +129,31 @@ fn read_leaf_entries(root: &[u8]) -> Result<(ExtentHeader, Vec<Extent>)> {
     Ok((header, out))
 }
 
-/// Returns true iff two adjacent leaf extents are physically contiguous and
-/// in the same uninit state — candidate for a merge.
+/// Longest extent `ee_len` can describe in `uninitialized` state: 32768
+/// initialized blocks, 32767 uninitialized (an `ee_len` above 32768 is what
+/// marks an extent uninitialized, so 32768 itself is reserved for the
+/// initialized one). The kernel's `ext4_can_extents_be_merged` caps at the
+/// same two values.
+fn max_extent_len(uninitialized: bool) -> u32 {
+    if uninitialized {
+        u32::from(EXT_INIT_MAX_LEN) - 1
+    } else {
+        u32::from(EXT_INIT_MAX_LEN)
+    }
+}
+
+/// Returns true iff two adjacent leaf extents are physically contiguous, in
+/// the same uninit state, and short enough together to be one extent —
+/// candidate for a merge.
+///
+/// The length cap is not optional (#387): an initialized extent longer than
+/// 32768 blocks encodes as an uninitialized one of `len - 32768`, and two
+/// uninitialized ones past 32767 overflow `ee_len`.
 fn are_contiguous(a: &Extent, b: &Extent) -> bool {
     if a.uninitialized != b.uninitialized {
+        return false;
+    }
+    if u32::from(a.length) + u32::from(b.length) > max_extent_len(a.uninitialized) {
         return false;
     }
     let a_log_end = a.logical_block as u64 + a.length as u64;
@@ -1113,17 +1134,7 @@ pub fn plan_initialize_range(root: &[u8], first: u32, end: u32) -> Result<(Vec<u
     let mut merged: Vec<Extent> = Vec::with_capacity(out.len());
     for e in out {
         match merged.last_mut() {
-            Some(prev)
-                if are_contiguous(prev, &e)
-                    && u32::from(prev.length) + u32::from(e.length)
-                        <= u32::from(if e.uninitialized {
-                            crate::extent::EXT_INIT_MAX_LEN - 1
-                        } else {
-                            crate::extent::EXT_INIT_MAX_LEN
-                        }) =>
-            {
-                prev.length += e.length
-            }
+            Some(prev) if are_contiguous(prev, &e) => prev.length += e.length,
             _ => merged.push(e),
         }
     }
