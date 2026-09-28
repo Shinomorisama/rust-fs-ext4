@@ -184,3 +184,65 @@ fn mkfs_with_a_generated_uuid() {
     }
     check_and_done(&p, "genuuid", 4096, 1);
 }
+
+/// `s_blocks_per_group`, read straight from the primary superblock.
+fn blocks_per_group(image: &str) -> u32 {
+    use std::os::unix::fs::FileExt;
+    let mut field = [0u8; 4];
+    fs::File::open(image)
+        .and_then(|f| f.read_exact_at(&mut field, 1024 + 0x20))
+        .unwrap_or_else(|e| panic!("read {image}: {e}"));
+    u32::from_le_bytes(field)
+}
+
+/// At 16 KiB blocks and larger, `8 * block_size` exceeds the format's
+/// 65528-block group (#429), and e2fsprogs refused the volume before
+/// checking anything: `ext2fs_open2: The ext2 superblock is corrupt`. The
+/// volume must now be one e2fsck passes, with the group `mke2fs -b <size>`
+/// chooses for a volume of the same size. 98304 blocks makes two groups,
+/// one full and one short, so the backup in group 1 is checked too.
+fn large_blocks_match_mke2fs(block_size: u32) {
+    let size = 98_304 * u64::from(block_size);
+    let tag = format!("{}k", block_size / 1024);
+    let ours = format_to_tmp(&tag, size, block_size);
+    fs_ext4_test_support::assert_e2fsck_clean(&ours, &tag);
+
+    let reference =
+        fs_ext4_test_support::temp_path!("fs_ext4_mke2fs_{tag}_{}.img", std::process::id());
+    std::fs::File::create(&reference)
+        .and_then(|f| f.set_len(size))
+        .unwrap_or_else(|e| panic!("create {reference}: {e}"));
+    let out = fs_ext4_test_support::oracle("mkfs.ext4")
+        .args(["-q", "-F", "-b"])
+        .arg(block_size.to_string())
+        .arg(&reference)
+        .output();
+    assert!(
+        out.status.success(),
+        "[{tag}] mkfs.ext4: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        blocks_per_group(&ours),
+        blocks_per_group(&reference),
+        "[{tag}] blocks per group: ours, then mke2fs's"
+    );
+    let _ = fs::remove_file(&reference);
+
+    check_and_done(&ours, &tag, block_size, 2);
+}
+
+#[test]
+fn mkfs_16k_blocks_match_mke2fs() {
+    large_blocks_match_mke2fs(16384);
+}
+
+#[test]
+fn mkfs_32k_blocks_match_mke2fs() {
+    large_blocks_match_mke2fs(32768);
+}
+
+#[test]
+fn mkfs_64k_blocks_match_mke2fs() {
+    large_blocks_match_mke2fs(65536);
+}
