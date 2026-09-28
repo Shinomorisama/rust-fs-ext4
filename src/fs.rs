@@ -10332,4 +10332,99 @@ mod tests {
         assert!(matches!(r, Err(Error::Corrupt(_))), "setxattr: {r:?}");
         assert_eq!(block_bytes(&dev, fi.file_acl), b, "the block is untouched");
     }
+
+    // --- an inode with i_extra_isize = 0 (#380) ------------------------
+
+    /// Rewrite `ino`'s raw image through `f`, re-checksummed.
+    fn patch_inode(fs: &Filesystem, ino: u32, f: impl FnOnce(&mut Vec<u8>)) {
+        let (inode, mut raw) = fs.read_inode_verified(ino).expect("read inode");
+        f(&mut raw);
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .expect("finalize");
+        fs.write_inode_raw(ino, &raw).expect("write inode");
+    }
+
+    /// With `i_extra_isize = 0` the kernel parses no in-inode xattr area
+    /// and reads 0x80.. as the `i_*_extra` fields. setxattr must not put an
+    /// area at 0x80: it gives the inode the extra fields first, as the
+    /// kernel does, and the attribute goes after them.
+    #[test]
+    fn setxattr_on_an_inode_with_no_extra_isize_does_not_write_at_0x80() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/f", 0o644).expect("create");
+        patch_inode(&fs, ino, |raw| raw[0x80..].fill(0));
+        fs.apply_setxattr("/f", "user.a", b"v").expect("setxattr");
+        let (inode, raw) = fs
+            .read_inode_verified(ino)
+            .expect("the inode still verifies");
+        let extra = u16::from_le_bytes(raw[0x80..0x82].try_into().unwrap());
+        assert_eq!(
+            extra,
+            32,
+            "i_extra_isize: the xattr went where the kernel reads i_*_extra: {:02x?}",
+            &raw[0x80..0xA4]
+        );
+        assert_eq!(
+            raw[0xA0..0xA4],
+            crate::xattr::EXT4_XATTR_MAGIC.to_le_bytes(),
+            "the in-inode area starts after the extra fields"
+        );
+        assert_eq!(
+            crate::xattr::get_resolved(&fs, &inode, &raw, "user.a").unwrap(),
+            Some(b"v".to_vec())
+        );
+    }
+
+    /// An area a writer put at 0x80 is not an area the kernel reads, and
+    /// neither is it one this crate reads or removes.
+    #[test]
+    fn an_xattr_area_at_0x80_is_not_read() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/f", 0o644).expect("create");
+        patch_inode(&fs, ino, |raw| {
+            raw[0x80..].fill(0);
+            let mut region = raw[0x80..].to_vec();
+            crate::xattr::plan_set_in_inode_region(&mut region, "user.a", b"v").unwrap();
+            raw[0x80..].copy_from_slice(&region);
+            // What makes it look like one: i_extra_isize reads 0.
+            assert_eq!(raw[0x80..0x82], [0, 0]);
+        });
+        let (inode, raw) = fs.read_inode_verified(ino).unwrap();
+        assert_eq!(
+            crate::xattr::get_resolved(&fs, &inode, &raw, "user.a").unwrap(),
+            None
+        );
+    }
+
+    /// With `i_extra_isize < 4` there is no `i_checksum_hi`: 0x82..0x84 is
+    /// ordinary inode bytes, covered by the checksum and compared by
+    /// nobody. Writing the checksum must not overwrite them, and verifying
+    /// must compare only the low 16 bits, as the kernel and libext2fs do.
+    #[test]
+    fn an_inode_without_room_for_checksum_hi_keeps_its_bytes_at_0x82() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        assert!(fs.csum.enabled, "fixture: a metadata_csum volume");
+        let ino = fs.apply_create("/f", 0o644).expect("create");
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        raw[0x80..].fill(0);
+        raw[0x82..0x84].copy_from_slice(&[0x02, 0xEA]);
+        // The kernel's checksum of this inode: 16 bits, over every byte
+        // but i_checksum_lo, 0x82..0x84 included.
+        let (lo, _) = fs
+            .csum
+            .compute_inode_checksum(ino, inode.generation, &raw)
+            .unwrap();
+        raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
+        assert!(
+            fs.csum.verify_inode(ino, inode.generation, &raw),
+            "a kernel-checksummed inode with i_extra_isize = 0 verifies"
+        );
+        let mut rewritten = raw.clone();
+        fs.finalize_inode_raw(ino, inode.generation, &mut rewritten)
+            .unwrap();
+        assert_eq!(rewritten, raw, "re-checksumming changes nothing");
+    }
 }
