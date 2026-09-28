@@ -3411,7 +3411,9 @@ impl Filesystem {
         // (#377); removing only the first copy found then brought the
         // stale one back. Every copy goes, in one transaction.
         let mut found = false;
-        if region_start + 4 <= region_end {
+        // `i_extra_isize = 0` means no in-inode area at all: the kernel
+        // does not parse one there (#380).
+        if i_extra_isize != 0 && region_start + 4 <= region_end {
             let region = &mut raw[region_start..region_end];
             if crate::xattr::plan_remove_in_inode_region(region, name)?
                 == crate::xattr::RemoveOutcome::Removed
@@ -3515,14 +3517,29 @@ impl Filesystem {
         let (inode, mut raw) = self.read_inode_verified(ino)?;
 
         let inode_size = self.sb.inode_size as usize;
-        let i_extra_isize = if raw.len() >= 0x82 {
+        let mut i_extra_isize = if raw.len() >= 0x82 {
             u16::from_le_bytes(raw[0x80..0x82].try_into().unwrap()) as usize
         } else {
             0
         };
+        // NO AREA AT 0x80 (#380). `i_extra_isize = 0` -- `ext2.ko`, older
+        // kernels, 256-byte-inode ext2 volumes -- is an inode whose extra
+        // fields are unused, and the kernel parses no in-inode xattr area
+        // there: it reads 0x80.. as `i_extra_isize`, `i_checksum_hi` and the
+        // `i_*_extra` words. An area written at 0x80 was invisible to it,
+        // and on `metadata_csum` the checksum's high half was then stored
+        // over the area's magic. The kernel gives such an inode its extra
+        // fields, zeroed, before it writes an attribute
+        // (`__ext4_expand_extra_isize`); so does this, in the same write.
+        let extra = crate::inode::EXTRA_ISIZE_DEFAULT as usize;
+        if i_extra_isize == 0 && inode_size.min(raw.len()) >= 128 + extra {
+            raw[0x80..0x80 + extra].fill(0);
+            write_inode_extra_isize(&mut raw);
+            i_extra_isize = extra;
+        }
         let region_start = 128 + i_extra_isize;
         let region_end = inode_size.min(raw.len());
-        let inline_capable = region_start + 8 <= region_end;
+        let inline_capable = i_extra_isize != 0 && region_start + 8 <= region_end;
 
         // Try in-inode first; on overflow fall through to the external block.
         let inline_result = if inline_capable {
@@ -3572,12 +3589,7 @@ impl Filesystem {
         raw: &mut [u8],
     ) -> Result<()> {
         if self.csum.enabled {
-            if let Some((lo, hi)) = self.csum.compute_inode_checksum(ino, generation, raw) {
-                raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
-                if raw.len() >= 0x84 {
-                    raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
-                }
-            }
+            self.csum.patch_inode_checksum(ino, generation, raw);
         }
         Ok(())
     }
@@ -4221,14 +4233,8 @@ impl Filesystem {
     /// Write inode checksum fields (lo at OFF_CHECKSUM_LO, hi at OFF_CHECKSUM_HI)
     /// when metadata checksums are enabled for this filesystem.
     fn stamp_inode_checksum(&self, raw: &mut [u8], ino: u32, generation: u32) {
-        use crate::inode::{INODE_SIZE_WITH_EXTRA, OFF_CHECKSUM_HI, OFF_CHECKSUM_LO};
         if self.csum.enabled {
-            if let Some((lo, hi)) = self.csum.compute_inode_checksum(ino, generation, raw) {
-                raw[OFF_CHECKSUM_LO..OFF_CHECKSUM_LO + 2].copy_from_slice(&lo.to_le_bytes());
-                if raw.len() >= INODE_SIZE_WITH_EXTRA {
-                    raw[OFF_CHECKSUM_HI..OFF_CHECKSUM_HI + 2].copy_from_slice(&hi.to_le_bytes());
-                }
-            }
+            self.csum.patch_inode_checksum(ino, generation, raw);
         }
     }
 
@@ -5344,12 +5350,7 @@ impl Filesystem {
         set_inode_time(raw, InodeTime::Ctime, now);
         set_inode_time(raw, InodeTime::Mtime, now);
         if self.csum.enabled {
-            if let Some((lo, hi)) = self.csum.compute_inode_checksum(ino, orig.generation, raw) {
-                raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
-                if raw.len() >= 0x84 {
-                    raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
-                }
-            }
+            self.csum.patch_inode_checksum(ino, orig.generation, raw);
         }
         Ok(())
     }
@@ -5634,12 +5635,7 @@ impl Filesystem {
         let new_count = (inode.links_count as i32 + delta).max(0) as u16;
         raw[0x1A..0x1C].copy_from_slice(&new_count.to_le_bytes());
         if self.csum.enabled {
-            if let Some((lo, hi)) = self.csum.compute_inode_checksum(ino, inode.generation, raw) {
-                raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
-                if raw.len() >= 0x84 {
-                    raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
-                }
-            }
+            self.csum.patch_inode_checksum(ino, inode.generation, raw);
         }
         Ok(())
     }
@@ -6347,12 +6343,7 @@ impl Filesystem {
         raw: &mut [u8],
     ) -> Result<()> {
         if self.csum.enabled {
-            if let Some((lo, hi)) = self.csum.compute_inode_checksum(ino, generation, raw) {
-                raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
-                if raw.len() >= 0x84 {
-                    raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
-                }
-            }
+            self.csum.patch_inode_checksum(ino, generation, raw);
         }
         self.buffer_write_inode(buf, ino, raw)
     }
