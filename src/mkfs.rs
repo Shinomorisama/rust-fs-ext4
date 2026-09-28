@@ -31,6 +31,21 @@ const I_EXTRA_ISIZE: u16 = 32; // covers checksum_hi, ctime/mtime/atime extra, c
 const ROOT_MODE: u16 = 0o40755; // S_IFDIR | 0755
 const EXTENT_MAGIC: u16 = 0xF30A;
 
+/// The most blocks a group may hold: `EXT2_MAX_BLOCKS_PER_GROUP`, 2^16 - 8.
+///
+/// A group's bitmap block has `8 * block_size` bits, which is the natural
+/// group size up to 8 KiB blocks and too many from 16 KiB on (#429).
+/// e2fsprogs' `ext2fs_open2` refuses a larger group as a corrupt superblock
+/// before checking anything, so `e2fsck`, `dumpe2fs` and `debugfs` cannot
+/// open the volume, and `mke2fs` caps its groups here for the same reason.
+pub const MAX_BLOCKS_PER_GROUP: u32 = (1 << 16) - 8;
+
+/// Blocks per group for `block_size`: one bitmap block's worth of bits,
+/// capped at [`MAX_BLOCKS_PER_GROUP`] -- the value `mke2fs -b <size>` picks.
+fn blocks_per_group_for(block_size: u32) -> u32 {
+    (8 * block_size).min(MAX_BLOCKS_PER_GROUP)
+}
+
 /// The block size `mkfs` uses when the caller does not choose one.
 ///
 /// Named because it was written out at three sites — the CLI's default,
@@ -126,12 +141,13 @@ pub fn format_filesystem_with_flavor(
 
     let log_block_size = (block_size.trailing_zeros() as i32 - 10) as u32;
 
-    // Geometry. blocks_per_group is the canonical 8 * block_size (so 32768
-    // for 4 KiB blocks). Inodes-per-group is sized so the inode table stays
+    // Geometry. blocks_per_group is one bitmap block's bits, 8 * block_size
+    // (32768 for 4 KiB blocks), capped at 65528 from 16 KiB blocks on.
+    // Inodes-per-group is sized so the inode table stays
     // a small fraction of the group; for v1 simplicity we use 8192 — gives
     // 64 KiB / 256 B = 256 inodes per inode-table block, 32 inode-table
     // blocks per group at 4 KiB.
-    let blocks_per_group: u32 = 8 * block_size; // 32768 at 4 KiB
+    let blocks_per_group: u32 = blocks_per_group_for(block_size); // 32768 at 4 KiB
     let blocks_count: u64 = size_bytes / block_size as u64;
     if blocks_count < 64 {
         return Err(Error::InvalidArgument("mkfs: too few blocks"));
@@ -278,12 +294,13 @@ pub fn format_filesystem_with_flavor(
     set_bitmap_range(&mut block_bitmap, 0, used_blocks - fdb);
     // Tail-pad: bits whose block (first_data_block + bit) is >= blocks_count
     // are out of range and must read "used" so the allocator never tries them
-    // and the bitmap checksum matches what e2fsck recomputes. blocks_per_group
-    // bits cover the bitmap's logical span.
+    // and the bitmap checksum matches what e2fsck recomputes. The padding
+    // runs to the end of the bitmap block, past blocks_per_group when the
+    // group is capped below the block's bits, as mke2fs writes it.
     set_bitmap_range(
         &mut block_bitmap,
         blocks_count - fdb,
-        blocks_per_group as u64,
+        u64::from(block_size) * 8,
     );
 
     // ----- Inode bitmap (group 0) ------------------------------------------
@@ -503,7 +520,7 @@ fn format_block_groups(
 
     let bs = block_size as u64;
     let log_block_size = (block_size.trailing_zeros() as i32 - 10) as u32;
-    let blocks_per_group: u32 = 8 * block_size;
+    let blocks_per_group: u32 = blocks_per_group_for(block_size);
     let bpg = blocks_per_group as u64;
     let inodes_per_group: u32 = 8192;
     let inode_table_blocks: u32 = (inodes_per_group as u64 * inode_size as u64).div_ceil(bs) as u32;
@@ -558,8 +575,10 @@ fn format_block_groups(
 
         let mut block_bitmap = vec![0u8; block_size as usize];
         set_bitmap_range(&mut block_bitmap, 0, used);
-        // Pad blocks past a short final group:
-        set_bitmap_range(&mut block_bitmap, glen, bpg);
+        // Pad blocks past a short final group, and the bits past the group
+        // when it is smaller than the bitmap block (16 KiB blocks and up),
+        // as mke2fs and the kernel both write them:
+        set_bitmap_range(&mut block_bitmap, glen, bs * 8);
         let bb_csum = csum.crc(&block_bitmap[..blocks_per_group as usize / 8]);
 
         let mut inode_bitmap = vec![0u8; block_size as usize];

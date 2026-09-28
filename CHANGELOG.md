@@ -548,6 +548,13 @@ Not caught by the compiler — the same source builds and behaves differently:
   saw `DT_UNKNOWN`. Link, rename, mknod and fsck now share one mapping,
   `DirEntryType::from_mode`, and `tests/rename_file_type_oracle.rs` has
   e2fsck judge one of each kind renamed.
+- **`mkfs` at 16 KiB blocks and larger makes volumes e2fsprogs can open**
+  (#429). Blocks per group was `8 * block_size`, 131072 and up from 16 KiB
+  blocks, past the format's 65528-block group; `e2fsck`, `dumpe2fs` and
+  `debugfs` refused the volume as a corrupt superblock. The group is now
+  capped at 65528 blocks (`mkfs::MAX_BLOCKS_PER_GROUP`), what `mke2fs -b`
+  chooses, and the bitmap bits past it are padded as mke2fs pads them.
+
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
