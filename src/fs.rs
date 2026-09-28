@@ -8315,6 +8315,80 @@ mod tests {
         }
     }
 
+    /// A writable lazy mount must not commit over a journal it has not
+    /// replayed (#375). The first commit writes its descriptor at journal
+    /// block 1, over the unreplayed log, and then marks the journal clean:
+    /// every transaction the last writer committed but did not checkpoint
+    /// is gone. The next mount therefore finds nothing to replay, and the
+    /// payload the journal carried never reaches its destination.
+    #[test]
+    fn a_lazy_mount_refuses_writes_until_its_journal_is_replayed() {
+        let (dev, payload) = ext3_with_a_dirty_journal();
+        let fs = Filesystem::mount_lazy(dev.clone()).expect("lazy mount");
+        let r = fs.apply_mkdir("/x", 0o755);
+        drop(fs);
+        let _ = Filesystem::mount(dev.clone());
+        assert!(
+            destination_holds_the_payload(&dev, &payload),
+            "the unreplayed transaction was lost (write result: {r:?})"
+        );
+    }
+
+    /// The refusal names its reason, and it lifts once the journal is
+    /// replayed: the same handle then writes, and the replayed transaction
+    /// is still on disk afterwards (#375).
+    #[test]
+    fn a_lazy_mount_writes_once_its_journal_is_replayed() {
+        let (dev, payload) = ext3_with_a_dirty_journal();
+        let fs = Filesystem::mount_lazy(dev.clone()).expect("lazy mount");
+        match fs.apply_mkdir("/x", 0o755) {
+            Err(Error::JournalNotReplayed) => {}
+            other => panic!("a write over an unreplayed journal: {other:?}"),
+        }
+        assert_eq!(fs.replay_journal_if_dirty().expect("replay"), 1);
+        fs.apply_mkdir("/x", 0o755)
+            .expect("the write is accepted once the journal is replayed");
+        drop(fs);
+        assert!(destination_holds_the_payload(&dev, &payload));
+    }
+
+    /// A lazy mount of a clean journal has nothing to replay, so it writes
+    /// straight away: the refusal is about the journal, not the lazy mount.
+    #[test]
+    fn a_lazy_mount_of_a_clean_journal_writes_without_a_replay() {
+        let (dev, _payload) = ext3_with_a_dirty_journal();
+        drop(Filesystem::mount(dev.clone()).expect("eager mount replays"));
+        let fs = Filesystem::mount_lazy(dev.clone()).expect("lazy mount");
+        fs.apply_mkdir("/x", 0o755)
+            .expect("a clean journal needs no replay before a write");
+    }
+
+    /// The read-only-then-writable shape (#375): the mount replayed the
+    /// journal into the cache only, so the log on disk is still dirty when
+    /// the device turns writable. A write then must wait for the replay
+    /// too, or it lands on a volume whose next mount replays the older
+    /// log over it.
+    #[test]
+    fn a_lazy_mount_that_becomes_writable_refuses_writes_until_its_journal_is_replayed() {
+        let (dev, payload) = ext3_with_a_dirty_journal();
+        let later = std::sync::Arc::new(LaterWritable {
+            inner: dev.clone(),
+            writable: std::sync::atomic::AtomicBool::new(false),
+        });
+        let fs = Filesystem::mount_lazy(later.clone()).expect("a read-only lazy mount");
+        later
+            .writable
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        match fs.apply_mkdir("/x", 0o755) {
+            Err(Error::JournalNotReplayed) => {}
+            other => panic!("a write over an unreplayed journal: {other:?}"),
+        }
+        assert_eq!(fs.replay_journal_if_dirty().expect("replay"), 1);
+        assert!(destination_holds_the_payload(&dev, &payload));
+        fs.apply_mkdir("/x", 0o755)
+            .expect("the write is accepted once the journal is replayed");
+    }
+
     // ---------------------------------------------------------------
     // EA_INODE: an attribute whose value lives in another inode
     // ---------------------------------------------------------------
