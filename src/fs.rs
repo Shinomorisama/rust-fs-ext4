@@ -11558,4 +11558,51 @@ mod tests {
         let report = fs.audit(u32::MAX, u32::MAX).unwrap();
         assert!(report.is_clean(), "{:?}", report.anomalies);
     }
+
+    /// The type byte of the root-directory entry `name`.
+    fn root_entry_type(fs: &Filesystem, name: &[u8]) -> crate::dir::DirEntryType {
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let phys = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+        let blk = fs.read_block(phys).unwrap();
+        crate::dir::DirBlockIter::new(&blk, true)
+            .map(|e| e.unwrap())
+            .find(|e| e.name == name)
+            .unwrap_or_else(|| panic!("{} not found", String::from_utf8_lossy(name)))
+            .file_type
+    }
+
+    /// #386: rename keeps the entry's file type for every special file --
+    /// a FIFO, a socket and both device kinds -- in both of its paths.
+    #[test]
+    fn audit70_rename_keeps_a_special_files_type() {
+        use crate::dir::DirEntryType;
+        let dev = formatted();
+        let fs = mount(&dev);
+        for (name, mode, want) in [
+            ("fifo", 0o010644u16, DirEntryType::Fifo),
+            ("sock", 0o140644, DirEntryType::Socket),
+            ("chr", 0o020644, DirEntryType::CharDev),
+            ("blk", 0o060644, DirEntryType::BlockDev),
+        ] {
+            let src = format!("/{name}");
+            fs.apply_mknod(&src, mode, 1, 3).unwrap();
+            // The no-overwrite path.
+            let moved = format!("/{name}_moved");
+            fs.apply_rename(&src, &moved, false).unwrap();
+            assert_eq!(
+                root_entry_type(&fs, &moved.as_bytes()[1..]),
+                want,
+                "{name}: rename"
+            );
+            // The replace path.
+            let victim = format!("/{name}_victim");
+            fs.apply_create(&victim, 0o644).unwrap();
+            fs.apply_rename(&moved, &victim, true).unwrap();
+            assert_eq!(
+                root_entry_type(&fs, &victim.as_bytes()[1..]),
+                want,
+                "{name}: rename over a file"
+            );
+        }
+    }
 }
