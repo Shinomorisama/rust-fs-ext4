@@ -1424,6 +1424,183 @@ tasks:
     );
 }
 
+/// The words of every `cargo fmt` run in `command`, from `fmt` onward.
+///
+/// A toolchain selector (`cargo +nightly fmt`) is not a subcommand, and
+/// anything after a bare `--` is rustfmt's, not cargo's, so it is cut:
+/// `cargo fmt --check -- --all` does not select every package.
+fn cargo_fmt_runs(command: &str) -> Vec<Vec<String>> {
+    let mut runs = Vec::new();
+    for raw in command.lines() {
+        let line = raw.trim_start();
+        if line.starts_with('#') {
+            continue;
+        }
+        let line = line.split(" #").next().unwrap_or(line);
+        for words in shell_commands(line) {
+            let mut words = words
+                .into_iter()
+                .skip_while(|w| w.contains('=') && !w.starts_with('-'))
+                .take_while(|w| w != "--");
+            let Some(program) = words.next() else {
+                continue;
+            };
+            if program != "cargo" && !program.ends_with("/cargo") {
+                continue;
+            }
+            let mut rest = words.skip_while(|w| w.starts_with('+'));
+            if rest.next().as_deref() == Some("fmt") {
+                runs.push(std::iter::once("fmt".to_string()).chain(rest).collect());
+            }
+        }
+    }
+    runs
+}
+
+/// The gating shell commands chore runs for `task`, following `task:`
+/// items down. A task or item chore may skip, or whose failure it
+/// discards, contributes nothing -- as in [`chore_checking_debug_runs`],
+/// and a task that does not exist is a panic for the same reason.
+fn chore_gating_commands(
+    tasks: &std::collections::BTreeMap<String, ChoreTask>,
+    task: &str,
+    path: &mut Vec<String>,
+) -> Vec<String> {
+    if path.iter().any(|on_path| on_path == task) {
+        return Vec::new();
+    }
+    let Some(body) = tasks.get(task) else {
+        panic!(
+            "`chore {task}` names no task in chores.yml. Its tasks: {:?}",
+            tasks.keys().collect::<Vec<_>>()
+        );
+    };
+    if carries_any(&body.keys, &NON_GATING_TASK_KEYS) {
+        return Vec::new();
+    }
+    path.push(task.to_string());
+    let mut out = Vec::new();
+    for cmd in &body.cmds {
+        match cmd {
+            ChoreCmd::Shell { keys, command } if !carries_any(keys, &NON_GATING_CMD_KEYS) => {
+                out.push(command.clone());
+            }
+            ChoreCmd::Task { keys, name } if !carries_any(keys, &NON_GATING_CMD_KEYS) => {
+                out.extend(chore_gating_commands(tasks, name, path));
+            }
+            _ => {}
+        }
+    }
+    path.pop();
+    out
+}
+
+/// The formatting check `chore lint` runs, as `(checks, missing_all)`:
+/// every gating `cargo fmt --check`, and those among them that check
+/// only the root package.
+fn lint_fmt_checks(chores: &str) -> (Vec<String>, Vec<String>) {
+    let tasks = parse_chores(chores);
+    let mut checks = Vec::new();
+    let mut missing_all = Vec::new();
+    for command in chore_gating_commands(&tasks, "lint", &mut Vec::new()) {
+        for run in cargo_fmt_runs(&command) {
+            if !run.iter().any(|w| w == "--check") {
+                continue;
+            }
+            let shown = format!("cargo {}", run.join(" "));
+            if !run.iter().any(|w| w == "--all") {
+                missing_all.push(shown.clone());
+            }
+            checks.push(shown);
+        }
+    }
+    (checks, missing_all)
+}
+
+/// THE FORMATTING GATE COVERS EVERY CRATE IN THIS TREE (#367).
+///
+/// `tests/support` -- the oracle and verdict machinery every test
+/// reaches its oracles through -- is a path dependency, not the root
+/// package. `cargo fmt --check` checks the root package only, so that
+/// crate sat unformatted on `main` with the gate green. `--all` is what
+/// reaches local path dependencies. CI runs `chore lint`, so this reads
+/// the task, not the workflow.
+#[test]
+fn the_lint_formatting_check_covers_every_local_crate() {
+    let chores = read_or_panic(&manifest_dir().join("chores.yml"));
+    let (checks, missing_all) = lint_fmt_checks(&chores);
+    assert!(
+        !checks.is_empty(),
+        "`chore lint` runs no gating `cargo fmt --check`, so nothing checks formatting at all"
+    );
+    assert!(
+        missing_all.is_empty(),
+        "`chore lint` checks formatting without `--all`, which leaves every local path \
+         dependency (tests/support) unchecked: {missing_all:?}"
+    );
+}
+
+mod lint_fmt {
+    use super::lint_fmt_checks;
+
+    fn lint(cmds: &str) -> (Vec<String>, Vec<String>) {
+        lint_fmt_checks(&format!("tasks:\n  lint:\n    cmds:\n{cmds}"))
+    }
+
+    #[test]
+    fn a_check_of_the_root_package_only_is_refused() {
+        let (checks, missing) = lint("      - cargo fmt --check\n");
+        assert_eq!(checks, vec!["cargo fmt --check"]);
+        assert_eq!(missing, vec!["cargo fmt --check"]);
+    }
+
+    #[test]
+    fn a_check_of_every_package_is_accepted() {
+        let (checks, missing) = lint("      - cargo fmt --all --check\n");
+        assert_eq!(checks, vec!["cargo fmt --all --check"]);
+        assert!(missing.is_empty());
+    }
+
+    /// Past `--` the words are rustfmt's, and rustfmt has no `--all`.
+    #[test]
+    fn an_all_handed_to_rustfmt_does_not_count() {
+        let (_, missing) = lint("      - cargo fmt --check -- --all\n");
+        assert_eq!(missing, vec!["cargo fmt --check"]);
+    }
+
+    #[test]
+    fn a_toolchain_selector_is_not_the_subcommand() {
+        let (checks, missing) = lint("      - cargo +stable fmt --check\n");
+        assert_eq!(checks.len(), 1);
+        assert_eq!(missing.len(), 1);
+    }
+
+    /// A check chore may discard is not a check.
+    #[test]
+    fn a_check_whose_failure_is_ignored_does_not_count() {
+        let (checks, _) =
+            lint("      - cmd: cargo fmt --all --check\n        ignore_error: true\n");
+        assert!(checks.is_empty());
+    }
+
+    /// Followed through `task:` items, as chore runs them.
+    #[test]
+    fn a_check_in_a_task_lint_calls_is_found() {
+        let (checks, missing) = lint_fmt_checks(
+            "tasks:\n  lint:\n    cmds:\n      - task: fmt\n  fmt:\n    cmds:\n      - cargo fmt --check\n",
+        );
+        assert_eq!(checks.len(), 1);
+        assert_eq!(missing.len(), 1);
+    }
+
+    /// Formatting in place is not a check, and a comment is not a command.
+    #[test]
+    fn formatting_in_place_and_comments_are_not_checks() {
+        let (checks, _) = lint("      - cargo fmt\n      - '# cargo fmt --all --check'\n");
+        assert!(checks.is_empty());
+    }
+}
+
 /// Whether the step's result is READ, which the line-based parser
 /// above cannot see. Six conditions, each with its own test, plus a
 /// control asserting the unmodified shape IS counted so the others
