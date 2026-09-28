@@ -1921,11 +1921,16 @@ impl Filesystem {
     /// straddling extents as needed. Reads of the punched range return
     /// zeros (sparse hole) thereafter; `i_size` is unchanged.
     ///
-    /// v1 limits:
-    /// - Depth-0 inline-root extent trees only. Surviving entries must
-    ///   fit in 4 slots (the inline-root capacity); anything larger
-    ///   returns `Corrupt(...)`. A real punch on a heavily-fragmented
-    ///   file may need depth ≥ 1, which is a Phase 4 follow-up.
+    /// Extent trees of any depth. The surviving extents are laid out
+    /// again by `extent_mut::plan_repack_tree` over the tree blocks the
+    /// file already holds (#258): four or fewer go in the inode, more get
+    /// as many leaf and index levels as they need, and tree blocks left
+    /// unused are freed with the data. A punch inside a single extent
+    /// leaves a head and a tail where there was one record, so the layout
+    /// can be one block short; that block is allocated, and a full volume
+    /// fails the punch with the allocator's error rather than for size.
+    ///
+    /// Limits:
     /// - Indirect-block (ext2/3) inodes return EINVAL — punch is an
     ///   ext4-specific kernel API.
     pub fn apply_fallocate_punch_hole(&self, ino: u32, offset: u64, len: u64) -> Result<()> {

@@ -2,15 +2,22 @@
 //!
 //! Takes the plan-layer outputs from E5 (bitmap), E7 (extent), E8 (dir), E9
 //! (htree), E10 (file) and serializes them into JBD2 journal blocks the
-//! caller writes to the journal inode. Produces:
+//! caller writes to the journal inode. Produces, in this order:
 //!
-//!   1. A **descriptor block** naming every dirty fs block, one tag per block.
-//!   2. A **data block** for each tag with the new content.
-//!   3. Optionally a **revoke block** for fs blocks whose earlier-journal
+//!   1. One or more **descriptor groups**, when there are writes: a
+//!      descriptor block tagging as many dirty fs blocks as fit in it, then
+//!      a **data block** for each of its tags with the new content. A write
+//!      set larger than one descriptor holds spills into further groups, each
+//!      ending in its own LAST tag.
+//!   2. Zero or more **revoke blocks** for fs blocks whose earlier-journal
 //!      contents must NOT be replayed (typically: freed leaf/index blocks so
-//!      a crash during free doesn't restore stale pointers).
-//!   4. A **commit block** — the single marker that atomically makes the
+//!      a crash during free doesn't restore stale pointers), as many as the
+//!      records need.
+//!   3. A **commit block** — the single marker that atomically makes the
 //!      transaction visible to recovery.
+//!
+//! `the_serialised_shape_is_descriptor_groups_then_revokes_then_commit`
+//! pins this shape.
 //!
 //! All JBD2 data is **big-endian** on disk (opposite of ext4 filesystem body).
 //!
@@ -494,6 +501,40 @@ mod tests {
         let r1 = u32::from_be_bytes(rev[20..24].try_into().unwrap());
         assert_eq!(r0, 1000);
         assert_eq!(r1, 2000);
+    }
+
+    /// The whole shape the module doc describes, at once: one or more
+    /// descriptor blocks each followed by its own data blocks, then zero or
+    /// more revoke blocks, then exactly one commit block, last.
+    #[test]
+    fn the_serialised_shape_is_descriptor_groups_then_revokes_then_commit() {
+        // 1 KiB blocks: 126 tags per descriptor, 252 records per revoke block.
+        let mut tx = Transaction::begin(12, 1024, false, false);
+        for i in 0..127u64 {
+            tx.add_write(3000 + i, vec![0x11; 1024]).unwrap();
+        }
+        for i in 0..253u64 {
+            tx.add_revoke(9000 + i);
+        }
+        let blocks = tx.commit().unwrap();
+
+        // 'D' descriptor, 'd' data, 'R' revoke, 'C' commit.
+        let shape: String = blocks
+            .iter()
+            .map(|b| {
+                if u32::from_be_bytes(b[0..4].try_into().unwrap()) != JBD2_MAGIC_NUMBER {
+                    return 'd';
+                }
+                match u32::from_be_bytes(b[4..8].try_into().unwrap()) {
+                    JBD2_DESCRIPTOR_BLOCK => 'D',
+                    JBD2_REVOKE_BLOCK => 'R',
+                    JBD2_COMMIT_BLOCK => 'C',
+                    other => panic!("unexpected block type {other}"),
+                }
+            })
+            .collect();
+        let want = format!("D{}DdRRC", "d".repeat(126));
+        assert_eq!(shape, want);
     }
 
     /// Round-trip: build a transaction, feed its output into journal::walk

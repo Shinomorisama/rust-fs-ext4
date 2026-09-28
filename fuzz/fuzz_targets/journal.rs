@@ -1,5 +1,8 @@
 #![no_main]
-//! The jbd2 journal superblock and its block headers.
+//! The jbd2 journal superblock: `JournalSuperblock::parse` and nothing
+//! else. The journal's block headers, descriptor tags and revoke records
+//! are parsed privately, during replay, and are reached only through the
+//! `image` target, which mounts whole images.
 //!
 //! A journal is read at mount, before the filesystem has been
 //! established, and it is a structure the format expects to be

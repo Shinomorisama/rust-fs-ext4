@@ -10,6 +10,13 @@ the strain shows in one file. Nothing here is a correctness finding. Every item 
 about how long it takes a reader to establish that the code is correct — which matters
 more than usual in a crate that mutates filesystems.
 
+
+**Erratum (2026-09-27).** Two counts below were wrong when written. H1 gives
+`fs.rs` as 4,920 lines; at the commit this review was recorded in (`e7b81b3`)
+it was 5,221 lines, 5,128 of them before its test module. M6 gives 13 unnamed
+offsets, but its per-file list (5 + 2 + 2 + 1) sums to 10; the other three
+were never located. The findings themselves stand.
+
 ---
 
 ## H1 — `fs.rs` is 4,920 lines holding 51 public functions in 2 `impl` blocks

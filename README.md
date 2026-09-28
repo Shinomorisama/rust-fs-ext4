@@ -495,7 +495,7 @@ cargo build --release --target x86_64-pc-windows-gnu
 
 Platform-specific packaging (macOS `lipo` for a universal static
 archive, an Xcode `.xcframework`, deb/rpm/Homebrew formulae)
-belongs in the consuming project. `fs-ext4` itself stays portable
+belongs in the consuming project. `am-fs-ext4` itself stays portable
 cargo — no platform-specific build scripts.
 
 ### Using from C
@@ -608,10 +608,24 @@ directory instead, and is refused if it is outside the repository.
 One-time setup per clone, so every commit runs the same `cargo fmt` and
 `cargo clippy` checks CI does. The hooks are
 [github-guard](https://github.com/antimatter-studios/agent-skills)'s, installed
-into `.git/hooks`, where a branch checkout cannot replace them:
+into `.git/hooks`, where a branch checkout cannot replace them.
+
+github-guard ships in agent-skills under `.claude/skills/github-guard/`.
+With agent-skills' `install-skill` skill set up, ask it to install
+`github-guard`; that copies it to `~/.claude/skills/github-guard/`, and
+then, from this repository:
 
 ```sh
 ~/.claude/skills/github-guard/install.sh .
+```
+
+Without `install-skill`, run the same script straight from a checkout of
+agent-skills — it finds its hooks beside itself, so nothing needs copying
+first:
+
+```sh
+git clone https://github.com/antimatter-studios/agent-skills.git ../agent-skills
+../agent-skills/.claude/skills/github-guard/install.sh .
 ```
 
 Bypass a single commit with `git commit --no-verify`.

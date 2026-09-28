@@ -16,9 +16,11 @@ pub const INODE_BASE_SIZE: usize = 128;
 ///
 /// Everything up to here is the fixed part every ext2/3/4 inode has;
 /// anything past it is the `i_extra_isize` region, which only larger
-/// inodes carry. So it is the length below which an inode buffer cannot
-/// hold `i_checksum_lo` at 0x7C, and the point at which
-/// `Checksummer::verify_inode` refuses.
+/// inodes carry. The inode checksum covers every byte of it, so it is the
+/// length below which `Checksummer::verify_inode` refuses. Not because a
+/// shorter buffer cannot hold `i_checksum_lo` — that field ends at 0x7E,
+/// so 126 bytes would — but because it is not the whole inode the
+/// checksum is defined over.
 ///
 /// It was declared in `mkfs.rs`, unused, while `checksum.rs` wrote the
 /// bare `128` twice.
