@@ -15,6 +15,7 @@
 use fs_ext4::block_io::{BlockDevice, FileDevice};
 use fs_ext4::error::Result;
 use fs_ext4::Filesystem;
+use fs_ext4_test_support::oracle;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -97,8 +98,10 @@ fn image_with_committed_mkdir(tag: &str) -> String {
     let (code, log) = run(debugfs, &["-w", "-f", &script, &image]);
     let _ = std::fs::remove_file(&script);
     assert_eq!(code, Some(0), "{log}");
-    let (code, log) = run(e2fsck, &["-fy", &image]);
-    assert!(matches!(code, Some(0 | 1)), "{log}");
+    oracle(e2fsck)
+        .args(["-fy", &image])
+        .judged()
+        .repaired("e2fsck -fy after the debugfs script");
 
     {
         let dev = Arc::new(CutAfterDirtyJournal {
@@ -162,10 +165,11 @@ fn a_read_only_mount_reads_what_the_journal_committed() {
     // The reference: the kernel's recovery code on a copy.
     let recovered = format!("{image}.recovered");
     std::fs::copy(&image, &recovered).unwrap();
-    let (code, log) = run(e2fsck, &["-fy", &recovered]);
-    assert!(matches!(code, Some(0 | 1)), "{log}");
-    let (code, log) = run(e2fsck, &["-fn", &recovered]);
-    assert_eq!(code, Some(0), "{log}");
+    oracle(e2fsck)
+        .args(["-fy", &recovered])
+        .judged()
+        .repaired("the reference recovery");
+    fs_ext4_test_support::assert_e2fsck_clean(&recovered, "the recovered reference");
     let reference = Filesystem::mount(Arc::new(FileDevice::open(&recovered).unwrap())).unwrap();
     assert_eq!(ro_root, names(&reference, "/"));
     let ro = Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
@@ -190,13 +194,8 @@ fn a_read_only_mount_reads_what_the_journal_committed() {
 fn debugfs_root_names(image: &str) -> Vec<Vec<u8>> {
     let out = fs_ext4_test_support::oracle("debugfs")
         .args(["-R", "ls -p /", image])
-        .output();
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "debugfs ls: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+        .judged()
+        .clean("debugfs ls");
     // `ls -p` prints `/ino/mode/uid/gid/name/size/` per entry.
     let mut names: Vec<Vec<u8>> = String::from_utf8_lossy(&out.stdout)
         .lines()
@@ -217,8 +216,10 @@ fn fresh_read_keeps_replayed_blocks_a_read_only_mount_cannot_checkpoint() {
     let image = image_with_committed_mkdir("fresh");
     let recovered = format!("{image}.recovered");
     std::fs::copy(&image, &recovered).unwrap();
-    let (code, log) = run("e2fsck", &["-fy", &recovered]);
-    assert!(matches!(code, Some(0 | 1)), "{log}");
+    fs_ext4_test_support::oracle("e2fsck")
+        .args(["-fy", &recovered])
+        .judged()
+        .repaired("e2fsck -fy");
     let expected = debugfs_root_names(&recovered);
     assert!(
         expected.contains(&b"committed".to_vec()),
