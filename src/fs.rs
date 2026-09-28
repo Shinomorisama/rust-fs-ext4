@@ -245,6 +245,16 @@ pub struct Filesystem {
     /// [`Self::refuse_write`] answers `ReadOnly` from here on, and [`Drop`]
     /// leaves the volume marked not clean for the checker.
     direct_commit_failed: std::sync::atomic::AtomicBool,
+    /// The on-disk journal holds committed transactions this mount has not
+    /// replayed onto the device (#375): a lazy mount, or one that mounted
+    /// read-only and replayed into the cache alone.
+    ///
+    /// A commit writes its descriptor at the head of the log and then marks
+    /// the journal clean, so one made now would overwrite the unreplayed
+    /// transactions and discard them. [`Self::refuse_write`] answers
+    /// [`Error::JournalNotReplayed`] until
+    /// [`Self::replay_journal_if_dirty`] has put them on the device.
+    replay_pending: std::sync::atomic::AtomicBool,
 }
 
 /// A mount that cleared `EXT4_VALID_FS` puts the state it found back when
@@ -320,6 +330,10 @@ impl Filesystem {
     /// commit or async commit) is currently qualified by this lifecycle.
     pub fn mount_recovering(dev: Arc<dyn BlockDevice>) -> Result<Self> {
         let mut fs = Self::mount_lazy(dev)?;
+        // This lifecycle replays the journal itself, below, with the live
+        // writer detached until it has: nothing commits over the log first.
+        fs.replay_pending
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         fs.refuse_write()?;
         let jsb = crate::jbd2::read_superblock(&fs)?.ok_or(Error::Unsupported(
             "checked recovery requires an internal journal",
@@ -524,8 +538,9 @@ impl Filesystem {
     /// `loadResource` produces EIO).
     ///
     /// Until replay runs, reads observe the on-disk pre-replay state and
-    /// any write through this handle will fail (the journal still says
-    /// dirty). This is the lazy/deferred-replay sibling of `mount`; for
+    /// any write through this handle fails with
+    /// [`Error::JournalNotReplayed`] while the journal still says dirty
+    /// (#375): a commit would overwrite the unreplayed log. This is the lazy/deferred-replay sibling of `mount`; for
     /// most callers `mount` is correct.
     pub fn mount_lazy(dev: Arc<dyn BlockDevice>) -> Result<Self> {
         Self::mount_inner(
@@ -586,6 +601,7 @@ impl Filesystem {
             journal: None,
             marked_not_clean: std::sync::atomic::AtomicBool::new(false),
             direct_commit_failed: std::sync::atomic::AtomicBool::new(false),
+            replay_pending: std::sync::atomic::AtomicBool::new(false),
             state_found: std::sync::atomic::AtomicU16::new(0),
         };
 
@@ -666,6 +682,16 @@ impl Filesystem {
             }
         }
 
+        // A journal still dirty on disk after the replay decision above --
+        // deferred, or replayed into the cache of a read-only device -- keeps
+        // every write waiting for `replay_journal_if_dirty` (#375). Set after
+        // the writer is opened, whose own gate is `write_refusal`.
+        if !fs.dev.is_writable() || defer_replay {
+            let dirty = crate::jbd2::read_superblock(&fs)?.is_some_and(|j| !j.is_clean());
+            fs.replay_pending
+                .store(dirty, std::sync::atomic::Ordering::SeqCst);
+        }
+
         // Phase 6.2 — orphan recovery. Runs after journal replay so any
         // pending kernel-level transactions have already played back;
         // any inode still on the orphan chain at this point is genuinely
@@ -744,6 +770,12 @@ impl Filesystem {
         {
             return Err(Error::ReadOnly);
         }
+        if self
+            .replay_pending
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(Error::JournalNotReplayed);
+        }
         let unmaintained = features::unmaintained_ro_compat(self.sb.feature_ro_compat);
         if unmaintained != 0 {
             return Err(Error::UnsupportedRoCompat(unmaintained));
@@ -804,6 +836,12 @@ impl Filesystem {
 
     pub fn replay_journal_if_dirty(&self) -> Result<usize> {
         let n = crate::journal_apply::replay_if_dirty(self)?;
+        // `replay_if_dirty` does nothing on a device that cannot be written,
+        // so only a writable one has had its log put on disk.
+        if self.dev.is_writable() {
+            self.replay_pending
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
         // Replay applied every pending journaled write to the data area,
         // so the device-layer cache's "pinned" entries (post-commit but
         // pre-checkpoint) are now consistent with disk. Tell the cache
