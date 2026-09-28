@@ -540,6 +540,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   decremented. fsck no longer reports, or "repairs", the pinned 1.
   `tests/dir_nlink_oracle.rs` has e2fsck judge a mkdir and rmdirs under a
   65001-subdirectory parent the Linux kernel built.
+- **A renamed FIFO, socket or device node keeps its entry's file type
+  (#386).** `apply_rename` mapped the inode's mode to the directory entry's
+  type byte knowing only regular files, directories and symlinks, and filed
+  everything else under type 0, so on a `filetype` volume the entry
+  disagreed with its inode: e2fsck pass 2 reported it and `d_type` readers
+  saw `DT_UNKNOWN`. Link, rename, mknod and fsck now share one mapping,
+  `DirEntryType::from_mode`, and `tests/rename_file_type_oracle.rs` has
+  e2fsck judge one of each kind renamed.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

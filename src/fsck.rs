@@ -1540,19 +1540,10 @@ fn repair_bogus_entry(
     // Read the child to determine its actual file_type. If it's
     // genuinely unreadable or genuinely a directory, bail.
     let child_filetype: DirEntryType = match fs.read_inode_verified(child_ino) {
-        Ok((child_inode, _)) => {
-            let mode_bits = child_inode.mode & crate::inode::S_IFMT;
-            match mode_bits {
-                crate::inode::S_IFREG => DirEntryType::RegFile,
-                crate::inode::S_IFDIR => return Ok(()),
-                crate::inode::S_IFLNK => DirEntryType::Symlink,
-                crate::inode::S_IFBLK => DirEntryType::BlockDev,
-                crate::inode::S_IFCHR => DirEntryType::CharDev,
-                crate::inode::S_IFIFO => DirEntryType::Fifo,
-                crate::inode::S_IFSOCK => DirEntryType::Socket,
-                _ => return Ok(()),
-            }
-        }
+        Ok((child_inode, _)) => match DirEntryType::from_mode(child_inode.mode) {
+            DirEntryType::Directory | DirEntryType::Unknown => return Ok(()),
+            t => t,
+        },
         Err(_) => return Ok(()),
     };
 
