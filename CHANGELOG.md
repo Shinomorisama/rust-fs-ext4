@@ -420,6 +420,17 @@ Not caught by the compiler — the same source builds and behaves differently:
   as the value once the attribute was removed. `setxattr` now removes the
   other copy in the same transaction, and `removexattr` removes it from
   both places.
+- **The external xattr block is checked before it is edited or read
+  (#378).** Every writer read the block `i_file_acl` names and went ahead:
+  a block without the xattr magic was formatted as an empty xattr block
+  over whatever it held -- another file's data, a directory block -- and
+  the call returned success; a block whose checksum failed was edited and
+  restamped, blessing the corruption, and an unverified `h_refcount` was
+  decremented on unlink. `setxattr`, `removexattr`, the release an unlink
+  or truncate does, and `getxattr` / `listxattr` now refuse a block without
+  the magic or with `h_blocks` other than 1 (`Corrupt`) and one that fails
+  its checksum (`BadChecksum`), as the kernel's `ext4_xattr_check_block`
+  does.
 
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new

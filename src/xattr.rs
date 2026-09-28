@@ -859,6 +859,49 @@ pub fn plan_remove_from_external_block(
     Ok(BlockRemoveOutcome::Removed)
 }
 
+/// Refuse an external xattr block that is not one: no magic, an `h_blocks`
+/// other than 1, or (on `metadata_csum`) a checksum that does not verify.
+///
+/// The kernel's `ext4_xattr_check_block` makes the same checks before it
+/// reads or edits the block, and answers EFSCORRUPTED. Every block ext4
+/// has ever written is exactly one block long; a larger `h_blocks` is not
+/// a layout anybody can edit in place.
+pub(crate) fn check_external_block(
+    csum: &crate::checksum::Checksummer,
+    block_nr: u64,
+    block: &[u8],
+) -> Result<()> {
+    if block.len() < 0x20 || u32::from_le_bytes(block[..4].try_into().unwrap()) != EXT4_XATTR_MAGIC
+    {
+        return Err(Error::Corrupt(
+            "i_file_acl names a block without the xattr magic",
+        ));
+    }
+    if u32::from_le_bytes(block[8..12].try_into().unwrap()) != 1 {
+        return Err(Error::Corrupt("xattr block h_blocks is not 1"));
+    }
+    if !csum.verify_xattr_block(block_nr, block) {
+        return Err(Error::BadChecksum {
+            what: "xattr block",
+        });
+    }
+    Ok(())
+}
+
+/// Check `inode`'s external xattr block, if it has one, before a read
+/// returns what is in it. See [`check_external_block`]: without it a block
+/// whose checksum fails still answers, with bytes that may be another
+/// attribute's or none at all.
+fn check_block_of(fs: &Filesystem, inode: &Inode) -> Result<()> {
+    if inode.file_acl == 0 {
+        return Ok(());
+    }
+    let bs = fs.sb.block_size();
+    let mut block = vec![0u8; bs as usize];
+    fs.dev.read_at(inode.file_acl * bs as u64, &mut block)?;
+    check_external_block(&fs.csum, inode.file_acl, &block)
+}
+
 /// Convenience: get a single xattr value by name. Returns `None` if not present.
 pub fn get(
     dev: &dyn BlockDevice,
@@ -894,6 +937,7 @@ pub fn read_all_resolved(
     inode: &Inode,
     inode_raw: &[u8],
 ) -> Result<Vec<XattrEntry>> {
+    check_block_of(fs, inode)?;
     let mut entries = read_all(
         fs.dev.as_ref(),
         inode,
@@ -917,6 +961,7 @@ pub fn read_all_resolved(
 /// cannot be read, though every name was right there. A names-only listing
 /// does not depend on any value being readable.
 pub fn list_names(fs: &Filesystem, inode: &Inode, inode_raw: &[u8]) -> Result<Vec<String>> {
+    check_block_of(fs, inode)?;
     Ok(read_all(
         fs.dev.as_ref(),
         inode,
@@ -937,6 +982,7 @@ pub fn get_resolved(
     inode_raw: &[u8],
     name: &str,
 ) -> Result<Option<Vec<u8>>> {
+    check_block_of(fs, inode)?;
     let Some(entry) = read_all(
         fs.dev.as_ref(),
         inode,

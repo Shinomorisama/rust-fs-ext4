@@ -3456,7 +3456,7 @@ impl Filesystem {
             return Ok(false);
         }
         let block_nr = inode.file_acl;
-        let mut block = buf.get_mut(self, block_nr)?.clone();
+        let mut block = self.buffer_read_xattr_block(buf, block_nr)?;
         let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
         match crate::xattr::plan_remove_from_external_block(&mut block, name, 1)? {
             crate::xattr::BlockRemoveOutcome::NotFound => Ok(false),
@@ -3611,8 +3611,7 @@ impl Filesystem {
         // Path A: existing external block — rewrite in-buffer, re-checksum.
         if inode.file_acl != 0 {
             let block_nr = inode.file_acl;
-            let mut block = vec![0u8; bs as usize];
-            self.dev.read_at(block_nr * bs_u64, &mut block)?;
+            let mut block = self.buffer_read_xattr_block(&mut buf, block_nr)?;
             let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
             crate::xattr::plan_set_in_external_block(&mut block, name, value, 1)?;
             if refs > 1 {
@@ -3722,7 +3721,7 @@ impl Filesystem {
         buf: &mut BlockBuffer,
         block_nr: u64,
     ) -> Result<u64> {
-        let mut block = buf.get_mut(self, block_nr)?.clone();
+        let mut block = self.buffer_read_xattr_block(buf, block_nr)?;
         let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
         if refs <= 1 {
             return self.buffer_free_block_run_and_bgd(buf, block_nr, 1);
@@ -3733,6 +3732,24 @@ impl Filesystem {
         }
         buf.put(block_nr, block);
         Ok(0)
+    }
+
+    /// The external xattr block at `block_nr`, read for an edit through
+    /// `buf`, and refused when it is not one.
+    ///
+    /// NOTHING IS WRITTEN OVER A BLOCK THAT HAS NOT BEEN CHECKED (#378).
+    /// Every edit used to read the block named by `i_file_acl` and go
+    /// ahead: a block without the magic was formatted as an empty xattr
+    /// block over whatever it held -- another file's data, a directory --
+    /// and a block whose checksum failed was edited and restamped, which
+    /// blessed the corruption. `h_refcount` was decremented on the same
+    /// trust. The kernel's `ext4_xattr_check_block` refuses all of them
+    /// with EFSCORRUPTED, and so does this: see
+    /// [`crate::xattr::check_external_block`].
+    fn buffer_read_xattr_block(&self, buf: &mut BlockBuffer, block_nr: u64) -> Result<Vec<u8>> {
+        let block = buf.get_mut(self, block_nr)?.clone();
+        crate::xattr::check_external_block(&self.csum, block_nr, &block)?;
+        Ok(block)
     }
 
     /// Give `ino` its own copy of a shared xattr block holding `block`'s
