@@ -461,6 +461,13 @@ Not caught by the compiler — the same source builds and behaves differently:
   does. A lazy mount that was read-only when it mounted is given its journal
   writer by the same call, where its writes used to go to the device
   unjournaled.
+- **An unaligned punch-hole or zero-range changes only its bytes.** The punch
+  rounded its byte range out to whole blocks and freed them, so
+  `punch(100, 100)` on a file zeroed bytes 0..4096; zero-range, a punch plus
+  a preallocation, did the same. The result was a consistent volume holding
+  the wrong data, which `e2fsck` cannot see. Only the blocks wholly inside the
+  range are freed now, and the covered part of a block at either edge is
+  zeroed in place in the same transaction, as the kernel does (#388).
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
