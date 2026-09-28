@@ -392,6 +392,18 @@ Not caught by the compiler — the same source builds and behaves differently:
   no longer loops forever on a malformed record in a directory's first
   block. Adding the variant is a breaking change for an exhaustive
   `match` on `Anomaly`.
+- **Five tests that could pass over a broken implementation now fail on
+  one** (#331). The journal's block-offset overflow branch is called
+  directly, since every image-level case was refused by the bounds check
+  first. The 32 MiB `gdt_csum` write is a block-indexed pattern read back
+  whole through `debugfs`, so a data block written to the wrong place or
+  not at all is seen. The htree hash table carries the empty name for
+  every version and both seeds, taken from `debugfs dx_hash`. The library
+  tests no longer swap the process-wide panic hook, which could swallow a
+  parallel test's failure message, and a script guard keeps `set_hook` out
+  of `src/`. `repro_wants_dir_symlinks` deletes its images unless
+  `RFE_KEEP_IMAGES` is set, and a script test fails a run that leaves
+  images in `tmp/`.
 
 - **A revoke block's record count is bounded by the block, not clamped to
   it.** Replay read records up to `min(r_count, block length)`, so on a
