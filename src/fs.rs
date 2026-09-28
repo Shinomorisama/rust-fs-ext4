@@ -3405,72 +3405,89 @@ impl Filesystem {
         };
         let region_start = 128 + i_extra_isize;
         let region_end = inode_size.min(raw.len());
+
+        // FROM BOTH PLACES. A name lives in the inode or in the external
+        // block, and a set that moved it used to leave a copy in the other
+        // (#377); removing only the first copy found then brought the
+        // stale one back. Every copy goes, in one transaction.
+        let mut found = false;
         if region_start + 4 <= region_end {
             let region = &mut raw[region_start..region_end];
-            match crate::xattr::plan_remove_in_inode_region(region, name)? {
-                crate::xattr::RemoveOutcome::Removed => {
-                    self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-                    return self.commit_inode_write(ino, &raw);
-                }
-                crate::xattr::RemoveOutcome::NotFound => { /* check external */ }
+            if crate::xattr::plan_remove_in_inode_region(region, name)?
+                == crate::xattr::RemoveOutcome::Removed
+            {
+                found = true;
             }
         }
+        let mut buf = BlockBuffer::new(self.sb.block_size());
+        if self.buffer_remove_from_external_block(&mut buf, ino, &inode, &mut raw, name)? {
+            found = true;
+        }
+        if !found {
+            return Err(Error::NotFound);
+        }
+        // POSIX stamps ctime on an attribute write. It goes through
+        // set_inode_time so the epoch bits are written too: the clock is
+        // an i64 since #324, and its low four bytes alone are a time that
+        // reads back as 1901 from 2038 (#386's neighbour, #324).
+        set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
+        self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
+        self.buffer_write_inode(&mut buf, ino, &raw)?;
+        self.commit_block_buffer(buf)
+    }
 
-        // External block path: read, plan-remove, write back (or free it
-        // when it becomes empty).
-        if inode.file_acl != 0 {
-            let bs = self.sb.block_size();
-            let bs_u64 = bs as u64;
-            let block_nr = inode.file_acl;
-            let mut block = vec![0u8; bs as usize];
-            self.dev.read_at(block_nr * bs_u64, &mut block)?;
-            let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
-            match crate::xattr::plan_remove_from_external_block(&mut block, name, 1)? {
-                crate::xattr::BlockRemoveOutcome::Removed if refs > 1 => {
-                    // Shared: this inode's remaining attributes move to a
-                    // block of its own, and the others keep the old one.
-                    let mut buf = BlockBuffer::new(bs);
-                    let new_nr = self.buffer_unshare_xattr_block(&mut buf, ino, block_nr, block)?;
-                    Self::write_file_acl(&mut raw, new_nr)?;
-                    set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
-                    self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-                    self.buffer_write_inode(&mut buf, ino, &raw)?;
-                    return self.commit_block_buffer(buf);
+    /// Remove `name` from `ino`'s external xattr block, staged in `buf`.
+    /// Returns whether the name was there.
+    ///
+    /// `raw` is the inode image the caller will write in the same
+    /// transaction: when the block is shared it gets a block of its own
+    /// (`i_file_acl` moves), and when the block empties it is released
+    /// (`i_file_acl` cleared, `i_blocks` one block lower). The caller
+    /// re-checksums and stages the inode.
+    fn buffer_remove_from_external_block(
+        &self,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        inode: &crate::inode::Inode,
+        raw: &mut [u8],
+        name: &str,
+    ) -> Result<bool> {
+        if inode.file_acl == 0 {
+            return Ok(false);
+        }
+        let block_nr = inode.file_acl;
+        let mut block = buf.get_mut(self, block_nr)?.clone();
+        let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
+        match crate::xattr::plan_remove_from_external_block(&mut block, name, 1)? {
+            crate::xattr::BlockRemoveOutcome::NotFound => Ok(false),
+            crate::xattr::BlockRemoveOutcome::Removed if refs > 1 => {
+                // Shared: this inode's remaining attributes move to a
+                // block of its own, and the others keep the old one.
+                let new_nr = self.buffer_unshare_xattr_block(buf, ino, block_nr, block)?;
+                Self::write_file_acl(raw, new_nr)?;
+                Ok(true)
+            }
+            crate::xattr::BlockRemoveOutcome::Removed => {
+                if self.csum.enabled {
+                    self.csum.patch_xattr_block(block_nr, &mut block);
                 }
-                crate::xattr::BlockRemoveOutcome::Removed => {
-                    if self.csum.enabled {
-                        self.csum.patch_xattr_block(block_nr, &mut block);
-                    }
-                    self.dev.write_at(block_nr * bs_u64, &block)?;
-                    self.bump_inode_ctime(ino, inode.generation, &mut raw)?;
-                    self.dev.flush()?;
-                    return Ok(());
-                }
-                crate::xattr::BlockRemoveOutcome::RemovedNowEmpty => {
-                    // Free the now-empty external block + clear i_file_acl + drop
-                    // i_blocks, all in one journaled transaction. The previous
-                    // direct path used free_block_run_and_bgd, which skipped the
-                    // block-bitmap checksum recompute and wrote a stale BGD —
-                    // corrupting the bitmap csum and the free counters. The
-                    // buffer helpers do it correctly and atomically.
-                    let mut buf = BlockBuffer::new(bs);
-                    // Freed only if no other inode shares it.
-                    let freed = self.buffer_release_xattr_block(&mut buf, block_nr)?;
-                    self.buffer_patch_sb_counters(&mut buf, freed as i64, 0)?;
-                    // Both halves, at the offsets the reader uses.
-                    Self::write_file_acl(&mut raw, 0)?;
-                    let sectors_per_block = bs_u64 / 512;
-                    let new_blocks = inode.blocks.saturating_sub(sectors_per_block);
-                    Self::patch_inode_size_and_blocks(&mut raw, inode.size, new_blocks)?;
-                    set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
-                    self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-                    self.buffer_write_inode(&mut buf, ino, &raw)?;
-                    return self.commit_block_buffer(buf);
-                }
-                crate::xattr::BlockRemoveOutcome::NotFound => { /* fall through */ }
+                buf.put(block_nr, block);
+                Ok(true)
+            }
+            crate::xattr::BlockRemoveOutcome::RemovedNowEmpty => {
+                // Freed only if no other inode shares it. The bitmap, the
+                // descriptor and the superblock count move in the same
+                // transaction as the inode that stops pointing at it.
+                let freed = self.buffer_release_xattr_block(buf, block_nr)?;
+                self.buffer_patch_sb_counters(buf, freed as i64, 0)?;
+                // Both halves, at the offsets the reader uses.
+                Self::write_file_acl(raw, 0)?;
+                let sectors_per_block = self.sb.block_size() as u64 / 512;
+                let new_blocks = inode.blocks.saturating_sub(sectors_per_block);
+                Self::patch_inode_size_and_blocks(raw, inode.size, new_blocks)?;
+                Ok(true)
             }
         }
-        Err(Error::NotFound)
     }
 
     /// Set (create or replace) the extended attribute `name` with `value`
@@ -3515,13 +3532,31 @@ impl Filesystem {
             Err(Error::NoSpaceLeftOnDevice)
         };
 
+        // ONE COPY, WHEREVER IT LANDS (#377). The name may already live in
+        // the other place: a value that grew past the inode, or shrank back
+        // into it. That copy is removed in the same transaction, as the
+        // kernel's `ext4_xattr_set_handle` does; left behind, the reader
+        // returned whichever copy it met first -- the in-inode one, stale
+        // or not -- and a remove brought the other back.
         match inline_result {
             Ok(_) => {
-                // In-inode rewrite already in `raw`. Refresh inode csum + commit.
+                // In-inode rewrite already in `raw`.
+                let mut buf = BlockBuffer::new(self.sb.block_size());
+                if self.buffer_remove_from_external_block(&mut buf, ino, &inode, &mut raw, name)? {
+                    set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
+                }
                 self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-                self.commit_inode_write(ino, &raw)
+                self.buffer_write_inode(&mut buf, ino, &raw)?;
+                self.commit_block_buffer(buf)
             }
             Err(Error::NoSpaceLeftOnDevice) => {
+                // The set never re-encoded the region, so an old in-inode
+                // copy is still there; it goes before the block gets the
+                // new one, and `raw` carries that into the same commit.
+                if inline_capable {
+                    let region = &mut raw[region_start..region_end];
+                    crate::xattr::plan_remove_in_inode_region(region, name)?;
+                }
                 self.apply_setxattr_external_block(ino, &inode, &mut raw, name, value)
             }
             Err(e) => Err(e),
@@ -3725,16 +3760,6 @@ impl Filesystem {
     /// clock, unsigned.
     fn dtime_now(&self) -> u32 {
         self.runtime.now_unix_seconds() as u32
-    }
-
-    /// Bump `i_ctime` to now and re-checksum + write the inode. Used on
-    /// attribute writes that touch external storage but don't otherwise
-    /// modify the inode body.
-    fn bump_inode_ctime(&self, ino: u32, generation: u32, raw: &mut [u8]) -> Result<()> {
-        let now = self.runtime.now_unix_seconds();
-        set_inode_time(raw, InodeTime::Ctime, now);
-        self.finalize_inode_raw(ino, generation, raw)?;
-        self.commit_inode_write(ino, raw)
     }
 
     /// Set the access + modification times on `path`. Mirrors POSIX
