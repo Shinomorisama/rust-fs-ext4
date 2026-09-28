@@ -7320,6 +7320,104 @@ mod tests {
         Filesystem::mount(dev.clone()).expect("mount")
     }
 
+    /// `/f` holding `len` bytes of 0xAA; returns its inode number.
+    fn file_of_aa(fs: &Filesystem, len: usize) -> u32 {
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        fs.apply_replace_file_content("/f", &vec![0xAAu8; len])
+            .unwrap();
+        ino
+    }
+
+    /// The file's bytes, and how many of them disagree with "0xAA outside
+    /// `zeroed`, 0 inside it".
+    fn bytes_wrong_after_zeroing(
+        fs: &Filesystem,
+        ino: u32,
+        zeroed: std::ops::Range<usize>,
+    ) -> usize {
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let data = crate::file_io::read_all(fs, &inode).unwrap();
+        data.iter()
+            .enumerate()
+            .filter(|(i, b)| **b != if zeroed.contains(i) { 0 } else { 0xAA })
+            .count()
+    }
+
+    /// An unaligned punch keeps the bytes outside its range (#388): the
+    /// edge blocks are zeroed in part, not freed whole.
+    #[test]
+    fn an_unaligned_punch_keeps_the_bytes_around_it() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 8192);
+        fs.apply_fallocate_punch_hole(ino, 100, 100).unwrap();
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, 100..200), 0);
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(
+            bytes_wrong_after_zeroing(&fs, ino, 100..200),
+            0,
+            "after a remount"
+        );
+    }
+
+    /// A punch spanning whole blocks frees those and zeroes the partial
+    /// ones at each end in place (#388).
+    #[test]
+    fn a_punch_frees_the_whole_blocks_and_zeroes_the_edges() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 3 * BS as usize);
+        let free_before = fs.sb.free_blocks_count;
+        let (lo, hi) = (100usize, 2 * BS as usize + 100);
+        fs.apply_fallocate_punch_hole(ino, lo as u64, (hi - lo) as u64)
+            .unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, lo..hi), 0);
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let mapped: Vec<bool> = (0..3)
+            .map(|lb| fs.map_inode_logical(&inode, lb).unwrap().is_some())
+            .collect();
+        assert_eq!(
+            mapped,
+            [true, false, true],
+            "only the middle block is freed"
+        );
+        assert_eq!(fs.sb.free_blocks_count, free_before + 1, "one block freed");
+    }
+
+    /// A punch inside one block frees nothing.
+    #[test]
+    fn a_punch_inside_one_block_frees_nothing() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 2 * BS as usize);
+        let free_before = fs.sb.free_blocks_count;
+        fs.apply_fallocate_punch_hole(ino, BS as u64 + 1, BS as u64 - 2)
+            .unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        let (lo, hi) = (BS as usize + 1, 2 * BS as usize - 1);
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, lo..hi), 0);
+        assert_eq!(fs.sb.free_blocks_count, free_before);
+    }
+
+    /// An unaligned zero-range zeroes exactly its range (#388): it is a
+    /// punch plus a preallocation, and inherited the punch's rounding.
+    #[test]
+    fn an_unaligned_zero_range_keeps_the_bytes_around_it() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = file_of_aa(&fs, 3 * BS as usize);
+        let (lo, hi) = (100usize, 2 * BS as usize + 100);
+        fs.apply_fallocate_zero_range(ino, lo as u64, (hi - lo) as u64)
+            .unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(bytes_wrong_after_zeroing(&fs, ino, lo..hi), 0);
+    }
+
     /// `/f` with one block written at every other logical block from 0 to
     /// 10: six extents, so its tree is depth 1. Returns its inode number.
     fn striped_file(fs: &Filesystem) -> u32 {
