@@ -688,6 +688,15 @@ tasks:
       - cargo fmt --all --check
       - cargo clippy --locked --all-targets -- -D warnings
 
+  check:msrv:
+    desc: Build the library and binaries on the toolchain Cargo.toml's rust-version names
+    # The declared minimum is a claim a consumer acts on: an older compiler
+    # gets cargo's "requires rustc" refusal instead of trying. This is what
+    # keeps it true -- a newer std API used in library code turns it red
+    # here, not in someone else's build. The version is read out of
+    # Cargo.toml by the script, so there is one copy of it.
+    cmds: ['scripts/msrv.sh']
+
   build:
     desc: Debug build
     cmds: ['cargo build']
