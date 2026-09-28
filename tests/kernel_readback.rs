@@ -242,11 +242,13 @@ fn check(report: &BTreeMap<(String, String), String>, written: &Written) -> Vec<
         "user.colour=amber,user.note=written-by-rust-fs-ext4".into(),
     );
 
-    // Listed in block order, which is the kernel's: shorter name first.
+    // Each value is fetched by name (`getfattr -n`), which is the kernel's
+    // sorted block lookup: a block in the wrong order reads `user.zz` as
+    // empty. The listing itself comes back in `getfattr`'s order.
     want(
         "xattrs",
         "dir/two-long-values",
-        format!("user.zz={LONG_VALUE_Z},user.abc={LONG_VALUE_A}"),
+        format!("user.abc={LONG_VALUE_A},user.zz={LONG_VALUE_Z}"),
     );
 
     want("type", "dir/big.bin", "regular-file".into());
