@@ -1622,11 +1622,26 @@ impl Filesystem {
     /// raw block pointers in `i_block` gets misparsed as an extent header
     /// (yielding `CorruptExtentTree("bad extent header magic")`).
     ///
+    /// An inline-data inode has no block map, so it is refused with
+    /// `Error::Unsupported` (#382): that is what makes every directory
+    /// mutation of an inline directory fail before it writes anything.
+    ///
     /// The indirect path internally maintains its own block cache for the
     /// duration of the call; sequential lookups via repeated calls don't
     /// share that cache (file_io's read paths build a longer-lived cache
     /// to amortize across blocks).
     pub fn map_inode_logical(&self, inode: &Inode, logical_block: u64) -> Result<Option<u64>> {
+        // An inline-data inode's i_block holds bytes, not pointers: for a
+        // directory, its parent's inode number and then entries; for a
+        // file, its first 60 bytes. Read as a block map, they name blocks
+        // belonging to something else, which every directory writer then
+        // parsed and wrote through (#382).
+        if inode.has_inline_data() {
+            return Err(Error::Unsupported(
+                "inline-data inode: i_block holds data, not a block map; \
+                 writing inline-data directories is not supported",
+            ));
+        }
         let bs = self.sb.block_size();
         if (inode.flags & crate::inode::InodeFlags::EXTENTS.bits()) != 0 {
             crate::extent::map_logical(&inode.block, self.dev.as_ref(), bs, logical_block)

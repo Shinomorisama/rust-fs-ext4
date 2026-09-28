@@ -468,6 +468,18 @@ Not caught by the compiler — the same source builds and behaves differently:
   the wrong data, which `e2fsck` cannot see. Only the blocks wholly inside the
   range are freed now, and the covered part of a block at either edge is
   zeroed in place in the same transaction, as the kernel does (#388).
+- **A mutation of an inline-data directory is refused instead of writing
+  through its bytes** (#382). No directory writer checked `INLINE_DATA_FL`,
+  and `map_inode_logical` read every non-extent inode's `i_block` as a block
+  map, so an inline directory's parent inode number became its block 0.
+  Renaming one across parents wrote the new parent's number into bytes
+  12..16 of whatever block the old parent's inode number named — a bitmap,
+  an inode table — and returned `Ok`; creates, links and removals inside
+  one parsed that foreign block as entries. `map_inode_logical` now refuses
+  an inline-data inode with `Unsupported`, so every create, mkdir, symlink,
+  link, unlink, rename and rmdir whose parent or target is an inline
+  directory fails before it writes. Renaming one within a block directory
+  still works, and reading inline directories is unchanged.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
