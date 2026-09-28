@@ -15,8 +15,8 @@
 //! `ext4-csum-seed.img` (metadata_csum_seed on top of metadata_csum and
 //! has_journal); `ext4-basic.img` is the control.
 //!
-//! The mutated image is intentionally left in the selected scratch directory
-//! (path is printed) so `e2fsck -fn` on the host can validate it against a
+//! With `RFE_KEEP_IMAGES=1` the mutated image is left in the selected scratch
+//! directory (path is printed) so `e2fsck -fn` can validate it against a
 //! real Linux ext4 — the
 //! in-process `is_clean()` check cannot catch a bad-checksum-but-marked-clean
 //! journal, which is exactly the symptom.
@@ -129,7 +129,14 @@ fn run_field_ops(img: &str, tag: &str) {
             .unwrap_or_else(|e| panic!("[{tag}] {p} not reachable after ops: {e:?}"));
     }
 
-    eprintln!("[{tag}] mutated image left for real-ext4 check at: {path}");
+    drop(fs);
+    // Kept only when asked for: tmp/ is never emptied by anything else, so
+    // an image kept on every run grows it on every run (#331).
+    if std::env::var_os("RFE_KEEP_IMAGES").is_some() {
+        eprintln!("[{tag}] mutated image left for real-ext4 check at: {path}");
+    } else {
+        let _ = fs::remove_file(&path);
+    }
 }
 
 #[test]

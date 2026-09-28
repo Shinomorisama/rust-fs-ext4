@@ -88,18 +88,19 @@ mod overflow_checks {
     /// spelling of "the checks are off" might exist -- a manifest key, a
     /// `CARGO_PROFILE_*` variable, a `.cargo/config.toml` -- this asks
     /// the build directly instead of enumerating them.
+    ///
+    /// The panic hook is left alone. It is process-wide, and the other
+    /// library tests run beside this one on other threads, so silencing
+    /// it here would silence their failures too (#331). The test harness
+    /// already captures what the default hook prints for this thread and
+    /// shows it only if this test fails; tests/scripts/test-no-panic-hook.sh
+    /// keeps `set_hook` out of `src/`.
     fn this_build_traps_an_overflow() -> bool {
-        // The hook is silenced so a deliberate panic does not print a
-        // scary backtrace into a passing job's log.
-        let previous = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let trapped = std::panic::catch_unwind(|| {
+        std::panic::catch_unwind(|| {
             let big = std::hint::black_box(u64::MAX);
             std::hint::black_box(big + 1);
         })
-        .is_err();
-        std::panic::set_hook(previous);
-        trapped
+        .is_err()
     }
 
     /// When the gate says it built a profile that traps, check that it
