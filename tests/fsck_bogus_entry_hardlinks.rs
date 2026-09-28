@@ -205,13 +205,14 @@ fn e2fsck_rejects_the_fabrication_and_accepts_the_repair() {
 
     let before = fs_ext4_test_support::oracle("e2fsck")
         .args(["-fn", &path])
-        .output();
+        .judged();
+    let code = before.output.status.code();
+    let report = before.report();
+    before.findings("e2fsck -fn must find the Directory-typed dirents");
     assert_eq!(
-        before.status.code(),
+        code,
         Some(4),
-        "e2fsck -fn must find the Directory-typed dirents uncorrected:\n{}{}",
-        String::from_utf8_lossy(&before.stdout),
-        String::from_utf8_lossy(&before.stderr)
+        "e2fsck -fn must leave the Directory-typed dirents uncorrected:\n{report}"
     );
 
     let repaired = fsck::audit_with_repair(
