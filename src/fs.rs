@@ -1891,9 +1891,9 @@ impl Filesystem {
     /// - Single contiguous physical allocation. If the bitmap can't
     ///   serve `ceil(len / block_size)` contiguous blocks, returns
     ///   `Error::Corrupt("no group has a contiguous free run...")`.
-    /// - Extent insertion must succeed against the inline-root depth-0
-    ///   tree (or trigger the existing depth-1 promotion). Multi-level
-    ///   trees aren't yet supported.
+    /// - The new extent goes into the inline root while it has a free
+    ///   slot; a full root is promoted to an index node and a deeper tree
+    ///   is descended, with the node blocks drawn in the same transaction.
     pub fn apply_fallocate_keep_size(&self, ino: u32, offset: u64, len: u64) -> Result<()> {
         self.refuse_write()?;
         if len == 0 {
@@ -1962,9 +1962,9 @@ impl Filesystem {
             physical_block: plan.first_block,
             uninitialized: true,
         };
-        let muts = crate::extent_mut::plan_insert_extent(&inode.block, new_extent)?;
-
         // Apply via BlockBuffer — atomic across bitmap, BGD, SB, inode.
+        // The data run is staged first, so the tree nodes a promotion
+        // allocates below are drawn around it.
         let mut buf = BlockBuffer::new(self.sb.block_size());
         self.buffer_mark_block_run_used(&mut buf, plan.first_block, need_blocks as u64)?;
         self.buffer_patch_bgd_counters(
@@ -1974,24 +1974,71 @@ impl Filesystem {
             plan.bgd.free_inodes_delta,
             plan.bgd.used_dirs_delta,
         )?;
+
+        // The inline root holds four extents. A fifth promotes it to an
+        // index node, and a root that already is one has to be descended:
+        // both go through the deep planner, as `apply_pwrite` does.
+        let mut meta_blocks: u64 = 0;
+        let new_root = match crate::extent_mut::plan_insert_extent(&inode.block, new_extent) {
+            Ok(muts) => muts
+                .into_iter()
+                .find_map(|m| match m {
+                    crate::extent_mut::ExtentMutation::WriteRoot { bytes } => Some(bytes),
+                    _ => None,
+                })
+                .ok_or(Error::Corrupt("fallocate: extent insert wrote no root"))?,
+            Err(Error::CorruptExtentTree(msg))
+                if msg.contains("LEAF_FULL_NEEDS_PROMOTION")
+                    || msg.contains("multi-level tree mutation") =>
+            {
+                let reader = FsBlockReader { fs: self };
+                let deep_plan = {
+                    let mut alloc_node = || -> Result<u64> {
+                        let p = self.plan_buffered_block_allocation(&buf, 1, inode_group)?;
+                        self.buffer_mark_block_run_used(&mut buf, p.first_block, 1)?;
+                        self.buffer_patch_bgd_counters(
+                            &mut buf,
+                            p.bgd.group_idx as usize,
+                            p.bgd.free_blocks_delta,
+                            0,
+                            0,
+                        )?;
+                        meta_blocks += 1;
+                        Ok(p.first_block)
+                    };
+                    crate::extent_mut::plan_insert_extent_deep(
+                        &inode.block,
+                        new_extent,
+                        bs_u32,
+                        &reader,
+                        &mut alloc_node,
+                    )?
+                };
+                for (block, mut bytes) in deep_plan.block_writes {
+                    if self.csum.enabled {
+                        self.csum
+                            .patch_extent_tail(ino, inode.generation, &mut bytes);
+                    }
+                    buf.put(block, bytes);
+                }
+                deep_plan.new_root
+            }
+            Err(e) => return Err(e),
+        };
         self.buffer_patch_sb_counters(
             &mut buf,
-            plan.sb.free_blocks_delta,
+            plan.sb.free_blocks_delta - meta_blocks as i64,
             plan.sb.free_inodes_delta,
         )?;
 
         // Splice the new extent root into the inode image.
-        for m in &muts {
-            if let crate::extent_mut::ExtentMutation::WriteRoot { bytes } = m {
-                Self::patch_inode_block_area(&mut raw, bytes)?;
-            }
-        }
+        Self::patch_inode_block_area(&mut raw, &new_root)?;
 
         // Bump i_blocks (sectors). KEEP_SIZE: i_size unchanged.
         let sectors_per_block = bs / 512;
         let new_i_blocks = inode
             .blocks
-            .saturating_add(need_blocks as u64 * sectors_per_block);
+            .saturating_add((need_blocks as u64 + meta_blocks) * sectors_per_block);
         Self::patch_inode_size_and_blocks(&mut raw, inode.size, new_i_blocks)?;
 
         // POSIX: fallocate bumps mtime + ctime.

@@ -51,6 +51,14 @@ impl BlockDevice for MemDev {
     }
 }
 
+/// The superblock's free-block count, as a fresh mount reads it.
+fn free_blocks(dev: &Arc<MemDev>) -> u64 {
+    Filesystem::mount(dev.clone())
+        .expect("mount")
+        .sb
+        .free_blocks_count
+}
+
 fn depth(root: &[u8]) -> u16 {
     u16::from_le_bytes([root[6], root[7]])
 }
@@ -82,7 +90,7 @@ fn fallocate_promotes_a_full_inline_root_and_descends_a_deep_one() {
     }
     let (inode, _) = fs.read_inode_verified(ino).expect("inode");
     assert_eq!(depth(&inode.block), 0, "four extents fit the inline root");
-    let (free_before, blocks_before) = (fs.sb.free_blocks_count, inode.blocks);
+    let (free_before, blocks_before) = (free_blocks(&dev), inode.blocks);
 
     // A fifth extent: the root is full and has to become an index node.
     fs.apply_fallocate_keep_size(ino, 16 * BS, 8 * BS)
@@ -102,10 +110,9 @@ fn fallocate_promotes_a_full_inline_root_and_descends_a_deep_one() {
     // the sixteen data blocks plus the leaf the promotion allocated.
     let sectors = BS / 512;
     assert_eq!(inode.size, 7 * BS, "KEEP_SIZE left i_size where it was");
-    let taken = fs.sb.free_blocks_count;
-    let fs_used = free_before - taken;
-    assert_eq!(fs_used, 17, "sixteen data blocks and one leaf");
-    assert_eq!(inode.blocks - blocks_before, fs_used * sectors);
+    let used = free_before - free_blocks(&dev);
+    assert_eq!(used, 17, "sixteen data blocks and one leaf");
+    assert_eq!(inode.blocks - blocks_before, used * sectors);
 
     // The written blocks still read back.
     let mut buf = vec![0u8; (7 * BS) as usize];
