@@ -104,6 +104,35 @@ Not caught by the compiler — the same source builds and behaves differently:
   export. `Filesystem::flush` now takes `&self`, holding the journal writer
   for the whole check, so a shared handle can flush while other calls run.
 
+- **Inode-addressed entry points, for a host that holds handles rather
+  than paths** (#372). A handle-based host names an item by its inode
+  number and a mutation by a (directory, name) pair; a path is the wrong
+  key for it, because a hard link gives one inode several and a directory
+  rename changes every one beneath it. `Filesystem` gains `lookup_at`,
+  `stat_ino`, `read_dir_ino`, `read_ino`, `read_link_ino`,
+  `apply_{create,mkdir,mknod,symlink,unlink,rmdir}_at`, `apply_link_at`,
+  `apply_rename_at` and `apply_{pwrite,truncate,chmod,chown,utimens}_ino`,
+  taking an `InodeRef` (or a bare `u32`) and names as bytes, so a name
+  that is not UTF-8 survives. They are the implementation: each path
+  function now resolves its path and calls its inode twin, and
+  `tests/inode_api.rs` holds the two to the same bytes on disk after every
+  step of scripted and random operation sequences. An `InodeRef` carrying
+  the generation it was read with is refused with the new `Error::Stale`
+  (ESTALE) once its inode is freed or reused for another file; so is a
+  number that never named a file. `tests/inode_api_e2fsck.rs` has e2fsck
+  judge a volume written only through them.
+- **The same entry points in the C ABI** (#372): `fs_ext4_lookup_at`,
+  `fs_ext4_stat_ino`, `fs_ext4_dir_open_ino`, `fs_ext4_pread_ino`,
+  `fs_ext4_readlink_ino` (the `fs_ext4_readlink` contract: length
+  returned, NUL-terminated, ERANGE when too small),
+  `fs_ext4_{create,mkdir,mknod,symlink,unlink,rmdir}_at`,
+  `fs_ext4_link_at`, `fs_ext4_rename_at` and
+  `fs_ext4_{pwrite,truncate,chmod,chown,utimens}_ino`. Every inode
+  argument is followed by the generation read with it, or
+  `FS_EXT4_GEN_ANY`; names are counted byte buffers; the calls that make
+  an inode fill an optional `fs_ext4_attr_t` for it. The path exports and
+  these share their read, list, readlink, truncate and argument checks,
+  and `tests/capi_ino_api.rs` holds each to its path twin.
 - **The parsers are fuzzed, on two tiers.** ext4 is the widest parser
   surface in the family — a superblock, group descriptors, an inode
   table, extent trees, htree indexes and a jbd2 journal, each read from
@@ -228,6 +257,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   every allocation, and the cache is dropped whenever a transaction
   publishes a clear or the descriptors are re-read; the two `fs_core`
   mount entry points share one body.
+- **Path functions go through the inode-addressed core, and refuse what
+  it refuses** (#372). `apply_rmdir` of a path ending in `.` is
+  `InvalidArgument` (and `..` is `DirectoryNotEmpty`), and `apply_rename`
+  with `.` or `..` as either final component is `InvalidArgument`: each
+  used to remove or re-file the directory's own entry. The subtree check in `apply_rename` walks `..` instead of
+  comparing path prefixes. A symlink target holding a NUL byte is refused.
+  A path that resolves to a freed or reserved inode fails with
+  `Error::Stale`.
 - **The test contract is chore tasks, and the first consumer of
   [fs-linux-test-harness](https://github.com/antimatter-studios/fs-linux-test-harness).**
   `chore tools` verifies what the HOST needs, `chore fixtures` builds the

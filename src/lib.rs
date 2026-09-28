@@ -61,7 +61,7 @@ pub mod xattr;
 pub mod capi;
 
 pub use error::{Error, Result};
-pub use fs::Filesystem;
+pub use fs::{Filesystem, InodeRef};
 pub use superblock::Superblock;
 
 // DOES THIS BUILD ACTUALLY TRAP AN ARITHMETIC OVERFLOW?

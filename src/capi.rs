@@ -46,13 +46,10 @@
 #![allow(clippy::missing_safety_doc)]
 
 use crate::block_io::{AlignedDevice, BlockDevice, CallbackDevice, FileDevice};
-use crate::dir::{self, DirBlockIter, DirEntryType};
-use crate::error::errno::{EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOSYS, ENOTDIR, ERANGE};
+use crate::dir::{self, DirEntryType};
+use crate::error::errno::{EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOSYS, ERANGE};
 use crate::error::{Error, Result};
-use crate::extent;
-use crate::features;
-use crate::file_io;
-use crate::fs::Filesystem;
+use crate::fs::{Filesystem, InodeRef};
 use crate::inode::{Inode, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK};
 use crate::path as path_mod;
 use crate::xattr;
@@ -1098,24 +1095,13 @@ pub unsafe extern "C" fn fs_ext4_stat(
             let path = cstr_to_str(path);
             let attr = &mut *attr;
 
-            let ino = match resolve_path(fs, path) {
-                Ok(n) => n,
+            match resolve_path(fs, path).and_then(|ino| stat_into(fs, ino.into(), attr)) {
+                Ok(()) => 0,
                 Err(e) => {
                     set_err_from(&e, &format!("stat {path}"));
-                    return -1;
+                    -1
                 }
-            };
-
-            let (inode, _raw) = match fs.read_inode_verified(ino) {
-                Ok(p) => p,
-                Err(e) => {
-                    set_err_from(&e, &format!("read inode {ino}"));
-                    return -1;
-                }
-            };
-
-            fill_attr(attr, ino, &inode);
-            0
+            }
         }),
     )
 }
@@ -1137,93 +1123,85 @@ pub unsafe extern "C" fn fs_ext4_dir_open(
             let fs_ref = &(*fs).fs;
             let path_str = cstr_to_str(path);
 
-            let ino = match resolve_path(fs_ref, path_str) {
-                Ok(n) => n,
+            match resolve_path(fs_ref, path_str).and_then(|ino| dir_iter(fs_ref, ino.into())) {
+                Ok(iter) => iter,
                 Err(e) => {
                     set_err_from(&e, &format!("dir_open {path_str}"));
-                    return std::ptr::null_mut();
+                    std::ptr::null_mut()
                 }
-            };
-            let (inode, _raw) = match fs_ref.read_inode_verified(ino) {
-                Ok(p) => p,
-                Err(e) => {
-                    set_err_from(&e, &format!("read inode {ino}"));
-                    return std::ptr::null_mut();
-                }
-            };
-            if !inode.is_dir() {
-                set_err_msg(&format!("dir_open {path_str}: not a directory"), ENOTDIR);
-                return std::ptr::null_mut();
             }
-
-            // Collect entries from all dir data blocks.
-            let entries = match collect_dir_entries(fs_ref, &inode) {
-                Ok(e) => e,
-                Err(e) => {
-                    set_err_from(&e, &format!("read directory {path_str}"));
-                    return std::ptr::null_mut();
-                }
-            };
-
-            let iter = Box::new(fs_ext4_dir_iter_t {
-                entries,
-                position: 0,
-                current: std::mem::zeroed(),
-            });
-            Box::into_raw(iter)
         }),
     )
 }
 
-/// Read all directory entries from an inode into `fs_ext4_dirent_t`s.
-fn collect_dir_entries(fs: &Filesystem, inode: &Inode) -> Result<Vec<fs_ext4_dirent_t>> {
-    file_io::refuse_encrypted_names(inode)?;
-    if !inode.has_extents() {
-        return Err(Error::Corrupt("legacy (non-extent) dirs not yet supported"));
+/// A directory iterator over every entry of the directory `dir`. The one
+/// implementation behind `fs_ext4_dir_open` and `fs_ext4_dir_open_ino`.
+fn dir_iter(fs: &Filesystem, dir: InodeRef) -> Result<*mut fs_ext4_dir_iter_t> {
+    let entries = fs
+        .read_dir_ino(dir)?
+        .iter()
+        .map(dir_entry_to_bridge)
+        .collect();
+    Ok(Box::into_raw(Box::new(fs_ext4_dir_iter_t {
+        entries,
+        position: 0,
+        // SAFETY: a plain-data struct of integers and a byte array.
+        current: unsafe { std::mem::zeroed() },
+    })))
+}
+
+/// Fill `attr` from the inode `r` names. The one implementation behind
+/// `fs_ext4_stat`, `fs_ext4_stat_ino` and every `attr` out-parameter.
+fn stat_into(fs: &Filesystem, r: InodeRef, attr: &mut fs_ext4_attr_t) -> Result<()> {
+    let inode = fs.stat_ino(r)?;
+    fill_attr(attr, r.ino, &inode);
+    Ok(())
+}
+
+/// Read up to `length` bytes of the regular file `r` names into `buf`.
+/// The one implementation behind `fs_ext4_read_file` and
+/// `fs_ext4_pread_ino`.
+unsafe fn read_into(
+    fs: &Filesystem,
+    r: InodeRef,
+    buf: *mut c_void,
+    offset: u64,
+    length: u64,
+) -> Result<i64> {
+    let inode = fs.stat_ino(r)?;
+    if !inode.is_file() {
+        return Err(Error::InvalidArgument("not a regular file"));
     }
-    let block_size = fs.sb.block_size();
-    let has_filetype = fs.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+    // Cap `length` against the file's actual size so a caller passing
+    // `u64::MAX` doesn't fabricate an absurd output slice. The slice
+    // descriptor is built from caller-controlled bytes — undefined
+    // behaviour if the caller's `buf` is smaller than `length`. Bounding
+    // here keeps the slice within the file and within `usize`.
+    let length = length.min(inode.size).min(usize::MAX as u64);
+    let out = std::slice::from_raw_parts_mut(buf as *mut u8, length as usize);
+    Ok(fs.read_ino(r, offset, out)? as i64)
+}
 
-    // Bound on entries we'll buffer per directory open. Each
-    // `fs_ext4_dirent_t` is ~264 bytes; 1M entries = ~264 MiB. A crafted
-    // image with `inode.size` claiming gigabytes would otherwise allocate
-    // proportionally, since the loop below grows `entries` straight from
-    // on-disk content.
-    const MAX_DIR_ENTRIES: usize = 1_000_000;
-    let mut entries = Vec::new();
-
-    // Handle inline-data dirs (tiny dirs stored inside the inode itself)
-    if inode.has_inline_data() {
-        for entry in DirBlockIter::new(&inode.block, has_filetype) {
-            let e = entry?;
-            if entries.len() >= MAX_DIR_ENTRIES {
-                return Err(Error::Corrupt("dir entries exceed MAX_DIR_ENTRIES"));
-            }
-            entries.push(dir_entry_to_bridge(&e));
-        }
-        return Ok(entries);
+/// Copy a symlink target into `buf` under the `fs_ext4_readlink` contract:
+/// NUL-terminated, the length returned, ERANGE and nothing written when
+/// `buf` cannot hold the target and its NUL.
+unsafe fn readlink_into(target: &[u8], buf: *mut c_char, bufsize: usize, what: &str) -> c_int {
+    let needed = target.len() + 1;
+    if bufsize < needed {
+        set_err_msg(
+            &format!(
+                "readlink {what}: buffer of {bufsize} bytes is too small, \
+                 {needed} needed (target and NUL)"
+            ),
+            ERANGE,
+        );
+        return -1;
     }
-
-    let total_blocks = inode.size.div_ceil(block_size as u64);
-    let mut block_buf = vec![0u8; block_size as usize];
-
-    for logical in 0..total_blocks {
-        let phys = match extent::map_logical(&inode.block, fs.dev.as_ref(), block_size, logical)? {
-            Some(p) => p,
-            None => continue, // sparse hole
-        };
-        fs.dev.read_at(phys * block_size as u64, &mut block_buf)?;
-
-        for entry in DirBlockIter::new(&block_buf, has_filetype) {
-            let e = entry?;
-            if entries.len() >= MAX_DIR_ENTRIES {
-                return Err(Error::Corrupt("dir entries exceed MAX_DIR_ENTRIES"));
-            }
-            entries.push(dir_entry_to_bridge(&e));
-        }
-    }
-
-    Ok(entries)
+    let out = std::slice::from_raw_parts_mut(buf.cast::<u8>(), needed);
+    out[..target.len()].copy_from_slice(target);
+    out[target.len()] = 0;
+    // The target is at most PATH_MAX bytes, so the length fits a c_int.
+    target.len() as c_int
 }
 
 /// Convert a parsed DirEntry to the C ABI dirent struct.
@@ -1316,37 +1294,10 @@ pub unsafe extern "C" fn fs_ext4_read_file(
             let fs_ref = &(*fs).fs;
             let path_str = cstr_to_str(path);
 
-            let ino = match resolve_path(fs_ref, path_str) {
+            let read = resolve_path(fs_ref, path_str)
+                .and_then(|ino| read_into(fs_ref, ino.into(), buf, offset, length));
+            match read {
                 Ok(n) => n,
-                Err(e) => {
-                    set_err_from(&e, &format!("read_file {path_str}"));
-                    return -1;
-                }
-            };
-            let (inode, inode_raw) = match fs_ref.read_inode_verified(ino) {
-                Ok(p) => p,
-                Err(e) => {
-                    set_err_from(&e, &format!("read inode {ino}"));
-                    return -1;
-                }
-            };
-            if !inode.is_file() {
-                set_err_msg(&format!("read_file {path_str}: not a regular file"), EINVAL);
-                return -1;
-            }
-
-            // Cap `length` against the file's actual size so a caller passing
-            // `u64::MAX` doesn't fabricate an absurd output slice. The
-            // downstream reader would refuse, but the slice descriptor itself
-            // is built from caller-controlled bytes — undefined behaviour if
-            // the caller's `buf` is smaller than `length`. Bounding here
-            // keeps the slice within the file and within `usize`.
-            let length = length.min(inode.size).min(usize::MAX as u64);
-            let out = std::slice::from_raw_parts_mut(buf as *mut u8, length as usize);
-            match file_io::read_with_raw_verified(
-                fs_ref, &inode, &inode_raw, ino, offset, length, out,
-            ) {
-                Ok(n) => n as i64,
                 Err(e) => {
                     set_err_from(&e, &format!("read_file {path_str}"));
                     -1
@@ -1393,23 +1344,7 @@ pub unsafe extern "C" fn fs_ext4_readlink(
                 }
             };
 
-            let needed = target.len() + 1;
-            if bufsize < needed {
-                set_err_msg(
-                    &format!(
-                        "readlink {path_str}: buffer of {bufsize} bytes is too small, \
-                         {needed} needed (target and NUL)"
-                    ),
-                    ERANGE,
-                );
-                return -1;
-            }
-            let out = std::slice::from_raw_parts_mut(buf.cast::<u8>(), needed);
-            out[..target.len()].copy_from_slice(&target);
-            out[target.len()] = 0;
-
-            // The target is at most PATH_MAX bytes, so the length fits a c_int.
-            target.len() as c_int
+            readlink_into(&target, buf, bufsize, path_str)
         }),
     )
 }
@@ -1584,39 +1519,10 @@ pub unsafe extern "C" fn fs_ext4_truncate(
             }
             let fs_ref = &(*fs).fs;
             let path_str = cstr_to_str(path);
-            let ino = match resolve_path(fs_ref, path_str) {
-                Ok(n) => n,
-                Err(e) => {
-                    set_err_from(&e, &format!("truncate {path_str}"));
-                    return -1;
-                }
-            };
-            // Type guard: truncating a directory corrupts it (frees data blocks,
-            // loses . and .. entries). POSIX ftruncate(2) mandates EISDIR on dir.
-            // Symlinks, devices, sockets are also not truncatable → EINVAL.
-            let inode = match fs_ref.read_inode_verified(ino) {
-                Ok((i, _)) => i,
-                Err(e) => {
-                    set_err_from(&e, &format!("read inode {ino}"));
-                    return -1;
-                }
-            };
-            if inode.is_dir() {
-                set_err_msg(&format!("truncate {path_str}: is a directory"), EISDIR);
-                return -1;
-            }
-            if !inode.is_file() {
-                set_err_msg(&format!("truncate {path_str}: not a regular file"), EINVAL);
-                return -1;
-            }
-            // Dispatch to grow (sparse) or shrink based on direction. At
-            // equality either path works; grow wins since it only bumps
-            // timestamps.
-            let res = if new_size >= inode.size {
-                fs_ref.apply_truncate_grow(ino, new_size)
-            } else {
-                fs_ref.apply_truncate_shrink(ino, new_size)
-            };
+            // The type guard (EISDIR for a directory, EINVAL for anything
+            // else that is not a regular file) is in `apply_truncate_ino`.
+            let res = resolve_path(fs_ref, path_str)
+                .and_then(|ino| fs_ref.apply_truncate_ino(ino, new_size));
             match res {
                 Ok(()) => 0,
                 Err(e) => {
@@ -1896,36 +1802,15 @@ pub unsafe extern "C" fn fs_ext4_pwrite(
                 set_err_msg("null fs/path", EINVAL);
                 return -1;
             }
-            if data.is_null() && len > 0 {
-                set_err_msg("null data with non-zero len", EINVAL);
-                return -1;
-            }
-            // Same hard cap as `fs_ext4_write_file` to defang a hostile
-            // caller passing `len = u64::MAX` — constructing `&[u8]` from
-            // raw parts with a length larger than the caller's buffer is
-            // UB even before any read happens.
-            const MAX_PWRITE_LEN: u64 = 1 << 30;
-            if len > MAX_PWRITE_LEN {
-                set_err_msg(
-                    &format!("pwrite: len {len} exceeds {MAX_PWRITE_LEN}"),
-                    EINVAL,
-                );
-                return -1;
-            }
-            // offset+len overflow: catch here so the FS-layer error has
-            // a clear FFI-level message rather than "offset+len overflow"
-            // surfaced from deep inside path handling.
-            if offset.checked_add(len).is_none() {
-                set_err_msg("pwrite: offset+len overflow", EINVAL);
-                return -1;
-            }
+            let slice = match write_arg(data, len, offset) {
+                Ok(s) => s,
+                Err(e) => {
+                    set_err_from(&e, "pwrite");
+                    return -1;
+                }
+            };
             let fs_ref = &(*fs).fs;
             let path_str = cstr_to_str(path);
-            let slice: &[u8] = if len == 0 {
-                &[]
-            } else {
-                std::slice::from_raw_parts(data as *const u8, len as usize)
-            };
             match fs_ref.apply_pwrite(path_str, offset, slice) {
                 Ok(new_size) => new_size as i64,
                 Err(e) => {
@@ -1935,6 +1820,32 @@ pub unsafe extern "C" fn fs_ext4_pwrite(
             }
         }),
     )
+}
+
+/// The caller's buffer for a positional write, checked before a slice is
+/// built from it. Shared by `fs_ext4_pwrite` and `fs_ext4_pwrite_ino`.
+unsafe fn write_arg<'a>(data: *const c_void, len: u64, offset: u64) -> Result<&'a [u8]> {
+    if data.is_null() && len > 0 {
+        return Err(Error::InvalidArgument("null data with non-zero len"));
+    }
+    // Same hard cap as `fs_ext4_write_file` to defang a hostile caller
+    // passing `len = u64::MAX` — constructing `&[u8]` from raw parts with a
+    // length larger than the caller's buffer is UB even before any read
+    // happens.
+    const MAX_PWRITE_LEN: u64 = 1 << 30;
+    if len > MAX_PWRITE_LEN {
+        return Err(Error::InvalidArgument("len exceeds the 1 GiB per-call cap"));
+    }
+    // offset+len overflow: caught here so the error names the arguments
+    // rather than surfacing from deep inside the write.
+    if offset.checked_add(len).is_none() {
+        return Err(Error::InvalidArgument("offset+len overflow"));
+    }
+    Ok(if len == 0 {
+        &[]
+    } else {
+        std::slice::from_raw_parts(data as *const u8, len as usize)
+    })
 }
 
 /// Mount an ext4 filesystem read-write. Companion to `fs_ext4_mount`.
@@ -2042,6 +1953,16 @@ pub unsafe extern "C" fn fs_ext4_rename(
 /// stay forward-compatible.
 pub const FS_EXT4_RENAME_REPLACE: c_int = 0x01;
 
+/// Whether `flags` asks for replacement. Any flag bit we don't define is
+/// rejected, so future additions can be detected by callers via EINVAL
+/// probing. Shared by `fs_ext4_rename2` and `fs_ext4_rename_at`.
+fn rename_flags(flags: c_int) -> Result<bool> {
+    if flags & !FS_EXT4_RENAME_REPLACE != 0 {
+        return Err(Error::InvalidArgument("unknown rename flag bits"));
+    }
+    Ok(flags & FS_EXT4_RENAME_REPLACE != 0)
+}
+
 /// Rename / move `src` → `dst` within this mount, with explicit flags.
 /// Currently the only flag is `FS_EXT4_RENAME_REPLACE` — when set, an
 /// existing destination is atomically replaced (POSIX `rename(2)`
@@ -2066,14 +1987,13 @@ pub unsafe extern "C" fn fs_ext4_rename2(
                 set_err_msg("null fs/src/dst", EINVAL);
                 return -1;
             }
-            // Reject any flag bits we don't define so future additions
-            // can be detected by callers via EINVAL probing.
-            let known = FS_EXT4_RENAME_REPLACE;
-            if flags & !known != 0 {
-                set_err_msg("rename2: unknown flag bits", EINVAL);
-                return -1;
-            }
-            let replace = flags & FS_EXT4_RENAME_REPLACE != 0;
+            let replace = match rename_flags(flags) {
+                Ok(r) => r,
+                Err(e) => {
+                    set_err_from(&e, "rename2");
+                    return -1;
+                }
+            };
             let fs_ref = &(*fs).fs;
             let src_str = cstr_to_str(src);
             let dst_str = cstr_to_str(dst);
@@ -2498,6 +2418,491 @@ pub unsafe extern "C" fn fs_ext4_setxattr(
             }
         }),
     )
+}
+
+// ===========================================================================
+// Inode-addressed entry points (#372)
+// ===========================================================================
+//
+// A handle-based host names every item by its inode number and every
+// mutation by a (directory inode, name) pair; it never has a path. These
+// are the path functions above with the path replaced by that: each calls
+// the same `Filesystem` implementation its path twin reaches after
+// resolving, so the two behave identically.
+//
+// Every inode argument comes with a generation: the `generation` field of
+// the `fs_ext4_attr_t` the caller read it from, or `FS_EXT4_GEN_ANY`. A
+// freed inode, one reused under a different generation, and a number that
+// never named a file all fail with ESTALE.
+//
+// Names are counted byte buffers, not C strings, so a name that is not
+// UTF-8 survives exactly. They are one entry, not a path: empty, or holding
+// a '/' or a NUL, is EINVAL; longer than 255 bytes is ENAMETOOLONG.
+
+/// Passed as a generation to accept whatever generation the inode has. A
+/// real generation of `0xFFFF_FFFF` cannot be pinned; it is still refused
+/// once the inode is freed.
+pub const FS_EXT4_GEN_ANY: u32 = u32::MAX;
+
+fn inode_ref(ino: u32, generation: u32) -> InodeRef {
+    if generation == FS_EXT4_GEN_ANY {
+        InodeRef::any(ino)
+    } else {
+        InodeRef::new(ino, generation)
+    }
+}
+
+/// The body of every inode-addressed export: null-checks `fs`, clears the
+/// last error, runs `body`, and records a failure under `what`.
+fn ino_call<T: Copy>(
+    fs: *mut fs_ext4_fs_t,
+    fail: T,
+    what: &dyn Fn() -> String,
+    body: impl FnOnce(&Filesystem) -> Result<T>,
+) -> T {
+    ffi_guard(
+        fail,
+        AssertUnwindSafe(|| {
+            clear_last_error();
+            if fs.is_null() {
+                set_err_msg(&format!("{}: null fs", what()), EINVAL);
+                return fail;
+            }
+            // SAFETY: non-null, and the caller's handle from a mount.
+            match body(unsafe { &(*fs).fs }) {
+                Ok(v) => v,
+                Err(e) => {
+                    set_err_from(&e, &what());
+                    fail
+                }
+            }
+        }),
+    )
+}
+
+/// A counted name from the caller.
+unsafe fn name_arg<'a>(name: *const c_char, name_len: usize) -> Result<&'a [u8]> {
+    if name.is_null() {
+        return Err(Error::InvalidArgument("null name"));
+    }
+    // Bounds the slice built from caller memory; any name past 255 bytes
+    // is refused further in anyway.
+    if name_len > FFI_PATH_MAX {
+        return Err(Error::NameTooLong);
+    }
+    Ok(std::slice::from_raw_parts(name.cast::<u8>(), name_len))
+}
+
+/// For messages only.
+unsafe fn name_for_msg(name: *const c_char, name_len: usize) -> String {
+    match name_arg(name, name_len) {
+        Ok(n) => String::from_utf8_lossy(n).into_owned(),
+        Err(_) => "<invalid name>".into(),
+    }
+}
+
+/// Fill an optional `attr` out-parameter for the inode just made or
+/// linked. A failure here is reported although the entry now exists.
+fn attr_out(fs: &Filesystem, ino: u32, attr: *mut fs_ext4_attr_t) -> Result<c_int> {
+    if !attr.is_null() {
+        // SAFETY: non-null; the caller passes a writable attr.
+        stat_into(fs, InodeRef::any(ino), unsafe { &mut *attr })?;
+    }
+    Ok(0)
+}
+
+/// Look up `name` in directory `dir_ino` and fill `attr` for what it names
+/// (`attr->inode` and `attr->generation` are the handle for it). Returns 0,
+/// or -1 with ENOENT, ENOTDIR, ESTALE, EINVAL, ...
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_lookup_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    let what = || format!("lookup_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        if attr.is_null() {
+            return Err(Error::InvalidArgument("null attr"));
+        }
+        let ino = fs.lookup_at(
+            inode_ref(dir_ino, dir_generation),
+            name_arg(name, name_len)?,
+        )?;
+        stat_into(fs, InodeRef::any(ino), &mut *attr)?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_stat` of inode `ino`. Returns 0, or -1 (ESTALE when `ino` no
+/// longer names a file).
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_stat_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    ino_call(fs, -1, &|| format!("stat_ino {ino}"), |fs| {
+        if attr.is_null() {
+            return Err(Error::InvalidArgument("null attr"));
+        }
+        stat_into(fs, inode_ref(ino, generation), &mut *attr)?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_dir_open` of directory `ino`. Returns NULL on failure.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_dir_open_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+) -> *mut fs_ext4_dir_iter_t {
+    ino_call(
+        fs,
+        std::ptr::null_mut(),
+        &|| format!("dir_open_ino {ino}"),
+        |fs| dir_iter(fs, inode_ref(ino, generation)),
+    )
+}
+
+/// `fs_ext4_read_file` of inode `ino`: up to `length` bytes from `offset`.
+/// Returns the bytes read, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_pread_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    buf: *mut c_void,
+    offset: u64,
+    length: u64,
+) -> i64 {
+    ino_call(fs, -1, &|| format!("pread_ino {ino}"), |fs| {
+        if buf.is_null() {
+            return Err(Error::InvalidArgument("null buf"));
+        }
+        read_into(fs, inode_ref(ino, generation), buf, offset, length)
+    })
+}
+
+/// `fs_ext4_readlink` of inode `ino`, under the same contract: the target
+/// and a NUL written into `buf`, its length returned, and -1 with ERANGE
+/// (nothing written) when `bufsize` cannot hold both.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_readlink_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    buf: *mut c_char,
+    bufsize: usize,
+) -> c_int {
+    ino_call(fs, -1, &|| format!("readlink_ino {ino}"), |fs| {
+        if buf.is_null() {
+            return Err(Error::InvalidArgument("null buf"));
+        }
+        let target = fs.read_link_ino(inode_ref(ino, generation))?;
+        Ok(readlink_into(
+            &target,
+            buf,
+            bufsize,
+            &format!("inode {ino}"),
+        ))
+    })
+}
+
+/// `fs_ext4_pwrite` to inode `ino`. Returns the new size, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_pwrite_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    data: *const c_void,
+    len: u64,
+    offset: u64,
+) -> i64 {
+    ino_call(
+        fs,
+        -1,
+        &|| format!("pwrite_ino {ino} @{offset}+{len}"),
+        |fs| {
+            let data = write_arg(data, len, offset)?;
+            Ok(fs.apply_pwrite_ino(inode_ref(ino, generation), offset, data)? as i64)
+        },
+    )
+}
+
+/// `fs_ext4_truncate` of inode `ino`. Returns 0, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_truncate_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    new_size: u64,
+) -> c_int {
+    ino_call(
+        fs,
+        -1,
+        &|| format!("truncate_ino {ino} -> {new_size}"),
+        |fs| {
+            fs.apply_truncate_ino(inode_ref(ino, generation), new_size)?;
+            Ok(0)
+        },
+    )
+}
+
+/// `fs_ext4_chmod` of inode `ino`. Returns 0, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_chmod_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    mode: u16,
+) -> c_int {
+    ino_call(fs, -1, &|| format!("chmod_ino {ino}"), |fs| {
+        fs.apply_chmod_ino(inode_ref(ino, generation), mode)?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_chown` of inode `ino`. Returns 0, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_chown_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    uid: u32,
+    gid: u32,
+) -> c_int {
+    ino_call(fs, -1, &|| format!("chown_ino {ino}"), |fs| {
+        fs.apply_chown_ino(inode_ref(ino, generation), uid, gid)?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_utimens` of inode `ino`. Returns 0, or -1.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fs_ext4_utimens_ino(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    atime_sec: i64,
+    atime_nsec: u32,
+    mtime_sec: i64,
+    mtime_nsec: u32,
+) -> c_int {
+    ino_call(fs, -1, &|| format!("utimens_ino {ino}"), |fs| {
+        fs.apply_utimens_ino(
+            inode_ref(ino, generation),
+            atime_sec,
+            atime_nsec,
+            mtime_sec,
+            mtime_nsec,
+        )?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_create` of entry `name` in directory `dir_ino`. Returns 0 and
+/// fills `attr` (may be NULL) for the new file, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_create_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+    mode: u16,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    let what = || format!("create_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        let dir = inode_ref(dir_ino, dir_generation);
+        let ino = fs.apply_create_at(dir, name_arg(name, name_len)?, mode)?;
+        attr_out(fs, ino, attr)
+    })
+}
+
+/// `fs_ext4_mkdir` of entry `name` in directory `dir_ino`. Returns 0 and
+/// fills `attr` (may be NULL) for the new directory, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_mkdir_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+    mode: u16,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    let what = || format!("mkdir_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        let dir = inode_ref(dir_ino, dir_generation);
+        let ino = fs.apply_mkdir_at(dir, name_arg(name, name_len)?, mode)?;
+        attr_out(fs, ino, attr)
+    })
+}
+
+/// `fs_ext4_mknod` of entry `name` in directory `dir_ino`. Returns 0 and
+/// fills `attr` (may be NULL) for the new node, or -1.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fs_ext4_mknod_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+    mode: u16,
+    major: u32,
+    minor: u32,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    let what = || format!("mknod_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        let dir = inode_ref(dir_ino, dir_generation);
+        let ino = fs.apply_mknod_at(dir, name_arg(name, name_len)?, mode, major, minor)?;
+        attr_out(fs, ino, attr)
+    })
+}
+
+/// `fs_ext4_symlink`: entry `name` in directory `dir_ino`, pointing at the
+/// NUL-terminated `target` (bytes, need not be UTF-8). Returns 0 and fills
+/// `attr` (may be NULL) for the new symlink, or -1.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fs_ext4_symlink_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+    target: *const c_char,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    let what = || format!("symlink_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        if target.is_null() {
+            return Err(Error::InvalidArgument("null target"));
+        }
+        let target = CStr::from_ptr(target).to_bytes();
+        if target.len() > FFI_PATH_MAX {
+            return Err(Error::NameTooLong);
+        }
+        let dir = inode_ref(dir_ino, dir_generation);
+        let ino = fs.apply_symlink_at(dir, name_arg(name, name_len)?, target)?;
+        attr_out(fs, ino, attr)
+    })
+}
+
+/// `fs_ext4_link`: a new entry `name` in directory `dir_ino` for inode
+/// `ino`. Returns 0 and fills `attr` (may be NULL) for `ino`, or -1.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fs_ext4_link_at(
+    fs: *mut fs_ext4_fs_t,
+    ino: u32,
+    generation: u32,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+    attr: *mut fs_ext4_attr_t,
+) -> c_int {
+    let what = || {
+        format!(
+            "link_at {ino} -> {dir_ino}/{}",
+            name_for_msg(name, name_len)
+        )
+    };
+    ino_call(fs, -1, &what, |fs| {
+        fs.apply_link_at(
+            inode_ref(ino, generation),
+            inode_ref(dir_ino, dir_generation),
+            name_arg(name, name_len)?,
+        )?;
+        attr_out(fs, ino, attr)
+    })
+}
+
+/// `fs_ext4_unlink` of entry `name` in directory `dir_ino`. Returns 0, or
+/// -1.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_unlink_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+) -> c_int {
+    let what = || format!("unlink_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        fs.apply_unlink_at(
+            inode_ref(dir_ino, dir_generation),
+            name_arg(name, name_len)?,
+        )?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_rmdir` of entry `name` in directory `dir_ino`. Returns 0, or
+/// -1 (EINVAL for `.`, ENOTEMPTY for `..`).
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_rmdir_at(
+    fs: *mut fs_ext4_fs_t,
+    dir_ino: u32,
+    dir_generation: u32,
+    name: *const c_char,
+    name_len: usize,
+) -> c_int {
+    let what = || format!("rmdir_at {dir_ino}/{}", name_for_msg(name, name_len));
+    ino_call(fs, -1, &what, |fs| {
+        fs.apply_rmdir_at(
+            inode_ref(dir_ino, dir_generation),
+            name_arg(name, name_len)?,
+        )?;
+        Ok(0)
+    })
+}
+
+/// `fs_ext4_rename2` of entry `src_name` in `src_dir_ino` to entry
+/// `dst_name` in `dst_dir_ino`, with the same `flags`. Returns 0, or -1.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fs_ext4_rename_at(
+    fs: *mut fs_ext4_fs_t,
+    src_dir_ino: u32,
+    src_dir_generation: u32,
+    src_name: *const c_char,
+    src_name_len: usize,
+    dst_dir_ino: u32,
+    dst_dir_generation: u32,
+    dst_name: *const c_char,
+    dst_name_len: usize,
+    flags: c_int,
+) -> c_int {
+    let what = || {
+        format!(
+            "rename_at {src_dir_ino}/{} -> {dst_dir_ino}/{}",
+            name_for_msg(src_name, src_name_len),
+            name_for_msg(dst_name, dst_name_len)
+        )
+    };
+    ino_call(fs, -1, &what, |fs| {
+        let replace = rename_flags(flags)?;
+        fs.apply_rename_at(
+            inode_ref(src_dir_ino, src_dir_generation),
+            name_arg(src_name, src_name_len)?,
+            inode_ref(dst_dir_ino, dst_dir_generation),
+            name_arg(dst_name, dst_name_len)?,
+            replace,
+        )?;
+        Ok(0)
+    })
 }
 
 // ===========================================================================

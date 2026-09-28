@@ -70,6 +70,10 @@ pub enum Error {
     /// Writing first would commit over the unreplayed log and lose it.
     /// Maps to EROFS: the mount is read-only until the replay runs.
     JournalNotReplayed,
+    /// An inode handle no longer names the file it was taken from (POSIX
+    /// ESTALE): the inode number is out of range or reserved, the inode has
+    /// been freed, or it has been freed and reused under a new generation.
+    Stale,
 }
 
 impl From<io::Error> for Error {
@@ -111,6 +115,7 @@ impl std::fmt::Display for Error {
             Error::JournalNotReplayed => {
                 write!(f, "read-only until the dirty journal is replayed")
             }
+            Error::Stale => write!(f, "stale inode handle"),
         }
     }
 }
@@ -145,6 +150,7 @@ impl Error {
             Error::UnsupportedIncompat(_)
             | Error::UnsupportedRoCompat(_)
             | Error::Unsupported(_) => ENOTSUP,
+            Error::Stale => ESTALE,
         }
     }
 }
@@ -164,6 +170,7 @@ pub mod errno {
     pub const ENAMETOOLONG: i32 = 63; // macOS POSIX value
     pub const ENOTSUP: i32 = 45;
     pub const ENOTEMPTY: i32 = 66; // macOS POSIX value
+    pub const ESTALE: i32 = 70; // macOS POSIX value (Linux: 116)
     pub const ENOSYS: i32 = 78; // macOS POSIX value (Linux: 38). Surfaced
                                 // by capi when a feature isn't implemented yet.
 }
