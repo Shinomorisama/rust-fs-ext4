@@ -11277,4 +11277,172 @@ mod tests {
             .unwrap();
         assert_eq!(rewritten, raw, "re-checksumming changes nothing");
     }
+
+    /// Overwrite an inode's raw record in place, re-stamping its checksum.
+    fn audit70_patch_inode(fs: &Filesystem, ino: u32, f: impl FnOnce(&mut Vec<u8>)) {
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        f(&mut raw);
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
+    }
+
+    fn audit70_set_links(fs: &Filesystem, ino: u32, count: u16) {
+        audit70_patch_inode(fs, ino, |raw| {
+            raw[0x1A..0x1C].copy_from_slice(&count.to_le_bytes())
+        });
+    }
+
+    fn audit70_links(fs: &Filesystem, ino: u32) -> u16 {
+        fs.read_inode_verified(ino).unwrap().0.links_count
+    }
+
+    /// Set a RO_COMPAT bit on a formatted volume, fixing the superblock
+    /// checksum so the result still mounts.
+    fn set_ro_compat_bit(dev: &std::sync::Arc<MemDev>, bit: u32) {
+        let mut sb = vec![0u8; 1024];
+        dev.read_at(crate::superblock::SUPERBLOCK_OFFSET, &mut sb)
+            .expect("read sb");
+        let cur = u32::from_le_bytes(sb[0x64..0x68].try_into().unwrap());
+        sb[0x64..0x68].copy_from_slice(&(cur | bit).to_le_bytes());
+        let csum = crate::checksum::linux_crc32c(!0, &sb[..0x3FC]);
+        sb[0x3FC..0x400].copy_from_slice(&csum.to_le_bytes());
+        dev.write_at(crate::superblock::SUPERBLOCK_OFFSET, &sb)
+            .expect("write sb");
+    }
+
+    /// #385: a directory link count of 1 means "too many to count"; rmdir
+    /// of a child must leave it at 1, not write the 0 that makes Linux
+    /// refuse the directory.
+    #[test]
+    fn audit70_rmdir_under_a_dir_nlink_parent_keeps_its_count() {
+        let dev = formatted();
+        set_ro_compat_bit(&dev, crate::features::RoCompat::DIR_NLINK.bits());
+        let fs = mount(&dev);
+        fs.apply_mkdir("/p", 0o755).unwrap();
+        fs.apply_mkdir("/p/c", 0o755).unwrap();
+        let p = resolve(&fs, "/p").unwrap();
+        audit70_set_links(&fs, p, 1);
+        fs.apply_rmdir("/p/c").unwrap();
+        assert_eq!(
+            audit70_links(&fs, p),
+            1,
+            "a directory's count of 1 is not decremented"
+        );
+    }
+
+    /// #385: mkdir under a parent whose count is already "too many to
+    /// count" leaves it there rather than writing a literal 2.
+    #[test]
+    fn audit70_mkdir_under_a_dir_nlink_parent_keeps_its_count() {
+        let dev = formatted();
+        set_ro_compat_bit(&dev, crate::features::RoCompat::DIR_NLINK.bits());
+        let fs = mount(&dev);
+        fs.apply_mkdir("/p", 0o755).unwrap();
+        let p = resolve(&fs, "/p").unwrap();
+        audit70_set_links(&fs, p, 1);
+        fs.apply_mkdir("/p/c", 0o755).unwrap();
+        assert_eq!(audit70_links(&fs, p), 1);
+    }
+
+    /// #385: the subdirectory that takes a DIR_NLINK parent past
+    /// EXT4_LINK_MAX pins the count at 1, as the kernel does.
+    #[test]
+    fn audit70_mkdir_past_the_maximum_pins_a_dir_nlink_parent_at_one() {
+        let dev = formatted();
+        set_ro_compat_bit(&dev, crate::features::RoCompat::DIR_NLINK.bits());
+        let fs = mount(&dev);
+        fs.apply_mkdir("/p", 0o755).unwrap();
+        let p = resolve(&fs, "/p").unwrap();
+        audit70_set_links(&fs, p, 65000);
+        fs.apply_mkdir("/p/c", 0o755).unwrap();
+        assert_eq!(audit70_links(&fs, p), 1);
+    }
+
+    /// #385: without DIR_NLINK a directory at EXT4_LINK_MAX takes no more
+    /// subdirectories: EMLINK, and nothing is written.
+    #[test]
+    fn audit70_mkdir_past_the_maximum_without_dir_nlink_is_refused() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        fs.apply_mkdir("/p", 0o755).unwrap();
+        let p = resolve(&fs, "/p").unwrap();
+        audit70_set_links(&fs, p, 65000);
+        let r = fs.apply_mkdir("/p/c", 0o755);
+        assert!(
+            r.is_err(),
+            "EMLINK expected, got {r:?}; count now {}",
+            audit70_links(&fs, p)
+        );
+        assert_eq!(audit70_links(&fs, p), 65000);
+        assert!(
+            resolve(&fs, "/p/c").is_err(),
+            "the refused directory was not created"
+        );
+    }
+
+    /// #385: a hard link past the link maximum is refused, not wrapped
+    /// to zero.
+    #[test]
+    fn audit70_a_link_past_the_maximum_is_refused_not_wrapped() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let f = fs.apply_create("/f", 0o644).unwrap();
+        audit70_set_links(&fs, f, 65535);
+        let r = fs.apply_link("/f", "/g");
+        assert!(
+            r.is_err(),
+            "EMLINK expected; link count now {}",
+            audit70_links(&fs, f)
+        );
+        assert_eq!(audit70_links(&fs, f), 65535);
+    }
+
+    /// #385: EXT4_LINK_MAX (65000) is the ceiling, as in the kernel's
+    /// `ext4_link`, not the width of the field.
+    #[test]
+    fn audit70_a_link_at_ext4_link_max_is_refused() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let f = fs.apply_create("/f", 0o644).unwrap();
+        audit70_set_links(&fs, f, 65000);
+        assert!(fs.apply_link("/f", "/g").is_err());
+        assert!(resolve(&fs, "/g").is_err());
+        audit70_set_links(&fs, f, 64999);
+        fs.apply_link("/f", "/g").unwrap();
+        assert_eq!(audit70_links(&fs, f), 65000);
+    }
+
+    /// #385: renaming a directory into a parent at EXT4_LINK_MAX on a
+    /// volume without DIR_NLINK is refused, like mkdir there.
+    #[test]
+    fn audit70_rename_of_a_dir_into_a_full_parent_is_refused() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        fs.apply_mkdir("/p", 0o755).unwrap();
+        fs.apply_mkdir("/d", 0o755).unwrap();
+        let p = resolve(&fs, "/p").unwrap();
+        audit70_set_links(&fs, p, 65000);
+        assert!(fs.apply_rename("/d", "/p/d", false).is_err());
+        assert_eq!(audit70_links(&fs, p), 65000);
+        assert!(
+            resolve(&fs, "/d").is_ok(),
+            "the refused rename left the source alone"
+        );
+    }
+
+    /// #385: fsck accepts a directory count of 1 on a DIR_NLINK volume --
+    /// it is the "too many to count" value, not a count that is too low.
+    #[test]
+    fn audit70_fsck_accepts_a_dir_nlink_count_of_one() {
+        let dev = formatted();
+        set_ro_compat_bit(&dev, crate::features::RoCompat::DIR_NLINK.bits());
+        let fs = mount(&dev);
+        fs.apply_mkdir("/p", 0o755).unwrap();
+        fs.apply_mkdir("/p/c", 0o755).unwrap();
+        let p = resolve(&fs, "/p").unwrap();
+        audit70_set_links(&fs, p, 1);
+        let report = fs.audit(u32::MAX, u32::MAX).unwrap();
+        assert!(report.is_clean(), "{:?}", report.anomalies);
+    }
 }
