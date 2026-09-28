@@ -327,6 +327,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   on the device. The same holds for a mount that was read-only when it
   mounted, whose replay went into the cache alone: its device turning
   writable does not make the on-disk log any less dirty.
+- **A pwrite that fails part-way leaves the extent tree as it was.** A write
+  into a file whose extent tree is deeper than the inode wrote every tree
+  node it rewrote straight to the device, ahead of its transaction, so the
+  next insert in the same call could read it back. When the call then failed
+  — out of space on a later sub-run, a failed commit, a power cut — the
+  on-disk tree mapped blocks the bitmap still called free, and the next
+  allocation cross-linked them; on a journaled volume the write also went
+  around the journal. The nodes are now staged in the transaction only, and
+  the call's planner and lookups read them back from there (#389).
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
