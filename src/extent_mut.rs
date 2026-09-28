@@ -129,10 +129,31 @@ fn read_leaf_entries(root: &[u8]) -> Result<(ExtentHeader, Vec<Extent>)> {
     Ok((header, out))
 }
 
-/// Returns true iff two adjacent leaf extents are physically contiguous and
-/// in the same uninit state — candidate for a merge.
+/// Longest extent `ee_len` can describe in `uninitialized` state: 32768
+/// initialized blocks, 32767 uninitialized (an `ee_len` above 32768 is what
+/// marks an extent uninitialized, so 32768 itself is reserved for the
+/// initialized one). The kernel's `ext4_can_extents_be_merged` caps at the
+/// same two values.
+fn max_extent_len(uninitialized: bool) -> u32 {
+    if uninitialized {
+        u32::from(EXT_INIT_MAX_LEN) - 1
+    } else {
+        u32::from(EXT_INIT_MAX_LEN)
+    }
+}
+
+/// Returns true iff two adjacent leaf extents are physically contiguous, in
+/// the same uninit state, and short enough together to be one extent —
+/// candidate for a merge.
+///
+/// The length cap is not optional (#387): an initialized extent longer than
+/// 32768 blocks encodes as an uninitialized one of `len - 32768`, and two
+/// uninitialized ones past 32767 overflow `ee_len`.
 fn are_contiguous(a: &Extent, b: &Extent) -> bool {
     if a.uninitialized != b.uninitialized {
+        return false;
+    }
+    if u32::from(a.length) + u32::from(b.length) > max_extent_len(a.uninitialized) {
         return false;
     }
     let a_log_end = a.logical_block as u64 + a.length as u64;
@@ -1113,17 +1134,7 @@ pub fn plan_initialize_range(root: &[u8], first: u32, end: u32) -> Result<(Vec<u
     let mut merged: Vec<Extent> = Vec::with_capacity(out.len());
     for e in out {
         match merged.last_mut() {
-            Some(prev)
-                if are_contiguous(prev, &e)
-                    && u32::from(prev.length) + u32::from(e.length)
-                        <= u32::from(if e.uninitialized {
-                            crate::extent::EXT_INIT_MAX_LEN - 1
-                        } else {
-                            crate::extent::EXT_INIT_MAX_LEN
-                        }) =>
-            {
-                prev.length += e.length
-            }
+            Some(prev) if are_contiguous(prev, &e) => prev.length += e.length,
             _ => merged.push(e),
         }
     }
@@ -1546,5 +1557,129 @@ mod tests {
             Error::CorruptExtentTree(msg) => assert!(msg.contains("multi-level")),
             _ => panic!("wrong error kind"),
         }
+    }
+
+    /// The `WriteRoot` bytes of a single-mutation plan.
+    fn root_of(muts: Vec<ExtentMutation>) -> Vec<u8> {
+        match muts.into_iter().next() {
+            Some(ExtentMutation::WriteRoot { bytes }) => bytes,
+            other => panic!("expected WriteRoot, got {other:?}"),
+        }
+    }
+
+    /// Sum of the lengths, and whether any entry reads back uninitialized.
+    fn total_and_any_uninit(entries: &[Extent]) -> (u64, bool) {
+        (
+            entries.iter().map(|e| e.length as u64).sum(),
+            entries.iter().any(|e| e.uninitialized),
+        )
+    }
+
+    /// Two contiguous initialized extents whose sum passes 32768 stay two
+    /// (#387): one `ee_len` over 32768 reads back as an uninitialized extent.
+    #[test]
+    fn an_insert_does_not_merge_past_the_initialized_extent_limit() {
+        let m = plan_insert_extent(
+            &mk_root(&[ext(0, 32768, 1000, false)]),
+            ext(32768, 1, 33768, false),
+        )
+        .unwrap();
+        let entries = read_back(&root_of(m));
+        assert_eq!(
+            total_and_any_uninit(&entries),
+            (32769, false),
+            "{entries:?}"
+        );
+        assert_eq!(entries.len(), 2, "{entries:?}");
+    }
+
+    /// Two contiguous uninit extents whose sum passes 32767 stay two
+    /// (#387): the merge used to overflow `ee_len`'s u16.
+    #[test]
+    fn an_insert_does_not_merge_past_the_uninit_extent_limit() {
+        let r = std::panic::catch_unwind(|| {
+            plan_insert_extent(
+                &mk_root(&[ext(0, 20000, 1000, true)]),
+                ext(20000, 20000, 21000, true),
+            )
+        });
+        let entries = read_back(&root_of(r.expect("no panic").unwrap()));
+        assert_eq!(total_and_any_uninit(&entries), (40000, true), "{entries:?}");
+        assert!(entries.iter().all(|e| e.uninitialized), "{entries:?}");
+    }
+
+    /// A merge exactly at the limit still happens: the cap is `<=`.
+    #[test]
+    fn an_insert_still_merges_up_to_the_limit() {
+        let m = plan_insert_extent(
+            &mk_root(&[ext(0, 32767, 1000, false)]),
+            ext(32767, 1, 33767, false),
+        )
+        .unwrap();
+        let entries = read_back(&root_of(m));
+        assert_eq!(shape(entries), vec![(0, 32768, 1000, false)]);
+        let m = plan_insert_extent(
+            &mk_root(&[ext(0, 32766, 1000, true)]),
+            ext(32766, 1, 33766, true),
+        )
+        .unwrap();
+        assert_eq!(shape(read_back(&root_of(m))), vec![(0, 32767, 1000, true)]);
+    }
+
+    /// A merge with the right-hand neighbour is capped too.
+    #[test]
+    fn an_insert_does_not_merge_right_past_the_limit() {
+        let m = plan_insert_extent(
+            &mk_root(&[ext(1, 32768, 1001, false)]),
+            ext(0, 1, 1000, false),
+        )
+        .unwrap();
+        let entries = read_back(&root_of(m));
+        assert_eq!(
+            total_and_any_uninit(&entries),
+            (32769, false),
+            "{entries:?}"
+        );
+    }
+
+    /// `plan_merge_adjacent` refuses a pair whose sum passes the limit.
+    #[test]
+    fn an_explicit_merge_does_not_pass_the_extent_limit() {
+        let root = mk_root(&[ext(0, 30000, 1000, false), ext(30000, 5000, 31000, false)]);
+        let m = plan_merge_adjacent(&root, 0).unwrap();
+        assert!(m.is_empty(), "a merge past 32768 was planned: {m:?}");
+    }
+
+    /// The deep-tree leaf insert (`insert_into_leaf_sorted`) is capped too.
+    #[test]
+    fn a_deep_leaf_insert_does_not_merge_past_the_extent_limit() {
+        let mut entries = vec![ext(0, 30000, 1000, false)];
+        insert_into_leaf_sorted(&mut entries, ext(30000, 5000, 31000, false));
+        assert_eq!(
+            total_and_any_uninit(&entries),
+            (35000, false),
+            "{entries:?}"
+        );
+        assert!(entries.iter().all(|e| e.length <= 32768), "{entries:?}");
+    }
+
+    /// Promoting a full root to depth 1 does not merge past the limit.
+    #[test]
+    fn a_promotion_does_not_merge_past_the_extent_limit() {
+        let root = mk_root(&[
+            ext(0, 5, 1000, false),
+            ext(100, 5, 2000, false),
+            ext(200, 5, 3000, false),
+            ext(300, 30000, 4000, false),
+        ]);
+        let plan =
+            plan_promote_leaf(&root, ext(30300, 5000, 34000, false), 4096, 123, false).unwrap();
+        let hdr = ExtentHeader::parse(&plan.leaf_bytes).unwrap();
+        let entries = read_back(&plan.leaf_bytes[..12 + hdr.entries as usize * 12]);
+        assert_eq!(
+            total_and_any_uninit(&entries),
+            (35015, false),
+            "{entries:?}"
+        );
     }
 }
