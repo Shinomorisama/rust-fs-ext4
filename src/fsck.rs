@@ -354,7 +354,11 @@ fn audit_inner(
             incomplete_dirs.insert(dir_ino);
             break;
         }
-        if !visited.insert(dir_ino) {
+        // Only a confirmed directory is marked visited (below, after
+        // the type check): a second Directory-typed dirent naming the
+        // same regular file must reach the check too and be its own
+        // BogusEntry, or repair needs two runs to converge (#325).
+        if visited.contains(&dir_ino) {
             continue;
         }
         // Record who really enqueued us. `parent_ino` is the directory
@@ -390,6 +394,7 @@ fn audit_inner(
             emit_dir_progress(on_progress, report.directories_scanned, work.len());
             continue;
         }
+        visited.insert(dir_ino);
 
         // Skip directories the audit can't fully enumerate (inline dirs
         // whose entries overflow into the xattr region — a valid
