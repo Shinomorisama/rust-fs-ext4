@@ -383,6 +383,16 @@ Not caught by the compiler — the same source builds and behaves differently:
   not converge and `initial - repaired != remaining`. An inode is now
   marked visited only once it is known to be a directory (#325).
 
+- **The fuzz workflow no longer runs its dispatch input as shell, and
+  keeps its reproducers when it is cancelled (#304).** `fuzz.yml` pasted
+  the `seconds` input into its `run:` line, so whoever could dispatch it
+  could run commands; it now arrives through `env:`, and
+  `scripts/fuzz-all.sh` refuses anything but a positive whole number of
+  seconds whose total across the targets fits the job's timeout, before
+  anything is fuzzed. The reproducer upload runs on `failure() ||
+  cancelled()`. A target with no seed corpus, or a fuzzer that exited
+  non-zero without leaving a reproducer, is now reported as what it is
+  rather than as a crash.
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
   entries and freed every node below, so a punch leaving more than four

