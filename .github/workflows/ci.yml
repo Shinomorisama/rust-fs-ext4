@@ -104,6 +104,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # restore-keys: any Cargo.lock change (fuzz/Cargo.lock included) misses
+      # the exact key, and a cold start prints every crate download and
+      # compile into the tier log -- 714 lines against the unit budget of
+      # 700, measured on #370, where a warm run prints about 645.
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -112,6 +116,7 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-unit-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-unit-cargo-
       - name: No fixtures are present
         run: |
           set -euo pipefail
@@ -188,6 +193,7 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-x86_64-cargo-
       - name: KVM, QEMU and Vagrant
         id: vm-host
         run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
@@ -264,6 +270,7 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-aarch64-cargo-
       - uses: actions/download-artifact@v4
         with:
           name: fixtures
@@ -363,6 +370,7 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-cargo-
       - name: chore tools:wasm
         # The wasm32 target, and wasm-bindgen-test-runner at the exact
         # wasm-bindgen version Cargo.lock resolved.
@@ -412,6 +420,7 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-semver-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-semver-cargo-
       - name: chore check:semver
         id: tier
         run: chore check:semver
@@ -442,6 +451,7 @@ jobs:
             ~/.cargo/git
             target/msrv
           key: ${{ runner.os }}-msrv-cargo-${{ hashFiles('**/Cargo.lock', 'Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-msrv-cargo-
       - name: chore check:msrv
         # The script installs the toolchain rust-version names; the runner's
         # rustup is all it needs.
