@@ -411,6 +411,27 @@ Not caught by the compiler — the same source builds and behaves differently:
   the transaction's buffer before removing from it. Nothing was written, so
   no volume was damaged. `tests/htree_dir_writes_oracle.rs` renames such a
   name in an index built by `e2fsck -D` and has `e2fsck -fn` judge it.
+- **An extended attribute whose value moves between the inode and the
+  external block keeps one copy (#377).** Growing an in-inode value past the
+  inode's capacity wrote the new value to the block and left the old one in
+  the inode, and the reader, which returns the first copy it finds, went on
+  answering with the old value; `listxattr` listed the name twice. Shrinking
+  a block value back into the inode left the block's copy, which came back
+  as the value once the attribute was removed. `setxattr` now removes the
+  other copy in the same transaction, and `removexattr` removes it from
+  both places.
+- **The external xattr block is checked before it is edited or read
+  (#378).** Every writer read the block `i_file_acl` names and went ahead:
+  a block without the xattr magic was formatted as an empty xattr block
+  over whatever it held -- another file's data, a directory block -- and
+  the call returned success; a block whose checksum failed was edited and
+  restamped, blessing the corruption, and an unverified `h_refcount` was
+  decremented on unlink. `setxattr`, `removexattr`, the release an unlink
+  or truncate does, and `getxattr` / `listxattr` now refuse a block without
+  the magic or with `h_blocks` other than 1 (`Corrupt`) and one that fails
+  its checksum (`BadChecksum`), as the kernel's `ext4_xattr_check_block`
+  does.
+
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
