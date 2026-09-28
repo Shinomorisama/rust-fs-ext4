@@ -44,7 +44,7 @@
 // near-duplicates.
 #![allow(clippy::missing_safety_doc)]
 
-use crate::block_io::{BlockDevice, CallbackDevice, FileDevice};
+use crate::block_io::{AlignedDevice, BlockDevice, CallbackDevice, FileDevice};
 use crate::dir::{self, DirBlockIter, DirEntryType};
 use crate::error::errno::{EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOSYS, ENOTDIR, ERANGE};
 use crate::error::{Error, Result};
@@ -310,6 +310,11 @@ pub struct fs_ext4_blockdev_cfg_t {
     pub read: fs_ext4_read_fn,
     pub context: *mut c_void,
     pub size_bytes: u64,
+    /// On the mount entry points: the device's sector size. When it is
+    /// greater than 1 the callbacks receive only requests whose offset and
+    /// length are multiples of it (see [`callback_mount_device`]); 0 or 1
+    /// passes the engine's byte-granular requests through unchanged. On
+    /// `fs_ext4_mkfs` it is the filesystem block size to format with.
     pub block_size: u32,
     pub write: fs_ext4_write_fn,
     pub flush: fs_ext4_flush_fn,
@@ -453,6 +458,55 @@ pub unsafe extern "C" fn fs_ext4_mount(device_path: *const c_char) -> *mut fs_ex
     )
 }
 
+/// Largest sector size a callback mount accepts: ext4's largest block
+/// size, since a sector may not be larger than a filesystem block.
+const MAX_SECTOR_SIZE: u32 = 65536;
+
+/// The device a callback mount runs on: `dev` itself when `cfg.block_size`
+/// is 0 or 1, otherwise `dev` behind an [`AlignedDevice`] so the callbacks
+/// only ever see `block_size`-aligned requests (#373).
+///
+/// `block_size` must be a power of two, divide `size_bytes`, and be no
+/// larger than the filesystem's block size (read from the superblock
+/// through the aligned device, before anything is mounted). Every refusal
+/// is `EINVAL`; the message says which rule it broke.
+fn callback_mount_device(
+    dev: CallbackDevice,
+    cfg: &fs_ext4_blockdev_cfg_t,
+) -> std::result::Result<Arc<dyn BlockDevice>, String> {
+    let sector = cfg.block_size;
+    if sector <= 1 {
+        return Ok(Arc::new(dev));
+    }
+    if !sector.is_power_of_two() || sector > MAX_SECTOR_SIZE {
+        return Err(format!(
+            "cfg.block_size {sector} is not a power of two in 2..={MAX_SECTOR_SIZE}"
+        ));
+    }
+    if !cfg.size_bytes.is_multiple_of(sector as u64) {
+        return Err(format!(
+            "cfg.block_size {sector} does not divide cfg.size_bytes {}",
+            cfg.size_bytes
+        ));
+    }
+    let dev = AlignedDevice::new(dev, sector);
+    // s_magic at +0x38, s_log_block_size at +0x18 of the superblock at
+    // byte 1024. A read that fails or finds no ext4 magic is left for the
+    // mount to report in its own words.
+    let mut sb = [0u8; 1024];
+    if dev.read_at(1024, &mut sb).is_ok() && u16::from_le_bytes([sb[0x38], sb[0x39]]) == 0xEF53 {
+        let log = u32::from_le_bytes([sb[0x18], sb[0x19], sb[0x1A], sb[0x1B]]);
+        if let Some(fs_block) = 1024u32.checked_shl(log).filter(|_| log < 22) {
+            if sector > fs_block {
+                return Err(format!(
+                    "cfg.block_size {sector} is larger than the filesystem block size {fs_block}"
+                ));
+            }
+        }
+    }
+    Ok(Arc::new(dev))
+}
+
 /// Mount via a caller-supplied read callback.
 #[no_mangle]
 pub unsafe extern "C" fn fs_ext4_mount_with_callbacks(
@@ -508,7 +562,14 @@ unsafe fn mount_with_callbacks_inner(cfg: *const fs_ext4_blockdev_cfg_t) -> *mut
         flush: None,
     };
 
-    match Filesystem::mount(Arc::new(dev) as Arc<dyn BlockDevice>) {
+    let dev = match callback_mount_device(dev, cfg) {
+        Ok(dev) => dev,
+        Err(msg) => {
+            set_err_msg(&msg, EINVAL);
+            return std::ptr::null_mut();
+        }
+    };
+    match Filesystem::mount(dev) {
         Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
         Err(e) => {
             set_err_from(&e, "mount (callback)");
@@ -687,7 +748,14 @@ unsafe fn mount_rw_with_callbacks_inner(cfg: *const fs_ext4_blockdev_cfg_t) -> *
         flush: flush_closure,
     };
 
-    match Filesystem::mount(Arc::new(dev) as Arc<dyn BlockDevice>) {
+    let dev = match callback_mount_device(dev, cfg) {
+        Ok(dev) => dev,
+        Err(msg) => {
+            set_err_msg(&msg, EINVAL);
+            return std::ptr::null_mut();
+        }
+    };
+    match Filesystem::mount(dev) {
         Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
         Err(e) => {
             set_err_from(&e, "mount_rw (callback)");
@@ -792,7 +860,14 @@ unsafe fn mount_rw_with_callbacks_lazy_inner(
         flush: flush_closure,
     };
 
-    match Filesystem::mount_lazy(Arc::new(dev) as Arc<dyn BlockDevice>) {
+    let dev = match callback_mount_device(dev, cfg) {
+        Ok(dev) => dev,
+        Err(msg) => {
+            set_err_msg(&msg, EINVAL);
+            return std::ptr::null_mut();
+        }
+    };
+    match Filesystem::mount_lazy(dev) {
         Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
         Err(e) => {
             set_err_from(&e, "mount_rw_lazy (callback)");

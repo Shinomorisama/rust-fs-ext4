@@ -156,6 +156,13 @@ typedef struct {
  * Must read exactly `length` bytes at `offset` into `buf`.
  * Returns 0 on success, non-zero on error.
  * `context` is the opaque pointer passed to fs_ext4_mount_with_callbacks.
+ *
+ * Alignment: on a mount whose `cfg->block_size` is greater than 1, both
+ * `offset` and `length` are always multiples of `block_size` (see
+ * fs_ext4_blockdev_cfg_t). With `block_size` 0 or 1 they are whatever the
+ * engine asks for, with no alignment at all: the superblock alone is read
+ * as 1024 bytes at offset 1024, and metadata writes can be smaller than
+ * a filesystem block.
  */
 typedef int (*fs_ext4_read_fn)(void *context, void *buf,
                                    uint64_t offset, uint64_t length);
@@ -164,6 +171,7 @@ typedef int (*fs_ext4_read_fn)(void *context, void *buf,
  * Callback for writing blocks to the device.
  * Must write exactly `length` bytes from `buf` starting at `offset`.
  * Returns 0 on success, non-zero on error.
+ * The same alignment contract as fs_ext4_read_fn applies.
  *
  * Optional — set to NULL when mounting read-only via
  * fs_ext4_mount_with_callbacks. Required (must be non-NULL) when mounting
@@ -193,7 +201,21 @@ typedef struct {
     fs_ext4_read_fn read;
     void   *context;     /* Passed to callbacks (e.g. FSBlockDeviceResource pointer) */
     uint64_t size_bytes; /* Total device/partition size */
-    uint32_t block_size; /* Physical block size (e.g. 512) */
+    /*
+     * On the mount entry points: the device's sector size — the unit it
+     * requires every request's offset and length to be a multiple of
+     * (e.g. 512 or 4096). When it is greater than 1 the driver sends the
+     * callbacks only such requests: an unaligned read is widened to the
+     * enclosing sectors, an unaligned write becomes a read-modify-write of
+     * its first and last sectors, and an aligned request passes through
+     * unchanged. The mount fails with EINVAL if it is not a power of two,
+     * does not divide `size_bytes`, or is larger than the filesystem block
+     * size. 0 or 1: no alignment; requests are passed through byte-granular.
+     *
+     * On fs_ext4_mkfs it means something else: the filesystem block size to
+     * format with (0 selects the default).
+     */
+    uint32_t block_size;
     fs_ext4_write_fn write; /* NEW in v0.1.3; NULL if read-only */
     fs_ext4_flush_fn flush; /* NEW in v0.1.3; NULL = flush is a no-op */
 } fs_ext4_blockdev_cfg_t;
