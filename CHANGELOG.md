@@ -419,6 +419,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   commit's write-through now leaves ordinary clean entries. A read-only
   mount's replayed journal blocks, which are not on the device, stay pinned.
   `Filesystem::cache_pinned_blocks` reports the pinned count (#328).
+- **The fuzz corpus seeds the htree decoder.** `mke2fs -d` writes every
+  directory as a linear list, so no committed seed held a real `dx_root`
+  and the explorer and the `fuzz_decoders` gate never started from one
+  (#305). `scripts/make-fuzz-corpus.sh` now indexes the ext4 filesystems
+  with `e2fsck -fyD`, takes the root directory's first block from the
+  root inode's own block map, and asserts that the root has
+  `EXT4_INDEX_FL` and that the block parses as a `dx_root`. The ext2 seed
+  stays linear on purpose. A rebuild replaces only the files the script
+  wrote, so committed reproducers survive it.
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
   entries and freed every node below, so a punch leaving more than four
