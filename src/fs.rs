@@ -159,6 +159,59 @@ impl<'a> crate::extent_mut::DeepReader for FsBlockReader<'a> {
     }
 }
 
+/// Extent-tree node blocks one call has planned but not yet committed, by
+/// block number, laid over what the device holds.
+///
+/// A pwrite that promotes or splits its tree goes on planning against the
+/// tree it has just changed: a later sub-run's insert descends into the
+/// nodes the earlier one wrote, and each lookup walks them. Those nodes live
+/// in the transaction's buffer and nowhere else until it commits (#389).
+/// Writing them to the device early, so a plain reader could find them, put
+/// rewrites of the file's EXISTING nodes on disk ahead of the bitmap bits,
+/// counters and `i_blocks` that justify them: a call that then failed — out
+/// of space on a later sub-run, a failed commit, a power cut — left the tree
+/// mapping blocks the bitmap calls free, and bypassed the journal.
+struct StagedTreeNodes<'a> {
+    fs: &'a Filesystem,
+    nodes: &'a std::collections::BTreeMap<u64, Vec<u8>>,
+}
+
+impl crate::extent_mut::DeepReader for StagedTreeNodes<'_> {
+    fn read_block(&self, block: u64, out: &mut [u8]) -> Result<()> {
+        match self.nodes.get(&block) {
+            Some(bytes) if bytes.len() == out.len() => {
+                out.copy_from_slice(bytes);
+                Ok(())
+            }
+            Some(_) => Err(Error::Corrupt(
+                "StagedTreeNodes: block length mismatch (callers must pass a buffer sized to fs block_size)",
+            )),
+            None => FsBlockReader { fs: self.fs }.read_block(block, out),
+        }
+    }
+}
+
+impl crate::block_io::BlockDevice for StagedTreeNodes<'_> {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
+        self.fs.dev.read_at(offset, buf)?;
+        let bs = self.fs.sb.block_size() as u64;
+        let end = offset + buf.len() as u64;
+        for (&block, bytes) in self.nodes.range(offset / bs..end.div_ceil(bs)) {
+            let (lo, hi) = ((block * bs).max(offset), ((block + 1) * bs).min(end));
+            if lo < hi {
+                buf[(lo - offset) as usize..(hi - offset) as usize].copy_from_slice(
+                    &bytes[(lo - block * bs) as usize..(hi - block * bs) as usize],
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn size_bytes(&self) -> u64 {
+        self.fs.dev.size_bytes()
+    }
+}
+
 /// `EXT4_CASEFOLD_FL`: names in this directory hash casefolded.
 const EXT4_CASEFOLD_FL: u32 = 0x4000_0000;
 /// `EXT4_ENCRYPT_FL`: names in this directory are stored encrypted.
@@ -4745,6 +4798,10 @@ impl Filesystem {
         // as we insert extents for each unmapped run; patched into `raw`
         // once at the end.
         let mut root_bytes: Vec<u8> = inode.block.to_vec();
+        // The tree nodes this call has planned, staged here and in `buf`
+        // until the commit; every lookup below reads through them (#389).
+        let mut tree_nodes: std::collections::BTreeMap<u64, Vec<u8>> =
+            std::collections::BTreeMap::new();
 
         let mut buf = BlockBuffer::new(self.sb.block_size());
         let group_idx_of_inode = ((ino - 1) / self.sb.inodes_per_group) as u32;
@@ -4766,9 +4823,15 @@ impl Filesystem {
         // preallocated block held never becomes readable.
         let mut preallocated = false;
         for lb in first_lb..last_lb_excl.min(u64::from(u32::MAX)) {
-            if let Some(e) =
-                crate::extent::lookup(&root_bytes, self.dev.as_ref(), self.sb.block_size(), lb)?
-            {
+            if let Some(e) = crate::extent::lookup(
+                &root_bytes,
+                &StagedTreeNodes {
+                    fs: self,
+                    nodes: &tree_nodes,
+                },
+                self.sb.block_size(),
+                lb,
+            )? {
                 if e.uninitialized {
                     preallocated = true;
                     break;
@@ -4805,7 +4868,10 @@ impl Filesystem {
         while lb < last_lb_excl {
             let mapped = crate::extent::map_logical(
                 &root_bytes,
-                self.dev.as_ref(),
+                &StagedTreeNodes {
+                    fs: self,
+                    nodes: &tree_nodes,
+                },
                 self.sb.block_size(),
                 lb,
             )?;
@@ -4818,7 +4884,10 @@ impl Filesystem {
             while run_end < last_lb_excl {
                 let p = crate::extent::map_logical(
                     &root_bytes,
-                    self.dev.as_ref(),
+                    &StagedTreeNodes {
+                        fs: self,
+                        nodes: &tree_nodes,
+                    },
                     self.sb.block_size(),
                     run_end,
                 )?;
@@ -4913,7 +4982,10 @@ impl Filesystem {
                         // same buffer-aware allocator. Each call stages a
                         // bitmap + BGD update so subsequent allocations
                         // see the just-claimed bits.
-                        let reader = FsBlockReader { fs: self };
+                        let reader = StagedTreeNodes {
+                            fs: self,
+                            nodes: &tree_nodes,
+                        };
                         let mut meta_blocks_alloc: u64 = 0;
                         let inode_generation = inode.generation;
                         let deep_plan = {
@@ -4943,24 +5015,16 @@ impl Filesystem {
                             )?
                         };
                         root_bytes = deep_plan.new_root;
-                        let bs_u64 = self.sb.block_size() as u64;
                         for (block, bytes) in deep_plan.block_writes {
                             let mut bytes = bytes;
                             if self.csum.enabled {
                                 self.csum
                                     .patch_extent_tail(ino, inode_generation, &mut bytes);
                             }
-                            // Eager-write tree-meta blocks to disk so a
-                            // *subsequent* plan_insert_extent_deep within
-                            // this same apply_pwrite (when more sub-runs
-                            // follow and need to descend the just-promoted
-                            // tree) can fetch them via FsBlockReader. Also
-                            // stage in buf so the final commit_block_buffer
-                            // covers them inside the same transaction tail.
-                            // On a pre-commit crash these become orphaned
-                            // bytes that fsck reclaims (the block bitmap
-                            // mark is in `buf` and only lands on commit).
-                            self.dev.write_at(block * bs_u64, &bytes)?;
+                            // Staged, never written ahead of the commit: a
+                            // later sub-run's plan and every lookup read it
+                            // back through `tree_nodes` (#389).
+                            tree_nodes.insert(block, bytes.clone());
                             buf.put(block, bytes);
                         }
                         alloc_total_blocks += meta_blocks_alloc;
@@ -4994,7 +5058,7 @@ impl Filesystem {
 
             let phys = crate::extent::map_logical(
                 &root_bytes,
-                self.dev.as_ref(),
+                &StagedTreeNodes { fs: self, nodes: &tree_nodes },
                 self.sb.block_size(),
                 cur_lb,
             )?
@@ -7019,6 +7083,67 @@ mod tests {
 
     fn mount(dev: &std::sync::Arc<MemDev>) -> Filesystem {
         Filesystem::mount(dev.clone()).expect("mount")
+    }
+
+    /// `/f` with one block written at every other logical block from 0 to
+    /// 10: six extents, so its tree is depth 1. Returns its inode number.
+    fn striped_file(fs: &Filesystem) -> u32 {
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        for lb in [0u64, 2, 4, 6, 8, 10] {
+            fs.apply_pwrite("/f", lb * BS as u64, &[1u8; BS as usize])
+                .unwrap();
+        }
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let depth = u16::from_le_bytes(inode.block[6..8].try_into().unwrap());
+        assert!(depth >= 1, "precondition: depth >= 1, got {depth}");
+        ino
+    }
+
+    /// Fill the volume with `/fill`, leaving no more than a few blocks free.
+    fn fill_leaving_a_few_free(fs: &Filesystem) {
+        let mut n = fs.sb.free_blocks_count.saturating_sub(4);
+        loop {
+            let r = fs.apply_create("/fill", 0o644).and_then(|_| {
+                fs.apply_replace_file_content("/fill", &vec![0u8; (n * BS as u64) as usize])
+            });
+            match r {
+                Ok(_) => break,
+                Err(_) => {
+                    let _ = fs.apply_unlink("/fill");
+                    n -= 1;
+                }
+            }
+        }
+    }
+
+    /// A pwrite that fails with ENOSPC part-way leaves no extent on disk
+    /// that maps blocks the bitmap still calls free (#389): the tree nodes
+    /// it rewrote were written straight to the device, ahead of the
+    /// transaction that never committed.
+    #[test]
+    fn a_pwrite_that_runs_out_of_space_leaves_the_tree_as_it_was() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = striped_file(&fs);
+        drop(fs);
+        let fs = mount(&dev);
+        fill_leaving_a_few_free(&fs);
+        drop(fs);
+        let fs = mount(&dev);
+        let left = fs.sb.free_blocks_count;
+        let bs = BS as u64;
+        let r = fs.apply_pwrite("/f", 20 * bs, &vec![2u8; ((left + 8) * bs) as usize]);
+        assert!(r.is_err(), "precondition: ENOSPC ({left} free)");
+        drop(fs);
+        let fs = mount(&dev);
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let mapped = fs.map_inode_logical(&inode, 20).unwrap();
+        assert_eq!(
+            mapped, None,
+            "a failed pwrite left logical block 20 mapped ({left} were free)"
+        );
+        let data = crate::file_io::read_all(&fs, &inode).unwrap();
+        assert_eq!(data.len(), 11 * BS as usize, "the size is unchanged");
     }
 
     /// Two plans in one open transaction must not hand out the same blocks
