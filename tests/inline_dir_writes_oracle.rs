@@ -80,8 +80,8 @@ fn mutations_of_inline_directories_made_by_debugfs_are_refused() {
             matches!(r, Err(Error::Unsupported(_))),
             "{name} an inline directory: {r:?}"
         );
-        fs_ext4_test_support::assert_e2fsck_clean(&image, &format!("inline dirs: {name}"));
     }
+    fs_ext4_test_support::assert_e2fsck_clean(&image, "inline dirs: every mutation refused");
 
     // Renaming within one parent touches only the parent's entries, which
     // is a block directory here: it still goes through.
