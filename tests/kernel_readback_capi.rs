@@ -1,8 +1,8 @@
 //! THE KERNEL READS BACK WHAT THE C ABI WROTE.
 //!
 //! `tests/kernel_readback.rs` drives the Rust API; this one drives
-//! `fs_ext4_*`, the interface every consumer actually links against
-//! (DiskJockey among them). The same tree, written through the FFI
+//! `fs_ext4_*`, the interface every consumer of the static library links
+//! against. The same tree, written through the FFI
 //! boundary — its own path handling, its own error reporting, its own
 //! mount handle — and the same kernel mount reading it back.
 //!
