@@ -116,7 +116,8 @@ fn image_with_committed_mkdir_into_an_uninit_group() -> String {
 fn a_create_after_a_lazy_replay_does_not_reuse_an_inode_the_replay_allocated() {
     let image = image_with_committed_mkdir_into_an_uninit_group();
 
-    let fs = Filesystem::mount_lazy(Arc::new(FileDevice::open_rw(&image).unwrap())).expect("lazy");
+    let mut fs =
+        Filesystem::mount_lazy(Arc::new(FileDevice::open_rw(&image).unwrap())).expect("lazy");
     assert_eq!(
         lookup(&fs, "/committed"),
         None,
