@@ -1125,4 +1125,39 @@ mod tests {
         let err = plan_set_in_inode_region(&mut region, "weird.key", b"v").unwrap_err();
         assert!(matches!(err, Error::InvalidArgument(_)));
     }
+
+    /// The kernel looks external-block entries up sorted by
+    /// `(name_index, name_len, name)` and stops at the first entry that
+    /// compares at or past the target (`xattr_find_entry(..., sorted=1)`),
+    /// so the block must be written in that order. Sorted by name alone,
+    /// `user.abc` goes before `user.zz`, and the kernel's lookup of `zz`
+    /// stops at `abc` and answers ENODATA (#379).
+    #[test]
+    fn external_block_entries_are_sorted_by_name_length_before_name() {
+        let mut block = vec![0u8; 4096];
+        plan_set_in_external_block(&mut block, "user.abc", b"1", 1).unwrap();
+        plan_set_in_external_block(&mut block, "user.zz", b"2", 1).unwrap();
+        assert_eq!(
+            block[0x20],
+            2,
+            "the first entry must be the shorter name (zz), not {:?}",
+            String::from_utf8_lossy(&block[0x30..0x30 + block[0x20] as usize])
+        );
+        // And the namespace still comes first: a longer name in a lower
+        // index sorts before a shorter one in a higher index.
+        plan_set_in_external_block(&mut block, "trusted.a", b"3", 1).unwrap();
+        let order: Vec<(u8, Vec<u8>)> = decode_external_block_entries(&block)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.name_index, e.name_bytes))
+            .collect();
+        assert_eq!(
+            order,
+            vec![
+                (1, b"zz".to_vec()),
+                (1, b"abc".to_vec()),
+                (4, b"a".to_vec()),
+            ]
+        );
+    }
 }
