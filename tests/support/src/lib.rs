@@ -103,14 +103,13 @@ pub fn temp_dir() -> &'static Path {
                 .expect("test support crate must live at <worktree>/tests/support");
             let explicit = std::env::var_os("FS_EXT4_TEST_TMPDIR");
             let selected_root = select_temp_dir(explicit.as_deref(), worktree);
-            let dir = materialize_temp_dir(explicit.as_deref(), &selected_root).unwrap_or_else(
-                |error| {
+            let dir =
+                materialize_temp_dir(explicit.as_deref(), &selected_root).unwrap_or_else(|error| {
                     panic!(
                         "cannot create ext4 test scratch directory below {}: {error}",
                         selected_root.display()
                     )
-                },
-            );
+                });
             if explicit.filter(|path| !path.is_empty()).is_none() {
                 remove_at_exit(dir.clone());
             }
