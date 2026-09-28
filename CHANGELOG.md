@@ -146,6 +146,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   API is compared with the newest am-fs-ext4 on crates.io by
   cargo-semver-checks, and a break that Cargo.toml's version does not declare
   fails the pull request (#120).
+### Fixed
+
+- **`chore staticlib` no longer calls a stale or broken artifact up to
+  date (#330).** `dist/include/fs_core.h` is a generated file, so deleting
+  it rebuilds; `Cargo.lock` and rust-fs-core's manifest and sources are
+  sources, so a lock-only bump or a core change rebuilds; and the build is
+  `--locked`, so a manifest that no longer matches the lock fails instead
+  of re-resolving. `tests/scripts/test-staticlib-freshness.sh` checks all
+  three against the real task.
 
 ### Changed
 
