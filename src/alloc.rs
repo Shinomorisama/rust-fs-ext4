@@ -277,9 +277,12 @@ fn mark_reserved_in_group(
 /// Three separate reverts of the inline code — dropping the data run,
 /// no-oping the meta push, and keeping only `first_block` instead of the
 /// whole `count` run — each left 278 library tests green and EXIT=0.
-/// Nothing in the suite reaches `buffer_extend_dir_deep`, on any
-/// runner, so the three lines that make the fix were held by nothing.
-/// Extracted here they are three assertions instead.
+/// At the time nothing in the suite reached `buffer_extend_dir_deep`,
+/// so the three lines that make the fix were held by nothing. Extracted
+/// here they are three assertions instead. Since 3973ce0 (#215),
+/// `tests/deep_dir_extent_nodes_are_distinct.rs` also drives a directory
+/// through the deep path and checks the result end to end, in the tier
+/// that runs e2fsck; these assertions remain the unit-tier witness.
 ///
 /// A PLAN IS A RUN, NOT A BLOCK. `count` is 1 for every caller today,
 /// which is exactly why `first_block` alone passed every test that
@@ -692,8 +695,9 @@ mod tests {
     // reverted with 278 library tests green, EXIT=0, 0 compile errors:
     // dropping the data run, no-oping the meta push, and reserving only
     // `first_block` instead of the whole `count` run. Nothing in the
-    // suite reaches that function on any runner, so a test there was
-    // never going to hold them.
+    // suite reached that function then; since 3973ce0 (#215)
+    // `tests/deep_dir_extent_nodes_are_distinct.rs` does, in the e2fsck
+    // tier, and these stay as the unit-tier witness.
 
     fn mk_plan(first_block: u64, count: u32) -> BlockAllocationPlan {
         BlockAllocationPlan {

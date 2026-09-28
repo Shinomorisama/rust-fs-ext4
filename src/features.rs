@@ -85,7 +85,10 @@ pub const SUPPORTED_INCOMPAT: u32 = Incompat::FILETYPE.bits()
     | Incompat::RECOVER.bits()
     // Read-only only: see WRITE_BREAKING_INCOMPAT.
     | Incompat::MMP.bits()
-    | Incompat::INLINE_DATA.bits()  // we'll handle the flag, even if data overflow uses xattr later
+    // Inline files are read in full, `i_block` then the `system.data`
+    // xattr (`inline_data::read_all`). An inline directory is searched in
+    // `i_block` only: see G3 in docs/format-conformance-gaps.md.
+    | Incompat::INLINE_DATA.bits()
     | Incompat::LARGEDIR.bits()
     | Incompat::EA_INODE.bits()
     | Incompat::CASEFOLD.bits();

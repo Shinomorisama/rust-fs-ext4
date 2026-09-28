@@ -201,6 +201,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   inside it — as `unit` did on #370 at 751/45,748. `images`, `kernel`,
   `wasm`, `scripts` and `semver` are unchanged: no measurement asked them to
   move.
+- **Documentation that had drifted from the code is corrected** (#307).
+  `apply_fallocate_punch_hole` handles extent trees of any depth, not
+  depth 0 only; `fs_ext4_mount_with_fs_core_device` and its lazy variant take
+  a reference on the underlying device, not on the handle;
+  `docs/format-conformance-gaps.md` is current status, with the part still
+  open (inline directories' `system.data` spill) named and the timestamps
+  the driver stamps itself after 2038 closed by #324; and the README says
+  how to get the git hooks. The 0.4.1 section below gains the two
+  allocator fixes it shipped without listing.
 
 - **The test contract is chore tasks, and the first consumer of
   [fs-linux-test-harness](https://github.com/antimatter-studios/fs-linux-test-harness).**
@@ -830,6 +839,20 @@ wrongness appeared later as data rather than as an error.
 - **`mkfs.ext4 -q` no longer depends on where it appears** — `quiet` was read
   while the loop that sets it was still running, so `-q -m 1` was silent and
   `-m 1 -q` was not.
+
+- **A group's uninitialised flags are cleared when it is first allocated
+  from** (#41) — allocating from a group set its bitmap bits but left
+  `INODE_UNINIT` / `BLOCK_UNINIT` standing, which licenses every reader, the
+  next mount included, to treat the whole group as free. On a multi-group
+  volume the next mount handed out the same inode, or the same block, again.
+
+- **A rebuilt block bitmap reserves what it must not hand out** (#44) — the
+  bitmap rebuilt the first time a group is allocated from now places backup
+  superblocks by the filesystem's own layout (every group without
+  `SPARSE_SUPER`, the two `s_backup_bgs` groups with `SPARSE_SUPER2`) rather
+  than the classic sparse rule, reserves `s_reserved_gdt_blocks`, and makes a
+  cleared `BLOCK_UNINIT` visible to later allocations only once the commit
+  that clears it has succeeded.
 
 ### Testing
 

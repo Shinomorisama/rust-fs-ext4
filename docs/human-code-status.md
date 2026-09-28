@@ -234,8 +234,9 @@ Two of the removals turned into something better than a deletion:
 - `EXT4_GOOD_OLD_INODE_SIZE = 128` was declared in `mkfs.rs` and unused, while
   `checksum.rs` wrote the bare `128` twice — including at the boundary D5 is
   about. It is now `inode::GOOD_OLD_INODE_SIZE`, used at both sites, and its doc
-  says what the number means: the length below which an inode cannot hold
-  `i_checksum_lo` at 0x7C.
+  says what the number means: the whole fixed ext2 inode, every byte of which
+  the inode checksum covers. (Not the end of `i_checksum_lo`, as this once
+  said: that field ends at 0x7E, so 126 bytes would hold it.)
 - `CountingDevice::writes()` was a test helper with no caller. Nothing asserted
   the block cache is write-through, so it now has a test rather than a deletion.
 

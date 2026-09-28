@@ -247,7 +247,8 @@ fs_ext4_fs_t *fs_ext4_mount_with_callbacks(
  * Single entry point — RO vs RW is decided by the inner device's
  * `is_writable()`, so callers don't need a `_rw` variant.
  *
- * The handle's reference count is incremented internally; the caller
+ * The underlying device's reference count is incremented internally
+ * (the handle itself is not retained); the caller
  * still owns their *FsCoreDevice and frees it via
  * `fs_core_device_close`. Closing the resulting fs_ext4_fs_t via
  * `fs_ext4_umount` drops the mount's own reference.
@@ -273,7 +274,8 @@ fs_ext4_fs_t *fs_ext4_mount_with_fs_core_device(struct FsCoreDevice *handle);
  * crate will fail until replay completes.
  *
  * Same handle-ownership semantics as fs_ext4_mount_with_fs_core_device:
- * the handle's reference count is incremented internally; the caller
+ * the underlying device's reference count is incremented internally
+ * (the handle itself is not retained); the caller
  * still owns their *FsCoreDevice and frees it via
  * `fs_core_device_close`. Closing the resulting fs_ext4_fs_t via
  * `fs_ext4_umount` drops the mount's own reference.

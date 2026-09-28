@@ -554,10 +554,12 @@ mod tests {
 
     /// The boundary itself: 127 bytes is refused, 128 is checked.
     ///
-    /// 128 is where `verify_inode`'s own field lives — `i_checksum_lo`
-    /// at 0x7C..0x7E — so a buffer one byte shorter cannot hold it.
+    /// 128 is not where `verify_inode`'s own field ends — `i_checksum_lo`
+    /// sits at 0x7C..0x7E, so 126 bytes would hold it. It is the whole
+    /// fixed ext2 inode, every byte of which the checksum covers, so a
+    /// shorter buffer cannot be checked even when it holds the field.
     #[test]
-    fn the_inode_length_boundary_is_where_the_field_ends() {
+    fn the_inode_length_boundary_is_the_whole_fixed_inode() {
         let c = enabled();
         assert!(!c.verify_inode(2, 0, &[0u8; 127]), "127 is too short");
         // 128 bytes of zeros is a real check that simply fails: the
@@ -565,6 +567,35 @@ mod tests {
         assert!(
             !c.verify_inode(2, 0, &[0u8; 128]),
             "128 is checked, and all-zero bytes do not verify"
+        );
+
+        // A 128-byte inode with a correct checksum verifies.
+        let mut raw: Vec<u8> = (0..128u32).map(|i| (i * 7 + 3) as u8).collect();
+        let (lo, _) = c.compute_inode_checksum(2, 5, &raw).unwrap();
+        raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
+        assert!(c.verify_inode(2, 5, &raw), "a correct checksum verifies");
+
+        // The bytes past the field are covered: 0x7E..0x80 is after
+        // `i_checksum_lo` and still inside the fixed inode.
+        let mut past_the_field = raw.clone();
+        past_the_field[0x7F] ^= 0x01;
+        assert!(
+            !c.verify_inode(2, 5, &past_the_field),
+            "a byte after i_checksum_lo is part of the checksum"
+        );
+
+        // 126 bytes hold the field, and carry a checksum that is correct
+        // over those 126 bytes — and are still refused, because they are
+        // not the whole fixed inode the checksum is defined over.
+        let mut holds_the_field = raw[..0x7E].to_vec();
+        holds_the_field[0x7C..0x7E].fill(0);
+        let mut crc = linux_crc32c(c.seed, &2u32.to_le_bytes());
+        crc = linux_crc32c(crc, &5u32.to_le_bytes());
+        crc = linux_crc32c(crc, &holds_the_field);
+        holds_the_field[0x7C..0x7E].copy_from_slice(&(crc as u16).to_le_bytes());
+        assert!(
+            !c.verify_inode(2, 5, &holds_the_field),
+            "126 bytes hold i_checksum_lo and are still too short"
         );
     }
 
