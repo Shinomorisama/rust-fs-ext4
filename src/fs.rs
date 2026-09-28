@@ -297,6 +297,60 @@ fn write_inode_extra_isize(raw: &mut [u8]) {
     }
 }
 
+/// The uninit flags a mount has cleared since it read its descriptors, and
+/// the descriptors with those flags applied.
+///
+/// One lock holds both, and every change to `cleared` goes through a method
+/// here that drops `overridden` with it, so the cached vector cannot outlive
+/// the state it was built from.
+#[derive(Default)]
+struct AllocationState {
+    /// Group index to the descriptor flags its clear left behind.
+    cleared: HashMap<usize, u16>,
+    /// `Filesystem::groups` with `cleared` applied. Built on first use and
+    /// shared by every read after it, until the next change.
+    overridden: Option<Arc<[BlockGroupDescriptor]>>,
+}
+
+impl AllocationState {
+    /// Take in the clears a committed buffer staged.
+    fn publish(&mut self, cleared: BTreeMap<usize, u16>) {
+        if cleared.is_empty() {
+            return;
+        }
+        for (gi, flags) in cleared {
+            self.cleared
+                .entry(gi)
+                .and_modify(|f| *f &= flags)
+                .or_insert(flags);
+        }
+        self.overridden = None;
+    }
+
+    /// Forget every clear: the descriptors were read again and carry them.
+    fn reset(&mut self) {
+        self.cleared.clear();
+        self.overridden = None;
+    }
+}
+
+/// The descriptors the allocators plan against: the mount-time snapshot
+/// itself, or the cached copy with this mount's cleared flags applied.
+pub(crate) enum AllocationGroups<'a> {
+    Snapshot(&'a [BlockGroupDescriptor]),
+    Overridden(Arc<[BlockGroupDescriptor]>),
+}
+
+impl std::ops::Deref for AllocationGroups<'_> {
+    type Target = [BlockGroupDescriptor];
+    fn deref(&self) -> &[BlockGroupDescriptor] {
+        match self {
+            Self::Snapshot(groups) => groups,
+            Self::Overridden(groups) => groups,
+        }
+    }
+}
+
 pub struct Filesystem {
     runtime: Arc<dyn crate::runtime::Runtime>,
     managed_recovery: bool,
@@ -318,7 +372,7 @@ pub struct Filesystem {
     ///
     /// Read through [`Filesystem::allocation_groups`], which is what the
     /// planners must be given.
-    uninit_cleared: Mutex<HashMap<usize, u16>>,
+    uninit_cleared: Mutex<AllocationState>,
     pub csum: Checksummer,
     /// Dialect detected at mount time from the superblock's feature flags.
     /// Drives runtime dispatch where ext2 / ext3 / ext4 differ — most
@@ -592,7 +646,7 @@ impl Filesystem {
         self.uninit_cleared
             .lock()
             .map_err(|_| Error::Corrupt("allocation state poisoned"))?
-            .clear();
+            .reset();
         Ok(())
     }
 
@@ -696,7 +750,7 @@ impl Filesystem {
             dev,
             sb,
             groups,
-            uninit_cleared: Mutex::new(HashMap::new()),
+            uninit_cleared: Mutex::new(AllocationState::default()),
             csum,
             flavor,
             journal: None,
@@ -820,6 +874,11 @@ impl Filesystem {
         }
         self.groups = bgd::read_all(self.dev.as_ref(), &sb, &csum)?;
         sb.check_fits_device(self.dev.size_bytes())?;
+        // The cached override was built from the descriptors just replaced.
+        self.uninit_cleared
+            .get_mut()
+            .map_err(|_| Error::Corrupt("allocation state poisoned"))?
+            .overridden = None;
         self.flavor = features::FsFlavor::detect(sb.feature_compat, sb.feature_incompat);
         self.csum = csum;
         self.sb = sb;
@@ -2286,11 +2345,9 @@ impl Filesystem {
         gi: usize,
         which: BgdUninitFlag,
     ) -> Result<bool> {
-        const INODE_UNINIT: u16 = 0x0001;
-        const BLOCK_UNINIT: u16 = 0x0002;
         let flag = match which {
-            BgdUninitFlag::Inode => INODE_UNINIT,
-            BgdUninitFlag::Block => BLOCK_UNINIT,
+            BgdUninitFlag::Inode => bgd::BgdFlags::INODE_UNINIT.bits(),
+            BgdUninitFlag::Block => bgd::BgdFlags::BLOCK_UNINIT.bits(),
         };
 
         // Where the descriptor lives, META_BG or not (#73).
@@ -2325,16 +2382,24 @@ impl Filesystem {
     /// snapshot, with any uninit flag this mount has since cleared taken back
     /// out. Borrows the snapshot untouched in the overwhelmingly common case
     /// where nothing has been cleared yet.
-    fn allocation_groups(&self) -> Cow<'_, [BlockGroupDescriptor]> {
-        let cleared = self.uninit_cleared.lock().unwrap();
-        if cleared.is_empty() {
-            return Cow::Borrowed(&self.groups);
+    ///
+    /// Otherwise the overridden copy is built once and shared until the next
+    /// clear is published (#333): this is called on every allocation,
+    /// several times inside the write retry loop, and cloning every
+    /// descriptor of a large volume each time cost more than the plan.
+    fn allocation_groups(&self) -> AllocationGroups<'_> {
+        let mut state = self.uninit_cleared.lock().unwrap();
+        if state.cleared.is_empty() {
+            return AllocationGroups::Snapshot(&self.groups);
         }
-        let mut groups = self.groups.clone();
-        for (&gi, &flags) in cleared.iter() {
-            groups[gi].flags = flags;
+        if state.overridden.is_none() {
+            let mut groups = self.groups.clone();
+            for (&gi, &flags) in state.cleared.iter() {
+                groups[gi].flags = flags;
+            }
+            state.overridden = Some(groups.into());
         }
-        Cow::Owned(groups)
+        AllocationGroups::Overridden(state.overridden.clone().unwrap())
     }
 
     /// Plan a block allocation inside an open transaction: bitmaps come from
@@ -2363,7 +2428,8 @@ impl Filesystem {
         hint: u32,
         reserved: &[u64],
     ) -> Result<crate::alloc::BlockAllocationPlan> {
-        let mut groups = self.allocation_groups();
+        let base = self.allocation_groups();
+        let mut groups = Cow::Borrowed(&*base);
         for (&gi, &flags) in &buf.uninit_cleared {
             if let Some(g) = groups.to_mut().get_mut(gi) {
                 g.flags = flags;
@@ -3088,12 +3154,7 @@ impl Filesystem {
             return Ok(());
         }
         let cleared = buf.uninit_cleared.clone();
-        let publish = |fs: &Self| {
-            let mut map = fs.uninit_cleared.lock().unwrap();
-            for (gi, flags) in cleared {
-                map.entry(gi).and_modify(|f| *f &= flags).or_insert(flags);
-            }
-        };
+        let publish = |fs: &Self| fs.uninit_cleared.lock().unwrap().publish(cleared);
         if let Some(jw_mu) = &self.journal {
             let mut jw = jw_mu.lock().map_err(|_| {
                 Error::Corrupt("journal writer mutex poisoned (prior write panicked)")
@@ -6133,11 +6194,20 @@ impl Filesystem {
     /// that csum stale, so e2fsck reported "block bitmap does not match
     /// checksum" once a directory grew a block) and its BGD + SB free-count
     /// deltas.
+    ///
+    /// The block is the plan's own, and a plan for anything but one block is
+    /// refused whole, rather than marking one block of it and applying the
+    /// counter deltas of all of them (#333).
     fn buffer_dir_block_alloc(
         &self,
         buf: &mut BlockBuffer,
         plan: &crate::alloc::BlockAllocationPlan,
     ) -> Result<()> {
+        if plan.count != 1 {
+            return Err(Error::Corrupt(
+                "buffer_dir_block_alloc: a directory block plan must allocate exactly one block",
+            ));
+        }
         self.buffer_mark_block_run_used(buf, plan.first_block, 1)?;
         self.buffer_patch_bgd_counters(
             buf,
@@ -7285,6 +7355,117 @@ mod tests {
         assert_ne!(
             first, second,
             "the second allocation handed out block {first} again"
+        );
+    }
+
+    /// Set `flag` in group `gi`'s on-disk descriptor, restamping its
+    /// checksum, behind the back of any mount.
+    fn set_group_flag(dev: &std::sync::Arc<MemDev>, gi: u64, flag: crate::bgd::BgdFlags) {
+        let fs = mount(dev);
+        let bs = u64::from(fs.sb.block_size());
+        let (bgt_block, off) = fs.sb.descriptor_location(gi);
+        let ds = fs.sb.desc_size as usize;
+        let mut raw = fs.read_block(bgt_block).unwrap();
+        let flags =
+            u16::from_le_bytes(raw[off + 0x12..off + 0x14].try_into().unwrap()) | flag.bits();
+        raw[off + 0x12..off + 0x14].copy_from_slice(&flags.to_le_bytes());
+        if let Some(c) =
+            crate::checksum::group_desc_csum(&fs.sb, &fs.csum, gi as u32, &raw[off..off + ds])
+        {
+            raw[off + 0x1e..off + 0x20].copy_from_slice(&c.to_le_bytes());
+        }
+        drop(fs);
+        dev.write_at(bgt_block * bs, &raw).unwrap();
+    }
+
+    fn block_uninit(fs: &Filesystem, gi: usize) -> bool {
+        fs.allocation_groups()[gi]
+            .flags()
+            .contains(crate::bgd::BgdFlags::BLOCK_UNINIT)
+    }
+
+    /// Clear group `gi`'s BLOCK_UNINIT in a transaction of its own and
+    /// commit it, which is what publishes the change to the mount.
+    fn clear_and_publish(fs: &Filesystem, gi: usize) {
+        let mut buf = BlockBuffer::new(fs.sb.block_size());
+        assert!(fs
+            .clear_bgd_uninit_flag_if_set(&mut buf, gi, BgdUninitFlag::Block)
+            .unwrap());
+        // No counter moves; this is what restamps the descriptor checksum.
+        fs.buffer_patch_bgd_counters(&mut buf, gi, 0, 0, 0).unwrap();
+        fs.commit_block_buffer(buf).unwrap();
+    }
+
+    /// The descriptors the planners are handed are cached once any uninit
+    /// flag has been cleared, rather than cloned on every call (#333). A
+    /// cache read before a transaction publishes must not survive it: the
+    /// planner would go on treating the group the transaction woke as
+    /// untouched, and hand out its blocks again without reading its bitmap.
+    #[test]
+    fn a_published_uninit_clear_is_seen_through_the_cached_descriptors() {
+        // 2 KiB blocks put 16,384 in a group, so 128 MiB is four groups:
+        // more than one to wake.
+        const MULTI: u64 = 128 * 1024 * 1024;
+        let dev = MemDev::new(MULTI);
+        crate::mkfs::format_filesystem(dev.as_ref(), Some("cache"), None, MULTI, 2048)
+            .expect("format");
+        for gi in [1, 2, 3] {
+            set_group_flag(&dev, gi, crate::bgd::BgdFlags::BLOCK_UNINIT);
+        }
+        let mut fs = mount(&dev);
+        assert!(fs.groups.len() >= 4, "{} groups", fs.groups.len());
+        assert!(block_uninit(&fs, 1) && block_uninit(&fs, 2) && block_uninit(&fs, 3));
+
+        // First publish: from here on the descriptors come from the cache,
+        // and this read fills it.
+        clear_and_publish(&fs, 1);
+        assert!(!block_uninit(&fs, 1));
+        assert!(block_uninit(&fs, 2));
+
+        // Second publish, with the cache full.
+        clear_and_publish(&fs, 2);
+        assert!(!block_uninit(&fs, 1), "an earlier clear was lost");
+        assert!(
+            !block_uninit(&fs, 2),
+            "a transaction published and the planners still see the group it woke as uninit"
+        );
+        assert!(block_uninit(&fs, 3));
+
+        // Re-reading the descriptors (`fresh_read`) resets what the mount
+        // has cleared, and must drop the cache with it: the next publish
+        // builds on the descriptors as read now.
+        fs.fresh_read().unwrap();
+        assert!(!block_uninit(&fs, 1) && !block_uninit(&fs, 2) && block_uninit(&fs, 3));
+        clear_and_publish(&fs, 3);
+        assert!(!block_uninit(&fs, 1) && !block_uninit(&fs, 2) && !block_uninit(&fs, 3));
+    }
+
+    /// A directory block is one block. A plan for any other count is refused
+    /// whole, rather than marking one block of it and applying the plan's
+    /// counter deltas for all of them (#333).
+    #[test]
+    fn a_dir_block_commit_refuses_a_plan_for_more_than_one_block() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let plan = fs
+            .plan_buffered_block_allocation(&BlockBuffer::new(BS), 2, 0)
+            .unwrap();
+        assert_eq!(plan.count, 2);
+        let before = dev.bytes.lock().unwrap().clone();
+        let mut buf = BlockBuffer::new(BS);
+        let got = fs.buffer_dir_block_alloc(&mut buf, &plan);
+        assert!(
+            matches!(got, Err(Error::Corrupt(_))),
+            "a count-2 plan was staged as a directory block: {got:?}"
+        );
+        assert!(
+            buf.dirty.is_empty() && buf.uninit_cleared.is_empty(),
+            "the refused plan staged {} blocks",
+            buf.dirty.len()
+        );
+        assert!(
+            *dev.bytes.lock().unwrap() == before,
+            "the refused plan wrote to the device"
         );
     }
 
