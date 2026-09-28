@@ -133,13 +133,15 @@ chore_min_version: 0.6.0
 #                                                    36404048578), which failed
 #                                                    the tier with exit 65 and
 #                                                    nothing red inside it
-#     kernel       71 /   4,090      100 /   5,600   ~40% / ~37%. Five tests
-#                                                    since #380 added one:
-#                                                    measured on the x86_64
-#                                                    CI job of PR #413, which
-#                                                    passed and printed 4,090
-#                                                    bytes over the old 4,000
-#                                                    (was 52 / 3,012 for four)
+#     kernel      108 /   6,045      140 /   7,900   ~30% / ~31%. Six tests
+#                                                    since #427 added the
+#                                                    inline-directory readback:
+#                                                    the x86_64 CI job of PR
+#                                                    #431 (run 36435740119)
+#                                                    passed and printed 108 /
+#                                                    6,045 over 100 / 5,600.
+#                                                    Was 71 / 4,090 for five
+#                                                    (#413), 52 / 3,012 for four
 #     lwext4       65 /   5,243       85 /   6,800   ~31% / ~30%: eight tests
 #                                                    and sixteen [oracle vm]
 #                                                    lines, so one more
@@ -448,7 +450,7 @@ tasks:
     # written — plus the reverse direction, and a deliberate corruption
     # that must fail.
     cmds:
-      - 'scripts/tier.sh test:kernel kernel 100 5600 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
+      - 'scripts/tier.sh test:kernel kernel 140 7900 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
       - 'scripts/test-floor.sh kernel 3'
 
   test:lwext4:
