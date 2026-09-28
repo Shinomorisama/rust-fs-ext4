@@ -383,6 +383,16 @@ Not caught by the compiler — the same source builds and behaves differently:
   volume `e2fsck` called clean, and every edit re-sorted a kernel-written
   block the same wrong way. Entries are now written in the kernel's order.
 
+- **Orphan recovery reads no block map out of a fast symlink or an inline
+  file** (#384). It freed a legacy block map whenever `i_blocks` was
+  non-zero, but `i_blocks` also counts an external xattr block, so a fast
+  symlink or inline file holding one — a security label that does not fit
+  in the inode — had its target text or data read as direct pointers, and
+  the blocks they named, other files' blocks, were freed. Text naming no
+  block left the member on the chain, and every orphan behind it with it.
+  Recovery now decides as unlink does (`holds_block_map`: not inline, and
+  more sectors than the xattr block), and the xattr block is still
+  released.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
