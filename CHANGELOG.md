@@ -401,6 +401,16 @@ Not caught by the compiler — the same source builds and behaves differently:
   `pwrite` does, drawing the node blocks in the same transaction and
   counting them in `i_blocks` and the free-block counts.
 
+- **A rename within an indexed directory whose new name splits a full leaf
+  no longer fails with `NotFound` (#392).** The new name is added first, and
+  when its leaf is full the leaf splits, moving its upper-hash half to a new
+  block past the directory's old end. The old name was then removed through
+  the directory's inode as read before the split, whose size stops short of
+  that block, so an old name among those moved was not found and the rename
+  was refused. Both rename paths now re-read the source directory through
+  the transaction's buffer before removing from it. Nothing was written, so
+  no volume was damaged. `tests/htree_dir_writes_oracle.rs` renames such a
+  name in an index built by `e2fsck -D` and has `e2fsck -fn` judge it.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

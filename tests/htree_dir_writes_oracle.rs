@@ -365,3 +365,139 @@ fn a_corrupt_index_root_is_neither_routed_through_nor_restamped() {
     );
     let _ = std::fs::remove_file(&image);
 }
+
+/// A rename within one indexed directory whose new name lands in a full
+/// leaf, and whose old name is among those the split moves out (#392).
+///
+/// The destination's leaf is first filled, by creates that each still fit
+/// it, until the new name does not. The new name is added first. Its leaf is
+/// full, so the leaf splits and
+/// the upper-hash half moves to a new block past the directory's old end.
+/// The old name was then removed through the directory's inode as read
+/// before the split, whose size stops short of that block: the name was not
+/// found and a legal rename failed with `NotFound`. Afterwards the new name
+/// must resolve to the renamed inode, the old one must be gone, and e2fsck
+/// must be clean.
+fn rename_out_of_a_splitting_leaf(tag: &str, features: &str) {
+    use fs_ext4::dir::{has_csum_tail, parse_block};
+
+    let image = indexed_volume(tag, features, 600);
+    let dst = "renamed_into_a_full_leaf".to_string();
+    let (src, src_ino) = {
+        let fs = Filesystem::mount(Arc::new(FileDevice::open_rw(&image).unwrap())).unwrap();
+        let bs = fs.sb.block_size() as usize;
+        let slot = |len: usize| (8 + len).div_ceil(4) * 4;
+        // The leaf the index routes `name` to, its logical number and bytes,
+        // and the room left in it.
+        let leaf_of = |name: &str| {
+            let bigdir = resolve(&fs, "/bigdir").unwrap();
+            let (inode, _) = fs.read_inode_verified(bigdir).unwrap();
+            let block = |logical: u64| {
+                fs.read_block(fs.map_inode_logical(&inode, logical).unwrap().unwrap())
+                    .unwrap()
+            };
+            let root = block(0);
+            let logical = fs_ext4::htree::lookup_leaf_with(
+                name.as_bytes(),
+                &root,
+                &fs.sb.hash_seed,
+                fs.sb.unsigned_hash(),
+                |logical| Ok(block(u64::from(logical))),
+            )
+            .unwrap()
+            .unwrap();
+            let leaf = block(u64::from(logical));
+            let tail = if has_csum_tail(&leaf) { 12 } else { 0 };
+            let used: usize = parse_block(&leaf, true)
+                .unwrap()
+                .iter()
+                .map(|e| slot(e.name.len()))
+                .sum();
+            (logical, leaf, tail, bs - tail - used)
+        };
+
+        // `e2fsck -D` leaves slack in its leaves, so fill the destination's
+        // leaf with names routed to it, each of which still fits, until the
+        // destination name no longer does.
+        let (target, _, _, _) = leaf_of(&dst);
+        let mut filler = 0;
+        loop {
+            let (_, _, _, room) = leaf_of(&dst);
+            if room < slot(dst.len()) {
+                break;
+            }
+            loop {
+                filler += 1;
+                assert!(filler < 200_000, "[{tag}] fixture: no filler fits the leaf");
+                let name = format!("filler_{filler:06}");
+                if leaf_of(&name).0 == target && room >= slot(name.len()) {
+                    fs.apply_create(&format!("/bigdir/{name}"), 0o644)
+                        .expect("create a filler");
+                    break;
+                }
+            }
+        }
+        let (logical, leaf, tail, _) = leaf_of(&dst);
+        assert_eq!(logical, target, "[{tag}] the fillers split the leaf early");
+
+        // A name in the upper-hash half, which the split moves out.
+        let root = {
+            let bigdir = resolve(&fs, "/bigdir").unwrap();
+            let (inode, _) = fs.read_inode_verified(bigdir).unwrap();
+            fs.read_block(fs.map_inode_logical(&inode, 0).unwrap().unwrap())
+                .unwrap()
+        };
+        assert_eq!(root[30], 0, "[{tag}] fixture: expected a one-level index");
+        let info = fs_ext4::htree::parse_root_info(&root).unwrap();
+        let version = fs_ext4::hash::effective_version(info.hash_version, fs.sb.unsigned_hash());
+        let split =
+            fs_ext4::htree_mut::plan_leaf_split(&leaf, version, &fs.sb.hash_seed, true, bs, tail)
+                .unwrap();
+        let src = parse_block(&leaf, true)
+            .unwrap()
+            .into_iter()
+            .find(|e| {
+                fs_ext4::hash::name_hash(&e.name, version, &fs.sb.hash_seed).major
+                    >= split.split_out_hash
+            })
+            .map(|e| String::from_utf8(e.name).unwrap())
+            .unwrap_or_else(|| panic!("[{tag}] fixture: the split moves no name"));
+        let src_ino = resolve(&fs, &format!("/bigdir/{src}")).unwrap();
+        (src, src_ino)
+    };
+    {
+        let fs = Filesystem::mount(Arc::new(FileDevice::open_rw(&image).unwrap())).unwrap();
+        fs.apply_rename(&format!("/bigdir/{src}"), &format!("/bigdir/{dst}"), false)
+            .unwrap_or_else(|e| panic!("[{tag}] rename {src} -> {dst}: {e:?}"));
+        assert!(
+            is_indexed(&fs, "/bigdir"),
+            "[{tag}] the leaf split, not the index dropped"
+        );
+        assert_eq!(
+            resolve(&fs, &format!("/bigdir/{dst}")).ok(),
+            Some(src_ino),
+            "[{tag}] {dst} names the renamed inode"
+        );
+        assert!(
+            matches!(
+                resolve(&fs, &format!("/bigdir/{src}")),
+                Err(fs_ext4::Error::NotFound)
+            ),
+            "[{tag}] {src} is gone"
+        );
+    }
+    if let Err(report) = e2fsck_clean(&image) {
+        panic!("[{tag}] e2fsck after a rename that split a leaf:\n{report}");
+    }
+    let _ = std::fs::remove_file(&image);
+}
+
+#[test]
+fn a_rename_that_splits_its_own_leaf_without_metadata_csum() {
+    rename_out_of_a_splitting_leaf("rename_split_nocsum", "^metadata_csum,^has_journal");
+}
+
+#[test]
+fn a_rename_that_splits_its_own_leaf_with_metadata_csum() {
+    rename_out_of_a_splitting_leaf("rename_split_csum", "metadata_csum");
+}
