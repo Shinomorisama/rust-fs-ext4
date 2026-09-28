@@ -1558,6 +1558,17 @@ tasks:
 /// anything after a bare `--` is rustfmt's, not cargo's, so it is cut:
 /// `cargo fmt --check -- --all` does not select every package.
 fn cargo_fmt_runs(command: &str) -> Vec<Vec<String>> {
+    cargo_runs(command, "fmt")
+        .into_iter()
+        .map(|(cargo, _)| cargo)
+        .collect()
+}
+
+/// Every `cargo <subcommand>` run in `command`, as `(cargo's words from
+/// the subcommand onward, the words after a bare `--`)`. The second half
+/// belongs to the tool the subcommand drives -- rustfmt, or clippy's
+/// lint flags -- and never selects a package.
+fn cargo_runs(command: &str, subcommand: &str) -> Vec<(Vec<String>, Vec<String>)> {
     let mut runs = Vec::new();
     for raw in command.lines() {
         let line = raw.trim_start();
@@ -1568,8 +1579,7 @@ fn cargo_fmt_runs(command: &str) -> Vec<Vec<String>> {
         for words in shell_commands(line) {
             let mut words = words
                 .into_iter()
-                .skip_while(|w| w.contains('=') && !w.starts_with('-'))
-                .take_while(|w| w != "--");
+                .skip_while(|w| w.contains('=') && !w.starts_with('-'));
             let Some(program) = words.next() else {
                 continue;
             };
@@ -1577,9 +1587,16 @@ fn cargo_fmt_runs(command: &str) -> Vec<Vec<String>> {
                 continue;
             }
             let mut rest = words.skip_while(|w| w.starts_with('+'));
-            if rest.next().as_deref() == Some("fmt") {
-                runs.push(std::iter::once("fmt".to_string()).chain(rest).collect());
+            if rest.next().as_deref() != Some(subcommand) {
+                continue;
             }
+            let rest: Vec<String> = rest.collect();
+            let split = rest.iter().position(|w| w == "--").unwrap_or(rest.len());
+            let cargo = std::iter::once(subcommand.to_string())
+                .chain(rest[..split].iter().cloned())
+                .collect();
+            let tool = rest.get(split + 1..).unwrap_or_default().to_vec();
+            runs.push((cargo, tool));
         }
     }
     runs
@@ -1725,6 +1742,179 @@ mod lint_fmt {
     #[test]
     fn formatting_in_place_and_comments_are_not_checks() {
         let (checks, _) = lint("      - cargo fmt\n      - '# cargo fmt --all --check'\n");
+        assert!(checks.is_empty());
+    }
+}
+
+/// The clippy check `chore lint` runs, as `(checks, missing_workspace)`:
+/// every gating `cargo clippy` that denies warnings, and those among
+/// them that lint only the root package.
+///
+/// Clippy has no `fmt --all`: its lints reach workspace members and
+/// nothing else, so a local path dependency is linted only once it is a
+/// member AND the run selects every member. The second half is asserted
+/// here; the first against `cargo metadata` in the test below.
+fn lint_clippy_checks(chores: &str) -> (Vec<String>, Vec<String>) {
+    let tasks = parse_chores(chores);
+    let mut checks = Vec::new();
+    let mut missing_workspace = Vec::new();
+    for command in chore_gating_commands(&tasks, "lint", &mut Vec::new()) {
+        for (run, lints) in cargo_runs(&command, "clippy") {
+            let denies_warnings = lints
+                .windows(2)
+                .any(|w| (w[0] == "-D" || w[0] == "--deny") && w[1] == "warnings")
+                || lints.iter().any(|w| w == "-Dwarnings");
+            if !denies_warnings {
+                continue;
+            }
+            let shown = format!("cargo {}", run.join(" "));
+            if !run.iter().any(|w| w == "--workspace" || w == "--all") {
+                missing_workspace.push(shown.clone());
+            }
+            checks.push(shown);
+        }
+    }
+    (checks, missing_workspace)
+}
+
+/// The crates the root manifest reaches by a path inside this tree,
+/// and the directories of the workspace members, as `cargo metadata`
+/// reports them. Cargo is the oracle for what clippy will reach, rather
+/// than a reading of `[workspace]` here that could disagree with it.
+///
+/// `--no-deps` resolves nothing, so it needs no registry and runs the
+/// same offline on every host; it also lists members only, which is why
+/// the local crates are found from the manifest's `path = "..."` values
+/// (every one naming a directory that holds a `Cargo.toml`).
+fn local_crates_and_members() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let root = manifest_dir();
+    let manifest = read_or_panic(&root.join("Cargo.toml"));
+    let mut local: Vec<PathBuf> = vec![root.clone()];
+    for line in manifest.lines() {
+        let line = line.split('#').next().unwrap_or_default();
+        for piece in line.split("path").skip(1) {
+            let Some(value) = piece.trim_start().strip_prefix('=') else {
+                continue;
+            };
+            let Some(value) = value.trim_start().strip_prefix('"') else {
+                continue;
+            };
+            let dir = value.split('"').next().unwrap_or_default();
+            if dir.starts_with("..") || !root.join(dir).join("Cargo.toml").is_file() {
+                continue;
+            }
+            local.push(root.join(dir));
+        }
+    }
+    let output = std::process::Command::new("cargo")
+        .args([
+            "metadata",
+            "--no-deps",
+            "--offline",
+            "--format-version",
+            "1",
+        ])
+        .arg("--manifest-path")
+        .arg(root.join("Cargo.toml"))
+        .output()
+        .unwrap_or_else(|e| panic!("cannot run `cargo metadata`: {e}"));
+    assert!(
+        output.status.success(),
+        "`cargo metadata` failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).expect("cargo metadata prints UTF-8");
+    // JSON is YAML 1.2, so the parser this file already uses reads it.
+    let documents = Yaml::load_from_str(&text).expect("cargo metadata prints JSON");
+    let metadata = documents.first().expect("cargo metadata prints a document");
+    let members = field(metadata, "packages")
+        .and_then(Yaml::as_sequence)
+        .expect("cargo metadata has a `packages` list")
+        .iter()
+        .filter_map(|package| field(package, "manifest_path").and_then(Yaml::as_str))
+        .filter_map(|path| Path::new(path).parent().map(Path::to_path_buf))
+        .collect();
+    (local, members)
+}
+
+/// THE CLIPPY GATE COVERS EVERY CRATE IN THIS TREE (#410).
+///
+/// The same gap as #367, for clippy: `tests/support` was a path
+/// dependency and not a workspace member, and clippy lints members
+/// only, so no flag on the root invocation reached it and a finding in
+/// it sat on `main` with the gate green. Both halves are needed: every
+/// local crate a member, and a `chore lint` clippy run over the whole
+/// workspace.
+#[test]
+fn the_lint_clippy_check_covers_every_local_crate() {
+    let chores = read_or_panic(&manifest_dir().join("chores.yml"));
+    let (checks, missing_workspace) = lint_clippy_checks(&chores);
+    assert!(
+        !checks.is_empty(),
+        "`chore lint` runs no gating `cargo clippy ... -- -D warnings`, so nothing lints at all"
+    );
+    assert!(
+        missing_workspace.is_empty(),
+        "`chore lint` runs clippy without `--workspace`, which lints the root package only: \
+         {missing_workspace:?}"
+    );
+    let (local, members) = local_crates_and_members();
+    let outside: Vec<&PathBuf> = local.iter().filter(|dir| !members.contains(dir)).collect();
+    assert!(
+        local.len() > 1,
+        "cargo metadata reports {local:?} as the local packages; tests/support is missing, \
+         so this check would pass having looked at nothing"
+    );
+    assert!(
+        outside.is_empty(),
+        "local crates that are not workspace members, which clippy never lints: {outside:?}"
+    );
+}
+
+mod lint_clippy {
+    use super::lint_clippy_checks;
+
+    fn lint(cmds: &str) -> (Vec<String>, Vec<String>) {
+        lint_clippy_checks(&format!("tasks:\n  lint:\n    cmds:\n{cmds}"))
+    }
+
+    #[test]
+    fn a_run_over_the_root_package_only_is_refused() {
+        let (checks, missing) =
+            lint("      - cargo clippy --locked --all-targets -- -D warnings\n");
+        assert_eq!(checks, vec!["cargo clippy --locked --all-targets"]);
+        assert_eq!(missing, checks);
+    }
+
+    #[test]
+    fn a_run_over_the_workspace_is_accepted() {
+        let (checks, missing) =
+            lint("      - cargo clippy --locked --workspace --all-targets -- -D warnings\n");
+        assert_eq!(checks.len(), 1);
+        assert!(missing.is_empty());
+    }
+
+    /// Past `--` the words are clippy's lint flags, and select nothing.
+    #[test]
+    fn a_workspace_handed_to_clippy_does_not_count() {
+        let (_, missing) = lint("      - cargo clippy -- -D warnings --workspace\n");
+        assert_eq!(missing.len(), 1);
+    }
+
+    /// A run that only warns gates nothing, so it is not a check.
+    #[test]
+    fn a_run_that_does_not_deny_warnings_is_not_a_check() {
+        let (checks, _) = lint("      - cargo clippy --workspace\n");
+        assert!(checks.is_empty());
+        let (checks, _) = lint("      - cargo clippy --workspace -- -Dwarnings\n");
+        assert_eq!(checks.len(), 1);
+    }
+
+    #[test]
+    fn a_run_whose_failure_is_ignored_does_not_count() {
+        let (checks, _) = lint(
+            "      - cmd: cargo clippy --workspace -- -D warnings\n        ignore_error: true\n",
+        );
         assert!(checks.is_empty());
     }
 }
