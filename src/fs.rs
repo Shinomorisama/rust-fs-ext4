@@ -1317,7 +1317,12 @@ impl Filesystem {
         // its size reaches -- the bound the kernel's truncate uses -- in
         // this same transaction. This used to free the inode alone, which
         // left all of those blocks allocated and named by nothing (#79).
-        if !parsed.has_extents() && parsed.blocks > 0 {
+        //
+        // Only an inode whose i_block holds pointers, decided as unlink
+        // decides it: a fast symlink's target or an inline file's data is
+        // no block map, and `i_blocks` also counts an xattr block, so
+        // `blocks > 0` alone freed the blocks their text named (#384).
+        if !parsed.has_extents() && Self::holds_block_map(&parsed, bs) {
             let data_blocks = u32::try_from(parsed.size.div_ceil(bs as u64))
                 .map_err(|_| Error::Corrupt("orphan: indirect file too large to map"))?;
             let Ok(tree) = crate::indirect_mut::collect_for_free(
@@ -7672,6 +7677,130 @@ mod tests {
         fs.commit_block_buffer(buf).expect("commit");
     }
 
+    /// Give `ino` an external xattr block the way a security label that does
+    /// not fit in the inode would, counted in `i_blocks`. Returns the block.
+    fn give_xattr_block(fs: &Filesystem, ino: u32) -> u64 {
+        let mut buf = BlockBuffer::new(BS);
+        let xb = fs.buffer_allocate_block(&mut buf, ino).unwrap();
+        let mut blk = vec![0u8; BS as usize];
+        crate::xattr::plan_set_in_external_block(&mut blk, "security.selinux", &[b'z'; 32], 1)
+            .unwrap();
+        fs.csum.patch_xattr_block(xb, &mut blk);
+        buf.put(xb, blk);
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        Filesystem::write_file_acl(&mut raw, xb).unwrap();
+        Filesystem::patch_inode_size_and_blocks(&mut raw, inode.size, inode.blocks + 8).unwrap();
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.buffer_write_inode(&mut buf, ino, &raw).unwrap();
+        fs.commit_block_buffer(buf).unwrap();
+        xb
+    }
+
+    /// Whether `block` is marked in use in its group's bitmap.
+    fn block_bit_set(fs: &Filesystem, block: u64) -> bool {
+        let rel = block - fs.sb.first_data_block as u64;
+        let gi = (rel / fs.sb.blocks_per_group as u64) as usize;
+        let bit = (rel % fs.sb.blocks_per_group as u64) as usize;
+        let bm = fs.read_block(fs.groups[gi].block_bitmap).unwrap();
+        bm[bit / 8] & (1 << (bit % 8)) != 0
+    }
+
+    /// #384: orphan recovery must not read a fast symlink's target as a
+    /// block map because it also holds an xattr block. The member is still
+    /// reclaimed, its xattr block with it.
+    #[test]
+    fn recovering_an_orphaned_fast_symlink_frees_no_block_named_by_its_target() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let victim = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+        let mut tb: Vec<u8> = (victim as u32).to_le_bytes().to_vec();
+        while tb.last() == Some(&0) {
+            tb.pop();
+        }
+        assert!(
+            tb.iter().all(|&b| b > 0 && b < 0x80),
+            "block {victim} not expressible as ASCII"
+        );
+        let t = String::from_utf8(tb).unwrap();
+        let ino = fs.apply_symlink(&t, "/l").unwrap();
+        let xb = give_xattr_block(&fs, ino);
+        plant_orphan(&fs, ino, 0, None);
+        drop(fs);
+        let fs = mount(&dev); // recovers orphans
+        assert!(
+            block_bit_set(&fs, victim),
+            "block {victim} (the root directory's) was freed by orphan recovery"
+        );
+        assert!(!block_bit_set(&fs, xb), "the xattr block {xb} was kept");
+        assert_eq!(fs.sb.last_orphan, 0, "the orphan chain was not drained");
+    }
+
+    /// #384: a fast symlink with an xattr block whose target, read as block
+    /// pointers, lies outside the volume is still reclaimed. It used to be
+    /// left on the chain, and every orphan behind it with it.
+    #[test]
+    fn an_orphaned_fast_symlink_whose_target_is_no_block_does_not_stall_the_chain() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let behind = fs.apply_create("/behind", 0o644).unwrap();
+        plant_orphan(&fs, behind, 0, None);
+        let ino = fs.apply_symlink("zzzz", "/l").unwrap();
+        let xb = give_xattr_block(&fs, ino);
+        // The symlink heads the chain; `behind` follows it.
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        raw[0x1A..0x1C].copy_from_slice(&0u16.to_le_bytes());
+        raw[0x14..0x18].copy_from_slice(&behind.to_le_bytes());
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        let mut buf = BlockBuffer::new(BS);
+        fs.buffer_write_inode(&mut buf, ino, &raw).unwrap();
+        fs.buffer_patch_sb_last_orphan(&mut buf, ino).unwrap();
+        fs.commit_block_buffer(buf).unwrap();
+        drop(fs);
+        let fs = mount(&dev); // recovers orphans
+        assert_eq!(fs.sb.last_orphan, 0, "the orphan chain was not drained");
+        assert!(!block_bit_set(&fs, xb), "the xattr block {xb} was kept");
+        for gone in [ino, behind] {
+            let (i, _) = fs.read_inode_verified(gone).unwrap();
+            assert_eq!(i.mode, 0, "orphan {gone} was not reclaimed");
+        }
+    }
+
+    /// #384: the same for an inline-data file holding an xattr block: its
+    /// data bytes are not block pointers.
+    #[test]
+    fn recovering_an_orphaned_inline_file_frees_no_block_named_by_its_data() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+        let fs = mount(&dev);
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let victim = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        let mut flags = u32::from_le_bytes(raw[0x20..0x24].try_into().unwrap());
+        flags &= !crate::inode::InodeFlags::EXTENTS.bits();
+        flags |= crate::inode::InodeFlags::INLINE_DATA.bits();
+        raw[0x20..0x24].copy_from_slice(&flags.to_le_bytes());
+        raw[0x28..0x64].fill(0);
+        raw[0x28..0x2C].copy_from_slice(&(victim as u32).to_le_bytes());
+        raw[0x04..0x08].copy_from_slice(&4u32.to_le_bytes());
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
+        let xb = give_xattr_block(&fs, ino);
+        plant_orphan(&fs, ino, 0, None);
+        drop(fs);
+        let fs = mount(&dev); // recovers orphans
+        assert!(
+            block_bit_set(&fs, victim),
+            "block {victim} (the root directory's) was freed by orphan recovery"
+        );
+        assert!(!block_bit_set(&fs, xb), "the xattr block {xb} was kept");
+        assert_eq!(fs.sb.last_orphan, 0, "the orphan chain was not drained");
+    }
+
     /// `s_state` straight off the device, as another handle -- or `e2fsck`
     /// -- would read it.
     fn on_disk_state(dev: &std::sync::Arc<MemDev>) -> u16 {
@@ -9513,6 +9642,45 @@ mod tests {
     /// Tests that run an oracle tool (they run in the harness VM): mkfs.ext4, e2fsck.
     mod needs_host {
         use super::*;
+
+        /// #384, judged by e2fsck: recovering an orphaned fast symlink that
+        /// holds an xattr block frees the inode and the xattr block and
+        /// nothing its target text names -- a freed in-use block is what
+        /// e2fsck's pass 5 reports.
+        #[test]
+        fn recovering_an_orphaned_fast_symlink_with_an_xattr_block_leaves_e2fsck_clean() {
+            let dev = formatted();
+            {
+                let fs = mount(&dev);
+                let (root, _) = fs.read_inode_verified(2).unwrap();
+                let victim = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+                let mut tb: Vec<u8> = (victim as u32).to_le_bytes().to_vec();
+                while tb.last() == Some(&0) {
+                    tb.pop();
+                }
+                let target = String::from_utf8(tb).expect("an ASCII block number");
+                let ino = fs.apply_symlink(&target, "/l").unwrap();
+                give_xattr_block(&fs, ino);
+                let (root, _) = fs.read_inode_verified(2).unwrap();
+                let mut buf = BlockBuffer::new(fs.sb.block_size());
+                fs.buffer_remove_dir_entry(&mut buf, 2, &root, b"l")
+                    .expect("remove the name");
+                fs.commit_block_buffer(buf).expect("commit");
+                plant_orphan(&fs, ino, 0, None);
+            }
+            // Recovery runs on this mount.
+            drop(mount(&dev));
+
+            let image = fs_ext4_test_support::temp_dir()
+                .join(format!("fs_ext4_symlink_orphan_{}.img", std::process::id()));
+            std::fs::write(&image, &*dev.bytes.lock().unwrap()).unwrap();
+            let judged = fs_ext4_test_support::oracle("e2fsck")
+                .arg("-fn")
+                .arg(&image)
+                .judged();
+            let _ = std::fs::remove_file(&image);
+            judged.clean("an orphaned fast symlink with an xattr block, recovered");
+        }
 
         /// A run reaching past `blocks_count` into the short final group's
         /// padding is refused; one ending at the last block is not.
