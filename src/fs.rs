@@ -1908,6 +1908,21 @@ impl Filesystem {
                 "truncate: only a regular file has a size to change",
             ));
         }
+        Self::refuse_inline_data_write(inode)
+    }
+
+    /// Refuse a content write to an inline-data file (#383). Its `i_block`
+    /// holds the file's first 60 bytes and `system.data` the rest, so
+    /// neither writer applies: the extent path would parse the bytes as a
+    /// tree, the block-map path frees them as pointers, and a size change
+    /// alone leaves `i_size` past what the inline area holds. Until inline
+    /// writes exist, `Unsupported` leaves the file whole.
+    fn refuse_inline_data_write(inode: &Inode) -> Result<()> {
+        if inode.has_inline_data() {
+            return Err(Error::Unsupported(
+                "writing the content of an inline-data file is not supported",
+            ));
+        }
         Ok(())
     }
 
@@ -4650,6 +4665,7 @@ impl Filesystem {
                 "write_file target is not a regular file",
             ));
         }
+        Self::refuse_inline_data_write(&inode)?;
         if !inode.has_extents() {
             // ext2 / ext3 (or ext4 inode without EXTENTS_FL): legacy
             // direct/indirect block-pointer scheme. Same overall shape as
@@ -5074,6 +5090,7 @@ impl Filesystem {
                 "pwrite target is not a regular file",
             ));
         }
+        Self::refuse_inline_data_write(&inode)?;
         if !inode.has_extents() {
             return Err(Error::InvalidArgument(
                 "pwrite: legacy (non-extents) inodes not supported in v1",

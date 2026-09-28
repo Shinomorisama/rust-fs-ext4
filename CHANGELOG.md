@@ -480,6 +480,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   link, unlink, rename and rmdir whose parent or target is an inline
   directory fails before it writes. Renaming one within a block directory
   still works, and reading inline directories is unchanged.
+- **A content write to an inline-data file is refused instead of freeing
+  its bytes as blocks** (#383). `apply_replace_file_content` sent every
+  non-extent inode to the block-map path, which read an inline file's first
+  bytes as direct pointers and freed the blocks they named — content
+  `"1\n"` names block 2609 — leaving `INLINE_DATA_FL` set over block
+  pointers the reader then returned as the file. `apply_truncate_grow`
+  patched only `i_size`, past what the inline area holds, which the reader
+  rejects as corrupt. Replace, pwrite, and truncate in both directions now
+  fail with `Unsupported` on an inline-data file and leave it whole.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
