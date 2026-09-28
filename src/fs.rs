@@ -85,6 +85,31 @@ fn patch_counter_u32(buf: &mut [u8], lo_off: usize, hi_off: Option<usize>, delta
     }
 }
 
+/// Apply counter deltas to the descriptor at `off` inside `block`: free
+/// blocks, free inodes and used directories, each a u16 low half plus, when
+/// `desc_size >= 64`, a u16 high half at the offsets `bgd::parse` reads.
+fn patch_bgd_counter_fields(
+    block: &mut [u8],
+    off: usize,
+    desc_size: u16,
+    free_blocks_delta: i32,
+    free_inodes_delta: i32,
+    used_dirs_delta: i32,
+) {
+    use crate::bgd::{
+        OFF_FREE_BLOCKS_HI, OFF_FREE_BLOCKS_LO, OFF_FREE_INODES_HI, OFF_FREE_INODES_LO,
+        OFF_USED_DIRS_HI, OFF_USED_DIRS_LO,
+    };
+    let has_hi = desc_size >= 64;
+    for (lo, hi, delta) in [
+        (OFF_FREE_BLOCKS_LO, OFF_FREE_BLOCKS_HI, free_blocks_delta),
+        (OFF_FREE_INODES_LO, OFF_FREE_INODES_HI, free_inodes_delta),
+        (OFF_USED_DIRS_LO, OFF_USED_DIRS_HI, used_dirs_delta),
+    ] {
+        patch_counter_u32(block, off + lo, has_hi.then_some(off + hi), delta);
+    }
+}
+
 /// Pack the low bits of an ext4 nanosecond timestamp field.
 ///
 /// ext4 stores extra precision in a 32-bit extra field: bits [31:2] hold the
@@ -2704,39 +2729,16 @@ impl Filesystem {
         free_inodes_delta: i32,
         used_dirs_delta: i32,
     ) -> Result<()> {
-        let desc_size = self.sb.desc_size as u64;
         // Where the descriptor lives, META_BG or not (#73).
         let (bgt_block, off_in_block) = self.sb.descriptor_location(gi as u64);
 
         let block = buf.get_mut(self, bgt_block)?;
-        patch_counter_u32(
+        patch_bgd_counter_fields(
             block,
-            off_in_block + 0x0C,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2A)
-            } else {
-                None
-            },
+            off_in_block,
+            self.sb.desc_size,
             free_blocks_delta,
-        );
-        patch_counter_u32(
-            block,
-            off_in_block + 0x0E,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2C)
-            } else {
-                None
-            },
             free_inodes_delta,
-        );
-        patch_counter_u32(
-            block,
-            off_in_block + 0x10,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2E)
-            } else {
-                None
-            },
             used_dirs_delta,
         );
 
@@ -5401,44 +5403,16 @@ impl Filesystem {
         used_dirs_delta: i32,
     ) -> Result<()> {
         let bs = self.sb.block_size() as u64;
-        let desc_size = self.sb.desc_size as u64;
         // Where the descriptor lives, META_BG or not (#73).
         let (bgt_block, off_in_block) = self.sb.descriptor_location(gi as u64);
 
         let mut block = self.read_block(bgt_block)?;
-
-        // Free-blocks: 16-bit at 0x0C, hi at 0x2A when 64-bit
-        patch_counter_u32(
+        patch_bgd_counter_fields(
             &mut block,
-            off_in_block + 0x0C,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2A)
-            } else {
-                None
-            },
+            off_in_block,
+            self.sb.desc_size,
             free_blocks_delta,
-        );
-        // Free-inodes: 16-bit at 0x0E, hi at 0x2C when 64-bit
-        patch_counter_u32(
-            &mut block,
-            off_in_block + 0x0E,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2C)
-            } else {
-                None
-            },
             free_inodes_delta,
-        );
-        // Used-dirs: 16-bit only (kernel defines u16+u16 hi at 0x2E too, but
-        // dirs per group realistically fit in u16 — handle both anyway).
-        patch_counter_u32(
-            &mut block,
-            off_in_block + 0x10,
-            if desc_size >= 0x40 {
-                Some(off_in_block + 0x2E)
-            } else {
-                None
-            },
             used_dirs_delta,
         );
 
@@ -9813,5 +9787,78 @@ mod tests {
             r.is_clean(),
             "an uninit group's bitmap bytes were counted: {r:?}"
         );
+    }
+
+    /// #390: the buffered BGD counter patch writes each counter's high half
+    /// where `BlockGroupDescriptor::parse` reads it (free_blocks_hi 0x2C,
+    /// free_inodes_hi 0x2E, used_dirs_hi 0x30), so a carry out of the low
+    /// half lands in the counter and not in `bg_inode_table_hi`.
+    #[test]
+    fn buffered_bgd_counter_high_halves_are_written_where_they_are_read() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        assert!(fs.sb.desc_size >= 64, "the fixture must carry high halves");
+        let (blk, off) = fs.sb.descriptor_location(0);
+        let mut buf = BlockBuffer::new(BS);
+        {
+            let b = buf.get_mut(&fs, blk).unwrap();
+            b[off + 0x0C..off + 0x0E].copy_from_slice(&0xFFFFu16.to_le_bytes());
+            b[off + 0x0E..off + 0x10].copy_from_slice(&0xFFFFu16.to_le_bytes());
+            b[off + 0x10..off + 0x12].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        }
+        let parse = |buf: &BlockBuffer| {
+            crate::bgd::BlockGroupDescriptor::parse(&buf.dirty[&blk][off..off + 64], 64).unwrap()
+        };
+        let before = parse(&buf);
+        fs.buffer_patch_bgd_counters(&mut buf, 0, 1, 1, 1).unwrap();
+        let after = parse(&buf);
+        assert_eq!(
+            after.inode_table, before.inode_table,
+            "inode table pointer changed"
+        );
+        assert_eq!(after.block_bitmap, before.block_bitmap);
+        assert_eq!(after.inode_bitmap, before.inode_bitmap);
+        assert_eq!(after.free_blocks_count, 0x1_0000);
+        assert_eq!(after.free_inodes_count, 0x1_0000);
+        assert_eq!(after.used_dirs_count, 0x1_0000);
+        assert_eq!(after.itable_unused, before.itable_unused);
+
+        // And a borrow back across the boundary returns every field.
+        fs.buffer_patch_bgd_counters(&mut buf, 0, -1, -1, -1)
+            .unwrap();
+        let back = parse(&buf);
+        assert_eq!(back.inode_table, before.inode_table);
+        assert_eq!(back.free_blocks_count, 0xFFFF);
+        assert_eq!(back.free_inodes_count, 0xFFFF);
+        assert_eq!(back.used_dirs_count, 0xFFFF);
+    }
+
+    /// #390: the unbuffered BGD counter patch (the one fsck repair uses)
+    /// agrees with `parse` on where the high halves live.
+    #[test]
+    fn direct_bgd_counter_high_halves_are_written_where_they_are_read() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        assert!(fs.sb.desc_size >= 64, "the fixture must carry high halves");
+        let (blk, off) = fs.sb.descriptor_location(0);
+        let mut raw = fs.read_block(blk).unwrap();
+        raw[off + 0x0C..off + 0x0E].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        raw[off + 0x0E..off + 0x10].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        raw[off + 0x10..off + 0x12].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        fs.restamp_group_desc_csum(&mut raw[..], off, 0);
+        dev.write_at(blk * u64::from(BS), &raw).unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        let before = crate::bgd::BlockGroupDescriptor::parse(&raw[off..off + 64], 64).unwrap();
+        fs.patch_bgd_counters(0, 1, 1, 1).unwrap();
+        let raw = fs.read_block(blk).unwrap();
+        let after = crate::bgd::BlockGroupDescriptor::parse(&raw[off..off + 64], 64).unwrap();
+        assert_eq!(
+            after.inode_table, before.inode_table,
+            "inode table pointer changed"
+        );
+        assert_eq!(after.free_blocks_count, 0x1_0000);
+        assert_eq!(after.free_inodes_count, 0x1_0000);
+        assert_eq!(after.used_dirs_count, 0x1_0000);
     }
 }

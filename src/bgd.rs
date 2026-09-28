@@ -26,6 +26,22 @@ pub struct BlockGroupDescriptor {
     pub checksum: u16,
 }
 
+/// Byte offsets of the split 32-bit counters inside one descriptor. The low
+/// halves sit in the 32-byte legacy descriptor; the high halves exist only
+/// when `desc_size >= 64`. Readers and writers share these so the two can
+/// never disagree about where a counter lives (#390).
+pub(crate) const OFF_FREE_BLOCKS_LO: usize = 0x0C;
+pub(crate) const OFF_FREE_INODES_LO: usize = 0x0E;
+pub(crate) const OFF_USED_DIRS_LO: usize = 0x10;
+pub(crate) const OFF_FREE_BLOCKS_HI: usize = 0x2C;
+pub(crate) const OFF_FREE_INODES_HI: usize = 0x2E;
+pub(crate) const OFF_USED_DIRS_HI: usize = 0x30;
+
+/// Read the little-endian u16 at `off`.
+fn u16_at(buf: &[u8], off: usize) -> u16 {
+    u16::from_le_bytes(buf[off..off + 2].try_into().unwrap())
+}
+
 bitflags::bitflags! {
     /// BGD flags (`bg_flags`).
     #[derive(Debug, Clone, Copy)]
@@ -49,9 +65,9 @@ impl BlockGroupDescriptor {
         let block_bitmap_lo = u32::from_le_bytes(buf[0x00..0x04].try_into().unwrap());
         let inode_bitmap_lo = u32::from_le_bytes(buf[0x04..0x08].try_into().unwrap());
         let inode_table_lo = u32::from_le_bytes(buf[0x08..0x0C].try_into().unwrap());
-        let free_blocks_lo = u16::from_le_bytes(buf[0x0C..0x0E].try_into().unwrap());
-        let free_inodes_lo = u16::from_le_bytes(buf[0x0E..0x10].try_into().unwrap());
-        let used_dirs_lo = u16::from_le_bytes(buf[0x10..0x12].try_into().unwrap());
+        let free_blocks_lo = u16_at(buf, OFF_FREE_BLOCKS_LO);
+        let free_inodes_lo = u16_at(buf, OFF_FREE_INODES_LO);
+        let used_dirs_lo = u16_at(buf, OFF_USED_DIRS_LO);
         let flags = u16::from_le_bytes(buf[0x12..0x14].try_into().unwrap());
         let block_bitmap_csum_lo = u16::from_le_bytes(buf[0x18..0x1A].try_into().unwrap());
         let inode_bitmap_csum_lo = u16::from_le_bytes(buf[0x1A..0x1C].try_into().unwrap());
@@ -73,9 +89,9 @@ impl BlockGroupDescriptor {
                 u32::from_le_bytes(buf[0x20..0x24].try_into().unwrap()),
                 u32::from_le_bytes(buf[0x24..0x28].try_into().unwrap()),
                 u32::from_le_bytes(buf[0x28..0x2C].try_into().unwrap()),
-                u16::from_le_bytes(buf[0x2C..0x2E].try_into().unwrap()),
-                u16::from_le_bytes(buf[0x2E..0x30].try_into().unwrap()),
-                u16::from_le_bytes(buf[0x30..0x32].try_into().unwrap()),
+                u16_at(buf, OFF_FREE_BLOCKS_HI),
+                u16_at(buf, OFF_FREE_INODES_HI),
+                u16_at(buf, OFF_USED_DIRS_HI),
                 u16::from_le_bytes(buf[0x32..0x34].try_into().unwrap()),
                 u16::from_le_bytes(buf[0x38..0x3A].try_into().unwrap()),
                 u16::from_le_bytes(buf[0x3A..0x3C].try_into().unwrap()),
