@@ -656,11 +656,18 @@ fn encode_external_block(block: &mut [u8], entries: &[DecodedEntry], refcount: u
     block[0x08..0x0C].copy_from_slice(&1u32.to_le_bytes());
     // h_hash + h_checksum + reserved: stay zero until checksum patch.
 
-    // Stable sort: kernel orders by (name_index, name).
+    // THE KERNEL'S ORDER, WHICH IS NOT ALPHABETICAL: namespace, then name
+    // LENGTH, then name bytes. Its block lookup (`xattr_find_entry` with
+    // `sorted=1`) compares in exactly that order and stops at the first
+    // entry at or past the target, so a block sorted by name alone hides
+    // every attribute that follows a longer name sorting earlier — with
+    // `user.abc` first, the kernel's `getxattr("user.zz")` stops at `abc`
+    // and answers ENODATA (#379). `e2fsck` does not check the order.
     let mut sorted: Vec<&DecodedEntry> = entries.iter().collect();
     sorted.sort_by(|a, b| {
         a.name_index
             .cmp(&b.name_index)
+            .then_with(|| a.name_bytes.len().cmp(&b.name_bytes.len()))
             .then_with(|| a.name_bytes.cmp(&b.name_bytes))
     });
 
