@@ -393,6 +393,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   Recovery now decides as unlink does (`holds_block_map`: not inline, and
   more sectors than the xattr block), and the xattr block is still
   released.
+- **A preallocation that needs a fifth extent deepens the tree** (#423).
+  `fallocate(KEEP_SIZE)` inserted only into the inode's inline extent root:
+  on a file that already held four extents it stopped with
+  `LEAF_FULL_NEEDS_PROMOTION`, and on a file whose tree was already deeper
+  it was refused. It now promotes a full root and descends a deep one, as
+  `pwrite` does, drawing the node blocks in the same transaction and
+  counting them in `i_blocks` and the free-block counts.
+
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
