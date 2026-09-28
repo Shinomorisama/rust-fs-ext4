@@ -112,7 +112,11 @@ fn a_wrong_dotdot_under_a_bad_checksum_is_repaired_as_e2fsck_repairs_it() {
     std::fs::copy(&image, &ours).unwrap();
 
     // The oracle: what e2fsck finds, and what it writes.
-    let (code, log) = run("e2fsck", &["-fy", &theirs]);
+    let judged = fs_ext4_test_support::oracle("e2fsck")
+        .args(["-fy", &theirs])
+        .judged();
+    let code = judged.output.status.code();
+    let log = judged.repaired("e2fsck -fy");
     assert_eq!(code, Some(1), "e2fsck -fy must correct the image: {log}");
     assert!(
         log.contains(&format!("Directory inode {sub}, block #0"))
