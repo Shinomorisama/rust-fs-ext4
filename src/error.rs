@@ -57,6 +57,11 @@ pub enum Error {
     /// Generic spec-violation error.
     Corrupt(&'static str),
 
+    /// The inode's link count has no room for another link (POSIX
+    /// EMLINK): a file at `EXT4_LINK_MAX` (65000) links, or a directory
+    /// with that many on a volume without `DIR_NLINK`.
+    TooManyLinks,
+
     /// A structure this driver can read but cannot correctly modify.
     /// Distinct from [`Error::ReadOnly`], which is about the mount, and
     /// from the `Unsupported*` feature errors, which are about the volume:
@@ -116,6 +121,7 @@ impl std::fmt::Display for Error {
                 write!(f, "read-only until the dirty journal is replayed")
             }
             Error::Stale => write!(f, "stale inode handle"),
+            Error::TooManyLinks => write!(f, "too many links"),
         }
     }
 }
@@ -140,6 +146,7 @@ impl Error {
             Error::ReadOnly | Error::JournalNotReplayed => EROFS,
             Error::NameTooLong => ENAMETOOLONG,
             Error::NoSpaceLeftOnDevice => ENOSPC,
+            Error::TooManyLinks => EMLINK,
             Error::InvalidArgument(_) => EINVAL,
             Error::InvalidInode(_) | Error::InvalidBlock(_) | Error::OutOfBounds => EINVAL,
             Error::BadMagic { .. }
@@ -165,6 +172,7 @@ pub mod errno {
     pub const EISDIR: i32 = 21;
     pub const EINVAL: i32 = 22;
     pub const EROFS: i32 = 30;
+    pub const EMLINK: i32 = 31;
     pub const ERANGE: i32 = 34;
     pub const ENOSPC: i32 = 28;
     pub const ENAMETOOLONG: i32 = 63; // macOS POSIX value

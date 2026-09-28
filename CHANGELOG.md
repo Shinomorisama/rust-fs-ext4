@@ -526,6 +526,20 @@ Not caught by the compiler — the same source builds and behaves differently:
   patched only `i_size`, past what the inline area holds, which the reader
   rejects as corrupt. Replace, pwrite, and truncate in both directions now
   fail with `Unsupported` on an inline-data file and leave it whole.
+- **Link counts stop at `EXT4_LINK_MAX`, and a `DIR_NLINK` count of 1
+  stays 1 (#385).** A count was moved by plain arithmetic into a `u16`: the
+  65536th hard link wrapped the count to 0, a name on an inode the next
+  orphan pass or e2fsck treats as deleted, and nothing enforced the kernel's
+  65000. On a `dir_nlink` volume a directory past 65000 links is written as
+  1, "too many to count"; an rmdir under one wrote 0, which Linux refuses to
+  load, and a mkdir wrote 2, which e2fsck reports. Counts now move as the
+  kernel's `ext4_inc_count` / `ext4_dec_count` move them: a link, mkdir or
+  directory rename that has no room returns the new `Error::TooManyLinks`
+  (`EMLINK`) and writes nothing, a directory past the maximum is pinned at 1
+  where `DIR_NLINK` allows it, and a directory count of 1 or 2 is never
+  decremented. fsck no longer reports, or "repairs", the pinned 1.
+  `tests/dir_nlink_oracle.rs` has e2fsck judge a mkdir and rmdirs under a
+  65001-subdirectory parent the Linux kernel built.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
