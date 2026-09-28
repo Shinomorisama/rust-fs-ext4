@@ -3279,12 +3279,14 @@ impl Filesystem {
     /// Set the `i_flags` field (FS_IOC_SETFLAGS) for the inode at `path`.
     ///
     /// Bumps ctime. Fails with `Error::ReadOnly` on read-only mounts, or
-    /// `Error::InvalidArgument` if the caller attempts to flip any of the
-    /// layout-critical flags managed internally (EXTENTS_FL, INLINE_DATA_FL,
-    /// EA_INODE_FL) — changing those without rewriting the inode payload would
-    /// corrupt the filesystem.
+    /// `Error::InvalidArgument` if `flags` changes any bit outside
+    /// [`crate::inode::USER_MODIFIABLE_FLAGS`] — `INDEX`, `EXTENTS`,
+    /// `INLINE_DATA`, `HUGE_FILE`, `ENCRYPT`, `VERITY`, `CASEFOLD` and the
+    /// like describe how the inode's existing bytes are read, so flipping
+    /// one without rewriting them would corrupt the file. Bits outside the
+    /// mask that are already set may be passed back unchanged.
     pub fn apply_set_flags(&self, path: &str, flags: u32) -> Result<()> {
-        use crate::inode::{InodeFlags, OFF_FLAGS};
+        use crate::inode::{OFF_FLAGS, USER_MODIFIABLE_FLAGS};
         self.refuse_write()?;
         let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
         let ino = crate::path::lookup_with_csum(
@@ -3296,12 +3298,10 @@ impl Filesystem {
         )?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
 
-        let managed = InodeFlags::EXTENTS.bits()
-            | InodeFlags::INLINE_DATA.bits()
-            | InodeFlags::EA_INODE.bits();
-        if (flags ^ inode.flags) & managed != 0 {
+        if (flags ^ inode.flags) & !USER_MODIFIABLE_FLAGS != 0 {
             return Err(Error::InvalidArgument(
-                "set_flags: cannot modify internally-managed inode flags (EXTENTS, INLINE_DATA, EA_INODE)",
+                "set_flags: only the user-modifiable inode flags may change \
+                 (INDEX, EXTENTS, INLINE_DATA, HUGE_FILE, ENCRYPT, VERITY, CASEFOLD and the like are managed)",
             ));
         }
 
@@ -7467,6 +7467,56 @@ mod tests {
             *dev.bytes.lock().unwrap() == before,
             "the refused plan wrote to the device"
         );
+    }
+
+    /// #381: set_flags must not let a caller set INDEX_FL on a linear
+    /// directory -- the driver then reads block 0 as a dx_root.
+    #[test]
+    fn set_flags_refuses_index_on_a_linear_directory() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let d = fs.apply_mkdir("/d", 0o755).unwrap();
+        let (i, _) = fs.read_inode_verified(d).unwrap();
+        let r = fs.apply_set_flags("/d", i.flags | crate::inode::InodeFlags::INDEX.bits());
+        assert!(r.is_err(), "INDEX_FL accepted on a linear directory");
+        let (after, _) = fs.read_inode_verified(d).unwrap();
+        assert_eq!(after.flags, i.flags, "a refused set_flags changed i_flags");
+    }
+
+    /// #381: every bit outside the kernel's user-modifiable mask that
+    /// changes how the inode's existing bytes are read is refused, set or
+    /// cleared; the ones a caller may change still go through.
+    #[test]
+    fn set_flags_changes_only_user_modifiable_bits() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let f = fs.apply_create("/f", 0o644).unwrap();
+        let (i, _) = fs.read_inode_verified(f).unwrap();
+        for (bit, name) in [
+            (0x0000_0800u32, "ENCRYPT"),
+            (0x0000_1000, "INDEX"),
+            (0x0004_0000, "HUGE_FILE"),
+            (0x0010_0000, "VERITY"),
+            (0x0200_0000, "DAX"),
+            (0x4000_0000, "CASEFOLD"),
+            (0x8000_0000, "RESERVED"),
+        ] {
+            assert!(
+                fs.apply_set_flags("/f", i.flags | bit).is_err(),
+                "{name} ({bit:#x}) accepted"
+            );
+        }
+        // A bit already set that the caller cannot change passes unchanged.
+        let wanted = i.flags
+            | crate::inode::InodeFlags::IMMUTABLE.bits()
+            | crate::inode::InodeFlags::NOATIME.bits()
+            | crate::inode::InodeFlags::NODUMP.bits();
+        fs.apply_set_flags("/f", wanted).unwrap();
+        let (after, _) = fs.read_inode_verified(f).unwrap();
+        assert_eq!(after.flags, wanted);
+        fs.apply_set_flags("/f", i.flags).unwrap();
+        let (after, _) = fs.read_inode_verified(f).unwrap();
+        assert_eq!(after.flags, i.flags);
     }
 
     /// `Filesystem::mount_recovering` / `finish` on a journalled volume.

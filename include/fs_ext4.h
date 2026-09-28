@@ -646,7 +646,11 @@ uint32_t fs_ext4_mknod(fs_ext4_fs_t *fs, const char *path,
  *   0x00000010  EXT4_IMMUTABLE_FL
  *   0x00000020  EXT4_APPEND_FL
  *   0x00000040  EXT4_NODUMP_FL
- *   0x00000200  EXT4_NOATIME_FL
+ *   0x00000080  EXT4_NOATIME_FL
+ * Only the kernel's user-modifiable bits may change (EXT4_FL_USER_MODIFIABLE
+ * less EXTENTS, DAX and CASEFOLD); changing any other bit (INDEX, HUGE_FILE,
+ * ENCRYPT, VERITY, INLINE_DATA, ...) fails with EINVAL and changes nothing.
+ * Bits already set outside that mask may be passed back unchanged.
  * Bumps i_ctime. Returns 0 on success, -1 on failure. */
 int fs_ext4_set_flags(fs_ext4_fs_t *fs, const char *path, uint32_t flags);
 
