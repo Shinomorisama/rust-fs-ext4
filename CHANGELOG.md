@@ -57,6 +57,13 @@ Not caught by the compiler — the same source builds and behaves differently:
 - `features::READ_BREAKING_RO_COMPAT` is now `0`: `BIGALLOC` volumes mount
   and read rather than being refused (#237).
 
+- **`Runtime::now_unix_seconds` returns `i64`, not `u32`.** The clock the
+  driver stamps inodes from could not express a time past 2038 as ext4
+  stores one — a signed 32-bit base extended by the epoch bits of each
+  `*_extra` field — nor a time before 1970. An implementation of
+  `Runtime` changes its return type; `SystemRuntime` callers change
+  nothing.
+
 ### Added
 
 - **The parsers are fuzzed, on two tiers.** ext4 is the widest parser
@@ -347,6 +354,18 @@ Not caught by the compiler — the same source builds and behaves differently:
   than its device, as the kernel does; `find_free_run` clamps to the
   bitmap with checked arithmetic; and the whole-file and directory bounds
   are checked and device-bounded rather than saturated (#321).
+- **Automatic timestamps past 2038 read back as themselves (#324).**
+  Every time the driver stamps on its own — the four times of a created
+  file, directory, symlink or device node; mtime and ctime on a write,
+  truncate or fallocate; ctime on chmod, chown, set-flags, an xattr change
+  and utimens — wrote the 32-bit base only, with the epoch bits left zero
+  (ctime's `*_extra` was explicitly zeroed). From 2038-01-19 each such
+  time read back as 1901. They now go through the same encoding
+  `utimens` uses, and on a 128-byte inode, which has no `*_extra` fields,
+  a time past 2038 is clamped to 2038-01-19 03:14:07 as the kernel does,
+  rather than wrapped. `i_dtime` stays the kernel's unsigned 32 bits.
+  Checked by `debugfs stat` in the harness VM
+  (`tests/timestamps_past_2038_oracle.rs`).
 
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline

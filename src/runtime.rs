@@ -12,8 +12,10 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 pub trait Runtime: Send + Sync {
-    /// Seconds since the Unix epoch, matching ext4's legacy timestamp fields.
-    fn now_unix_seconds(&self) -> u32;
+    /// Seconds since the Unix epoch, signed and 64-bit: ext4 stores
+    /// times past 2038 (to 2446) by extending the 32-bit base with the
+    /// epoch bits of each `*_extra` field, so a `u32` cannot carry them.
+    fn now_unix_seconds(&self) -> i64;
     /// New inode generation; implementations must avoid immediate reuse.
     fn next_inode_generation(&self) -> u32;
 }
@@ -24,17 +26,19 @@ pub struct SystemRuntime;
 static COUNTER: AtomicU32 = AtomicU32::new(1);
 
 impl Runtime for SystemRuntime {
-    fn now_unix_seconds(&self) -> u32 {
+    fn now_unix_seconds(&self) -> i64 {
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
-            (js_sys::Date::now() / 1000.0) as u32
+            (js_sys::Date::now() / 1000.0).floor() as i64
         }
         #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as u32)
-                .unwrap_or(0)
+            let now = std::time::SystemTime::now();
+            match now.duration_since(std::time::UNIX_EPOCH) {
+                Ok(d) => i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
+                // A clock set before 1970 is still a time ext4 can store.
+                Err(e) => i64::try_from(e.duration().as_secs()).map_or(i64::MIN, |s| -s),
+            }
         }
     }
     fn next_inode_generation(&self) -> u32 {

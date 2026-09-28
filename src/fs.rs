@@ -5,7 +5,7 @@ use crate::block_io::BlockDevice;
 use crate::checksum::Checksummer;
 use crate::error::{Error, Result};
 use crate::features;
-use crate::inode::Inode;
+use crate::inode::{set_inode_time, Inode, InodeTime};
 use crate::superblock::Superblock;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
@@ -166,16 +166,18 @@ const EXT4_ENCRYPT_FL: u32 = 0x0000_0800;
 
 /// Write atime, ctime, mtime (and crtime when the inode buffer is large
 /// enough) from `now` into the raw inode bytes.
-fn write_inode_timestamps(raw: &mut [u8], now: u32) {
-    use crate::inode::{INODE_SIZE_WITH_CRTIME, OFF_ATIME, OFF_CRTIME, OFF_CTIME, OFF_MTIME};
-    raw[OFF_ATIME..OFF_ATIME + 4].copy_from_slice(&now.to_le_bytes());
-    raw[OFF_CTIME..OFF_CTIME + 4].copy_from_slice(&now.to_le_bytes());
-    raw[OFF_MTIME..OFF_MTIME + 4].copy_from_slice(&now.to_le_bytes());
+///
+/// Each goes through [`set_inode_time`], so a time past 2038 keeps its
+/// epoch bits where the inode has `*_extra` fields and is clamped where
+/// it has none. Call after [`write_inode_extra_isize`]: whether those
+/// fields exist is read from `i_extra_isize`.
+fn write_inode_timestamps(raw: &mut [u8], now: i64) {
+    set_inode_time(raw, InodeTime::Atime, now);
+    set_inode_time(raw, InodeTime::Ctime, now);
+    set_inode_time(raw, InodeTime::Mtime, now);
     // i_crtime (birth time) only exists in the extra section. Without it,
-    // Darwin's st_birthtime / Finder "Created" date shows 1970-01-01.
-    if raw.len() >= INODE_SIZE_WITH_CRTIME {
-        raw[OFF_CRTIME..OFF_CRTIME + 4].copy_from_slice(&now.to_le_bytes());
-    }
+    // a birth-time reader shows 1970-01-01.
+    set_inode_time(raw, InodeTime::Crtime, now);
 }
 
 /// Write a pre-allocated generation value into the raw inode bytes.
@@ -1132,7 +1134,7 @@ impl Filesystem {
         raw[0x64..0x68].copy_from_slice(&old_gen.to_le_bytes());
         self.finalize_inode_raw(orphan_ino, old_gen, &mut raw)?;
         self.buffer_write_inode(buf, orphan_ino, &raw)?;
-        Ok(Some((freed, self.runtime.now_unix_seconds(), true)))
+        Ok(Some((freed, self.dtime_now(), true)))
     }
 
     /// Finish a `truncate()` that a crash interrupted, for an orphan that
@@ -1623,8 +1625,8 @@ impl Filesystem {
         Self::patch_inode_size_and_blocks(&mut raw, new_size, inode.blocks)?;
 
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes()); // ctime
-        raw[0x10..0x14].copy_from_slice(&now.to_le_bytes()); // mtime
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
+        set_inode_time(&mut raw, InodeTime::Mtime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.commit_inode_write(ino, &raw)
@@ -1748,8 +1750,8 @@ impl Filesystem {
 
         // POSIX: fallocate bumps mtime + ctime.
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
-        raw[0x10..0x14].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
+        set_inode_time(&mut raw, InodeTime::Mtime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.buffer_write_inode(&mut buf, ino, &raw)?;
@@ -1881,8 +1883,8 @@ impl Filesystem {
             + allocated_blocks * sectors_per_block;
         Self::patch_inode_size_and_blocks(&mut raw, inode.size, new_i_blocks)?;
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
-        raw[0x10..0x14].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
+        set_inode_time(&mut raw, InodeTime::Mtime, now);
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.buffer_write_inode(&mut buf, ino, &raw)?;
 
@@ -1936,7 +1938,7 @@ impl Filesystem {
 
         // POSIX: chmod bumps ctime (not mtime).
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.commit_inode_write(ino, &raw)
@@ -3048,7 +3050,7 @@ impl Filesystem {
         }
 
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.commit_inode_write(ino, &raw)
@@ -3062,7 +3064,7 @@ impl Filesystem {
     /// EA_INODE_FL) — changing those without rewriting the inode payload would
     /// corrupt the filesystem.
     pub fn apply_set_flags(&self, path: &str, flags: u32) -> Result<()> {
-        use crate::inode::{InodeFlags, OFF_CTIME, OFF_FLAGS};
+        use crate::inode::{InodeFlags, OFF_FLAGS};
         self.refuse_write()?;
         let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
         let ino = crate::path::lookup_with_csum(
@@ -3086,7 +3088,7 @@ impl Filesystem {
         raw[OFF_FLAGS..OFF_FLAGS + 4].copy_from_slice(&flags.to_le_bytes());
 
         let now = self.runtime.now_unix_seconds();
-        raw[OFF_CTIME..OFF_CTIME + 4].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.commit_inode_write(ino, &raw)
@@ -3156,7 +3158,7 @@ impl Filesystem {
                     let mut buf = BlockBuffer::new(bs);
                     let new_nr = self.buffer_unshare_xattr_block(&mut buf, ino, block_nr, block)?;
                     Self::write_file_acl(&mut raw, new_nr)?;
-                    raw[0x0C..0x10].copy_from_slice(&self.runtime.now_unix_seconds().to_le_bytes());
+                    set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
                     self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
                     self.buffer_write_inode(&mut buf, ino, &raw)?;
                     return self.commit_block_buffer(buf);
@@ -3186,7 +3188,7 @@ impl Filesystem {
                     let sectors_per_block = bs_u64 / 512;
                     let new_blocks = inode.blocks.saturating_sub(sectors_per_block);
                     Self::patch_inode_size_and_blocks(&mut raw, inode.size, new_blocks)?;
-                    raw[0x0C..0x10].copy_from_slice(&self.runtime.now_unix_seconds().to_le_bytes());
+                    set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
                     self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
                     self.buffer_write_inode(&mut buf, ino, &raw)?;
                     return self.commit_block_buffer(buf);
@@ -3317,7 +3319,7 @@ impl Filesystem {
             }
             // i_blocks unchanged — only need to bump ctime.
             let now = self.runtime.now_unix_seconds();
-            raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
+            set_inode_time(raw, InodeTime::Ctime, now);
             self.finalize_inode_raw(ino, inode.generation, raw)?;
             self.buffer_write_inode(&mut buf, ino, raw)?;
             return self.commit_block_buffer(buf);
@@ -3368,7 +3370,7 @@ impl Filesystem {
         let new_blocks = inode.blocks.saturating_add(sectors_per_block);
         Self::patch_inode_size_and_blocks(raw, inode.size, new_blocks)?;
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(raw, InodeTime::Ctime, now);
         self.finalize_inode_raw(ino, inode.generation, raw)?;
         self.buffer_write_inode(&mut buf, ino, raw)?;
 
@@ -3444,12 +3446,19 @@ impl Filesystem {
         Ok(new_nr)
     }
 
+    /// `i_dtime` for an inode deleted now. It has no `*_extra` word and
+    /// so no epoch bits: like the kernel, store the low 32 bits of the
+    /// clock, unsigned.
+    fn dtime_now(&self) -> u32 {
+        self.runtime.now_unix_seconds() as u32
+    }
+
     /// Bump `i_ctime` to now and re-checksum + write the inode. Used on
     /// attribute writes that touch external storage but don't otherwise
     /// modify the inode body.
     fn bump_inode_ctime(&self, ino: u32, generation: u32, raw: &mut [u8]) -> Result<()> {
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
+        set_inode_time(raw, InodeTime::Ctime, now);
         self.finalize_inode_raw(ino, generation, raw)?;
         self.commit_inode_write(ino, raw)
     }
@@ -3538,14 +3547,9 @@ impl Filesystem {
         }
         // POSIX: any attribute write bumps ctime.
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes());
+        // Its nanoseconds go to zero with it: `now` is whole seconds.
+        set_inode_time(&mut raw, InodeTime::Ctime, now);
 
-        if i_extra_isize >= 8 && raw.len() >= 0x88 {
-            // Bump ctime_nsec to 0 alongside the ctime bump above. `now`
-            // is a u32 second count, so its epoch bits are zero until
-            // 2038 — see G6 in docs/format-conformance-gaps.md.
-            raw[0x84..0x88].copy_from_slice(&0u32.to_le_bytes());
-        }
         if mtime_sec != TIME_OMIT && has_mtime_extra {
             let packed = pack_nsec_lo(mtime_nsec) | mtime_epoch;
             raw[0x88..0x8C].copy_from_slice(&packed.to_le_bytes());
@@ -3705,7 +3709,7 @@ impl Filesystem {
         for b in &mut target_raw[..inode_size] {
             *b = 0;
         }
-        let dtime = self.runtime.now_unix_seconds();
+        let dtime = self.dtime_now();
         target_raw[0x14..0x18].copy_from_slice(&dtime.to_le_bytes()); // dtime
         target_raw[0x64..0x68].copy_from_slice(&old_gen.to_le_bytes()); // generation
         self.finalize_inode_raw(target_ino, old_gen, &mut target_raw)?;
@@ -3930,11 +3934,12 @@ impl Filesystem {
             raw[OFF_BLOCK + 4..OFF_BLOCK + 8].copy_from_slice(&new_dev.to_le_bytes());
         }
 
+        // i_extra_isize first: it says whether the epoch bits have a home.
+        write_inode_extra_isize(&mut raw);
         let now = self.runtime.now_unix_seconds();
         write_inode_timestamps(&mut raw, now);
         let generation = self.runtime.next_inode_generation();
         write_inode_generation(&mut raw, generation);
-        write_inode_extra_isize(&mut raw);
         self.stamp_inode_checksum(&mut raw, ino, generation);
         Ok(raw)
     }
@@ -4064,11 +4069,12 @@ impl Filesystem {
         let inline_target_off = OFF_BLOCK;
         raw[inline_target_off..inline_target_off + target.len()].copy_from_slice(target);
 
+        // i_extra_isize first: it says whether the epoch bits have a home.
+        write_inode_extra_isize(&mut raw);
         let now = self.runtime.now_unix_seconds();
         write_inode_timestamps(&mut raw, now);
         let generation = self.runtime.next_inode_generation();
         write_inode_generation(&mut raw, generation);
-        write_inode_extra_isize(&mut raw);
         self.stamp_inode_checksum(&mut raw, ino, generation);
         Ok(raw)
     }
@@ -4127,11 +4133,12 @@ impl Filesystem {
         raw[OFF_BLOCKS_LO..OFF_BLOCKS_LO + 4].copy_from_slice(&(sectors as u32).to_le_bytes());
         self.map_one_block(&mut raw, data_phys)?;
 
+        // i_extra_isize first: it says whether the epoch bits have a home.
+        write_inode_extra_isize(&mut raw);
         let now = self.runtime.now_unix_seconds();
         write_inode_timestamps(&mut raw, now);
         let generation = self.runtime.next_inode_generation();
         write_inode_generation(&mut raw, generation);
-        write_inode_extra_isize(&mut raw);
         self.stamp_inode_checksum(&mut raw, ino, generation);
         Ok(raw)
     }
@@ -4165,11 +4172,12 @@ impl Filesystem {
             raw[extent_header_off + 6..extent_header_off + 8].copy_from_slice(&0u16.to_le_bytes());
         }
 
+        // i_extra_isize first: it says whether the epoch bits have a home.
+        write_inode_extra_isize(&mut raw);
         let now = self.runtime.now_unix_seconds();
         write_inode_timestamps(&mut raw, now);
         let generation = self.runtime.next_inode_generation();
         write_inode_generation(&mut raw, generation);
-        write_inode_extra_isize(&mut raw);
         self.stamp_inode_checksum(&mut raw, ino, generation);
         Ok(raw)
     }
@@ -5000,8 +5008,8 @@ impl Filesystem {
     ) -> Result<()> {
         Self::patch_inode_size_and_blocks(raw, new_size, new_sectors)?;
         let now = self.runtime.now_unix_seconds();
-        raw[0x0C..0x10].copy_from_slice(&now.to_le_bytes()); // ctime
-        raw[0x10..0x14].copy_from_slice(&now.to_le_bytes()); // mtime
+        set_inode_time(raw, InodeTime::Ctime, now);
+        set_inode_time(raw, InodeTime::Mtime, now);
         if self.csum.enabled {
             if let Some((lo, hi)) = self.csum.compute_inode_checksum(ino, orig.generation, raw) {
                 raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
@@ -5255,11 +5263,12 @@ impl Filesystem {
         raw[OFF_BLOCKS_HI..OFF_BLOCKS_HI + 2]
             .copy_from_slice(&(((sectors >> 32) & 0xFFFF) as u16).to_le_bytes());
 
+        // i_extra_isize first: it says whether the epoch bits have a home.
+        write_inode_extra_isize(&mut raw);
         let now = self.runtime.now_unix_seconds();
         write_inode_timestamps(&mut raw, now);
         let generation = self.runtime.next_inode_generation();
         write_inode_generation(&mut raw, generation);
-        write_inode_extra_isize(&mut raw);
         self.stamp_inode_checksum(&mut raw, ino, generation);
         Ok(raw)
     }
@@ -5839,7 +5848,7 @@ impl Filesystem {
                 for b in &mut dst_old_raw[..inode_size] {
                     *b = 0;
                 }
-                let dtime = self.runtime.now_unix_seconds();
+                let dtime = self.dtime_now();
                 dst_old_raw[0x14..0x18].copy_from_slice(&dtime.to_le_bytes());
                 dst_old_raw[0x64..0x68].copy_from_slice(&old_gen.to_le_bytes());
                 self.finalize_inode_raw(dst_old_ino, old_gen, &mut dst_old_raw)?;
@@ -6713,7 +6722,7 @@ impl Filesystem {
         // refcounts — the same cleanup apply_unlink already does for files.
         let inode_size = self.sb.inode_size as usize;
         let mut target_raw = vec![0u8; inode_size];
-        let dtime = self.runtime.now_unix_seconds();
+        let dtime = self.dtime_now();
         target_raw[0x14..0x18].copy_from_slice(&dtime.to_le_bytes());
         target_raw[0x64..0x68].copy_from_slice(&target_inode.generation.to_le_bytes());
         self.finalize_inode_raw(target_ino, target_inode.generation, &mut target_raw)?;
@@ -6787,15 +6796,40 @@ mod tests {
     #[test]
     fn write_inode_timestamps_sets_atime_ctime_mtime() {
         let mut raw = vec![0u8; 256];
+        write_inode_timestamps(&mut raw, 0x5EAD_BEEF);
+        assert_eq!(read_le32(&raw, OFF_ATIME), 0x5EAD_BEEF);
+        assert_eq!(read_le32(&raw, OFF_CTIME), 0x5EAD_BEEF);
+        assert_eq!(read_le32(&raw, OFF_MTIME), 0x5EAD_BEEF);
+    }
+
+    /// With no `*_extra` fields (i_extra_isize 0) a time past 2038 is
+    /// clamped, as the kernel does, not wrapped to a negative base.
+    #[test]
+    fn write_inode_timestamps_clamps_past_2038_without_extra_fields() {
+        let mut raw = vec![0u8; 256];
         write_inode_timestamps(&mut raw, 0xDEAD_BEEF);
-        assert_eq!(read_le32(&raw, OFF_ATIME), 0xDEAD_BEEF);
-        assert_eq!(read_le32(&raw, OFF_CTIME), 0xDEAD_BEEF);
-        assert_eq!(read_le32(&raw, OFF_MTIME), 0xDEAD_BEEF);
+        assert_eq!(read_le32(&raw, OFF_ATIME), i32::MAX as u32);
+        assert_eq!(read_le32(&raw, OFF_CTIME), i32::MAX as u32);
+        assert_eq!(read_le32(&raw, OFF_MTIME), i32::MAX as u32);
+    }
+
+    /// With them, the same time keeps its epoch bits and reads back whole.
+    #[test]
+    fn write_inode_timestamps_keeps_epoch_bits_with_extra_fields() {
+        let mut raw = vec![0u8; 256];
+        write_inode_extra_isize(&mut raw);
+        write_inode_timestamps(&mut raw, 0xDEAD_BEEF);
+        let inode = Inode::parse(&raw).unwrap();
+        assert_eq!(inode.atime, 0xDEAD_BEEF);
+        assert_eq!(inode.ctime, 0xDEAD_BEEF);
+        assert_eq!(inode.mtime, 0xDEAD_BEEF);
+        assert_eq!(inode.crtime, 0xDEAD_BEEF);
     }
 
     #[test]
     fn write_inode_timestamps_sets_crtime_when_large_enough() {
         let mut raw = vec![0u8; INODE_SIZE_WITH_CRTIME + 4];
+        write_inode_extra_isize(&mut raw);
         write_inode_timestamps(&mut raw, 0x1234_5678);
         assert_eq!(read_le32(&raw, OFF_CRTIME), 0x1234_5678);
     }
