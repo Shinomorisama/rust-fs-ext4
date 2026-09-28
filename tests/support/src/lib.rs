@@ -103,14 +103,58 @@ pub fn temp_dir() -> &'static Path {
                 .expect("test support crate must live at <worktree>/tests/support");
             let explicit = std::env::var_os("FS_EXT4_TEST_TMPDIR");
             let selected_root = select_temp_dir(explicit.as_deref(), worktree);
-            materialize_temp_dir(explicit.as_deref(), &selected_root).unwrap_or_else(|error| {
-                panic!(
-                    "cannot create ext4 test scratch directory below {}: {error}",
-                    selected_root.display()
-                )
-            })
+            let dir =
+                materialize_temp_dir(explicit.as_deref(), &selected_root).unwrap_or_else(|error| {
+                    panic!(
+                        "cannot create ext4 test scratch directory below {}: {error}",
+                        selected_root.display()
+                    )
+                });
+            if explicit.filter(|path| !path.is_empty()).is_none() {
+                remove_at_exit(dir.clone());
+            }
+            dir
         })
         .as_path()
+}
+
+/// The per-process directory [`temp_dir`] created, removed when the
+/// process exits.
+///
+/// Under `scripts/test.sh` the runner names the directory and removes it
+/// itself, so there is nothing here to do. A plain `cargo test` names
+/// none, each test binary creates `tmp/fs-ext4-tests.<pid>.*`, and before
+/// this every run left one behind per binary. Rust runs no destructor
+/// for a static, so the removal is an `atexit` handler: libtest returns
+/// from `main` whether its tests passed or failed, and the C runtime
+/// runs the handler then. A process killed by a signal leaves its
+/// directory, as it would leave anything else.
+///
+/// `RFE_KEEP_IMAGES` asks for what a run wrote to survive it, so with it
+/// set only an EMPTY directory is removed.
+fn remove_at_exit(dir: PathBuf) {
+    static OWNED: OnceLock<PathBuf> = OnceLock::new();
+    if OWNED.set(dir).is_err() {
+        return;
+    }
+    extern "C" fn remove_owned_scratch() {
+        let Some(dir) = OWNED.get() else { return };
+        if std::env::var_os("RFE_KEEP_IMAGES").is_some() {
+            let _ = fs::remove_dir(dir);
+        } else {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+    extern "C" {
+        fn atexit(callback: extern "C" fn()) -> std::os::raw::c_int;
+    }
+    // SAFETY: `atexit` is the C runtime's, takes a plain function with no
+    // arguments, and is called from one place, once per process.
+    let registered = unsafe { atexit(remove_owned_scratch) };
+    assert_eq!(
+        registered, 0,
+        "atexit refused the scratch-directory cleanup"
+    );
 }
 
 /// Format a test filename beneath the selected scratch directory.
