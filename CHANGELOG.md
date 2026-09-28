@@ -24,6 +24,10 @@ Source-breaking, each caught by the compiler downstream:
 - `extent_mut::ExtentMutation` gained `WriteTreeBlock`, which moved the
   implicit discriminants of `AllocLeafBlock`, `FreeLeafBlock` and
   `FreePhysicalRun` up by one (#169).
+- `Filesystem::replay_journal_if_dirty` takes `&mut self` (#376): a replay
+  that applied anything now reloads the mount's superblock and descriptors and
+  reopens its journal writer, which a shared borrow cannot. The C entry point
+  is unchanged.
 
 Not caught by the compiler — the same source builds and behaves differently:
 
@@ -444,6 +448,19 @@ Not caught by the compiler — the same source builds and behaves differently:
   `i_checksum_hi` only where `i_extra_isize` covers it, and verification
   compares only the low 16 bits where it does not, as the kernel does.
 
+- **A lazy mount's journal replay brings the mount up to date with it**
+  (#376). `replay_journal_if_dirty` replayed onto the device and left the
+  mount planning against the superblock and descriptors it read before the
+  replay, and committing through a journal writer opened over the dirty log.
+  The writer's next commit wrote back its pre-replay sequence, below the
+  replayed tail, so a later replay could walk from it into an older
+  transaction; and a group whose `INODE_UNINIT` the replay cleared was still
+  flagged in the mount's copy, so the next create in it was handed the inode
+  the replayed transaction had allocated. The replay now reloads both and
+  reopens the writer from the replayed journal superblock, as an eager mount
+  does. A lazy mount that was read-only when it mounted is given its journal
+  writer by the same call, where its writes used to go to the device
+  unjournaled.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

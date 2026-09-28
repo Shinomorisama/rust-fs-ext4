@@ -891,7 +891,7 @@ pub unsafe extern "C" fn fs_ext4_replay_journal_if_dirty(fs: *mut fs_ext4_fs_t) 
                 set_err_msg("null fs handle", EINVAL);
                 return -1;
             }
-            let fs_ref = &(*fs).fs;
+            let fs_ref = &mut (*fs).fs;
             match fs_ref.replay_journal_if_dirty() {
                 Ok(_) => 0,
                 Err(e) => {
@@ -2862,7 +2862,7 @@ pub unsafe extern "C" fn fs_ext4_fsck_run(
                 set_err_msg("null fs/opts/report", EINVAL);
                 return -1;
             }
-            let fs_ref = &(*fs).fs;
+            let fs_ref = &mut (*fs).fs;
             let opts_ref = &*opts;
             // Sanity: read_only must be 0 or 1; repair can only run
             // when read_only == 0. Anything outside this matrix is a

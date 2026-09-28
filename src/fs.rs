@@ -1019,7 +1019,15 @@ impl Filesystem {
         self.dev.flush()
     }
 
-    pub fn replay_journal_if_dirty(&self) -> Result<usize> {
+    ///
+    /// Takes `&mut self` because a replay that applied anything leaves the
+    /// mount's own view behind (#376): the superblock and descriptors were
+    /// read before it, and a journal writer opened over the dirty log holds
+    /// its pre-replay sequence. All three are brought up to date here, as
+    /// an eager mount does before it opens its writer.
+    pub fn replay_journal_if_dirty(&mut self) -> Result<usize> {
+        let dirty = self.dev.is_writable()
+            && crate::jbd2::read_superblock(self)?.is_some_and(|j| !j.is_clean());
         let n = crate::journal_apply::replay_if_dirty(self)?;
         // `replay_if_dirty` does nothing on a device that cannot be written,
         // so only a writable one has had its log put on disk.
@@ -1037,6 +1045,35 @@ impl Filesystem {
         // cache misses serve stale data-area bytes.
         if n > 0 {
             self.dev.unpin_all();
+            // The replayed transactions may carry newer copies of the
+            // superblock and descriptors. Planning against the copies read
+            // at mount treats a group whose UNINIT flag the replay cleared
+            // as untouched, synthesises its bitmap, and hands out what the
+            // replay allocated. `uninit_cleared` described the old copies.
+            self.reload_geometry()?;
+            // `reset`, not a bare clear: the allocation state is a
+            // struct since #341 and also caches the descriptors with the
+            // clears applied, which must go with them.
+            self.uninit_cleared
+                .lock()
+                .map_err(|_| Error::Corrupt("allocation state poisoned"))?
+                .reset();
+        }
+        // The writer takes over the log cursor from the replayed journal
+        // superblock, as mount's does, so its next commit follows the
+        // replayed sequence rather than rewinding it. One opened over the
+        // dirty log is replaced; a mount that was read-only when it mounted
+        // has none, and is given one now that the device can take writes.
+        // A healthy writer over a journal that was already clean is left
+        // alone: it owns the cursor.
+        // A writer whose commit failed is kept: its failure is what `flush`
+        // and `Drop` report, and a fresh one would hide it.
+        let failed = self
+            .journal
+            .as_ref()
+            .is_some_and(|w| w.lock().map_or(true, |w| !w.is_healthy()));
+        if (dirty || self.journal.is_none()) && !failed && self.write_refusal().is_ok() {
+            self.journal = crate::journal_writer::JournalWriter::open(self)?.map(Mutex::new);
         }
         Ok(n)
     }
@@ -8940,7 +8977,7 @@ mod tests {
                 inner: dev.clone(),
                 writable: std::sync::atomic::AtomicBool::new(false),
             });
-            let fs = Filesystem::mount_lazy(later.clone()).expect("a read-only lazy mount");
+            let mut fs = Filesystem::mount_lazy(later.clone()).expect("a read-only lazy mount");
             later
                 .writable
                 .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -8986,7 +9023,7 @@ mod tests {
     #[test]
     fn a_lazy_mount_writes_once_its_journal_is_replayed() {
         let (dev, payload) = ext3_with_a_dirty_journal();
-        let fs = Filesystem::mount_lazy(dev.clone()).expect("lazy mount");
+        let mut fs = Filesystem::mount_lazy(dev.clone()).expect("lazy mount");
         match fs.apply_mkdir("/x", 0o755) {
             Err(Error::JournalNotReplayed) => {}
             other => panic!("a write over an unreplayed journal: {other:?}"),
@@ -9021,7 +9058,7 @@ mod tests {
             inner: dev.clone(),
             writable: std::sync::atomic::AtomicBool::new(false),
         });
-        let fs = Filesystem::mount_lazy(later.clone()).expect("a read-only lazy mount");
+        let mut fs = Filesystem::mount_lazy(later.clone()).expect("a read-only lazy mount");
         later
             .writable
             .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -9033,6 +9070,67 @@ mod tests {
         assert!(destination_holds_the_payload(&dev, &payload));
         fs.apply_mkdir("/x", 0o755)
             .expect("the write is accepted once the journal is replayed");
+    }
+
+    /// After a lazy replay the next commit must carry a sequence past the
+    /// replayed transaction, as an eager mount's does (#376). The writer
+    /// opened over the dirty journal kept its pre-replay sequence and wrote
+    /// it back on the next commit, below the replayed tail: a crash then lets
+    /// a later replay walk on into the older transaction behind ours.
+    #[test]
+    fn a_lazy_replay_leaves_the_writer_past_the_replayed_sequence() {
+        let seq_after = |lazy: bool| {
+            let (dev, _payload) = ext3_with_a_dirty_journal();
+            let fs = if lazy {
+                let mut fs = Filesystem::mount_lazy(dev.clone()).expect("lazy");
+                assert_eq!(fs.replay_journal_if_dirty().expect("replay"), 1);
+                fs
+            } else {
+                Filesystem::mount(dev.clone()).expect("eager")
+            };
+            fs.apply_chmod("/", 0o700).expect("chmod");
+            crate::jbd2::read_superblock(&fs).unwrap().unwrap().sequence
+        };
+        assert_eq!(
+            seq_after(true),
+            seq_after(false),
+            "lazy and eager must agree on the log's sequence"
+        );
+    }
+
+    /// A lazy mount that was read-only when it mounted has no journal writer,
+    /// and nothing opened one once the device turned writable, so every write
+    /// after the replay call went to the device unjournaled (#376). The
+    /// replay call is where the writable handle begins, so it opens one.
+    #[test]
+    fn a_lazy_mount_that_becomes_writable_journals_after_the_replay_call() {
+        let (dev, _payload) = ext3_with_a_dirty_journal();
+        let later = std::sync::Arc::new(LaterWritable {
+            inner: dev.clone(),
+            writable: std::sync::atomic::AtomicBool::new(false),
+        });
+        let mut fs = Filesystem::mount_lazy(later.clone()).expect("a read-only lazy mount");
+        assert!(fs.journal.is_none(), "a read-only mount opens no writer");
+        later
+            .writable
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(fs.replay_journal_if_dirty().expect("replay"), 1);
+        assert!(
+            fs.journal.is_some(),
+            "the handle is writable now, and its writes must be journaled"
+        );
+        fs.apply_chmod("/", 0o700).expect("chmod");
+        let jsb = crate::jbd2::read_superblock(&fs).unwrap().unwrap();
+        let eager = {
+            let (dev, _payload) = ext3_with_a_dirty_journal();
+            let fs = Filesystem::mount(dev.clone()).expect("eager");
+            fs.apply_chmod("/", 0o700).expect("chmod");
+            crate::jbd2::read_superblock(&fs).unwrap().unwrap().sequence
+        };
+        assert_eq!(
+            jsb.sequence, eager,
+            "the chmod went through the journal, past the replayed sequence"
+        );
     }
 
     // ---------------------------------------------------------------
