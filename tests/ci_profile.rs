@@ -1394,9 +1394,9 @@ fn the_pr_gate_builds_fixtures_once_in_the_harness_vm_and_tests_both_architectur
             cmd,
             ChoreCmd::Shell { keys, command }
                 if !carries_any(keys, &NON_GATING_CMD_KEYS)
-                    && command.trim() == "cargo clippy --locked --all-targets -- -D warnings"
+                    && command.trim() == "cargo clippy --locked --workspace --all-targets -- -D warnings"
         )),
-        "chores.yml `lint` must run `cargo clippy --locked --all-targets -- -D warnings`"
+        "chores.yml `lint` must run `cargo clippy --locked --workspace --all-targets -- -D warnings`"
     );
 }
 

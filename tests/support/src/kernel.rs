@@ -220,14 +220,14 @@ impl Sha256 {
                 .wrapping_add(s1);
         }
         let mut v = self.state;
-        for i in 0..64 {
+        for (&k, &wi) in Self::K.iter().zip(&w) {
             let s1 = v[4].rotate_right(6) ^ v[4].rotate_right(11) ^ v[4].rotate_right(25);
             let ch = (v[4] & v[5]) ^ (!v[4] & v[6]);
             let t1 = v[7]
                 .wrapping_add(s1)
                 .wrapping_add(ch)
-                .wrapping_add(Self::K[i])
-                .wrapping_add(w[i]);
+                .wrapping_add(k)
+                .wrapping_add(wi);
             let s0 = v[0].rotate_right(2) ^ v[0].rotate_right(13) ^ v[0].rotate_right(22);
             let maj = (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
             let t2 = s0.wrapping_add(maj);
