@@ -428,6 +428,19 @@ Not caught by the compiler — the same source builds and behaves differently:
   `EXT4_INDEX_FL` and that the block parses as a `dx_root`. The ext2 seed
   stays linear on purpose. A rebuild replaces only the files the script
   wrote, so committed reproducers survive it.
+- **The release workflow can no longer half-publish a release, run a
+  moved tag with a write token, or read a crates.io outage as "not
+  published"** (#329). The `mkfs.ext4` matrix legs upload artifacts, and
+  one `release` job — the only job with `contents: write`, running no
+  third-party action — publishes every tarball once all legs passed.
+  Every action in `release.yml` is pinned to a commit SHA, and every
+  checkout sets `persist-credentials: false`. The crates.io check,
+  now `scripts/crates-io-published.sh`, reads the HTTP status: 200 skips
+  the publish, 404 publishes, anything else is retried and then fails.
+  `tests/scripts/test-write-jobs-pinned.sh`,
+  `tests/scripts/test-release-outside-matrix.sh` and
+  `tests/scripts/test-crates-io-check.sh` hold each of the three.
+
 - **A hole can be punched in a file whose extent tree is deeper than the
   inode.** Punching wrote what survived back into the inode's four inline
   entries and freed every node below, so a punch leaving more than four

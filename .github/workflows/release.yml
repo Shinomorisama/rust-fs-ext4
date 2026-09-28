@@ -5,6 +5,16 @@ on:
     tags:
       - 'v*.*.*'
 
+# EVERY JOB READS, AND ONE JOB WRITES (#329).
+#
+# `contents: write` is held by the `release` job alone, which runs no
+# third-party action and checks nothing out. Every action here is pinned to
+# a commit SHA, with the tag it stood for beside it: a tag is a pointer its
+# owner can move, and a job holding a token should not run whatever it
+# points at today. Every checkout sets `persist-credentials: false`, so no
+# later step finds the token in .git/config.
+# tests/scripts/test-write-jobs-pinned.sh fails a write job that runs an
+# unpinned action or persists its token.
 permissions:
   contents: read
 
@@ -17,7 +27,9 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - name: verify tag matches Cargo.toml version
         run: |
@@ -39,11 +51,11 @@ jobs:
         run: scripts/ci-install-chore.sh
       - name: chore siblings
         run: chore siblings
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-27
         with:
           toolchain: 1.95.0
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: chore tools
         run: chore tools
       - name: KVM, QEMU and Vagrant
@@ -73,9 +85,8 @@ jobs:
   package-cli:
     name: package mkfs.ext4 (${{ matrix.label }})
     needs: [test]
-    permissions:
-      # `gh release` writes assets onto the tag's release.
-      contents: write
+    # Read-only. A leg uploads its tarball as a workflow artifact; the
+    # `release` job publishes them together once every leg has passed.
     strategy:
       # One platform failing should not hide whether the other built.
       fail-fast: false
@@ -87,7 +98,9 @@ jobs:
             label: linux-x86_64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       # The path dependency, at the ref chores.yml pins (read from there
       # rather than restated; chore itself has no build for every runner
@@ -99,10 +112,10 @@ jobs:
           pin() { sed -n "s/^  $1: *//p" chores.yml | tr -d '\r'; }
           git clone --depth 1 --branch "$(pin FS_CORE_REF)" "$(pin FS_CORE_URL)" ../rust-fs-core
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-27
         with:
           toolchain: 1.95.0
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: build mkfs_ext4
         shell: bash
@@ -152,22 +165,60 @@ jobs:
           test -x "$probe/mkfs.ext4"
           "$probe/mkfs.ext4" --help > /dev/null
 
+      # AN ARTIFACT, NOT THE RELEASE. A leg that published its own asset
+      # did so whether or not the other leg later failed, and with
+      # `fail-fast: false` that left a release with one platform on it
+      # (#329). tests/scripts/test-release-outside-matrix.sh fails a
+      # matrix job that touches the release.
+      - name: keep the tarball for the release job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mkfs-ext4-${{ matrix.label }}
+          path: ${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # The one job that writes to the repository, and it runs only when every
+  # leg of package-cli passed. It checks nothing out and runs no third-party
+  # action: it downloads the legs' tarballs and hands them to `gh`.
+  release:
+    name: publish the GitHub release
+    needs: [package-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: collect every leg's tarball
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: mkfs-ext4-*
+          path: dist
+          merge-multiple: true
+
       # The release for a tag may not exist yet — this repo's tags have
       # historically been published to crates.io without a GitHub
-      # release. Create it if absent so the upload has somewhere to go,
-      # and let two matrix legs race harmlessly: whichever arrives first
-      # creates it, the other's `view` succeeds.
-      - name: upload to the release
+      # release. `gh release create` with the assets uploads them to a
+      # draft and publishes it once they are all there; a release that
+      # already exists (a re-run) gets them in one `upload`.
+      - name: create the release, or upload to it
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          gh release view "$tag" >/dev/null 2>&1 \
-            || gh release create "$tag" --title "$tag" --generate-notes \
-            || gh release view "$tag" >/dev/null
-          gh release upload "$tag" "${{ steps.pack.outputs.tarball }}" --clobber
+          shopt -s nullglob
+          assets=(dist/*.tar.gz)
+          if [ "${#assets[@]}" -ne 2 ]; then
+            echo "expected 2 tarballs (one per package-cli leg), found ${#assets[@]}: ${assets[*]}" >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" --title "$tag" --generate-notes
+          fi
 
   publish:
     name: publish to crates.io
@@ -178,7 +229,9 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       # The path dependency, at the ref chores.yml pins (read from there
       # rather than restated; chore itself has no build for every runner
@@ -190,7 +243,7 @@ jobs:
           pin() { sed -n "s/^  $1: *//p" chores.yml | tr -d '\r'; }
           git clone --depth 1 --branch "$(pin FS_CORE_REF)" "$(pin FS_CORE_URL)" ../rust-fs-core
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-27
         with:
           toolchain: 1.95.0
 
@@ -198,23 +251,19 @@ jobs:
       # re-tag — or a release published by hand — would otherwise fail
       # this job every time. Skip instead, so the workflow is idempotent
       # and a red run means something actually went wrong.
+      #
+      # 200 is published and 404 is not; anything else -- a 429, a 5xx, a
+      # timeout -- is retried and then fails the step, rather than being
+      # read as "not published" and sent on to a `cargo publish` that
+      # fails with "already exists" (#329).
+      # tests/scripts/test-crates-io-check.sh runs this step against a
+      # stubbed curl.
       - name: skip if this version is already on crates.io
         id: already
         shell: bash
-        run: |
-          set -euo pipefail
-          name="$(grep -m1 '^name = ' Cargo.toml | sed 's/name = //; s/"//g')"
-          version="$(grep -m1 '^version = ' Cargo.toml | sed 's/version = //; s/"//g')"
-          if curl -sf "https://crates.io/api/v1/crates/$name/$version" \
-               -H 'User-Agent: release-workflow' >/dev/null 2>&1; then
-            echo "$name $version is already published; nothing to do."
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "$name $version is not on crates.io; publishing."
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: scripts/crates-io-published.sh >> "$GITHUB_OUTPUT"
 
-      - uses: rust-lang/crates-io-auth-action@v1.0.4
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         if: steps.already.outputs.published == 'false'
         id: auth
 
