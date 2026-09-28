@@ -31,6 +31,27 @@ pub enum DirEntryType {
 }
 
 impl DirEntryType {
+    /// The entry type for an inode of mode `mode` (only its `S_IFMT` bits
+    /// are read): the kernel's `fs_umode_to_ftype`. Every writer that
+    /// names an inode maps its mode here, so an entry's type byte cannot
+    /// disagree with its inode by a writer knowing fewer types than another
+    /// (#386). A mode that is no file type maps to `Unknown`.
+    pub fn from_mode(mode: u16) -> Self {
+        use crate::inode::{
+            S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
+        };
+        match mode & S_IFMT {
+            S_IFREG => Self::RegFile,
+            S_IFDIR => Self::Directory,
+            S_IFCHR => Self::CharDev,
+            S_IFBLK => Self::BlockDev,
+            S_IFIFO => Self::Fifo,
+            S_IFSOCK => Self::Socket,
+            S_IFLNK => Self::Symlink,
+            _ => Self::Unknown,
+        }
+    }
+
     pub fn from_u8(b: u8) -> Self {
         match b {
             1 => Self::RegFile,
@@ -394,6 +415,27 @@ pub fn remove_entry_from_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #386: every file type maps to its own entry type, permission bits
+    /// ignored, and matches the on-disk byte `from_u8` reads back.
+    #[test]
+    fn from_mode_knows_every_file_type() {
+        use crate::inode::{S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFREG, S_IFSOCK};
+        for (mode, want) in [
+            (S_IFREG, DirEntryType::RegFile),
+            (S_IFDIR, DirEntryType::Directory),
+            (S_IFCHR, DirEntryType::CharDev),
+            (S_IFBLK, DirEntryType::BlockDev),
+            (S_IFIFO, DirEntryType::Fifo),
+            (S_IFSOCK, DirEntryType::Socket),
+            (S_IFLNK, DirEntryType::Symlink),
+            (0, DirEntryType::Unknown),
+        ] {
+            let got = DirEntryType::from_mode(mode | 0o7777);
+            assert_eq!(got, want, "mode {mode:#o}");
+            assert_eq!(DirEntryType::from_u8(got as u8), want);
+        }
+    }
 
     /// Hand-rolled directory block: ".", "..", "hello".
     fn synth_block() -> Vec<u8> {

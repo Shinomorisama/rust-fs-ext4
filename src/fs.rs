@@ -4600,11 +4600,12 @@ impl Filesystem {
     /// The directory-entry type for a special file of `mode`, or the
     /// refusal of a mode that is not one.
     fn mknod_entry_type(mode: u16) -> Result<crate::dir::DirEntryType> {
-        match mode & crate::inode::S_IFMT {
-            crate::inode::S_IFCHR => Ok(crate::dir::DirEntryType::CharDev),
-            crate::inode::S_IFBLK => Ok(crate::dir::DirEntryType::BlockDev),
-            crate::inode::S_IFIFO => Ok(crate::dir::DirEntryType::Fifo),
-            crate::inode::S_IFSOCK => Ok(crate::dir::DirEntryType::Socket),
+        let file_type = mode & crate::inode::S_IFMT;
+        match file_type {
+            crate::inode::S_IFCHR
+            | crate::inode::S_IFBLK
+            | crate::inode::S_IFIFO
+            | crate::inode::S_IFSOCK => Ok(crate::dir::DirEntryType::from_mode(file_type)),
             _ => Err(Error::InvalidArgument(
                 "mknod: unsupported type; use create/mkdir for reg/dir",
             )),
@@ -6307,15 +6308,7 @@ impl Filesystem {
             return Err(Error::AlreadyExists);
         }
 
-        let dir_type = match src_inode.file_type() {
-            crate::inode::S_IFREG => crate::dir::DirEntryType::RegFile,
-            crate::inode::S_IFLNK => crate::dir::DirEntryType::Symlink,
-            crate::inode::S_IFCHR => crate::dir::DirEntryType::CharDev,
-            crate::inode::S_IFBLK => crate::dir::DirEntryType::BlockDev,
-            crate::inode::S_IFIFO => crate::dir::DirEntryType::Fifo,
-            crate::inode::S_IFSOCK => crate::dir::DirEntryType::Socket,
-            _ => crate::dir::DirEntryType::Unknown,
-        };
+        let dir_type = crate::dir::DirEntryType::from_mode(src_inode.mode);
 
         // Build the multi-block transaction: bump nlink + add dir entry,
         // both staged into one buffer so a crash either applies both or
@@ -6467,13 +6460,10 @@ impl Filesystem {
             self.check_link_room(&dst_parent_inode)?;
         }
 
-        // Map POSIX mode bits to the directory-entry file-type byte.
-        let dir_type = match src_inode.file_type() {
-            crate::inode::S_IFREG => crate::dir::DirEntryType::RegFile,
-            crate::inode::S_IFDIR => crate::dir::DirEntryType::Directory,
-            crate::inode::S_IFLNK => crate::dir::DirEntryType::Symlink,
-            _ => crate::dir::DirEntryType::Unknown,
-        };
+        // Map POSIX mode bits to the directory-entry file-type byte: every
+        // type, not only the three this once knew, which filed a renamed
+        // FIFO, socket or device node under type 0 (#386).
+        let dir_type = crate::dir::DirEntryType::from_mode(src_inode.mode);
 
         // ===================================================================
         // Replace-overwrite branch — dst already exists and caller opted in.
@@ -11557,5 +11547,52 @@ mod tests {
         audit70_set_links(&fs, p, 1);
         let report = fs.audit(u32::MAX, u32::MAX).unwrap();
         assert!(report.is_clean(), "{:?}", report.anomalies);
+    }
+
+    /// The type byte of the root-directory entry `name`.
+    fn root_entry_type(fs: &Filesystem, name: &[u8]) -> crate::dir::DirEntryType {
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let phys = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+        let blk = fs.read_block(phys).unwrap();
+        crate::dir::DirBlockIter::new(&blk, true)
+            .map(|e| e.unwrap())
+            .find(|e| e.name == name)
+            .unwrap_or_else(|| panic!("{} not found", String::from_utf8_lossy(name)))
+            .file_type
+    }
+
+    /// #386: rename keeps the entry's file type for every special file --
+    /// a FIFO, a socket and both device kinds -- in both of its paths.
+    #[test]
+    fn audit70_rename_keeps_a_special_files_type() {
+        use crate::dir::DirEntryType;
+        let dev = formatted();
+        let fs = mount(&dev);
+        for (name, mode, want) in [
+            ("fifo", 0o010644u16, DirEntryType::Fifo),
+            ("sock", 0o140644, DirEntryType::Socket),
+            ("chr", 0o020644, DirEntryType::CharDev),
+            ("blk", 0o060644, DirEntryType::BlockDev),
+        ] {
+            let src = format!("/{name}");
+            fs.apply_mknod(&src, mode, 1, 3).unwrap();
+            // The no-overwrite path.
+            let moved = format!("/{name}_moved");
+            fs.apply_rename(&src, &moved, false).unwrap();
+            assert_eq!(
+                root_entry_type(&fs, &moved.as_bytes()[1..]),
+                want,
+                "{name}: rename"
+            );
+            // The replace path.
+            let victim = format!("/{name}_victim");
+            fs.apply_create(&victim, 0o644).unwrap();
+            fs.apply_rename(&moved, &victim, true).unwrap();
+            assert_eq!(
+                root_entry_type(&fs, &victim.as_bytes()[1..]),
+                want,
+                "{name}: rename over a file"
+            );
+        }
     }
 }
