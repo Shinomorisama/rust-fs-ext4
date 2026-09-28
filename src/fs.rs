@@ -11595,4 +11595,179 @@ mod tests {
             );
         }
     }
+
+    /// #427: an inline-data directory laid out the way the kernel lays one
+    /// out -- `i_block` holds the parent's inode number, then entries from
+    /// byte 4; entries that do not fit continue in the `system.data` xattr
+    /// -- is read by both the lookup and the readdir path.
+    mod inline_dir_reads {
+        use super::*;
+        use crate::inode::{InodeFlags, OFF_BLOCK, OFF_FLAGS, OFF_SIZE_LO};
+
+        /// One directory entry, `rec_len` bytes long.
+        fn dirent(ino: u32, name: &[u8], file_type: u8, rec_len: u16) -> Vec<u8> {
+            let mut e = vec![0u8; rec_len as usize];
+            e[0..4].copy_from_slice(&ino.to_le_bytes());
+            e[4..6].copy_from_slice(&rec_len.to_le_bytes());
+            e[6] = name.len() as u8;
+            e[7] = file_type;
+            e[8..8 + name.len()].copy_from_slice(name);
+            e
+        }
+
+        /// Rewrite the directory `dir` in the kernel's inline layout:
+        /// `i_block` = `parent` + `in_block` (56 bytes), and `continuation`
+        /// as the `system.data` xattr value; `i_size` = 60 + its length.
+        fn make_inline_dir(
+            fs: &Filesystem,
+            dir: u32,
+            parent: u32,
+            in_block: &[u8],
+            continuation: &[u8],
+        ) {
+            assert_eq!(in_block.len(), 56, "i_block holds 56 bytes of entries");
+            let (inode, mut raw) = fs.read_inode_verified(dir).unwrap();
+            let flags =
+                (inode.flags & !InodeFlags::EXTENTS.bits()) | InodeFlags::INLINE_DATA.bits();
+            raw[OFF_FLAGS..OFF_FLAGS + 4].copy_from_slice(&flags.to_le_bytes());
+            raw[OFF_BLOCK..OFF_BLOCK + 4].copy_from_slice(&parent.to_le_bytes());
+            raw[OFF_BLOCK + 4..OFF_BLOCK + 60].copy_from_slice(in_block);
+            let size = 60 + continuation.len() as u32;
+            raw[OFF_SIZE_LO..OFF_SIZE_LO + 4].copy_from_slice(&size.to_le_bytes());
+            let extra = u16::from_le_bytes(raw[0x80..0x82].try_into().unwrap()) as usize;
+            let end = (fs.sb.inode_size as usize).min(raw.len());
+            crate::xattr::plan_set_in_inode_region(
+                &mut raw[128 + extra..end],
+                "system.data",
+                continuation,
+            )
+            .expect("system.data fits in the inode");
+            fs.finalize_inode_raw(dir, inode.generation, &mut raw)
+                .unwrap();
+            fs.write_inode_raw(dir, &raw).unwrap();
+        }
+
+        /// A volume with `/d` inline: `x` and `sub` in `i_block`, `zz` in
+        /// the continuation. Returns the device and the inode numbers.
+        fn volume() -> (std::sync::Arc<MemDev>, u32, u32, u32, u32) {
+            let dev = formatted();
+            set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+            let fs = mount(&dev);
+            let d = fs.apply_mkdir("/d", 0o755).unwrap();
+            let x = fs.apply_create("/x", 0o644).unwrap();
+            let sub = fs.apply_mkdir("/sub", 0o755).unwrap();
+            let zz = fs.apply_create("/zz", 0o644).unwrap();
+            let mut in_block = dirent(x, b"x", 1, 12);
+            in_block.extend(dirent(sub, b"sub", 2, 44));
+            make_inline_dir(&fs, d, 2, &in_block, &dirent(zz, b"zz", 1, 20));
+            drop(fs);
+            (dev, d, x, sub, zz)
+        }
+
+        #[test]
+        fn a_lookup_reads_entries_from_byte_4_and_from_the_continuation() {
+            let (dev, d, x, sub, zz) = volume();
+            let fs = mount(&dev);
+            assert!(fs.read_inode_verified(d).unwrap().0.has_inline_data());
+            for (path, want) in [
+                ("/d/x", x),
+                ("/d/sub", sub),
+                ("/d/zz", zz),
+                ("/d/.", d),
+                ("/d/..", 2),
+            ] {
+                assert_eq!(
+                    resolve(&fs, path).map_err(|e| format!("{e:?}")),
+                    Ok(want),
+                    "{path}"
+                );
+            }
+            assert!(matches!(resolve(&fs, "/d/nope"), Err(Error::NotFound)));
+        }
+
+        #[test]
+        fn readdir_lists_the_synthesised_dots_the_block_entries_and_the_continuation() {
+            use std::ffi::{CStr, CString};
+            let (dev, d, x, sub, zz) = volume();
+            let image = fs_ext4_test_support::temp_dir()
+                .join(format!("fs_ext4_inline_readdir_{}.img", std::process::id()));
+            std::fs::write(&image, &*dev.bytes.lock().unwrap()).unwrap();
+            let path = CString::new(image.to_str().unwrap()).unwrap();
+            let mut listed = Vec::new();
+            let err = unsafe {
+                let fs = crate::capi::fs_ext4_mount(path.as_ptr());
+                assert!(!fs.is_null(), "mount");
+                let dir = CString::new("/d").unwrap();
+                let it = crate::capi::fs_ext4_dir_open(fs, dir.as_ptr());
+                let err = if it.is_null() {
+                    Some(
+                        CStr::from_ptr(crate::capi::fs_ext4_last_error())
+                            .to_string_lossy()
+                            .into_owned(),
+                    )
+                } else {
+                    loop {
+                        let e = crate::capi::fs_ext4_dir_next(it);
+                        if e.is_null() {
+                            break;
+                        }
+                        let name = CStr::from_ptr((*e).name.as_ptr())
+                            .to_string_lossy()
+                            .into_owned();
+                        listed.push((name, (*e).inode));
+                    }
+                    crate::capi::fs_ext4_dir_close(it);
+                    None
+                };
+                crate::capi::fs_ext4_umount(fs);
+                err
+            };
+            let _ = std::fs::remove_file(&image);
+            assert_eq!(err, None, "dir_open /d");
+            listed.sort();
+            let mut want: Vec<(String, u32)> =
+                [(".", d), ("..", 2), ("sub", sub), ("x", x), ("zz", zz)]
+                    .iter()
+                    .map(|(n, i)| (n.to_string(), *i))
+                    .collect();
+            want.sort();
+            assert_eq!(listed, want);
+        }
+
+        #[test]
+        fn the_inode_api_reads_an_inline_directory() {
+            let (dev, d, x, sub, zz) = volume();
+            let fs = mount(&dev);
+            for (name, want) in [
+                (&b"x"[..], x),
+                (b"sub", sub),
+                (b"zz", zz),
+                (b".", d),
+                (b"..", 2),
+            ] {
+                assert_eq!(
+                    fs.lookup_at(d, name).map_err(|e| format!("{e:?}")),
+                    Ok(want),
+                    "lookup_at {}",
+                    String::from_utf8_lossy(name)
+                );
+            }
+            assert!(matches!(fs.lookup_at(d, b"nope"), Err(Error::NotFound)));
+            let mut listed: Vec<(Vec<u8>, u32)> = fs
+                .read_dir_ino(d)
+                .map_err(|e| format!("{e:?}"))
+                .expect("read_dir_ino")
+                .into_iter()
+                .map(|e| (e.name, e.inode))
+                .collect();
+            listed.sort();
+            let mut want: Vec<(Vec<u8>, u32)> =
+                [(".", d), ("..", 2), ("sub", sub), ("x", x), ("zz", zz)]
+                    .iter()
+                    .map(|(n, i)| (n.as_bytes().to_vec(), *i))
+                    .collect();
+            want.sort();
+            assert_eq!(listed, want);
+        }
+    }
 }
