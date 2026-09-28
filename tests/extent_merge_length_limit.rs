@@ -22,8 +22,10 @@ const BS: u64 = 1024;
 /// Blocks per preallocation: half a 1 KiB-block group, so pieces tile the
 /// free groups exactly and each one lands against the last.
 const PIECE: u64 = 4096;
-/// Eight pieces: 32768 blocks, one past what an uninitialized extent holds.
-const PIECES: u64 = 8;
+/// Ten pieces. The first lands in the tail of group 1, which is not
+/// contiguous with the rest; the next eight run on end to end from group 2,
+/// 32768 blocks, one past what an uninitialized extent holds.
+const PIECES: u64 = 10;
 
 fn mkfs() -> String {
     let path = fs_ext4_test_support::temp_path!("fs_ext4_merge_limit_{}.img", std::process::id());
