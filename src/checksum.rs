@@ -370,7 +370,10 @@ impl Checksummer {
             return false;
         }
         let stored_lo = u16::from_le_bytes(inode_raw[0x7C..0x7E].try_into().unwrap()) as u32;
-        let stored_hi = if inode_raw.len() >= 0x84 {
+        // Only where `i_checksum_hi` exists. Below `i_extra_isize = 4` the
+        // bytes at 0x82 are ordinary inode bytes the checksum covers, and
+        // the kernel and libext2fs compare the low 16 bits alone (#380).
+        let stored_hi = if checksum_hi_fits(inode_raw) {
             u16::from_le_bytes(inode_raw[0x82..0x84].try_into().unwrap()) as u32
         } else {
             0
@@ -461,8 +464,7 @@ impl Checksummer {
         // (i_extra_isize = 0) the kernel uses ONLY the 16-bit lo checksum and
         // treats 0x82 as ordinary (zero) data; zeroing hi and storing a full
         // 32-bit value there mismatches ("checksum does not match inode").
-        let fits_hi = inode_raw.len() >= 0x84
-            && u16::from_le_bytes(inode_raw[0x80..0x82].try_into().unwrap()) >= 4;
+        let fits_hi = checksum_hi_fits(inode_raw);
         let mut tmp = inode_raw.to_vec();
         tmp[0x7C] = 0;
         tmp[0x7D] = 0;
@@ -481,6 +483,30 @@ impl Checksummer {
         };
         Some((lo, hi))
     }
+
+    /// Checksum `inode_raw` and store it: `i_checksum_lo` always, and
+    /// `i_checksum_hi` only where the inode has one.
+    ///
+    /// EVERY WRITER USED TO STORE BOTH HALVES. With `i_extra_isize < 4`
+    /// [`compute_inode_checksum`](Self::compute_inode_checksum) covers
+    /// 0x82..0x84 as ordinary bytes and returns a `hi` of 0, and storing
+    /// that 0 at 0x82 afterwards changed a byte the checksum had just
+    /// covered -- and on an inode whose in-inode xattr area was placed at
+    /// 0x80, erased the area's magic (#380). No-op when checksums are off.
+    pub(crate) fn patch_inode_checksum(&self, ino: u32, generation: u32, inode_raw: &mut [u8]) {
+        if let Some((lo, hi)) = self.compute_inode_checksum(ino, generation, inode_raw) {
+            inode_raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
+            if checksum_hi_fits(inode_raw) {
+                inode_raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
+            }
+        }
+    }
+}
+
+/// Whether the inode has an `i_checksum_hi`: `i_extra_isize` (0x80) covers
+/// 0x82..0x84 -- the kernel's `EXT4_FITS_IN_INODE` test.
+fn checksum_hi_fits(inode_raw: &[u8]) -> bool {
+    inode_raw.len() >= 0x84 && u16::from_le_bytes(inode_raw[0x80..0x82].try_into().unwrap()) >= 4
 }
 
 #[cfg(test)]

@@ -431,6 +431,18 @@ Not caught by the compiler — the same source builds and behaves differently:
   the magic or with `h_blocks` other than 1 (`Corrupt`) and one that fails
   its checksum (`BadChecksum`), as the kernel's `ext4_xattr_check_block`
   does.
+- **An xattr set on an inode with `i_extra_isize = 0` goes where the kernel
+  reads it (#380).** Such an inode -- left by `ext2.ko`, older kernels, or
+  a 256-byte-inode ext2 volume -- has no in-inode xattr area as far as the
+  kernel and libext2fs are concerned: they read 0x80.. as the extra fields.
+  `setxattr` put the area at 0x80 anyway, invisible to the kernel and over
+  its timestamp bits, and on `metadata_csum` then stored a checksum high
+  half of 0 over the area's magic. `setxattr` now gives the inode
+  `i_extra_isize = 32` (zeroed, as the kernel's `__ext4_expand_extra_isize`
+  does) before writing the area, and the readers and `removexattr` no longer
+  treat bytes at 0x80 as an area. Every inode-checksum writer now stores
+  `i_checksum_hi` only where `i_extra_isize` covers it, and verification
+  compares only the low 16 bits where it does not, as the kernel does.
 
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new

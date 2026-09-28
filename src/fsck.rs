@@ -1724,12 +1724,7 @@ fn finalize_and_commit_inode(
     raw: &mut [u8],
 ) -> Result<()> {
     if fs.csum.enabled {
-        if let Some((lo, hi)) = fs.csum.compute_inode_checksum(ino, generation, raw) {
-            raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
-            if raw.len() >= 0x84 {
-                raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
-            }
-        }
+        fs.csum.patch_inode_checksum(ino, generation, raw);
     }
     let mut buf = BlockBuffer::new(fs.sb.block_size());
     fs.buffer_write_inode(&mut buf, ino, raw)?;

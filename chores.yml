@@ -125,8 +125,13 @@ chore_min_version: 0.6.0
 #                                                    36404048578), which failed
 #                                                    the tier with exit 65 and
 #                                                    nothing red inside it
-#     kernel       52 /   3,012       80 /   4,000   ~54% / ~33%: four tests,
-#                                                    so one more is a big step
+#     kernel       71 /   4,090      100 /   5,600   ~40% / ~37%. Five tests
+#                                                    since #380 added one:
+#                                                    measured on the x86_64
+#                                                    CI job of PR #413, which
+#                                                    passed and printed 4,090
+#                                                    bytes over the old 4,000
+#                                                    (was 52 / 3,012 for four)
 #     lwext4       65 /   5,243       85 /   6,800   ~31% / ~30%: eight tests
 #                                                    and sixteen [oracle vm]
 #                                                    lines, so one more
@@ -435,7 +440,7 @@ tasks:
     # written — plus the reverse direction, and a deliberate corruption
     # that must fail.
     cmds:
-      - 'scripts/tier.sh test:kernel kernel 80 4000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
+      - 'scripts/tier.sh test:kernel kernel 100 5600 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
       - 'scripts/test-floor.sh kernel 3'
 
   test:lwext4:

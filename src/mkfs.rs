@@ -1027,10 +1027,7 @@ fn write_root_inode(
     }
 
     if csum.enabled {
-        if let Some((lo, hi)) = csum.compute_inode_checksum(EXT4_ROOT_INO, 0, slot) {
-            slot[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
-            slot[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
-        }
+        csum.patch_inode_checksum(EXT4_ROOT_INO, 0, slot);
     }
 }
 

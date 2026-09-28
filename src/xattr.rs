@@ -146,7 +146,12 @@ pub fn read_all(
     if inode_raw.len() >= 128 + 4 {
         let extra_isize = u16::from_le_bytes(inode_raw[128..130].try_into().unwrap()) as usize;
         let xattr_region_start = 128 + extra_isize;
-        if xattr_region_start + 4 <= inode_size as usize
+        // `i_extra_isize = 0` means the extra fields are unused and there
+        // is no in-inode area: the kernel (`ext4_iget`) and libext2fs parse
+        // none, so neither does this. Bytes at 0x80 that look like one are
+        // not an attribute anybody else can see (#380).
+        if extra_isize != 0
+            && xattr_region_start + 4 <= inode_size as usize
             && xattr_region_start + 4 <= inode_raw.len()
         {
             let region = &inode_raw[xattr_region_start..(inode_size as usize).min(inode_raw.len())];
