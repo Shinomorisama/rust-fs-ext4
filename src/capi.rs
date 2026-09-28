@@ -2700,6 +2700,15 @@ fn anomaly_to_capi(a: &crate::fsck::Anomaly) -> (&'static str, u32, String) {
                 .join(",");
             ("duplicate_dir_inode", *ino, format!("aliases={detail}"))
         }
+        &Anomaly::DirBlockChecksumMismatch {
+            dir_ino,
+            logical_block,
+            htree,
+        } => (
+            "dir_block_checksum",
+            dir_ino,
+            format!("logical_block={logical_block} htree={}", u8::from(htree)),
+        ),
     }
 }
 
