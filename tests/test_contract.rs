@@ -123,11 +123,14 @@ fn direct_tool_spawns(text: &str) -> Vec<String> {
 /// and that is not a hypothetical: every oracle test used to do exactly
 /// that, with a `run(program, args)` helper. The only programs a test
 /// spawns by computed name are this crate's own binaries, which come
-/// from `CARGO_BIN_EXE_*`, so the rule is: a non-literal program must be
-/// one of those, in the same file.
+/// from `CARGO_BIN_EXE_*`, and the test binary itself, re-run from
+/// `std::env::current_exe()` to watch a whole process start and exit
+/// (tests/test_temp_policy.rs). So the rule is: a non-literal program
+/// must be bound to one of those, in the same file.
 fn indirect_spawns(text: &str) -> Vec<String> {
     let spawn = ["Command", "::", "new", "("].concat();
     let own_binary = ["CARGO_BIN", "_EXE"].concat();
+    let this_test_binary = ["current", "_exe()"].concat();
     let mut hits = Vec::new();
     for (at, _) in text.match_indices(&spawn) {
         let rest = text[at + spawn.len()..].trim_start();
@@ -147,7 +150,7 @@ fn indirect_spawns(text: &str) -> Vec<String> {
             (line.contains(&format!("let {name} ="))
                 || line.contains(&format!("let {name}:"))
                 || line.contains(&format!("const {name}:")))
-                && line.contains(&own_binary)
+                && (line.contains(&own_binary) || line.contains(&this_test_binary))
         });
         if !bound_to_own_binary {
             hits.push(name);
@@ -383,8 +386,8 @@ fn no_test_spawns_a_program_it_named_in_a_variable() {
     assert!(
         offenders.is_empty(),
         "these spawn a program whose name is in a variable, which the checks above \
-         cannot read. Only this crate's own binaries (CARGO_BIN_EXE_*) are spawned \
-         that way; an oracle tool goes through fs_ext4_test_support::oracle:\n{}",
+         cannot read. Only this crate's own binaries (CARGO_BIN_EXE_*) and the test \
+         binary itself (std::env::current_exe()) are spawned that way; an oracle tool goes through fs_ext4_test_support::oracle:\n{}",
         offenders.join("\n")
     );
 }
@@ -472,6 +475,10 @@ fn the_scans_recognise_the_shapes_they_refuse() {
         "::new(MKFS).output();\n",
         "let out = Command",
         "::new(tool).args(args).output();\n",
+        "let this_test_binary = std::env::current",
+        "_exe().unwrap();\n",
+        "let out = Command",
+        "::new(this_test_binary).output();\n",
         "Command",
         "::new(\"sh\").arg(\"-c\");\n",
     ]
