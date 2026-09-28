@@ -186,8 +186,8 @@ impl Sha256 {
     fn new() -> Self {
         Self {
             state: [
-                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
-                0x1f83d9ab, 0x5be0cd19,
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
             ],
             buffer: Vec::new(),
             length: 0,
@@ -267,7 +267,6 @@ impl Sha256 {
     }
 }
 
-
 /// What the kernel reported, as `(kind, path) -> value`.
 fn parse(report: &str) -> BTreeMap<(String, String), String> {
     report
@@ -319,7 +318,6 @@ find . -mindepth 1 -printf '%P\n' | sort | while read -r path; do
 done
 printf 'kernel\t\t%s\n' "$(uname -r)"
 "#;
-
 
 /// Mount `image` read-only in the guest and report everything in it:
 /// for every path, its type, mode, size, SHA-256, symlink target, `user.*`
