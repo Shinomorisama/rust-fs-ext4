@@ -555,6 +555,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   capped at 65528 blocks (`mkfs::MAX_BLOCKS_PER_GROUP`), what `mke2fs -b`
   chooses, and the bitmap bits past it are padded as mke2fs pads them.
 
+- **Inline-data directories are read.** An inline directory's `i_block`
+  holds its parent's inode number in bytes 0..4 and its entries from byte 4,
+  continuing in the `system.data` xattr once they outgrow it. Lookup parsed
+  from byte 0, so every name in a kernel-made inline directory failed with
+  `bad rec_len`; readdir refused the directory as a legacy one; `fsck` skipped
+  it. All three now read `.` and `..` synthesised as the kernel does, the
+  entries from byte 4, and the continuation, checked against directories the
+  kernel made (#427).
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

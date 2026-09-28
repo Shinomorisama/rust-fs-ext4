@@ -333,8 +333,7 @@ fn audit_inner(
     // up as we pop work items. Root maps to itself by convention so a
     // corrupted root ".." still flags WrongDotDot.
     let mut actual_parent: HashMap<u32, u32> = HashMap::new();
-    // Directories we couldn't fully walk (parse failure, inline overflow
-    // we don't decode, bound cap). Any link-count anomalies that could
+    // Directories we couldn't fully walk (parse failure, bound cap). Any link-count anomalies that could
     // have been explained by their missing entries are suppressed below.
     let mut incomplete_dirs: std::collections::HashSet<u32> = std::collections::HashSet::new();
     // ino → list of (parent_ino, name_bytes) that reference it. Skips
@@ -385,7 +384,7 @@ fn audit_inner(
         actual_parent.entry(dir_ino).or_insert(parent_ino);
         report.directories_scanned += 1;
 
-        let (inode, _raw) = match fs.read_inode_verified(dir_ino) {
+        let (inode, raw) = match fs.read_inode_verified(dir_ino) {
             Ok(p) => p,
             Err(_) => {
                 incomplete_dirs.insert(dir_ino);
@@ -412,23 +411,15 @@ fn audit_inner(
         }
         visited.insert(dir_ino);
 
-        // Skip directories the audit can't fully enumerate (inline dirs
-        // whose entries overflow into the xattr region — a valid
-        // on-disk layout we don't decode here).
-        if inode.has_inline_data() {
-            incomplete_dirs.insert(dir_ino);
-            emit_dir_progress(on_progress, report.directories_scanned, work.len());
-            continue;
-        }
-
         let mut bad_checksums: Vec<(u64, bool)> = Vec::new();
         let collected = collect_dir_entries_checked(
             fs,
-            Some(dir_ino),
+            dir_ino,
             &inode,
+            &raw,
             has_filetype,
             block_size,
-            &mut |logical, htree| bad_checksums.push((logical, htree)),
+            Some(&mut |logical, htree| bad_checksums.push((logical, htree))),
         );
         for (logical_block, htree) in bad_checksums {
             let a = Anomaly::DirBlockChecksumMismatch {
@@ -775,11 +766,13 @@ fn emit_dir_progress(
 
 fn collect_dir_entries(
     fs: &Filesystem,
+    ino: u32,
     inode: &Inode,
+    inode_raw: &[u8],
     has_filetype: bool,
     block_size: u32,
 ) -> Result<Vec<crate::dir::DirEntry>> {
-    collect_dir_entries_checked(fs, None, inode, has_filetype, block_size, &mut |_, _| {})
+    collect_dir_entries_checked(fs, ino, inode, inode_raw, has_filetype, block_size, None)
 }
 
 /// What a directory block's checksum says about it.
@@ -900,22 +893,32 @@ fn dir_block_passes_checks(block: &[u8], has_filetype: bool) -> bool {
 }
 
 /// [`collect_dir_entries`], reporting every block whose checksum does not
-/// match through `on_bad_checksum(logical, htree)` when `dir_ino` is given.
+/// match through `on_bad_checksum(logical, htree)` when one is given.
+/// `inode_raw` is the directory's on-disk inode, for the `system.data`
+/// xattr an inline directory's entries continue into.
 fn collect_dir_entries_checked(
     fs: &Filesystem,
-    dir_ino: Option<u32>,
+    dir_ino: u32,
     inode: &Inode,
+    inode_raw: &[u8],
     has_filetype: bool,
     block_size: u32,
-    on_bad_checksum: &mut dyn FnMut(u64, bool),
+    mut on_bad_checksum: Option<&mut dyn FnMut(u64, bool)>,
 ) -> Result<Vec<crate::dir::DirEntry>> {
-    let mut entries = Vec::new();
     if inode.has_inline_data() {
-        for entry in DirBlockIter::new(&inode.block, has_filetype) {
-            entries.push(entry?);
-        }
-        return Ok(entries);
+        // `.` and `..` synthesised, entries from byte 4 and then from the
+        // `system.data` continuation (#427).
+        return crate::inline_data::read_dir(
+            fs.dev.as_ref(),
+            dir_ino,
+            inode,
+            inode_raw,
+            fs.sb.inode_size,
+            block_size,
+            has_filetype,
+        );
     }
+    let mut entries = Vec::new();
     if !inode.has_extents() {
         return Err(Error::Corrupt(
             "legacy non-extent dirs not supported by audit",
@@ -932,7 +935,7 @@ fn collect_dir_entries_checked(
             .checked_mul(block_size as u64)
             .ok_or(Error::Corrupt("audit: dir block offset overflow"))?;
         fs.dev.read_at(offset, &mut buf)?;
-        if let Some(dir_ino) = dir_ino {
+        if let Some(on_bad_checksum) = on_bad_checksum.as_mut() {
             if let DirBlockChecksum::Mismatch { htree } =
                 dir_block_checksum(fs, dir_ino, inode, logical, &buf)
             {
@@ -1321,7 +1324,7 @@ fn repair_duplicate_dir_inode(
     if !kept_inode.is_dir() {
         return Ok(());
     }
-    let subdir_count = count_subdirs(fs, &kept_inode, has_ft, bs)?;
+    let subdir_count = count_subdirs(fs, ino, &kept_inode, &kept_raw, has_ft, bs)?;
     let new_nlink: u16 = 2u16.saturating_add(subdir_count.min(u16::MAX as u32 - 2) as u16);
     kept_raw[0x1A..0x1C].copy_from_slice(&new_nlink.to_le_bytes());
     finalize_and_commit_inode(fs, ino, kept_inode.generation, &mut kept_raw)?;
@@ -1333,11 +1336,13 @@ fn repair_duplicate_dir_inode(
 /// `i_links_count` from scratch after removing duplicate dirents.
 fn count_subdirs(
     fs: &Filesystem,
+    dir_ino: u32,
     dir_inode: &Inode,
+    dir_raw: &[u8],
     has_filetype: bool,
     block_size: u32,
 ) -> Result<u32> {
-    let entries = collect_dir_entries(fs, dir_inode, has_filetype, block_size)?;
+    let entries = collect_dir_entries(fs, dir_ino, dir_inode, dir_raw, has_filetype, block_size)?;
     let mut n = 0u32;
     for e in entries {
         if e.name == b"." || e.name == b".." {

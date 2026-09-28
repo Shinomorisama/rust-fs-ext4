@@ -19,6 +19,7 @@ use crate::dir::{self, DirEntry};
 use crate::error::{Error, Result};
 use crate::htree;
 use crate::indirect;
+use crate::inline_data;
 use crate::inode::{Inode, InodeFlags};
 use crate::superblock::Superblock;
 
@@ -116,7 +117,7 @@ pub(crate) fn find_entry(
     // supported here — `find_entry_linear` and `find_entry_htree` use
     // `indirect::map_logical_any` for flavor-aware logical→physical mapping.
     if dir_inode.has_inline_data() {
-        return find_inline(dir_inode, name);
+        return find_inline(dev, sb, dir_ino, dir_inode, name, csum);
     }
 
     let has_filetype = sb.feature_incompat & crate::features::Incompat::FILETYPE.bits() != 0;
@@ -286,21 +287,93 @@ fn find_entry_htree(
     Ok(None)
 }
 
-/// Handle directories whose entries live inline in i_block + inline xattrs.
-/// For tiny directories ext4 stores the entries directly inside the inode
-/// (INLINE_DATA feature). We only handle the i_block portion for now; the
-/// xattr-side continuation is rare and will be added with xattr support.
-fn find_inline(dir_inode: &Inode, name: &[u8]) -> Result<u32> {
-    // Inline-data dirs reuse the 60-byte i_block area. Entries start
-    // at offset 0 with the same on-disk format as normal dir blocks,
-    // but with a smaller buffer.
-    for entry in dir::DirBlockIter::new(&dir_inode.block, /* has_filetype */ true) {
+/// Look `name` up in an inline-data directory: `.`, `..` from bytes 0..4 of
+/// `i_block`, the entries from byte 4, then -- only when the name is not
+/// among those and `i_size` says there is more -- the entries continued in
+/// the `system.data` xattr (#427).
+fn find_inline(
+    dev: &dyn BlockDevice,
+    sb: &Superblock,
+    dir_ino: u32,
+    dir_inode: &Inode,
+    name: &[u8],
+    csum: &crate::checksum::Checksummer,
+) -> Result<u32> {
+    let has_filetype = sb.feature_incompat & crate::features::Incompat::FILETYPE.bits() != 0;
+    let in_block = inline_data::dir_entries(dir_ino, dir_inode, &[], has_filetype)?;
+    if let Some(entry) = in_block.iter().find(|e| e.name == name) {
+        return Ok(entry.inode);
+    }
+    if dir_inode.size as usize <= inline_data::INLINE_BLOCK_SIZE {
+        return Err(Error::NotFound);
+    }
+    let raw = read_raw_inode(dev, sb, dir_ino, dir_inode, csum)?;
+    let continuation =
+        inline_data::dir_continuation(dev, dir_inode, &raw, sb.inode_size, sb.block_size())?;
+    for entry in dir::DirBlockIter::new(&continuation, has_filetype) {
         let entry = entry?;
         if entry.name == name {
             return Ok(entry.inode);
         }
     }
     Err(Error::NotFound)
+}
+
+/// The on-disk bytes of `ino`, for the in-inode xattr an inline directory
+/// continues into. The lookup's `read_inode` hands back a parsed [`Inode`]
+/// only, so the inode table is found through the one group descriptor it
+/// needs. The bytes must be the inode the lookup was given: checksum-valid
+/// when checksums are on, and with the same `i_block`, size and generation.
+fn read_raw_inode(
+    dev: &dyn BlockDevice,
+    sb: &Superblock,
+    ino: u32,
+    expected: &Inode,
+    csum: &crate::checksum::Checksummer,
+) -> Result<Vec<u8>> {
+    if ino == 0 || ino > sb.inodes_count || sb.inodes_per_group == 0 {
+        return Err(Error::InvalidInode(ino));
+    }
+    let group = u64::from((ino - 1) / sb.inodes_per_group);
+    if group >= sb.block_group_count() {
+        return Err(Error::InvalidInode(ino));
+    }
+    let block_size = u64::from(sb.block_size());
+    let desc_size = sb.desc_size as usize;
+    let (desc_block, desc_off) = sb.descriptor_location(group);
+    let mut table = vec![0u8; block_size as usize];
+    dev.read_at(
+        desc_block
+            .checked_mul(block_size)
+            .ok_or(Error::Corrupt("group descriptor block number overflow"))?,
+        &mut table,
+    )?;
+    let desc = table
+        .get(desc_off..desc_off + desc_size)
+        .ok_or(Error::Corrupt("group descriptor outside its block"))?;
+    let bgd = crate::bgd::BlockGroupDescriptor::parse(desc, sb.desc_size)?;
+    let inode_size = u64::from(sb.inode_size);
+    let local = u64::from((ino - 1) % sb.inodes_per_group);
+    let offset = bgd
+        .inode_table
+        .checked_mul(block_size)
+        .and_then(|b| b.checked_add(local * inode_size))
+        .ok_or(Error::Corrupt("inode table offset overflow"))?;
+    let mut raw = vec![0u8; inode_size as usize];
+    dev.read_at(offset, &mut raw)?;
+    let parsed = Inode::parse(&raw)?;
+    if csum.enabled && !csum.verify_inode(ino, parsed.generation, &raw) {
+        return Err(Error::BadChecksum { what: "inode" });
+    }
+    if parsed.block != expected.block
+        || parsed.size != expected.size
+        || parsed.generation != expected.generation
+    {
+        return Err(Error::Corrupt(
+            "inline directory: the inode table disagrees with the inode being looked up",
+        ));
+    }
+    Ok(raw)
 }
 
 /// Split "/foo/bar/baz" into ["foo", "bar", "baz"]. Empty components (from
