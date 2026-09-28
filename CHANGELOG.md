@@ -375,6 +375,13 @@ Not caught by the compiler — the same source builds and behaves differently:
   counter. It bites groups with more than 65535 free blocks or inodes, which
   16 KiB and larger blocks allow. The offsets are now named constants the
   parser and both writers share.
+- **The kernel finds every attribute in an external xattr block this crate
+  wrote (#379).** The block's entries were sorted by namespace and name, but
+  the kernel's lookup compares namespace, then name *length*, then name, and
+  stops at the first entry past the one it wants. With `user.abc` written
+  before `user.zz`, the kernel's `getxattr("user.zz")` answered ENODATA on a
+  volume `e2fsck` called clean, and every edit re-sorted a kernel-written
+  block the same wrong way. Entries are now written in the kernel's order.
 
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new

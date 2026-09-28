@@ -144,6 +144,18 @@ fn write_everything(tag: &str) -> Written {
     fs.apply_setxattr("/dir/small.txt", "user.note", b"written-by-rust-fs-ext4")
         .expect("setxattr");
 
+    // Two attributes too big for the inode, so both land in the external
+    // block, with names of different lengths where the longer sorts first
+    // bytewise. The kernel looks block entries up sorted by name length
+    // before name, and stops at the first entry past the target; written
+    // in any other order it cannot find `user.zz` (#379).
+    fs.apply_create("/dir/two-long-values", 0o644)
+        .expect("create");
+    fs.apply_setxattr("/dir/two-long-values", "user.abc", LONG_VALUE_A.as_bytes())
+        .expect("setxattr abc");
+    fs.apply_setxattr("/dir/two-long-values", "user.zz", LONG_VALUE_Z.as_bytes())
+        .expect("setxattr zz");
+
     fs.apply_setxattr(
         "/acl_dir",
         "system.posix_acl_access",
@@ -186,6 +198,17 @@ fn write_everything(tag: &str) -> Written {
     }
 }
 
+/// Values too long for the in-inode area (about 90 bytes on a 256-byte
+/// inode), so they go to the external block.
+const LONG_VALUE_A: &str = concat!(
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+);
+const LONG_VALUE_Z: &str = concat!(
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+);
+
 const LONG_TARGET: &str =
     "a/very/long/target/that/cannot/live/inside/the/inode/because/it/is/far/past/sixty/bytes";
 
@@ -217,6 +240,15 @@ fn check(report: &BTreeMap<(String, String), String>, written: &Written) -> Vec<
         "xattrs",
         "dir/small.txt",
         "user.colour=amber,user.note=written-by-rust-fs-ext4".into(),
+    );
+
+    // Each value is fetched by name (`getfattr -n`), which is the kernel's
+    // sorted block lookup: a block in the wrong order reads `user.zz` as
+    // empty. The listing itself comes back in `getfattr`'s order.
+    want(
+        "xattrs",
+        "dir/two-long-values",
+        format!("user.abc={LONG_VALUE_A},user.zz={LONG_VALUE_Z}"),
     );
 
     want("type", "dir/big.bin", "regular-file".into());
