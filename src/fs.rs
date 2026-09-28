@@ -9814,4 +9814,77 @@ mod tests {
             "an uninit group's bitmap bytes were counted: {r:?}"
         );
     }
+
+    /// #390: the buffered BGD counter patch writes each counter's high half
+    /// where `BlockGroupDescriptor::parse` reads it (free_blocks_hi 0x2C,
+    /// free_inodes_hi 0x2E, used_dirs_hi 0x30), so a carry out of the low
+    /// half lands in the counter and not in `bg_inode_table_hi`.
+    #[test]
+    fn buffered_bgd_counter_high_halves_are_written_where_they_are_read() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        assert!(fs.sb.desc_size >= 64, "the fixture must carry high halves");
+        let (blk, off) = fs.sb.descriptor_location(0);
+        let mut buf = BlockBuffer::new(BS);
+        {
+            let b = buf.get_mut(&fs, blk).unwrap();
+            b[off + 0x0C..off + 0x0E].copy_from_slice(&0xFFFFu16.to_le_bytes());
+            b[off + 0x0E..off + 0x10].copy_from_slice(&0xFFFFu16.to_le_bytes());
+            b[off + 0x10..off + 0x12].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        }
+        let parse = |buf: &BlockBuffer| {
+            crate::bgd::BlockGroupDescriptor::parse(&buf.dirty[&blk][off..off + 64], 64).unwrap()
+        };
+        let before = parse(&buf);
+        fs.buffer_patch_bgd_counters(&mut buf, 0, 1, 1, 1).unwrap();
+        let after = parse(&buf);
+        assert_eq!(
+            after.inode_table, before.inode_table,
+            "inode table pointer changed"
+        );
+        assert_eq!(after.block_bitmap, before.block_bitmap);
+        assert_eq!(after.inode_bitmap, before.inode_bitmap);
+        assert_eq!(after.free_blocks_count, 0x1_0000);
+        assert_eq!(after.free_inodes_count, 0x1_0000);
+        assert_eq!(after.used_dirs_count, 0x1_0000);
+        assert_eq!(after.itable_unused, before.itable_unused);
+
+        // And a borrow back across the boundary returns every field.
+        fs.buffer_patch_bgd_counters(&mut buf, 0, -1, -1, -1)
+            .unwrap();
+        let back = parse(&buf);
+        assert_eq!(back.inode_table, before.inode_table);
+        assert_eq!(back.free_blocks_count, 0xFFFF);
+        assert_eq!(back.free_inodes_count, 0xFFFF);
+        assert_eq!(back.used_dirs_count, 0xFFFF);
+    }
+
+    /// #390: the unbuffered BGD counter patch (the one fsck repair uses)
+    /// agrees with `parse` on where the high halves live.
+    #[test]
+    fn direct_bgd_counter_high_halves_are_written_where_they_are_read() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        assert!(fs.sb.desc_size >= 64, "the fixture must carry high halves");
+        let (blk, off) = fs.sb.descriptor_location(0);
+        let mut raw = fs.read_block(blk).unwrap();
+        raw[off + 0x0C..off + 0x0E].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        raw[off + 0x0E..off + 0x10].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        raw[off + 0x10..off + 0x12].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        fs.restamp_group_desc_csum(&mut raw[..], off, 0);
+        dev.write_at(blk * u64::from(BS), &raw).unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        let before = crate::bgd::BlockGroupDescriptor::parse(&raw[off..off + 64], 64).unwrap();
+        fs.patch_bgd_counters(0, 1, 1, 1).unwrap();
+        let raw = fs.read_block(blk).unwrap();
+        let after = crate::bgd::BlockGroupDescriptor::parse(&raw[off..off + 64], 64).unwrap();
+        assert_eq!(
+            after.inode_table, before.inode_table,
+            "inode table pointer changed"
+        );
+        assert_eq!(after.free_blocks_count, 0x1_0000);
+        assert_eq!(after.free_inodes_count, 0x1_0000);
+        assert_eq!(after.used_dirs_count, 0x1_0000);
+    }
 }
