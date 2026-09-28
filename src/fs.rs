@@ -9227,4 +9227,56 @@ mod tests {
             judged.clean("an indirect-mapped orphan after its data is freed");
         }
     }
+
+    /// #391: fsck counts an uninit group the way the format defines it —
+    /// a BLOCK_UNINIT group's blocks from its own metadata, an INODE_UNINIT
+    /// group's inodes as all free — not from bitmap blocks the format leaves
+    /// unspecified. Group 2 of a 2 KiB-block volume (the smallest block that
+    /// formats more than one group) holds nothing but its own bitmaps and
+    /// inode table, so flagging it uninit is honest.
+    #[test]
+    fn fsck_does_not_count_an_uninit_groups_bitmaps() {
+        const SMALL_BS: u32 = 2048;
+        // Two 32 MiB groups and a partial third.
+        const SMALL_VOL: u64 = 80 * 1024 * 1024;
+        let dev = MemDev::new(SMALL_VOL);
+        crate::mkfs::format_filesystem(dev.as_ref(), Some("uninit"), None, SMALL_VOL, SMALL_BS)
+            .expect("format");
+        let gi = 2usize;
+        {
+            let fs = mount(&dev);
+            assert!(fs.groups.len() > gi, "the volume needs a third group");
+            let g = fs.groups[gi];
+            assert_eq!(g.free_inodes_count, fs.sb.inodes_per_group);
+            assert_eq!(g.used_dirs_count, 0);
+            let (blk, off) = fs.sb.descriptor_location(gi as u64);
+            let mut raw = fs.read_block(blk).unwrap();
+            let flags = u16::from_le_bytes(raw[off + 0x12..off + 0x14].try_into().unwrap())
+                | crate::bgd::BgdFlags::BLOCK_UNINIT.bits()
+                | crate::bgd::BgdFlags::INODE_UNINIT.bits();
+            raw[off + 0x12..off + 0x14].copy_from_slice(&flags.to_le_bytes());
+            fs.restamp_group_desc_csum(&mut raw[..], off, gi);
+            dev.write_at(blk * u64::from(SMALL_BS), &raw).unwrap();
+        }
+        {
+            let fs = mount(&dev);
+            let before = fs.audit(1000, 10000).unwrap();
+            assert!(
+                before.is_clean(),
+                "precondition: clean with the real bitmaps still in place: {before:?}"
+            );
+            let g = fs.groups[gi];
+            let bs = SMALL_BS as usize;
+            dev.write_at(g.block_bitmap * u64::from(SMALL_BS), &vec![0u8; bs])
+                .unwrap();
+            dev.write_at(g.inode_bitmap * u64::from(SMALL_BS), &vec![0xFFu8; bs])
+                .unwrap();
+        }
+        let fs = mount(&dev);
+        let r = fs.audit(1000, 10000).unwrap();
+        assert!(
+            r.is_clean(),
+            "an uninit group's bitmap bytes were counted: {r:?}"
+        );
+    }
 }

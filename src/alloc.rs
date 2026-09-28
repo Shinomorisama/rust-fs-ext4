@@ -362,19 +362,7 @@ where
         let max_bits = blocks_in_group(sb, gi);
 
         let mut bitmap_bytes: Vec<u8> = if bgd.flags().contains(BgdFlags::BLOCK_UNINIT) {
-            // Uninit is not empty: the group still holds its backup
-            // superblock and GDT, and without flex_bg its own bitmaps and
-            // inode table. The kernel's `ext4_init_block_bitmap` marks
-            // them; a plan that doesn't hands one of them out as free.
-            let mut bm = vec![0u8; sb.block_size() as usize];
-            for (first_bit, count) in group_owned_metadata_runs(sb, groups, gi as usize) {
-                for bit in first_bit..(first_bit + count).min(u64::from(max_bits)) {
-                    if let Some(b) = bm.get_mut((bit / 8) as usize) {
-                        *b |= 1u8 << (bit % 8);
-                    }
-                }
-            }
-            bm
+            uninit_block_bitmap(sb, groups, gi)
         } else {
             bitmap_reader(bgd.block_bitmap)?
         };
@@ -413,6 +401,34 @@ where
     Err(Error::Corrupt(
         "no group has a contiguous free run of this size",
     ))
+}
+
+/// The block bitmap a `BLOCK_UNINIT` group implies: its own metadata in
+/// use, every other block in the group free.
+///
+/// Uninit is not empty: the group still holds its backup superblock and
+/// GDT, and without flex_bg its own bitmaps and inode table. The kernel's
+/// `ext4_init_block_bitmap` marks them; a plan that doesn't hands one of
+/// them out as free. The on-disk bitmap block of such a group is
+/// unspecified (`mke2fs` never writes it), so the planner and fsck both
+/// count from this instead of reading it (#391). Bits past the group's
+/// last block are left clear; callers bound their scans by
+/// [`blocks_in_group`].
+pub(crate) fn uninit_block_bitmap(
+    sb: &Superblock,
+    groups: &[BlockGroupDescriptor],
+    gi: u32,
+) -> Vec<u8> {
+    let max_bits = u64::from(blocks_in_group(sb, gi));
+    let mut bm = vec![0u8; sb.block_size() as usize];
+    for (first_bit, count) in group_owned_metadata_runs(sb, groups, gi as usize) {
+        for bit in first_bit..(first_bit + count).min(max_bits) {
+            if let Some(b) = bm.get_mut((bit / 8) as usize) {
+                *b |= 1u8 << (bit % 8);
+            }
+        }
+    }
+    bm
 }
 
 /// The blocks group `gi` owns that physically live inside it, as
