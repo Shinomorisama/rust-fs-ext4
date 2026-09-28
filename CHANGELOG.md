@@ -149,6 +149,16 @@ Not caught by the compiler — the same source builds and behaves differently:
 
 ### Changed
 
+- **Four output budgets are re-measured, and raised to the ~30% headroom the
+  table names as its own convention** (#422): `unit` 700/42,000 →
+  850/50,000, `lwext4` 80/6,000 → 85/6,800, `suite` 2,500/125,000 →
+  2,900/140,000 and `vm` 2,700/135,000 → 3,050/148,000, each from the
+  retained tier logs of CI run 36400527061. The rows stood still while the
+  tiers grew into them, so a tier could fail with exit 65 and nothing red
+  inside it — as `unit` did on #370 at 751/45,748. `images`, `kernel`,
+  `wasm`, `scripts` and `semver` are unchanged: no measurement asked them to
+  move.
+
 - **The test contract is chore tasks, and the first consumer of
   [fs-linux-test-harness](https://github.com/antimatter-studios/fs-linux-test-harness).**
   `chore tools` verifies what the HOST needs, `chore fixtures` builds the
