@@ -8695,6 +8695,133 @@ mod tests {
             .expect("write sb");
     }
 
+    /// Turn the directory `dir` (child of `parent`) into an inline-data
+    /// directory the way the kernel lays one out: `i_block` holds the
+    /// parent's inode number, then entries; `i_size` is 60. `entry`, if
+    /// given, is `(inode, name, file_type)` placed as its one entry.
+    fn make_inline_dir(fs: &Filesystem, dir: u32, parent: u32, entry: Option<(u32, &[u8], u8)>) {
+        let (inode, mut raw) = fs.read_inode_verified(dir).unwrap();
+        let mut flags = u32::from_le_bytes(raw[0x20..0x24].try_into().unwrap());
+        flags &= !crate::inode::InodeFlags::EXTENTS.bits();
+        flags |= crate::inode::InodeFlags::INLINE_DATA.bits();
+        raw[0x20..0x24].copy_from_slice(&flags.to_le_bytes());
+        raw[0x28..0x64].fill(0);
+        raw[0x28..0x2C].copy_from_slice(&parent.to_le_bytes());
+        let (ino, name, ft) = entry.unwrap_or((0, b"", 0));
+        raw[0x2C..0x30].copy_from_slice(&ino.to_le_bytes());
+        raw[0x30..0x32].copy_from_slice(&56u16.to_le_bytes());
+        raw[0x32] = name.len() as u8;
+        raw[0x33] = ft;
+        raw[0x34..0x34 + name.len()].copy_from_slice(name);
+        raw[0x04..0x08].copy_from_slice(&60u32.to_le_bytes());
+        fs.finalize_inode_raw(dir, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(dir, &raw).unwrap();
+    }
+
+    /// The image outside the primary superblock, which a mount's first write
+    /// marks not clean and its drop marks clean again.
+    fn outside_superblock(dev: &std::sync::Arc<MemDev>) -> Vec<u8> {
+        let mut bytes = dev.bytes.lock().unwrap().clone();
+        bytes[1024..2048].fill(0);
+        bytes
+    }
+
+    /// #382: renaming an inline-data directory must not treat its i_block
+    /// (parent inode number, then entries) as a block map.
+    #[test]
+    fn renaming_an_inline_directory_does_not_write_through_its_parent_number() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+        let fs = mount(&dev);
+        fs.apply_mkdir("/a", 0o755).unwrap();
+        fs.apply_mkdir("/b", 0o755).unwrap();
+        fs.apply_mkdir("/a/sub", 0o755).unwrap();
+        let a = resolve(&fs, "/a").unwrap();
+        let sub = resolve(&fs, "/a/sub").unwrap();
+        make_inline_dir(&fs, sub, a, None);
+        drop(fs);
+        let fs = mount(&dev);
+        let before = fs.read_block(a as u64).unwrap();
+        let r = fs.apply_rename("/a/sub", "/b/sub", false);
+        drop(fs);
+        let fs = mount(&dev);
+        let after = fs.read_block(a as u64).unwrap();
+        assert!(
+            before == after,
+            "block {a} (the parent's inode number) was written by a rename: {r:?}"
+        );
+        assert!(
+            matches!(r, Err(Error::Unsupported(_))),
+            "rename of an inline directory: {r:?}"
+        );
+    }
+
+    /// #382: every directory mutation whose parent or target is an
+    /// inline-data directory is refused, and writes nothing.
+    #[test]
+    fn every_mutation_of_an_inline_directory_is_refused_and_writes_nothing() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+        let fs = mount(&dev);
+        fs.apply_mkdir("/a", 0o755).unwrap();
+        fs.apply_mkdir("/b", 0o755).unwrap();
+        fs.apply_mkdir("/a/sub", 0o755).unwrap();
+        fs.apply_mkdir("/a/empty", 0o755).unwrap();
+        fs.apply_create("/f2", 0o644).unwrap();
+        fs.apply_create("/b/y", 0o644).unwrap();
+        let a = resolve(&fs, "/a").unwrap();
+        let sub = resolve(&fs, "/a/sub").unwrap();
+        let empty = resolve(&fs, "/a/empty").unwrap();
+        let f2 = resolve(&fs, "/f2").unwrap();
+        // /a/sub holds one entry, "f", a second link to /f2.
+        make_inline_dir(&fs, sub, a, Some((f2, b"f", 1)));
+        make_inline_dir(&fs, empty, a, None);
+        let (i, raw) = fs.read_inode_verified(f2).unwrap();
+        let mut raw = raw.clone();
+        raw[0x1A..0x1C].copy_from_slice(&2u16.to_le_bytes());
+        fs.finalize_inode_raw(f2, i.generation, &mut raw).unwrap();
+        fs.write_inode_raw(f2, &raw).unwrap();
+        drop(fs);
+
+        type Op = fn(&Filesystem) -> Result<()>;
+        let ops: [(&str, Op); 9] = [
+            ("create inside", |fs| {
+                fs.apply_create("/a/sub/g", 0o644).map(drop)
+            }),
+            ("mkdir inside", |fs| {
+                fs.apply_mkdir("/a/sub/h", 0o755).map(drop)
+            }),
+            ("symlink inside", |fs| {
+                fs.apply_symlink("t", "/a/sub/s").map(drop)
+            }),
+            ("link into", |fs| fs.apply_link("/f2", "/a/sub/l")),
+            ("unlink inside", |fs| fs.apply_unlink("/a/sub/f")),
+            ("rename out of", |fs| {
+                fs.apply_rename("/a/sub/f", "/b/f", false)
+            }),
+            ("rename into", |fs| {
+                fs.apply_rename("/b/y", "/a/sub/y", false)
+            }),
+            ("rename over", |fs| fs.apply_rename("/b", "/a/empty", true)),
+            ("rmdir", |fs| fs.apply_rmdir("/a/empty")),
+        ];
+        for (name, op) in ops {
+            let before = outside_superblock(&dev);
+            let fs = mount(&dev);
+            let r = op(&fs);
+            drop(fs);
+            assert!(
+                matches!(r, Err(Error::Unsupported(_))),
+                "{name} an inline directory: {r:?}"
+            );
+            assert!(
+                outside_superblock(&dev) == before,
+                "{name} an inline directory wrote to the image"
+            );
+        }
+    }
+
     /// `fs_ext4_listxattr` into a short buffer writes whole names only,
     /// as `include/fs_ext4.h` now says; it said "as much as fits".
     #[test]
