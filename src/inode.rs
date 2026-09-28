@@ -109,6 +109,31 @@ bitflags::bitflags! {
     }
 }
 
+/// The `i_flags` bits a caller may change through `set_flags`.
+///
+/// The kernel's `EXT4_FL_USER_MODIFIABLE`, less the bits it honours only
+/// under conditions this driver does not implement: `EXTENTS` (a
+/// migration that rewrites the block map), `DAX` (a mount option and a
+/// device that supports it) and `CASEFOLD` (an empty directory on a
+/// volume with the casefold feature), and the obsolete `EOFBLOCKS`.
+/// Every other bit — `INDEX`, `HUGE_FILE`, `ENCRYPT`, `VERITY`,
+/// `INLINE_DATA`, `EA_INODE` among them — describes how the bytes the
+/// inode already holds are read, so flipping it alone makes them read
+/// wrong.
+pub const USER_MODIFIABLE_FLAGS: u32 = InodeFlags::SECRM.bits()
+    | InodeFlags::UNRM.bits()
+    | InodeFlags::COMPR.bits()
+    | InodeFlags::SYNC.bits()
+    | InodeFlags::IMMUTABLE.bits()
+    | InodeFlags::APPEND.bits()
+    | InodeFlags::NODUMP.bits()
+    | InodeFlags::NOATIME.bits()
+    | 0x0000_4000 // JOURNAL_DATA
+    | 0x0000_8000 // NOTAIL
+    | 0x0001_0000 // DIRSYNC
+    | 0x0002_0000 // TOPDIR
+    | 0x2000_0000; // PROJINHERIT
+
 /// Parsed ext4 inode.
 ///
 /// Combines hi+lo halves for uid, gid, size, file_acl, blocks, and checksum so

@@ -3279,12 +3279,14 @@ impl Filesystem {
     /// Set the `i_flags` field (FS_IOC_SETFLAGS) for the inode at `path`.
     ///
     /// Bumps ctime. Fails with `Error::ReadOnly` on read-only mounts, or
-    /// `Error::InvalidArgument` if the caller attempts to flip any of the
-    /// layout-critical flags managed internally (EXTENTS_FL, INLINE_DATA_FL,
-    /// EA_INODE_FL) — changing those without rewriting the inode payload would
-    /// corrupt the filesystem.
+    /// `Error::InvalidArgument` if `flags` changes any bit outside
+    /// [`crate::inode::USER_MODIFIABLE_FLAGS`] — `INDEX`, `EXTENTS`,
+    /// `INLINE_DATA`, `HUGE_FILE`, `ENCRYPT`, `VERITY`, `CASEFOLD` and the
+    /// like describe how the inode's existing bytes are read, so flipping
+    /// one without rewriting them would corrupt the file. Bits outside the
+    /// mask that are already set may be passed back unchanged.
     pub fn apply_set_flags(&self, path: &str, flags: u32) -> Result<()> {
-        use crate::inode::{InodeFlags, OFF_FLAGS};
+        use crate::inode::{OFF_FLAGS, USER_MODIFIABLE_FLAGS};
         self.refuse_write()?;
         let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
         let ino = crate::path::lookup_with_csum(
@@ -3296,12 +3298,10 @@ impl Filesystem {
         )?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
 
-        let managed = InodeFlags::EXTENTS.bits()
-            | InodeFlags::INLINE_DATA.bits()
-            | InodeFlags::EA_INODE.bits();
-        if (flags ^ inode.flags) & managed != 0 {
+        if (flags ^ inode.flags) & !USER_MODIFIABLE_FLAGS != 0 {
             return Err(Error::InvalidArgument(
-                "set_flags: cannot modify internally-managed inode flags (EXTENTS, INLINE_DATA, EA_INODE)",
+                "set_flags: only the user-modifiable inode flags may change \
+                 (INDEX, EXTENTS, INLINE_DATA, HUGE_FILE, ENCRYPT, VERITY, CASEFOLD and the like are managed)",
             ));
         }
 

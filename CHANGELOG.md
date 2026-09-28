@@ -358,6 +358,15 @@ Not caught by the compiler — the same source builds and behaves differently:
   allocation cross-linked them; on a journaled volume the write also went
   around the journal. The nodes are now staged in the transaction only, and
   the call's planner and lookups read them back from there (#389).
+- **`set_flags` changes only the bits a caller may change** (#381). It
+  refused only `EXTENTS`, `INLINE_DATA` and `EA_INODE`, so `INDEX_FL` on a
+  linear directory made the next create or lookup read its first block as a
+  `dx_root`, `HUGE_FILE_FL` changed the unit of `i_blocks`, and `ENCRYPT` or
+  `VERITY` made a file unreadable. A change to any bit outside
+  `inode::USER_MODIFIABLE_FLAGS` — the kernel's `EXT4_FL_USER_MODIFIABLE`
+  less `EXTENTS`, `DAX` and `CASEFOLD` — now fails with `InvalidArgument`
+  and writes nothing; a bit already set may be passed back unchanged. The
+  header's `EXT4_NOATIME_FL` value is corrected to `0x80`.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator
