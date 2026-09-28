@@ -18,6 +18,18 @@ repository = "https://github.com/christhomas/rust-fs-ext4"
 # try to include it and fail on the nightly-only dependency.
 exclude = ["fuzz"]
 
+# `tests/support` is a member so clippy reaches it: clippy lints
+# workspace members only, so as a bare path dependency no flag on the
+# root invocation linted it (#410). The root package stays the default
+# member, so a plain `cargo test` or `cargo build` is unchanged; `chore
+# lint` passes `--workspace`. `fuzz` is excluded because it is its own
+# package, on its own toolchain, with its own lock file. The root
+# package is a member without being listed, and must not be: `"."`
+# would contain `fuzz` and override the exclusion.
+[workspace]
+members = ["tests/support"]
+exclude = ["fuzz"]
+
 [lib]
 name = "fs_ext4"
 crate-type = ["staticlib", "rlib"]

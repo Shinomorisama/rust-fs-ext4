@@ -680,13 +680,15 @@ tasks:
     #
     # `--all` is what reaches the local path dependencies: without it
     # `tests/support` -- the crate every test reaches its oracles
-    # through -- is never checked (#367). `tests/ci_profile.rs` holds
-    # this line to it.
+    # through -- is never checked (#367). Clippy has no such flag: it
+    # lints workspace members only, so `tests/support` is a member and
+    # `--workspace` selects it (#410). `tests/ci_profile.rs` holds both
+    # lines to it.
     cmds:
       - scripts/agents-core-check.sh
       - scripts/ci-gate.sh
       - cargo fmt --all --check
-      - cargo clippy --locked --all-targets -- -D warnings
+      - cargo clippy --locked --workspace --all-targets -- -D warnings
 
   check:msrv:
     desc: Build the library and binaries on the toolchain Cargo.toml's rust-version names
