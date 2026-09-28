@@ -1943,8 +1943,10 @@ impl Filesystem {
     /// (yielding `CorruptExtentTree("bad extent header magic")`).
     ///
     /// An inline-data inode has no block map, so it is refused with
-    /// `Error::Unsupported` (#382): that is what makes every directory
-    /// mutation of an inline directory fail before it writes anything.
+    /// `Error::Unsupported` (#382). The directory writers hand an inline
+    /// directory to the inline-directory editors before they get here
+    /// (#428); this refusal is what stops any other caller writing through
+    /// its bytes.
     ///
     /// The indirect path internally maintains its own block cache for the
     /// duration of the call; sequential lookups via repeated calls don't
@@ -1958,8 +1960,7 @@ impl Filesystem {
         // parsed and wrote through (#382).
         if inode.has_inline_data() {
             return Err(Error::Unsupported(
-                "inline-data inode: i_block holds data, not a block map; \
-                 writing inline-data directories is not supported",
+                "inline-data inode: i_block holds data, not a block map",
             ));
         }
         let bs = self.sb.block_size();
@@ -2356,6 +2357,158 @@ impl Filesystem {
         self.finalize_inode_raw_after_write(ino, &mut raw, &converted, new_size, converted.blocks)?;
         self.buffer_write_inode(&mut buf, ino, &raw)?;
         self.commit_block_buffer(buf)
+    }
+
+    // ----------------------------------------------------------------------
+    // Inline-data directories (#428)
+    // ----------------------------------------------------------------------
+    //
+    // An inline directory's `i_block` holds its parent's inode number and
+    // then entries, continued in `system.data`: no block map, so the block
+    // writers below refuse it (#382). Each of them hands an inline directory
+    // to these instead. An entry is added and removed in the inode while it
+    // fits, and a directory whose entries outgrow it is converted to a
+    // one-block directory holding them, in the same transaction, as the
+    // kernel's `ext4_convert_inline_dir` does. Every edit reads the
+    // directory through the open transaction, so a second edit of the same
+    // directory in one operation (a rename within it) sees the first.
+
+    /// The inline directory `ino` as `buf` has it.
+    fn buffered_inline_dir(
+        &self,
+        buf: &BlockBuffer,
+        ino: u32,
+    ) -> Result<(Inode, Vec<u8>, crate::inline_mut::InlineDir)> {
+        let (inode, raw) = self.buffered_inode_verified(buf, ino)?;
+        let dir = crate::inline_mut::InlineDir::load(
+            self.dev.as_ref(),
+            &inode,
+            &raw,
+            self.sb.inode_size,
+            self.sb.block_size(),
+        )?;
+        Ok((inode, raw, dir))
+    }
+
+    /// Stage the edited inline directory `dir` as inode `ino`.
+    fn buffer_store_inline_dir(
+        &self,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        inode: &Inode,
+        mut raw: Vec<u8>,
+        dir: &crate::inline_mut::InlineDir,
+    ) -> Result<()> {
+        dir.store(&mut raw, self.sb.inode_size)?;
+        self.buffer_write_dir_inode(buf, ino, inode.generation, &mut raw)
+    }
+
+    /// Add `name → target` to the inline directory `ino`, staged in `buf`:
+    /// in `i_block`, then in the continuation, which is created at the size
+    /// the inode can hold when there is none; and when it fits in neither,
+    /// by converting the directory to a block holding every entry.
+    fn buffer_add_inline_dir_entry(
+        &self,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        name: &[u8],
+        target: u32,
+        file_type: crate::dir::DirEntryType,
+    ) -> Result<()> {
+        let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+        let (inode, raw, mut dir) = self.buffered_inline_dir(buf, ino)?;
+        if dir.add(target, name, file_type, has_ft)?
+            || (dir.expand(&raw, self.sb.inode_size) && dir.add(target, name, file_type, has_ft)?)
+        {
+            return self.buffer_store_inline_dir(buf, ino, &inode, raw, &dir);
+        }
+        let mut entries = dir.entries(has_ft)?;
+        entries.push(crate::dir::DirEntry {
+            inode: target,
+            name: name.to_vec(),
+            file_type,
+        });
+        self.buffer_convert_inline_dir(buf, ino, &inode, raw, dir.parent, &entries)
+    }
+
+    /// Convert the inline directory `ino` to a directory of one block
+    /// holding `.`, `..` (to `parent`) and `entries`, staged in `buf`:
+    /// the block, its allocation, and the inode with `system.data` removed,
+    /// `EXT4_INLINE_DATA_FL` cleared and the block mapped.
+    fn buffer_convert_inline_dir(
+        &self,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        inode: &Inode,
+        mut raw: Vec<u8>,
+        parent: u32,
+        entries: &[crate::dir::DirEntry],
+    ) -> Result<()> {
+        let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+        let reserved_tail = if self.csum.enabled { 12 } else { 0 };
+        let mut block = self.seed_directory_block(ino, parent, inode.generation)?;
+        for e in entries {
+            crate::dir::add_entry_to_block(
+                &mut block,
+                e.inode,
+                &e.name,
+                e.file_type,
+                has_ft,
+                reserved_tail,
+            )
+            .map_err(|e| match e {
+                Error::OutOfBounds => {
+                    Error::Corrupt("an inline directory's entries do not fit in one block")
+                }
+                e => e,
+            })?;
+        }
+        if self.csum.enabled {
+            self.csum
+                .patch_dir_entry_tail(ino, inode.generation, &mut block);
+        }
+        let phys = self.buffer_alloc_dir_block(buf, ino)?;
+        buf.put(phys, block);
+        crate::inline_mut::strip(&mut raw, self.sb.inode_size)?;
+        self.map_one_block(&mut raw, phys)?;
+        let bs = u64::from(self.sb.block_size());
+        Self::patch_inode_size_and_blocks(&mut raw, bs, inode.blocks + bs / 512)?;
+        self.buffer_write_dir_inode(buf, ino, inode.generation, &mut raw)
+    }
+
+    /// Remove `name` from the inline directory `ino`, staged in `buf`.
+    /// `Error::NotFound` when it is not there.
+    fn buffer_remove_inline_dir_entry(
+        &self,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        name: &[u8],
+    ) -> Result<()> {
+        let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+        let (inode, raw, mut dir) = self.buffered_inline_dir(buf, ino)?;
+        if !dir.remove(name, has_ft)? {
+            return Err(Error::NotFound);
+        }
+        self.buffer_store_inline_dir(buf, ino, &inode, raw, &dir)
+    }
+
+    /// `Error::DirectoryNotEmpty` unless the inline directory `ino`, whose
+    /// on-disk image is `raw`, holds nothing but `.` and `..`.
+    fn refuse_nonempty_inline_dir(&self, ino: u32, inode: &Inode, raw: &[u8]) -> Result<()> {
+        let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+        let entries = crate::inline_data::read_dir(
+            self.dev.as_ref(),
+            ino,
+            inode,
+            raw,
+            self.sb.inode_size,
+            self.sb.block_size(),
+            has_ft,
+        )?;
+        if entries.iter().any(|e| !is_dot_or_dotdot(&e.name)) {
+            return Err(Error::DirectoryNotEmpty);
+        }
+        Ok(())
     }
 
     pub fn apply_truncate_grow(&self, ino: u32, new_size: u64) -> Result<()> {
@@ -3446,6 +3599,15 @@ impl Filesystem {
         parent_inode: &Inode,
         name: &[u8],
     ) -> Result<()> {
+        // An inline directory, as this transaction has it: still inline, or
+        // converted to a block by an add earlier in it (#428).
+        if parent_inode.has_inline_data() {
+            let (now, _) = self.buffered_inode_verified(buf, parent_ino)?;
+            if now.has_inline_data() {
+                return self.buffer_remove_inline_dir_entry(buf, parent_ino, name);
+            }
+            return self.buffer_remove_dir_entry(buf, parent_ino, &now, name);
+        }
         let bs = self.sb.block_size();
         let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
         let n_blocks = parent_inode.size.div_ceil(bs as u64);
@@ -3486,6 +3648,17 @@ impl Filesystem {
         dir_inode: &Inode,
         new_parent_ino: u32,
     ) -> Result<()> {
+        // An inline directory's `..` is the inode number in bytes 0..4 of
+        // its `i_block` (#428).
+        if dir_inode.has_inline_data() {
+            let (now, _) = self.buffered_inode_verified(buf, dir_ino)?;
+            if !now.has_inline_data() {
+                return self.buffer_update_dotdot(buf, dir_ino, &now, new_parent_ino);
+            }
+            let (inode, raw, mut dir) = self.buffered_inline_dir(buf, dir_ino)?;
+            dir.parent = new_parent_ino;
+            return self.buffer_store_inline_dir(buf, dir_ino, &inode, raw, &dir);
+        }
         let phys = self
             .map_inode_logical(dir_inode, 0)?
             .ok_or(Error::Corrupt("buffer_update_dotdot: dir block 0 missing"))?;
@@ -3530,6 +3703,18 @@ impl Filesystem {
         target_ino: u32,
         file_type: crate::dir::DirEntryType,
     ) -> Result<()> {
+        // An inline directory takes the entry in the inode, or is converted
+        // to a block that holds it; either way it never needs extending
+        // (#428).
+        if parent_inode.has_inline_data() {
+            let (now, _) = self.buffered_inode_verified(buf, parent_ino)?;
+            if now.has_inline_data() {
+                return self
+                    .buffer_add_inline_dir_entry(buf, parent_ino, name, target_ino, file_type);
+            }
+            return self
+                .buffer_add_dir_entry_inplace(buf, parent_ino, &now, name, target_ino, file_type);
+        }
         let bs = self.sb.block_size();
         let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
         if parent_inode.flags & crate::inode::InodeFlags::INDEX.bits() != 0 {
@@ -4554,43 +4739,10 @@ impl Filesystem {
         // All mutations land in this buffer and commit as one transaction.
         let mut buf = BlockBuffer::new(self.sb.block_size());
 
-        // Remove the dir entry from the parent. Scans each block until
-        // `remove_entry_from_block` reports success.
-        let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
+        // Remove the dir entry from the parent: a block directory's first
+        // block holding it, or an inline directory's inode (#428).
         let bs = self.sb.block_size();
-        let parent_blocks = parent_inode.size.div_ceil(bs as u64);
-        let mut removed = false;
-        for logical in 0..parent_blocks {
-            let Some(phys) = self.map_inode_logical(&parent_inode, logical)? else {
-                continue;
-            };
-            let block = buf.get_mut(self, phys)?;
-            // An index block holds no entries to remove, and read as one it
-            // ends in a tail-shaped dt_reserved and a `..` spanning the rest
-            // (#233).
-            if Self::is_htree_index_block(&parent_inode, logical, block) {
-                continue;
-            }
-            // `dir_entry_tail` occupies the last 12 bytes when metadata_csum
-            // is on; don't scribble over it.
-            let reserved_tail = if self.csum.enabled && crate::dir::has_csum_tail(block) {
-                12
-            } else {
-                0
-            };
-            if crate::dir::remove_entry_from_block(block, name, has_ft, reserved_tail)? {
-                // Recompute the tail csum if present — entry-list shape changed.
-                if self.csum.enabled && reserved_tail == 12 {
-                    self.csum
-                        .patch_dir_entry_tail(parent_ino_num, parent_inode.generation, block);
-                }
-                removed = true;
-                break;
-            }
-        }
-        if !removed {
-            return Err(Error::NotFound);
-        }
+        self.buffer_remove_dir_entry(&mut buf, parent_ino_num, &parent_inode, name)?;
 
         // Decrement link count. Non-zero after → just persist the new count.
         let new_links = target_inode.links_count.saturating_sub(1);
@@ -6156,6 +6308,16 @@ impl Filesystem {
     /// block)`, so a scan that has only the `Inode` cannot verify what it is
     /// reading. Every caller already had the number in scope.
     fn find_entry_in_dir(&self, dir_ino: u32, dir_inode: &Inode, name: &[u8]) -> Result<u32> {
+        if dir_inode.has_inline_data() {
+            return crate::path::find_entry(
+                self.dev.as_ref(),
+                &self.sb,
+                dir_ino,
+                dir_inode,
+                name,
+                &self.csum,
+            );
+        }
         let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
         let bs = self.sb.block_size();
         let n_blocks = dir_inode.size.div_ceil(bs as u64);
@@ -6381,7 +6543,7 @@ impl Filesystem {
         check_new_entry_name(name)?;
         let dir = dir.into();
         let parent_ino = dir.ino;
-        let (parent_inode, mut parent_raw) = self.live_dir(dir)?;
+        let (parent_inode, _) = self.live_dir(dir)?;
         if self.entry_exists(parent_ino, &parent_inode, name)? {
             return Err(Error::AlreadyExists);
         }
@@ -6467,8 +6629,11 @@ impl Filesystem {
         };
 
         if !parent_extends {
-            // In-place add succeeded — bump parent's nlink in the same buffer.
-            self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_inode, 1)?;
+            // In-place add succeeded — bump parent's nlink in the same
+            // buffer, read through it: an inline parent's new entry is in
+            // its inode, staged there (#428).
+            let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
+            self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_now, 1)?;
             self.buffer_write_inode(&mut buf, parent_ino, &parent_raw)?;
             self.commit_block_buffer(buf)?;
         } else {
@@ -6742,7 +6907,10 @@ impl Filesystem {
 
             // Non-empty-dir overwrite is forbidden by POSIX. Walk every
             // block of dst and reject any entry that isn't `.` / `..`.
-            if dst_is_dir {
+            if dst_is_dir && dst_old_inode.has_inline_data() {
+                // Its entries are in its inode (#428).
+                self.refuse_nonempty_inline_dir(dst_old_ino, &dst_old_inode, &dst_old_raw)?;
+            } else if dst_is_dir {
                 let bs = self.sb.block_size();
                 let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
                 let blocks = dst_old_inode.size.div_ceil(bs as u64);
@@ -7738,17 +7906,23 @@ impl Filesystem {
         }
         let dir = dir.into();
         let parent_ino = dir.ino;
-        let (parent_inode, mut parent_raw) = self.live_dir(dir)?;
+        let (parent_inode, _) = self.live_dir(dir)?;
         let target_ino = self.find_entry_in_dir(parent_ino, &parent_inode, name)?;
-        let (target_inode, _) = self.live_inode(target_ino.into())?;
+        let (target_inode, target_raw) = self.live_inode(target_ino.into())?;
         if !target_inode.is_dir() {
             return Err(Error::NotADirectory);
         }
 
-        // Empty-check: walk every block, reject if any entry is not "." or "..".
+        // Empty-check: walk every block, reject if any entry is not "." or
+        // "..". An inline directory's entries are in its inode (#428).
         let bs = self.sb.block_size();
         let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
-        let blocks = target_inode.size.div_ceil(bs as u64);
+        let blocks = if target_inode.has_inline_data() {
+            self.refuse_nonempty_inline_dir(target_ino, &target_inode, &target_raw)?;
+            0
+        } else {
+            target_inode.size.div_ceil(bs as u64)
+        };
         for logical in 0..blocks {
             // Either mapping: a block-mapped directory's i_block is not an
             // extent header.
@@ -7809,42 +7983,22 @@ impl Filesystem {
         self.finalize_inode_raw(target_ino, target_inode.generation, &mut target_raw)?;
         self.buffer_write_inode(&mut buf, target_ino, &target_raw)?;
 
-        // Remove the entry from the parent directory.
-        let parent_blocks = parent_inode.size.div_ceil(bs as u64);
-        let mut removed = false;
-        for logical in 0..parent_blocks {
-            let Some(phys) = self.map_inode_logical(&parent_inode, logical)? else {
-                continue;
-            };
-            let block = buf.get_mut(self, phys)?;
-            // An index block holds no entries to remove, and read as one it
-            // ends in a tail-shaped dt_reserved and a `..` spanning the rest
-            // (#233).
-            if Self::is_htree_index_block(&parent_inode, logical, block) {
-                continue;
+        // Remove the entry from the parent directory, a block one or an
+        // inline one (#428).
+        match self.buffer_remove_dir_entry(&mut buf, parent_ino, &parent_inode, name) {
+            Err(Error::NotFound) => {
+                return Err(Error::Corrupt(
+                    "apply_rmdir: entry disappeared mid-operation",
+                ))
             }
-            let reserved_tail = if self.csum.enabled && crate::dir::has_csum_tail(block) {
-                12
-            } else {
-                0
-            };
-            if crate::dir::remove_entry_from_block(block, name, has_ft, reserved_tail)? {
-                if self.csum.enabled && reserved_tail == 12 {
-                    self.csum
-                        .patch_dir_entry_tail(parent_ino, parent_inode.generation, block);
-                }
-                removed = true;
-                break;
-            }
-        }
-        if !removed {
-            return Err(Error::Corrupt(
-                "apply_rmdir: entry disappeared mid-operation",
-            ));
+            r => r?,
         }
 
         // Parent loses the ".." reference from the removed child → nlink -1.
-        self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_inode, -1)?;
+        // Read through the buffer: an inline parent's entries were just
+        // staged in its inode.
+        let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
+        self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_now, -1)?;
         self.buffer_write_inode(&mut buf, parent_ino, &parent_raw)?;
 
         self.commit_block_buffer(buf)
@@ -9445,40 +9599,10 @@ mod tests {
         bytes
     }
 
-    /// #382: renaming an inline-data directory must not treat its i_block
-    /// (parent inode number, then entries) as a block map.
-    #[test]
-    fn renaming_an_inline_directory_does_not_write_through_its_parent_number() {
-        let dev = formatted();
-        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
-        let fs = mount(&dev);
-        fs.apply_mkdir("/a", 0o755).unwrap();
-        fs.apply_mkdir("/b", 0o755).unwrap();
-        fs.apply_mkdir("/a/sub", 0o755).unwrap();
-        let a = resolve(&fs, "/a").unwrap();
-        let sub = resolve(&fs, "/a/sub").unwrap();
-        make_inline_dir(&fs, sub, a, None);
-        drop(fs);
-        let fs = mount(&dev);
-        let before = fs.read_block(a as u64).unwrap();
-        let r = fs.apply_rename("/a/sub", "/b/sub", false);
-        drop(fs);
-        let fs = mount(&dev);
-        let after = fs.read_block(a as u64).unwrap();
-        assert!(
-            before == after,
-            "block {a} (the parent's inode number) was written by a rename: {r:?}"
-        );
-        assert!(
-            matches!(r, Err(Error::Unsupported(_))),
-            "rename of an inline directory: {r:?}"
-        );
-    }
-
-    /// #382: every directory mutation whose parent or target is an
-    /// inline-data directory is refused, and writes nothing.
-    #[test]
-    fn every_mutation_of_an_inline_directory_is_refused_and_writes_nothing() {
+    /// The inline-directory fixture of the #382 and #428 tests: `/a` and
+    /// `/b` block directories, `/b/y` a file; `/a/sub` inline holding `f`,
+    /// a second link to `/f2`; `/a/empty` inline and empty.
+    fn inline_dir_volume() -> std::sync::Arc<MemDev> {
         let dev = formatted();
         set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
         let fs = mount(&dev);
@@ -9492,7 +9616,6 @@ mod tests {
         let sub = resolve(&fs, "/a/sub").unwrap();
         let empty = resolve(&fs, "/a/empty").unwrap();
         let f2 = resolve(&fs, "/f2").unwrap();
-        // /a/sub holds one entry, "f", a second link to /f2.
         make_inline_dir(&fs, sub, a, Some((f2, b"f", 1)));
         make_inline_dir(&fs, empty, a, None);
         let (i, raw) = fs.read_inode_verified(f2).unwrap();
@@ -9501,43 +9624,225 @@ mod tests {
         fs.finalize_inode_raw(f2, i.generation, &mut raw).unwrap();
         fs.write_inode_raw(f2, &raw).unwrap();
         drop(fs);
+        dev
+    }
 
+    /// The names in directory `path`, `.` and `..` excluded, sorted, and
+    /// whether it is inline.
+    fn names_in(fs: &Filesystem, path: &str) -> (Vec<String>, bool) {
+        let ino = resolve(fs, path).unwrap();
+        let mut names: Vec<String> = fs
+            .read_dir_ino(ino)
+            .unwrap()
+            .into_iter()
+            .map(|e| String::from_utf8_lossy(&e.name).into_owned())
+            .filter(|n| n != "." && n != "..")
+            .collect();
+        names.sort();
+        (names, fs.stat_ino(ino).unwrap().has_inline_data())
+    }
+
+    fn links(fs: &Filesystem, path: &str) -> u16 {
+        fs.stat_ino(resolve(fs, path).unwrap()).unwrap().links_count
+    }
+
+    /// #382, #428: renaming an inline-data directory across parents must
+    /// not treat its i_block (parent inode number, then entries) as a block
+    /// map; it rewrites the parent number there.
+    #[test]
+    fn renaming_an_inline_directory_across_parents_rewrites_its_parent_number() {
+        let dev = inline_dir_volume();
+        let fs = mount(&dev);
+        let (a, b) = (links(&fs, "/a"), links(&fs, "/b"));
+        fs.apply_rename("/a/sub", "/b/sub", false).unwrap();
+        drop(fs);
+        let fs = mount(&dev);
+        assert_eq!(
+            resolve(&fs, "/b/sub/..").unwrap(),
+            resolve(&fs, "/b").unwrap()
+        );
+        assert_eq!(names_in(&fs, "/b/sub"), (vec!["f".into()], true));
+        assert_eq!((links(&fs, "/a"), links(&fs, "/b")), (a - 1, b + 1));
+        let report = crate::fsck::audit(&fs, u32::MAX, u32::MAX).unwrap();
+        assert!(report.anomalies.is_empty(), "{:?}", report.anomalies);
+    }
+
+    /// #428: every directory mutation whose parent or target is an
+    /// inline-data directory goes through (they were refused, #382), by
+    /// path and by inode number; the entries read back and the volume's
+    /// audit is clean after each.
+    #[test]
+    fn every_mutation_of_an_inline_directory_succeeds() {
         type Op = fn(&Filesystem) -> Result<()>;
-        let ops: [(&str, Op); 9] = [
-            ("create inside", |fs| {
-                fs.apply_create("/a/sub/g", 0o644).map(drop)
-            }),
-            ("mkdir inside", |fs| {
-                fs.apply_mkdir("/a/sub/h", 0o755).map(drop)
-            }),
-            ("symlink inside", |fs| {
-                fs.apply_symlink("t", "/a/sub/s").map(drop)
-            }),
-            ("link into", |fs| fs.apply_link("/f2", "/a/sub/l")),
-            ("unlink inside", |fs| fs.apply_unlink("/a/sub/f")),
-            ("rename out of", |fs| {
-                fs.apply_rename("/a/sub/f", "/b/f", false)
-            }),
-            ("rename into", |fs| {
-                fs.apply_rename("/b/y", "/a/sub/y", false)
-            }),
-            ("rename over", |fs| fs.apply_rename("/b", "/a/empty", true)),
-            ("rmdir", |fs| fs.apply_rmdir("/a/empty")),
+        type Check = fn(&Filesystem);
+        fn ino(fs: &Filesystem, path: &str) -> u32 {
+            resolve(fs, path).unwrap()
+        }
+        let ops: [(&str, Op, Check); 16] = [
+            (
+                "create inside",
+                |fs| fs.apply_create("/a/sub/g", 0o644).map(drop),
+                |fs| assert_eq!(names_in(fs, "/a/sub"), (vec!["f".into(), "g".into()], true)),
+            ),
+            (
+                "create_at inside",
+                |fs| fs.apply_create_at(ino(fs, "/a/sub"), b"g", 0o644).map(drop),
+                |fs| assert_eq!(names_in(fs, "/a/sub"), (vec!["f".into(), "g".into()], true)),
+            ),
+            (
+                "mkdir inside",
+                |fs| fs.apply_mkdir("/a/sub/h", 0o755).map(drop),
+                |fs| {
+                    assert_eq!(names_in(fs, "/a/sub").0, ["f", "h"]);
+                    assert_eq!(links(fs, "/a/sub"), 3);
+                    assert_eq!(ino(fs, "/a/sub/h/.."), ino(fs, "/a/sub"));
+                },
+            ),
+            (
+                "mkdir_at inside an empty one",
+                |fs| {
+                    fs.apply_mkdir_at(ino(fs, "/a/empty"), b"h", 0o755)
+                        .map(drop)
+                },
+                |fs| {
+                    assert_eq!(names_in(fs, "/a/empty"), (vec!["h".into()], true));
+                    assert_eq!(links(fs, "/a/empty"), 3);
+                },
+            ),
+            (
+                "symlink inside",
+                |fs| fs.apply_symlink("t", "/a/sub/s").map(drop),
+                |fs| assert_eq!(fs.read_link(ino(fs, "/a/sub/s")).unwrap(), b"t"),
+            ),
+            (
+                "link into",
+                |fs| fs.apply_link("/f2", "/a/sub/l"),
+                |fs| {
+                    assert_eq!(ino(fs, "/a/sub/l"), ino(fs, "/f2"));
+                    assert_eq!(links(fs, "/f2"), 3);
+                },
+            ),
+            (
+                "unlink inside",
+                |fs| fs.apply_unlink("/a/sub/f"),
+                |fs| {
+                    assert_eq!(names_in(fs, "/a/sub"), (vec![], true));
+                    assert_eq!(links(fs, "/f2"), 1);
+                },
+            ),
+            (
+                "unlink_at inside",
+                |fs| fs.apply_unlink_at(ino(fs, "/a/sub"), b"f"),
+                |fs| assert_eq!(names_in(fs, "/a/sub"), (vec![], true)),
+            ),
+            (
+                "rename out of",
+                |fs| fs.apply_rename("/a/sub/f", "/b/f", false),
+                |fs| {
+                    assert_eq!(names_in(fs, "/a/sub"), (vec![], true));
+                    assert_eq!(ino(fs, "/b/f"), ino(fs, "/f2"));
+                },
+            ),
+            (
+                "rename into",
+                |fs| fs.apply_rename("/b/y", "/a/sub/y", false),
+                |fs| assert_eq!(names_in(fs, "/a/sub").0, ["f", "y"]),
+            ),
+            (
+                "rename within",
+                |fs| {
+                    let sub = ino(fs, "/a/sub");
+                    fs.apply_rename_at(sub, b"f", sub, b"renamed", false)
+                },
+                |fs| assert_eq!(names_in(fs, "/a/sub"), (vec!["renamed".into()], true)),
+            ),
+            (
+                "rename over an empty one",
+                |fs| fs.apply_rename("/b", "/a/empty", true),
+                |fs| {
+                    assert_eq!(names_in(fs, "/a/empty"), (vec!["y".into()], false));
+                    assert!(matches!(resolve(fs, "/b"), Err(Error::NotFound)));
+                },
+            ),
+            (
+                "rmdir",
+                |fs| fs.apply_rmdir("/a/empty"),
+                |fs| assert_eq!(names_in(fs, "/a").0, ["sub"]),
+            ),
+            (
+                "rmdir_at inside",
+                |fs| {
+                    fs.apply_mkdir("/a/sub/h", 0o755)?;
+                    fs.apply_rmdir_at(ino(fs, "/a/sub"), b"h")
+                },
+                |fs| {
+                    assert_eq!(names_in(fs, "/a/sub"), (vec!["f".into()], true));
+                    assert_eq!(links(fs, "/a/sub"), 2);
+                },
+            ),
+            (
+                "entries past what the inode holds",
+                |fs| {
+                    for i in 0..12 {
+                        fs.apply_create(&format!("/a/sub/file-number-{i:02}"), 0o644)?;
+                    }
+                    Ok(())
+                },
+                |fs| {
+                    let (names, inline) = names_in(fs, "/a/sub");
+                    assert!(!inline, "twelve more entries converted it to a block");
+                    assert_eq!(names.len(), 13);
+                    assert_eq!(ino(fs, "/a/sub/f"), ino(fs, "/f2"));
+                    assert_eq!(ino(fs, "/a/sub/.."), ino(fs, "/a"));
+                },
+            ),
+            (
+                "rename within, converting",
+                |fs| {
+                    let sub = ino(fs, "/a/sub");
+                    fs.apply_rename_at(sub, b"f", sub, &[b'n'; 200], false)
+                },
+                |fs| {
+                    let (names, inline) = names_in(fs, "/a/sub");
+                    assert_eq!((names, inline), (vec!["n".repeat(200)], false));
+                },
+            ),
         ];
-        for (name, op) in ops {
-            let before = outside_superblock(&dev);
+        for (name, op, check) in ops {
+            let dev = inline_dir_volume();
             let fs = mount(&dev);
-            let r = op(&fs);
+            op(&fs).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             drop(fs);
+            let fs = mount(&dev);
+            check(&fs);
+            let report = crate::fsck::audit(&fs, u32::MAX, u32::MAX).unwrap();
             assert!(
-                matches!(r, Err(Error::Unsupported(_))),
-                "{name} an inline directory: {r:?}"
-            );
-            assert!(
-                outside_superblock(&dev) == before,
-                "{name} an inline directory wrote to the image"
+                report.anomalies.is_empty(),
+                "{name}: {:?}",
+                report.anomalies
             );
         }
+    }
+
+    /// #428: an inline directory that is not empty is still not removed,
+    /// and the refusal writes nothing.
+    #[test]
+    fn a_non_empty_inline_directory_is_not_removed() {
+        let dev = inline_dir_volume();
+        let before = outside_superblock(&dev);
+        let fs = mount(&dev);
+        assert!(matches!(
+            fs.apply_rmdir("/a/sub"),
+            Err(Error::DirectoryNotEmpty)
+        ));
+        assert!(matches!(
+            fs.apply_rename("/b", "/a/sub", true),
+            Err(Error::DirectoryNotEmpty)
+        ));
+        drop(fs);
+        assert!(outside_superblock(&dev) == before, "a refusal wrote");
+        let fs = mount(&dev);
+        assert_eq!(names_in(&fs, "/a/sub"), (vec!["f".into()], true));
     }
 
     /// `fs_ext4_listxattr` into a short buffer writes whole names only,
