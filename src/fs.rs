@@ -7672,6 +7672,130 @@ mod tests {
         fs.commit_block_buffer(buf).expect("commit");
     }
 
+    /// Give `ino` an external xattr block the way a security label that does
+    /// not fit in the inode would, counted in `i_blocks`. Returns the block.
+    fn give_xattr_block(fs: &Filesystem, ino: u32) -> u64 {
+        let mut buf = BlockBuffer::new(BS);
+        let xb = fs.buffer_allocate_block(&mut buf, ino).unwrap();
+        let mut blk = vec![0u8; BS as usize];
+        crate::xattr::plan_set_in_external_block(&mut blk, "security.selinux", &[b'z'; 32], 1)
+            .unwrap();
+        fs.csum.patch_xattr_block(xb, &mut blk);
+        buf.put(xb, blk);
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        Filesystem::write_file_acl(&mut raw, xb).unwrap();
+        Filesystem::patch_inode_size_and_blocks(&mut raw, inode.size, inode.blocks + 8).unwrap();
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.buffer_write_inode(&mut buf, ino, &raw).unwrap();
+        fs.commit_block_buffer(buf).unwrap();
+        xb
+    }
+
+    /// Whether `block` is marked in use in its group's bitmap.
+    fn block_bit_set(fs: &Filesystem, block: u64) -> bool {
+        let rel = block - fs.sb.first_data_block as u64;
+        let gi = (rel / fs.sb.blocks_per_group as u64) as usize;
+        let bit = (rel % fs.sb.blocks_per_group as u64) as usize;
+        let bm = fs.read_block(fs.groups[gi].block_bitmap).unwrap();
+        bm[bit / 8] & (1 << (bit % 8)) != 0
+    }
+
+    /// #384: orphan recovery must not read a fast symlink's target as a
+    /// block map because it also holds an xattr block. The member is still
+    /// reclaimed, its xattr block with it.
+    #[test]
+    fn recovering_an_orphaned_fast_symlink_frees_no_block_named_by_its_target() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let victim = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+        let mut tb: Vec<u8> = (victim as u32).to_le_bytes().to_vec();
+        while tb.last() == Some(&0) {
+            tb.pop();
+        }
+        assert!(
+            tb.iter().all(|&b| b > 0 && b < 0x80),
+            "block {victim} not expressible as ASCII"
+        );
+        let t = String::from_utf8(tb).unwrap();
+        let ino = fs.apply_symlink(&t, "/l").unwrap();
+        let xb = give_xattr_block(&fs, ino);
+        plant_orphan(&fs, ino, 0, None);
+        drop(fs);
+        let fs = mount(&dev); // recovers orphans
+        assert!(
+            block_bit_set(&fs, victim),
+            "block {victim} (the root directory's) was freed by orphan recovery"
+        );
+        assert!(!block_bit_set(&fs, xb), "the xattr block {xb} was kept");
+        assert_eq!(fs.sb.last_orphan, 0, "the orphan chain was not drained");
+    }
+
+    /// #384: a fast symlink with an xattr block whose target, read as block
+    /// pointers, lies outside the volume is still reclaimed. It used to be
+    /// left on the chain, and every orphan behind it with it.
+    #[test]
+    fn an_orphaned_fast_symlink_whose_target_is_no_block_does_not_stall_the_chain() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let behind = fs.apply_create("/behind", 0o644).unwrap();
+        plant_orphan(&fs, behind, 0, None);
+        let ino = fs.apply_symlink("zzzz", "/l").unwrap();
+        let xb = give_xattr_block(&fs, ino);
+        // The symlink heads the chain; `behind` follows it.
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        raw[0x1A..0x1C].copy_from_slice(&0u16.to_le_bytes());
+        raw[0x14..0x18].copy_from_slice(&behind.to_le_bytes());
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        let mut buf = BlockBuffer::new(BS);
+        fs.buffer_write_inode(&mut buf, ino, &raw).unwrap();
+        fs.buffer_patch_sb_last_orphan(&mut buf, ino).unwrap();
+        fs.commit_block_buffer(buf).unwrap();
+        drop(fs);
+        let fs = mount(&dev); // recovers orphans
+        assert_eq!(fs.sb.last_orphan, 0, "the orphan chain was not drained");
+        assert!(!block_bit_set(&fs, xb), "the xattr block {xb} was kept");
+        for gone in [ino, behind] {
+            let (i, _) = fs.read_inode_verified(gone).unwrap();
+            assert_eq!(i.mode, 0, "orphan {gone} was not reclaimed");
+        }
+    }
+
+    /// #384: the same for an inline-data file holding an xattr block: its
+    /// data bytes are not block pointers.
+    #[test]
+    fn recovering_an_orphaned_inline_file_frees_no_block_named_by_its_data() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::INLINE_DATA.bits());
+        let fs = mount(&dev);
+        let (root, _) = fs.read_inode_verified(2).unwrap();
+        let victim = fs.map_inode_logical(&root, 0).unwrap().unwrap();
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        let mut flags = u32::from_le_bytes(raw[0x20..0x24].try_into().unwrap());
+        flags &= !crate::inode::InodeFlags::EXTENTS.bits();
+        flags |= crate::inode::InodeFlags::INLINE_DATA.bits();
+        raw[0x20..0x24].copy_from_slice(&flags.to_le_bytes());
+        raw[0x28..0x64].fill(0);
+        raw[0x28..0x2C].copy_from_slice(&(victim as u32).to_le_bytes());
+        raw[0x04..0x08].copy_from_slice(&4u32.to_le_bytes());
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
+        let xb = give_xattr_block(&fs, ino);
+        plant_orphan(&fs, ino, 0, None);
+        drop(fs);
+        let fs = mount(&dev); // recovers orphans
+        assert!(
+            block_bit_set(&fs, victim),
+            "block {victim} (the root directory's) was freed by orphan recovery"
+        );
+        assert!(!block_bit_set(&fs, xb), "the xattr block {xb} was kept");
+        assert_eq!(fs.sb.last_orphan, 0, "the orphan chain was not drained");
+    }
+
     /// `s_state` straight off the device, as another handle -- or `e2fsck`
     /// -- would read it.
     fn on_disk_state(dev: &std::sync::Arc<MemDev>) -> u16 {
