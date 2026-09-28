@@ -317,6 +317,16 @@ Not caught by the compiler — the same source builds and behaves differently:
   from its own metadata, through the helper the allocator uses, and an
   `INODE_UNINIT` group counts every inode free.
 
+- **A lazy mount refuses writes until its dirty journal is replayed**
+  (#375), as `mount_lazy` always said it did. Nothing enforced it: the first
+  write committed at the head of the log, over the transactions the last
+  writer committed but did not checkpoint, and then marked the journal clean,
+  so they were lost and the write itself was planned against pre-replay
+  metadata. A write now fails with the new `Error::JournalNotReplayed`
+  (`EROFS` through the C API) until `replay_journal_if_dirty` has put the log
+  on the device. The same holds for a mount that was read-only when it
+  mounted, whose replay went into the cache alone: its device turning
+  writable does not make the on-disk log any less dirty.
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

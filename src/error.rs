@@ -63,6 +63,13 @@ pub enum Error {
     /// this is one operation on one object being refused because doing it
     /// would leave the filesystem worse than not doing it.
     Unsupported(&'static str),
+
+    /// A write refused because the volume's journal holds committed
+    /// transactions this mount has not yet replayed onto the device: a
+    /// lazy mount before [`crate::fs::Filesystem::replay_journal_if_dirty`].
+    /// Writing first would commit over the unreplayed log and lose it.
+    /// Maps to EROFS: the mount is read-only until the replay runs.
+    JournalNotReplayed,
 }
 
 impl From<io::Error> for Error {
@@ -101,6 +108,9 @@ impl std::fmt::Display for Error {
             Error::CorruptDirEntry(msg) => write!(f, "corrupt directory entry: {msg}"),
             Error::Corrupt(msg) => write!(f, "corrupt: {msg}"),
             Error::Unsupported(msg) => write!(f, "unsupported: {msg}"),
+            Error::JournalNotReplayed => {
+                write!(f, "read-only until the dirty journal is replayed")
+            }
         }
     }
 }
@@ -122,7 +132,7 @@ impl Error {
             Error::IsADirectory => EISDIR,
             Error::AlreadyExists => EEXIST,
             Error::DirectoryNotEmpty => ENOTEMPTY,
-            Error::ReadOnly => EROFS,
+            Error::ReadOnly | Error::JournalNotReplayed => EROFS,
             Error::NameTooLong => ENAMETOOLONG,
             Error::NoSpaceLeftOnDevice => ENOSPC,
             Error::InvalidArgument(_) => EINVAL,
