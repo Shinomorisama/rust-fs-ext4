@@ -7021,6 +7021,67 @@ mod tests {
         Filesystem::mount(dev.clone()).expect("mount")
     }
 
+    /// `/f` with one block written at every other logical block from 0 to
+    /// 10: six extents, so its tree is depth 1. Returns its inode number.
+    fn striped_file(fs: &Filesystem) -> u32 {
+        let ino = fs.apply_create("/f", 0o644).unwrap();
+        for lb in [0u64, 2, 4, 6, 8, 10] {
+            fs.apply_pwrite("/f", lb * BS as u64, &[1u8; BS as usize])
+                .unwrap();
+        }
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let depth = u16::from_le_bytes(inode.block[6..8].try_into().unwrap());
+        assert!(depth >= 1, "precondition: depth >= 1, got {depth}");
+        ino
+    }
+
+    /// Fill the volume with `/fill`, leaving no more than a few blocks free.
+    fn fill_leaving_a_few_free(fs: &Filesystem) {
+        let mut n = fs.sb.free_blocks_count.saturating_sub(4);
+        loop {
+            let r = fs.apply_create("/fill", 0o644).and_then(|_| {
+                fs.apply_replace_file_content("/fill", &vec![0u8; (n * BS as u64) as usize])
+            });
+            match r {
+                Ok(_) => break,
+                Err(_) => {
+                    let _ = fs.apply_unlink("/fill");
+                    n -= 1;
+                }
+            }
+        }
+    }
+
+    /// A pwrite that fails with ENOSPC part-way leaves no extent on disk
+    /// that maps blocks the bitmap still calls free (#389): the tree nodes
+    /// it rewrote were written straight to the device, ahead of the
+    /// transaction that never committed.
+    #[test]
+    fn a_pwrite_that_runs_out_of_space_leaves_the_tree_as_it_was() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = striped_file(&fs);
+        drop(fs);
+        let fs = mount(&dev);
+        fill_leaving_a_few_free(&fs);
+        drop(fs);
+        let fs = mount(&dev);
+        let left = fs.sb.free_blocks_count;
+        let bs = BS as u64;
+        let r = fs.apply_pwrite("/f", 20 * bs, &vec![2u8; ((left + 8) * bs) as usize]);
+        assert!(r.is_err(), "precondition: ENOSPC ({left} free)");
+        drop(fs);
+        let fs = mount(&dev);
+        let (inode, _) = fs.read_inode_verified(ino).unwrap();
+        let mapped = fs.map_inode_logical(&inode, 20).unwrap();
+        assert_eq!(
+            mapped, None,
+            "a failed pwrite left logical block 20 mapped ({left} were free)"
+        );
+        let data = crate::file_io::read_all(&fs, &inode).unwrap();
+        assert_eq!(data.len(), 11 * BS as usize, "the size is unchanged");
+    }
+
     /// Two plans in one open transaction must not hand out the same blocks
     /// of a BLOCK_UNINIT group. The first plan's staging clears the group's
     /// flag only on the buffer, so a second plan that still sees the flag
