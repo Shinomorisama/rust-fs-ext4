@@ -500,7 +500,7 @@ fn interrupted_finish(path: &Path, fail_at: usize, writeback: bool) -> (bool, us
         writeback,
         pending: Mutex::new(Vec::new()),
     });
-    let mut mounted = Filesystem::mount_recovering(device.clone()).expect("checked mount");
+    let mounted = Filesystem::mount_recovering(device.clone()).expect("checked mount");
     mounted.apply_pwrite("/oracle", 0, b"release").unwrap();
     mounted.flush().unwrap();
     let start = device.event.load(Ordering::SeqCst);

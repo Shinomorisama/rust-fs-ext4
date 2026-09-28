@@ -292,7 +292,8 @@ fs_ext4_fs_t *fs_ext4_mount_with_fs_core_device_lazy(struct FsCoreDevice *handle
  *
  * Both `cfg->read` AND `cfg->write` must be non-NULL — otherwise this
  * returns NULL with errno set to EINVAL. `cfg->flush` is optional; pass
- * NULL to make synchronize() a no-op (the caller's host I/O layer is
+ * NULL to make every device flush the driver issues -- including the one
+ * fs_ext4_flush() asks for -- a no-op (the caller's host I/O layer is
  * expected to handle stable-storage barriers in that case).
  *
  * Returns NULL on failure; use fs_ext4_last_error() / fs_ext4_last_errno()
@@ -334,6 +335,57 @@ int fs_ext4_replay_journal_if_dirty(fs_ext4_fs_t *fs);
  * Unmount and free all resources.
  */
 void fs_ext4_umount(fs_ext4_fs_t *fs);
+
+/*
+ * Durability barrier for a live mount. The handle stays mounted and usable.
+ *
+ * Unmounting is NOT needed to get data out. Every mutating call already
+ * writes its changes to their final on-disk location before it returns:
+ * a journaled mount commits and checkpoints each transaction immediately,
+ * and a mount without a journal writes in ordered stages, with a device
+ * flush between each step either way. fs_ext4_flush() adds one more device
+ * flush (the `cfg->flush` callback, or fsync for a path mount) and checks
+ * that nothing is left in flight: no earlier device write or journal
+ * operation failed, and no transaction is left uncheckpointed. On return
+ * 0, every mutating call that returned before this one is on stable
+ * storage -- as far as the host's flush reaches: with a NULL `cfg->flush`
+ * it only means the bytes were handed to `cfg->write`.
+ *
+ * Safe to call while other calls on the same handle run; a mutation in
+ * progress on another thread either completes before the check or starts
+ * after it. On a read-only mount there is nothing to write back and it
+ * returns 0.
+ *
+ * Returns 0 on success, -1 on failure with fs_ext4_last_error() /
+ * fs_ext4_last_errno() set: EIO when an earlier mutation's device write or
+ * journal operation failed -- the mount can no longer vouch for the device
+ * and must be unmounted and remounted (which replays or checks) -- or the
+ * errno the host's flush surfaced.
+ */
+int fs_ext4_flush(fs_ext4_fs_t *fs);
+
+/*
+ * fs_ext4_flush(), then drop the mount's read caches and re-read the
+ * superblock and group descriptors from the device. For a host that
+ * changed the device underneath an idle mount and needs the mount to see
+ * the device as it now is. The handle stays mounted and usable.
+ *
+ * NOT concurrent-writer support: the caller must serialise -- no other
+ * call on this handle may be in flight, and nothing may write the device
+ * while this runs. A change to the volume's identity or geometry is
+ * refused (EIO) rather than adopted.
+ *
+ * A read-only mount of a volume with a dirty journal replays the journal
+ * into its cache only; the device still holds the pre-replay bytes, which
+ * a read-only mount may not change. There, fs_ext4_fresh_read() returns -1
+ * with EIO and keeps the replayed view: dropping the cache would turn
+ * committed state back into superseded state. Remount read-write (which
+ * replays onto the device) to get a physical readback.
+ *
+ * Returns 0 on success, -1 on failure with fs_ext4_last_error() /
+ * fs_ext4_last_errno() set; every fs_ext4_flush() failure applies.
+ */
+int fs_ext4_fresh_read(fs_ext4_fs_t *fs);
 
 /* ---- Volume info ---- */
 

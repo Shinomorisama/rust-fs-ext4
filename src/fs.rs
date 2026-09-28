@@ -381,7 +381,12 @@ impl Filesystem {
     /// Flush a live mount without clearing its recovery marker or releasing it.
     /// Checked journal transactions must already be fully checkpointed. After an
     /// error the owner must retire the mount, just as for a failed mutation.
-    pub fn flush(&mut self) -> Result<()> {
+    ///
+    /// Takes `&self` so a handle shared between threads can flush while other
+    /// calls run. The journal writer is held for the whole check, so a
+    /// transaction another thread is committing either finishes first or
+    /// starts after: the check never sees one half-done.
+    pub fn flush(&self) -> Result<()> {
         if self
             .direct_commit_failed
             .load(std::sync::atomic::Ordering::SeqCst)
@@ -390,17 +395,20 @@ impl Filesystem {
                 "direct commit failed; reopen and check the volume",
             ));
         }
-        if let Some(writer) = &self.journal {
-            if !writer
-                .lock()
-                .map_err(|_| Error::Corrupt("journal writer poisoned"))?
-                .is_healthy()
-            {
-                return Err(Error::Corrupt(
-                    "journal operation failed; reopen for recovery",
-                ));
+        let _writer = match &self.journal {
+            Some(writer) => {
+                let guard = writer
+                    .lock()
+                    .map_err(|_| Error::Corrupt("journal writer poisoned"))?;
+                if !guard.is_healthy() {
+                    return Err(Error::Corrupt(
+                        "journal operation failed; reopen for recovery",
+                    ));
+                }
+                Some(guard)
             }
-        }
+            None => None,
+        };
         self.dev.flush()?;
         if !self.managed_recovery {
             return Ok(());
