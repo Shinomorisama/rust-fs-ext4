@@ -88,14 +88,22 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
-#     unit        642 /  38,550      850 /  50,000   ~32% / ~30%: tests get
+#     unit        765 /  46,832    1,050 /  65,000   ~37% / ~39%: tests get
 #                                                    added, and this is the
 #                                                    tier every one of them
 #                                                    starts in. 530 / 31,331
-#                                                    for #257; #370's stack of
-#                                                    unit tests reached
-#                                                    751 / 45,748 and failed
-#                                                    the tier (run 36408881585)
+#                                                    for #257; 642 / 38,550 on
+#                                                    main at 05d683c (#422);
+#                                                    RE-MEASURED on the stack
+#                                                    of the #70 audit fixes:
+#                                                    CI printed 765 / 46,832
+#                                                    at #417, and the stack
+#                                                    top (#431, with the
+#                                                    inode API's tests) prints
+#                                                    819 / 49,891 on a host
+#                                                    run -- 109 bytes under
+#                                                    850 / 50,000, before CI's
+#                                                    longer paths are counted
 #     images    1,081 /  47,123    1,400 /  60,000   ~29% / ~21%: not raised,
 #                                                    because a row raised
 #                                                    without a measurement
@@ -365,7 +373,7 @@ tasks:
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 850 50000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1050 65000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'scripts/test-floor.sh unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).
