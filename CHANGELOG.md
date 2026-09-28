@@ -291,6 +291,16 @@ Not caught by the compiler — the same source builds and behaves differently:
   its tail blocks; two uninitialized extents past 32767 overflowed `ee_len`.
   Every merge now refuses a pair over 32768 initialized or 32767
   uninitialized blocks, as the kernel does (#387).
+- **fsck counts an uninit group the way the format defines it** (#391). The
+  free-count audit counted zero bits in every group's on-disk bitmaps, but a
+  `BLOCK_UNINIT` or `INODE_UNINIT` group's bitmap block is unspecified —
+  `mke2fs` never writes it. A clean multi-group volume could then report
+  `BlockGroupFreeCountDrift`/`SuperblockFreeCountDrift`, and repair wrote the
+  raw counts into the descriptor and superblock, which `e2fsck` reports as
+  "Free blocks count wrong". A `BLOCK_UNINIT` group's bitmap is now rebuilt
+  from its own metadata, through the helper the allocator uses, and an
+  `INODE_UNINIT` group counts every inode free.
+
 - **A punch that needs two tree blocks from a `BLOCK_UNINIT` group gets two
   blocks.** A punch splitting an extent in a tree of full leaves needs a new
   leaf and an index node above it, in one transaction. The one-block allocator

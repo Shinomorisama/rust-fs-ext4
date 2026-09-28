@@ -675,14 +675,28 @@ fn audit_free_counts(
         // and nothing here does (#152).
         let group_first_block = first_data + gi as u64 * bpg;
         let group_block_count = std::cmp::min(bpg, total_blocks.saturating_sub(group_first_block));
-        let block_bitmap = fs.read_block(bg.block_bitmap)?;
+        //
+        // A BLOCK_UNINIT group's bitmap block is unspecified — mke2fs
+        // never writes it — so it is rebuilt from the group's metadata,
+        // exactly as the allocator reads it, rather than counted (#391).
+        let block_bitmap = if bg.flags().contains(bgd::BgdFlags::BLOCK_UNINIT) {
+            crate::alloc::uninit_block_bitmap(&fs.sb, &live_groups, gi as u32)
+        } else {
+            fs.read_block(bg.block_bitmap)?
+        };
         let observed_blocks = count_zero_bits_le(&block_bitmap, group_block_count as u32);
 
         // Inode bitmap: every group has exactly inodes_per_group
         // inodes (the ext4 layout doesn't leave a partial last group
-        // for inodes; the trailing bits are reserved-as-1).
-        let inode_bitmap = fs.read_block(bg.inode_bitmap)?;
-        let observed_inodes = count_zero_bits_le(&inode_bitmap, ipg as u32);
+        // for inodes; the trailing bits are reserved-as-1). An
+        // INODE_UNINIT group has every inode free, whatever its
+        // unwritten bitmap block holds.
+        let observed_inodes = if bg.flags().contains(bgd::BgdFlags::INODE_UNINIT) {
+            ipg as u32
+        } else {
+            let inode_bitmap = fs.read_block(bg.inode_bitmap)?;
+            count_zero_bits_le(&inode_bitmap, ipg as u32)
+        };
 
         sum_free_blocks += observed_blocks as u64;
         sum_free_inodes += observed_inodes as u64;
