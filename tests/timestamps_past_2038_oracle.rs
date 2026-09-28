@@ -102,9 +102,15 @@ fn field_line<'a>(stat: &'a str, field: &str) -> &'a str {
         .unwrap_or_else(|| panic!("debugfs stat has no {field}: line\n{stat}"))
 }
 
+/// `e2fsck -fn` must examine the volume and find nothing: the verdict, not
+/// the exit status, which `-n` leaves at 0 for a problem it declined to fix.
 fn e2fsck_clean(image: &Path) {
-    let (code, out, err) = run("e2fsck", &["-fn", image.to_str().unwrap()]);
-    assert_eq!(code, 0, "e2fsck -fn is not clean:\n{out}{err}");
+    fs_ext4_test_support::oracle("e2fsck")
+        .args(["-fn", image.to_str().unwrap()])
+        .env("TZ", "GMT")
+        .env("E2FSPROGS_FAKE_TIME", "1700000000")
+        .judged()
+        .clean("e2fsck -fn after the driver's create");
 }
 
 #[test]
