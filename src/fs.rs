@@ -6088,9 +6088,34 @@ impl Filesystem {
         Ok(block)
     }
 
+    /// Whether the volume carries RO_COMPAT `DIR_NLINK`, under which a
+    /// directory `i_links_count` of 1 means "more subdirectories than the
+    /// field can count".
+    fn has_dir_nlink(&self) -> bool {
+        self.sb.feature_ro_compat & features::RoCompat::DIR_NLINK.bits() != 0
+    }
+
+    /// Refuse, with [`Error::TooManyLinks`], a new link to `inode` that the
+    /// link count has no room for: the kernel's `ext4_link` check for files
+    /// and `EXT4_DIR_LINK_MAX` for a directory gaining a subdirectory.
+    ///
+    /// Called before anything is staged, so a refusal writes nothing.
+    fn check_link_room(&self, inode: &Inode) -> Result<()> {
+        next_links_count(inode.is_dir(), inode.links_count, 1, self.has_dir_nlink()).map(|_| ())
+    }
+
     /// Adjust `i_links_count` on a raw inode image. Recomputes CSUM.
+    ///
+    /// The count moves as the kernel's `ext4_inc_count` / `ext4_dec_count`
+    /// move it (see [`next_links_count`]): it never wraps, and a directory
+    /// count of 1 stays 1.
     fn patch_inode_nlink(&self, ino: u32, raw: &mut [u8], inode: &Inode, delta: i32) -> Result<()> {
-        let new_count = (inode.links_count as i32 + delta).max(0) as u16;
+        let new_count = next_links_count(
+            inode.is_dir(),
+            inode.links_count,
+            delta,
+            self.has_dir_nlink(),
+        )?;
         raw[0x1A..0x1C].copy_from_slice(&new_count.to_le_bytes());
         if self.csum.enabled {
             self.csum.patch_inode_checksum(ino, inode.generation, raw);
@@ -6123,6 +6148,8 @@ impl Filesystem {
         if self.entry_exists(parent_ino, &parent_inode, name)? {
             return Err(Error::AlreadyExists);
         }
+        // The new subdirectory's `..` is a link to the parent.
+        self.check_link_room(&parent_inode)?;
 
         let bs = self.sb.block_size();
         let parent_group = (parent_ino - 1) / self.sb.inodes_per_group;
@@ -6271,6 +6298,7 @@ impl Filesystem {
             // (rather than EPERM) — matches our IsADirectory convention.
             return Err(Error::IsADirectory);
         }
+        self.check_link_room(&src_inode)?;
 
         let dir = dir.into();
         let dst_parent_ino = dir.ino;
@@ -6431,6 +6459,12 @@ impl Filesystem {
             return Err(Error::InvalidArgument(
                 "rename: cannot move directory into its own subtree",
             ));
+        }
+
+        // A directory arriving in a new parent adds a `..` link to it; one
+        // that replaces a directory there leaves the count where it was.
+        if src_is_dir && existing_dst_ino.is_none() && src_parent_ino != dst_parent_ino {
+            self.check_link_room(&dst_parent_inode)?;
         }
 
         // Map POSIX mode bits to the directory-entry file-type byte.
@@ -7569,6 +7603,52 @@ impl Filesystem {
 
         self.commit_block_buffer(buf)
     }
+}
+
+/// `EXT4_LINK_MAX`: the most links the kernel gives one inode.
+pub(crate) const EXT4_LINK_MAX: u16 = 65000;
+
+/// The link count `count` becomes after `delta` links are added (positive)
+/// or dropped (negative), one at a time, by the kernel's rules:
+///
+/// - `ext4_inc_count`: a count already at [`EXT4_LINK_MAX`] takes no more
+///   links ([`Error::TooManyLinks`]) -- except a directory on a `DIR_NLINK`
+///   volume, whose count is pinned at 1, "too many to count". A directory
+///   already at 1 stays at 1.
+/// - `ext4_dec_count`: a directory's count only drops while it is above 2,
+///   so a pinned 1 is never taken to 0 (which Linux refuses to load); a
+///   file's count stops at 0.
+pub(crate) fn next_links_count(
+    is_dir: bool,
+    count: u16,
+    delta: i32,
+    dir_nlink: bool,
+) -> Result<u16> {
+    let mut count = count;
+    for _ in 0..delta.unsigned_abs() {
+        count = if delta > 0 {
+            if is_dir && count == 1 {
+                1
+            } else if count >= EXT4_LINK_MAX {
+                if is_dir && dir_nlink {
+                    1
+                } else {
+                    return Err(Error::TooManyLinks);
+                }
+            } else {
+                count + 1
+            }
+        } else if is_dir {
+            if count > 2 {
+                count - 1
+            } else {
+                count
+            }
+        } else {
+            count.saturating_sub(1)
+        };
+    }
+    Ok(count)
 }
 
 #[cfg(test)]
@@ -11370,7 +11450,7 @@ mod tests {
         audit70_set_links(&fs, p, 65000);
         let r = fs.apply_mkdir("/p/c", 0o755);
         assert!(
-            r.is_err(),
+            matches!(r, Err(Error::TooManyLinks)),
             "EMLINK expected, got {r:?}; count now {}",
             audit70_links(&fs, p)
         );
@@ -11391,7 +11471,7 @@ mod tests {
         audit70_set_links(&fs, f, 65535);
         let r = fs.apply_link("/f", "/g");
         assert!(
-            r.is_err(),
+            matches!(r, Err(Error::TooManyLinks)),
             "EMLINK expected; link count now {}",
             audit70_links(&fs, f)
         );
@@ -11406,7 +11486,10 @@ mod tests {
         let fs = mount(&dev);
         let f = fs.apply_create("/f", 0o644).unwrap();
         audit70_set_links(&fs, f, 65000);
-        assert!(fs.apply_link("/f", "/g").is_err());
+        assert!(matches!(
+            fs.apply_link("/f", "/g"),
+            Err(Error::TooManyLinks)
+        ));
         assert!(resolve(&fs, "/g").is_err());
         audit70_set_links(&fs, f, 64999);
         fs.apply_link("/f", "/g").unwrap();
@@ -11423,12 +11506,42 @@ mod tests {
         fs.apply_mkdir("/d", 0o755).unwrap();
         let p = resolve(&fs, "/p").unwrap();
         audit70_set_links(&fs, p, 65000);
-        assert!(fs.apply_rename("/d", "/p/d", false).is_err());
+        assert!(matches!(
+            fs.apply_rename("/d", "/p/d", false),
+            Err(Error::TooManyLinks)
+        ));
         assert_eq!(audit70_links(&fs, p), 65000);
         assert!(
             resolve(&fs, "/d").is_ok(),
             "the refused rename left the source alone"
         );
+    }
+
+    /// #385: the kernel's `ext4_inc_count` / `ext4_dec_count`, step by step.
+    #[test]
+    fn next_links_count_follows_the_kernel() {
+        // Files: up to EXT4_LINK_MAX and no further; down to 0 and no further.
+        assert_eq!(next_links_count(false, 64999, 1, true).unwrap(), 65000);
+        assert!(matches!(
+            next_links_count(false, 65000, 1, true),
+            Err(Error::TooManyLinks)
+        ));
+        assert_eq!(next_links_count(false, 1, -1, true).unwrap(), 0);
+        assert_eq!(next_links_count(false, 0, -1, true).unwrap(), 0);
+        // Directories: pinned at 1 past the maximum with DIR_NLINK, refused without.
+        assert_eq!(next_links_count(true, 65000, 1, true).unwrap(), 1);
+        assert!(matches!(
+            next_links_count(true, 65000, 1, false),
+            Err(Error::TooManyLinks)
+        ));
+        assert_eq!(next_links_count(true, 1, 1, false).unwrap(), 1);
+        // A directory count never drops through 2 or out of the pinned 1.
+        assert_eq!(next_links_count(true, 3, -1, true).unwrap(), 2);
+        assert_eq!(next_links_count(true, 2, -1, true).unwrap(), 2);
+        assert_eq!(next_links_count(true, 1, -1, true).unwrap(), 1);
+        // A summed delta is applied one link at a time.
+        assert_eq!(next_links_count(true, 64999, 2, true).unwrap(), 1);
+        assert_eq!(next_links_count(true, 5, -2, true).unwrap(), 3);
     }
 
     /// #385: fsck accepts a directory count of 1 on a DIR_NLINK volume --

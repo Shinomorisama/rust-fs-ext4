@@ -495,6 +495,7 @@ fn audit_inner(
     // under-counted) but still report TooLow (we already saw more than
     // the stored value — the image is genuinely wrong).
     let have_incomplete = !incomplete_dirs.is_empty();
+    let dir_nlink = fs.sb.feature_ro_compat & crate::features::RoCompat::DIR_NLINK.bits() != 0;
     let mut inodes_done: u64 = 0;
     let mut last_tick = Stopwatch::start();
     let tick = Duration::from_millis(500);
@@ -512,7 +513,12 @@ fn audit_inner(
                     report.anomalies_count += 1;
                     continue;
                 }
-                if (stored as u32) < count {
+                // On a DIR_NLINK volume a directory count of 1 is the
+                // kernel's "too many to count" (`ext4_inc_count` pins it
+                // there past EXT4_LINK_MAX and `ext4_dec_count` never moves
+                // it), not a count that is too low.
+                let uncounted = stored == 1 && inode.is_dir() && dir_nlink;
+                if (stored as u32) < count && !uncounted {
                     let a = Anomaly::LinkCountTooLow {
                         ino,
                         stored,
@@ -1377,7 +1383,18 @@ fn repair_link_count(
         return Ok(());
     }
     let (inode, mut raw) = fs.read_inode_verified(ino)?;
-    raw[0x1A..0x1C].copy_from_slice(&(observed as u16).to_le_bytes());
+    // A directory past EXT4_LINK_MAX is written as the DIR_NLINK "too many
+    // to count" value, as e2fsck pass 4 does; without DIR_NLINK there is
+    // no count to write.
+    let count = if inode.is_dir() && observed > crate::fs::EXT4_LINK_MAX as u32 {
+        if fs.sb.feature_ro_compat & crate::features::RoCompat::DIR_NLINK.bits() == 0 {
+            return Ok(());
+        }
+        1u16
+    } else {
+        observed as u16
+    };
+    raw[0x1A..0x1C].copy_from_slice(&count.to_le_bytes());
     finalize_and_commit_inode(fs, ino, inode.generation, &mut raw)?;
     report.repaired_count += 1;
     Ok(())
