@@ -2288,7 +2288,9 @@ pub unsafe extern "C" fn fs_ext4_set_flags(
 /// POSIX seconds-since-epoch, signed and 64-bit to match what the format
 /// stores; pass `FS_EXT4_TIME_OMIT` (`INT64_MIN`) to leave a given pair
 /// unchanged. `*_nsec` are the sub-second nanoseconds (written only when
-/// i_extra_isize covers them). Bumps i_ctime.
+/// i_extra_isize covers them), below 1e9, or one of `utimensat(2)`'s
+/// sentinels `FS_EXT4_UTIME_NOW` / `FS_EXT4_UTIME_OMIT` (Linux's values),
+/// honoured per field. Bumps i_ctime unless both pairs are omitted.
 ///
 /// Widened from `uint32_t` in 0.5.0. The old type could not express a
 /// pre-1970 date, and its `UINT32_MAX` sentinel collided with a real
@@ -2298,8 +2300,8 @@ pub unsafe extern "C" fn fs_ext4_set_flags(
 ///
 /// Returns 0 on success, -1 on failure with details in
 /// `fs_ext4_last_error`. Fails with EINVAL for a time outside the range
-/// ext4 can store, or one needing the epoch bits on an inode too small
-/// to carry an `*_extra` field.
+/// ext4 can store, one needing the epoch bits on an inode too small
+/// to carry an `*_extra` field, or any other `*_nsec` of 1e9 or more.
 #[no_mangle]
 pub unsafe extern "C" fn fs_ext4_utimens(
     fs: *mut fs_ext4_fs_t,

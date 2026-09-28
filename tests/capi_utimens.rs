@@ -253,3 +253,104 @@ fn utimens_round_trips_a_pre_1970_date() {
     unsafe { fs_ext4_umount(fs_handle) };
     let _ = fs::remove_file(&img);
 }
+
+/// The header's `FS_EXT4_UTIME_NOW` / `FS_EXT4_UTIME_OMIT`.
+const C_UTIME_NOW: u32 = fs_ext4::fs::UTIME_NOW;
+const C_UTIME_OMIT: u32 = fs_ext4::fs::UTIME_OMIT;
+
+/// A nanosecond count of one billion or more is EINVAL, and the inode
+/// is left exactly as it was (#326). Before, 1e9..2^30-1 was stored
+/// verbatim and anything larger was masked into garbage.
+#[test]
+fn utimens_refuses_a_nanosecond_count_of_one_billion_or_more() {
+    let img = scratch("nsec_range");
+    let img_c = CString::new(img.to_str().unwrap()).unwrap();
+    let path_c = CString::new("/test.txt").unwrap();
+    let fs_handle = unsafe { fs_ext4_mount_rw(img_c.as_ptr()) };
+    assert!(!fs_handle.is_null());
+
+    let before = stat_attr(fs_handle, "/test.txt");
+    for nsec in [1_000_000_000u32, 1 << 30, u32::MAX] {
+        for (label, a, m) in [("atime", nsec, 0), ("mtime", 0, nsec)] {
+            let rc = unsafe { fs_ext4_utimens(fs_handle, path_c.as_ptr(), 0, a, 0, m) };
+            assert_eq!(rc, -1, "{label} nsec {nsec:#x} should be refused");
+            assert_eq!(
+                fs_ext4_last_errno(),
+                22,
+                "{label} nsec {nsec:#x} errno (EINVAL)"
+            );
+        }
+    }
+    let after = stat_attr(fs_handle, "/test.txt");
+    assert_eq!(
+        (
+            after.atime,
+            after.atime_nsec,
+            after.mtime,
+            after.mtime_nsec,
+            after.ctime
+        ),
+        (
+            before.atime,
+            before.atime_nsec,
+            before.mtime,
+            before.mtime_nsec,
+            before.ctime
+        ),
+        "a refused call changed the inode"
+    );
+
+    unsafe { fs_ext4_umount(fs_handle) };
+    let _ = fs::remove_file(&img);
+}
+
+/// `FS_EXT4_UTIME_NOW` in a nanoseconds field sets that timestamp to the
+/// current time and ignores the seconds beside it.
+#[test]
+fn utimens_utime_now_sets_the_current_time() {
+    let img = scratch("utime_now");
+    let img_c = CString::new(img.to_str().unwrap()).unwrap();
+    let path_c = CString::new("/test.txt").unwrap();
+    let fs_handle = unsafe { fs_ext4_mount_rw(img_c.as_ptr()) };
+    assert!(!fs_handle.is_null());
+
+    let m = 946_771_200i64;
+    let rc = unsafe { fs_ext4_utimens(fs_handle, path_c.as_ptr(), 0, C_UTIME_NOW, m, 5) };
+    assert_eq!(rc, 0, "utimens failed: {}", fs_ext4_last_errno());
+
+    let after = stat_attr(fs_handle, "/test.txt");
+    // ctime is bumped to the same clock in the same call.
+    assert_eq!(after.atime, after.ctime, "atime is not the current time");
+    assert_eq!(after.atime_nsec, 0);
+    assert_eq!((after.mtime, after.mtime_nsec), (m, 5), "mtime applied");
+
+    unsafe { fs_ext4_umount(fs_handle) };
+    let _ = fs::remove_file(&img);
+}
+
+/// `FS_EXT4_UTIME_OMIT` in a nanoseconds field leaves that timestamp
+/// alone and ignores the seconds beside it.
+#[test]
+fn utimens_utime_omit_leaves_the_field_alone() {
+    let img = scratch("utime_omit");
+    let img_c = CString::new(img.to_str().unwrap()).unwrap();
+    let path_c = CString::new("/test.txt").unwrap();
+    let fs_handle = unsafe { fs_ext4_mount_rw(img_c.as_ptr()) };
+    assert!(!fs_handle.is_null());
+
+    let before = stat_attr(fs_handle, "/test.txt");
+    let a = 1_600_000_000i64;
+    let rc = unsafe { fs_ext4_utimens(fs_handle, path_c.as_ptr(), a, 7, 0, C_UTIME_OMIT) };
+    assert_eq!(rc, 0, "utimens failed: {}", fs_ext4_last_errno());
+
+    let after = stat_attr(fs_handle, "/test.txt");
+    assert_eq!((after.atime, after.atime_nsec), (a, 7), "atime applied");
+    assert_eq!(
+        (after.mtime, after.mtime_nsec),
+        (before.mtime, before.mtime_nsec),
+        "mtime preserved by UTIME_OMIT"
+    );
+
+    unsafe { fs_ext4_umount(fs_handle) };
+    let _ = fs::remove_file(&img);
+}

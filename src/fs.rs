@@ -104,6 +104,54 @@ fn pack_nsec_lo(nsec: u32) -> u32 {
 /// sentinel. `i64::MIN` is far outside anything ext4 can store.
 pub const TIME_OMIT: i64 = i64::MIN;
 
+/// Passed to [`Filesystem::apply_utimens`] as a nanoseconds value to set
+/// that timestamp to the current time from the mount's
+/// [`Runtime`](crate::runtime::Runtime); the seconds beside it are
+/// ignored. The value `utimensat(2)` gives `UTIME_NOW` on Linux,
+/// `(1 << 30) - 1`. The clock is whole seconds, so the stored
+/// nanoseconds are zero.
+pub const UTIME_NOW: u32 = (1 << 30) - 1;
+
+/// Passed to [`Filesystem::apply_utimens`] as a nanoseconds value to
+/// leave that timestamp unchanged; the seconds beside it are ignored.
+/// The value `utimensat(2)` gives `UTIME_OMIT` on Linux, `(1 << 30) - 2`.
+/// Equivalent to [`TIME_OMIT`] in the seconds.
+pub const UTIME_OMIT: u32 = (1 << 30) - 2;
+
+/// One more than the largest nanosecond count a timestamp can carry.
+const NSEC_PER_SEC: u32 = 1_000_000_000;
+
+/// What one `(sec, nsec)` pair passed to `apply_utimens` asks for.
+#[derive(Clone, Copy)]
+enum TimeUpdate {
+    Omit,
+    Set(i64, u32),
+}
+
+impl TimeUpdate {
+    /// Resolve the `utimensat(2)` sentinels and refuse anything that is
+    /// not a storable time, before any write.
+    fn resolve(sec: i64, nsec: u32, now: i64) -> Result<Self> {
+        if sec == TIME_OMIT || nsec == UTIME_OMIT {
+            return Ok(Self::Omit);
+        }
+        if nsec == UTIME_NOW {
+            return Ok(Self::Set(now, 0));
+        }
+        if nsec >= NSEC_PER_SEC {
+            return Err(Error::InvalidArgument(
+                "nanoseconds must be below 1e9 (or UTIME_NOW / UTIME_OMIT)",
+            ));
+        }
+        if !(crate::inode::MIN_ENCODABLE_TIME..=crate::inode::MAX_ENCODABLE_TIME).contains(&sec) {
+            return Err(Error::InvalidArgument(
+                "timestamp outside the range ext4 can store (1901..2446)",
+            ));
+        }
+        Ok(Self::Set(sec, nsec))
+    }
+}
+
 /// Split a `/a/b/c` path into (`/a/b`, `c`). Returns an error for empty or
 /// `"/"` paths (no basename to act on).
 fn split_parent_and_base(path: &str) -> Result<(String, String)> {
@@ -3576,6 +3624,13 @@ impl Filesystem {
     /// sentinel on either `_sec` leaves that pair unchanged (lets callers
     /// touch just atime or just mtime).
     ///
+    /// Each `_nsec` also takes `utimensat(2)`'s sentinels: [`UTIME_OMIT`]
+    /// leaves that pair unchanged and [`UTIME_NOW`] sets it to the
+    /// mount's current time, the `_sec` beside either being ignored. When
+    /// both pairs are omitted nothing is written, ctime included, as on
+    /// Linux. Any other `_nsec` of 1e9 or more is `InvalidArgument`,
+    /// refused before anything is written.
+    ///
     /// Seconds are signed and 64-bit because that is what the format
     /// means: the on-disk base is a signed 32-bit count, extended by the
     /// low two bits of the matching `*_extra` field. A `u32` here could
@@ -3598,16 +3653,10 @@ impl Filesystem {
         mtime_nsec: u32,
     ) -> Result<()> {
         self.refuse_write()?;
-        for secs in [atime_sec, mtime_sec] {
-            if secs != TIME_OMIT
-                && !(crate::inode::MIN_ENCODABLE_TIME..=crate::inode::MAX_ENCODABLE_TIME)
-                    .contains(&secs)
-            {
-                return Err(Error::InvalidArgument(
-                    "timestamp outside the range ext4 can store (1901..2446)",
-                ));
-            }
-        }
+        // One reading of the clock serves UTIME_NOW and the ctime bump.
+        let now = self.runtime.now_unix_seconds();
+        let atime = TimeUpdate::resolve(atime_sec, atime_nsec, now)?;
+        let mtime = TimeUpdate::resolve(mtime_sec, mtime_nsec, now)?;
         let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
         let ino = crate::path::lookup_with_csum(
             self.dev.as_ref(),
@@ -3618,8 +3667,9 @@ impl Filesystem {
         )?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
 
-        let (atime_base, atime_epoch) = crate::inode::encode_extra_time(atime_sec);
-        let (mtime_base, mtime_epoch) = crate::inode::encode_extra_time(mtime_sec);
+        if let (TimeUpdate::Omit, TimeUpdate::Omit) = (atime, mtime) {
+            return Ok(());
+        }
 
         // Extra-isize region carries the nsec fields AND the epoch bits.
         // Offsets (relative to inode start):
@@ -3635,35 +3685,39 @@ impl Filesystem {
         let has_mtime_extra = i_extra_isize >= 12 && raw.len() >= 0x8C;
         let has_atime_extra = i_extra_isize >= 16 && raw.len() >= 0x90;
 
+        // (base offset, extra offset if the inode has room for it)
+        let fields = [
+            (atime, 0x08, has_atime_extra.then_some(0x8C)),
+            (mtime, 0x10, has_mtime_extra.then_some(0x88)),
+        ];
+
         // Refuse before writing anything, so a rejected call leaves the
         // inode exactly as it was rather than half-updated.
-        if (mtime_sec != TIME_OMIT && mtime_epoch != 0 && !has_mtime_extra)
-            || (atime_sec != TIME_OMIT && atime_epoch != 0 && !has_atime_extra)
-        {
-            return Err(Error::InvalidArgument(
-                "timestamp past 2038 needs an *_extra field this inode is too small to hold",
-            ));
+        for (update, _, extra) in fields {
+            if let TimeUpdate::Set(sec, _) = update {
+                if crate::inode::encode_extra_time(sec).1 != 0 && extra.is_none() {
+                    return Err(Error::InvalidArgument(
+                        "timestamp past 2038 needs an *_extra field this inode is too small to hold",
+                    ));
+                }
+            }
         }
 
-        if atime_sec != TIME_OMIT {
-            raw[0x08..0x0C].copy_from_slice(&atime_base.to_le_bytes());
+        for (update, base_off, extra) in fields {
+            let TimeUpdate::Set(sec, nsec) = update else {
+                continue;
+            };
+            let (base, epoch) = crate::inode::encode_extra_time(sec);
+            raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
+            if let Some(off) = extra {
+                let packed = pack_nsec_lo(nsec) | epoch;
+                raw[off..off + 4].copy_from_slice(&packed.to_le_bytes());
+            }
         }
-        if mtime_sec != TIME_OMIT {
-            raw[0x10..0x14].copy_from_slice(&mtime_base.to_le_bytes());
-        }
+
         // POSIX: any attribute write bumps ctime.
-        let now = self.runtime.now_unix_seconds();
         // Its nanoseconds go to zero with it: `now` is whole seconds.
         set_inode_time(&mut raw, InodeTime::Ctime, now);
-
-        if mtime_sec != TIME_OMIT && has_mtime_extra {
-            let packed = pack_nsec_lo(mtime_nsec) | mtime_epoch;
-            raw[0x88..0x8C].copy_from_slice(&packed.to_le_bytes());
-        }
-        if atime_sec != TIME_OMIT && has_atime_extra {
-            let packed = pack_nsec_lo(atime_nsec) | atime_epoch;
-            raw[0x8C..0x90].copy_from_slice(&packed.to_le_bytes());
-        }
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.commit_inode_write(ino, &raw)
