@@ -3275,50 +3275,20 @@ impl Filesystem {
         // block ("corrupt directory entry: bad rec_len during add") because
         // its content block silently reused the directory's block number.
         //
-        // Unlike an uninit inode bitmap, "all blocks free" isn't quite
-        // right here: a group still owns whatever fixed overhead physically
-        // lives inside it, and zeroing the bitmap without putting that back
-        // hands the group's own metadata out as free space. Two kinds of
-        // overhead can be there — the RO_COMPAT_SPARSE_SUPER superblock +
-        // GDT backup (groups 0, 1, and powers of 3/5/7), and the group's own
-        // block bitmap, inode bitmap and inode table.
-        //
-        // With flex_bg those last three usually sit in the cohort's head
-        // group, and a group is only left BLOCK_UNINIT when mkfs had no real
-        // bitmap/table data to write for it — so on a flex_bg volume they are
-        // reliably elsewhere. That is an assumption about the formatter,
-        // though, not something the on-disk format guarantees: without
-        // flex_bg every group holds its own. So rather than assume, ask where
-        // the descriptor actually points and reserve whatever lands inside
-        // this group.
+        // Unlike an uninit inode bitmap, "all blocks free" is not the
+        // starting point: the group keeps its own fixed metadata in use
+        // (see the comment above `alloc::uninit_group_used_ranges`).
         let was_uninit = self.clear_bgd_uninit_flag_if_set(buf, gi, BgdUninitFlag::Block)?;
-        let reserved_runs = if was_uninit {
-            crate::alloc::group_owned_metadata_runs(&self.sb, &self.groups, gi)
-        } else {
-            Vec::new()
-        };
+        // The bitmap block of a group that was BLOCK_UNINIT holds nothing
+        // meaningful: it starts from what the flag stood for, which is the
+        // same bitmap the planner and fsck assumed (`uninit_block_bitmap`).
+        let implied = was_uninit
+            .then(|| crate::alloc::uninit_block_bitmap(&self.sb, &self.groups, gi as u32));
         let bitmap_block = self.groups[gi].block_bitmap;
         let bm = buf.get_mut(self, bitmap_block)?;
-        if was_uninit {
-            bm.iter_mut().for_each(|byte| *byte = 0);
-            for (first_bit, count) in reserved_runs {
-                for bit in first_bit..(first_bit + count).min(bpg) {
-                    let byte = (bit / 8) as usize;
-                    let mask = 1u8 << (bit % 8);
-                    if byte < bm.len() {
-                        bm[byte] |= mask;
-                    }
-                }
-            }
-            // Bits past the group's last block are set, as the kernel's
-            // `ext4_mark_bitmap_end` sets them: e2fsck reports "Padding at
-            // end of block bitmap is not set" otherwise. Every group whose
-            // blocks_per_group is under the bitmap block's 8 * block_size
-            // bits has some, and a short last group more.
-            let in_group = u64::from(crate::alloc::blocks_in_group(&self.sb, gi as u32));
-            for bit in in_group..(bm.len() as u64 * 8) {
-                bm[(bit / 8) as usize] |= 1u8 << (bit % 8);
-            }
+        if let Some(implied) = implied {
+            let n = implied.len().min(bm.len());
+            bm[..n].copy_from_slice(&implied[..n]);
         }
         for i in 0..len {
             let bit = bit_start as u64 + i;

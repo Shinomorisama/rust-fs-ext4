@@ -406,93 +406,88 @@ where
     ))
 }
 
-/// The block bitmap a `BLOCK_UNINIT` group implies: its own metadata in
-/// use, every other block in the group free.
-///
-/// Uninit is not empty: the group still holds its backup superblock and
-/// GDT, and without flex_bg its own bitmaps and inode table. The kernel's
-/// `ext4_init_block_bitmap` marks them; a plan that doesn't hands one of
-/// them out as free. The on-disk bitmap block of such a group is
-/// unspecified (`mke2fs` never writes it), so the planner and fsck both
-/// count from this instead of reading it (#391). Bits past the group's
-/// last block are left clear; callers bound their scans by
-/// [`blocks_in_group`].
+// ---------------------------------------------------------------------------
+// The bitmap a BLOCK_UNINIT group stands for
+// ---------------------------------------------------------------------------
+//
+// A group flagged BLOCK_UNINIT has no block bitmap on disk worth reading
+// (blockgroup.html, "Lazy Block Group Initialization": the bitmap "can be
+// calculated"). bitmaps.html warns that uninitialised is not the same as
+// empty. What is in use is the group's fixed-location metadata:
+//
+// - at its head, when it carries a superblock copy or a META_BG descriptor
+//   copy, those blocks and (outside META_BG) the reserved GDT blocks --
+//   `Superblock::group_head_metadata_blocks`;
+// - its own block bitmap, inode bitmap and inode table, but only where the
+//   descriptor puts them inside this group. Under flex_bg they usually sit
+//   in another group, and blocks this group holds for *other* groups'
+//   bitmaps are not counted: `dumpe2fs` on a flex group leader forced to
+//   BLOCK_UNINIT lists them as free.
+//
+// Bits past the group's last block (a bitmap block has 8 * block_size of
+// them) are set, as every bitmap the tools write sets them; e2fsck
+// reports "Padding at end of block bitmap is not set" otherwise.
+//
+// tests in `needs_host` below compare this against `dumpe2fs` for every
+// BLOCK_UNINIT group of mkfs.ext4 volumes with and without flex_bg and
+// META_BG, at 1 KiB and 4 KiB.
+
+/// Group-relative block ranges that a `BLOCK_UNINIT` group has in use.
+pub(crate) fn uninit_group_used_ranges(
+    sb: &Superblock,
+    groups: &[BlockGroupDescriptor],
+    gi: usize,
+) -> Vec<std::ops::Range<u64>> {
+    let group_first = sb.first_data_block as u64 + gi as u64 * sb.blocks_per_group as u64;
+    let group_len = u64::from(blocks_in_group(sb, gi as u32));
+    let mut used = Vec::new();
+
+    let head = sb.group_head_metadata_blocks(gi as u64);
+    if head > 0 {
+        used.push(0..head.min(group_len));
+    }
+
+    if let Some(desc) = groups.get(gi) {
+        let table_len = (u64::from(sb.inodes_per_group) * u64::from(sb.inode_size))
+            .div_ceil(u64::from(sb.block_size()));
+        for (start, len) in [
+            (desc.block_bitmap, 1),
+            (desc.inode_bitmap, 1),
+            (desc.inode_table, table_len),
+        ] {
+            let Some(relative) = start.checked_sub(group_first) else {
+                continue;
+            };
+            if relative < group_len {
+                used.push(relative..(relative + len).min(group_len));
+            }
+        }
+    }
+    used
+}
+
+/// The whole block bitmap a `BLOCK_UNINIT` group stands for: the ranges
+/// of [`uninit_group_used_ranges`] and the padding past the group's end
+/// set, everything else clear. The planner and fsck read this instead of
+/// the unwritten bitmap block (#391), and the first allocation into the
+/// group writes it out.
 pub(crate) fn uninit_block_bitmap(
     sb: &Superblock,
     groups: &[BlockGroupDescriptor],
     gi: u32,
 ) -> Vec<u8> {
-    let max_bits = u64::from(blocks_in_group(sb, gi));
-    let mut bm = vec![0u8; sb.block_size() as usize];
-    for (first_bit, count) in group_owned_metadata_runs(sb, groups, gi as usize) {
-        for bit in first_bit..(first_bit + count).min(max_bits) {
-            if let Some(b) = bm.get_mut((bit / 8) as usize) {
-                *b |= 1u8 << (bit % 8);
-            }
+    let mut bitmap = vec![0u8; sb.block_size() as usize];
+    let capacity = bitmap.len() as u64 * 8;
+    let padding = u64::from(blocks_in_group(sb, gi)).min(capacity)..capacity;
+    for range in uninit_group_used_ranges(sb, groups, gi as usize)
+        .into_iter()
+        .chain(std::iter::once(padding))
+    {
+        for bit in range.start.min(capacity)..range.end.min(capacity) {
+            bitmap[(bit / 8) as usize] |= 1 << (bit % 8);
         }
     }
-    bm
-}
-
-/// The blocks group `gi` owns that physically live inside it, as
-/// `(first_bit, count)` runs relative to the group's first block.
-///
-/// A BLOCK_UNINIT group's bitmap is implied rather than stored, and this
-/// is what it implies: everything here is in use, the rest is free. Both
-/// the planner and the first real write of the bitmap need it, or the
-/// group's own metadata becomes allocatable free space. Reading it off the
-/// descriptor rather than deriving it from the feature flags means an
-/// unusual layout is handled by inspection instead of by assumption.
-pub(crate) fn group_owned_metadata_runs(
-    sb: &Superblock,
-    groups: &[BlockGroupDescriptor],
-    gi: usize,
-) -> Vec<(u64, u64)> {
-    let bs = sb.block_size() as u64;
-    let bpg = sb.blocks_per_group as u64;
-    let group_start = sb.first_data_block as u64 + gi as u64 * bpg;
-    let mut runs = Vec::new();
-
-    // Superblock, group-descriptor-table backup and the blocks held
-    // back for growing the table, at the head of every group that
-    // carries a backup.
-    //
-    // Which groups those are is the filesystem's decision, not a
-    // constant: `SPARSE_SUPER2` puts backups in two named groups and
-    // no others, and a filesystem without `SPARSE_SUPER` puts one in
-    // every group. Assuming the classic rule reports "no backup
-    // here" for groups that have one, and a rebuilt bitmap then
-    // offers a live backup superblock as free space.
-    //
-    // `s_reserved_gdt_blocks` belongs in the same run. It sits
-    // between the descriptor table and the block bitmap, and it is
-    // the room the filesystem keeps to grow into — free-looking, and
-    // not free.
-    //
-    // Under `META_BG` the table is split by meta group instead, and a
-    // group's head holds one descriptor block when it is the first, second
-    // or last of its meta group (#73). `group_head_metadata_blocks` has both.
-    let head = sb.group_head_metadata_blocks(gi as u64);
-    if head > 0 {
-        runs.push((0, head));
-    }
-
-    // The group's own bitmaps and inode table, wherever the descriptor
-    // says they are — included only when that is inside this group.
-    let itable_blocks = (sb.inodes_per_group as u64 * sb.inode_size as u64).div_ceil(bs);
-    let Some(g) = groups.get(gi) else {
-        return runs;
-    };
-    for (block, count) in [
-        (g.block_bitmap, 1),
-        (g.inode_bitmap, 1),
-        (g.inode_table, itable_blocks),
-    ] {
-        if block >= group_start && block < group_start + bpg {
-            runs.push((block - group_start, count));
-        }
-    }
-    runs
+    bitmap
 }
 
 /// Returns the number of blocks that actually exist in group `gi` (the last
@@ -1142,9 +1137,9 @@ mod tests {
             "first block past the group's metadata"
         );
 
-        // The runs themselves, relative to the group start.
-        let runs = group_owned_metadata_runs(&sb, &groups, 1);
-        assert_eq!(runs, vec![(0, 5), (5, 1), (6, 1), (7, 512)]);
+        // The ranges themselves, relative to the group start.
+        let used = uninit_group_used_ranges(&sb, &groups, 1);
+        assert_eq!(used, vec![0..5, 5..6, 6..7, 7..519]);
     }
 
     /// THE ACCEPTANCE HALF: a reservation is a reservation of one block
@@ -1301,5 +1296,189 @@ mod tests {
         let sb = mk_sb(4096, 32768, 8192, 32769 + 100);
         assert_eq!(blocks_in_group(&sb, 0), 32768); // full
         assert_eq!(blocks_in_group(&sb, 1), 100); // short last group
+    }
+}
+
+/// [`uninit_block_bitmap`] against `dumpe2fs`, which lists every group's
+/// free blocks, BLOCK_UNINIT ones included, from its own reconstruction.
+#[cfg(test)]
+mod uninit_bitmap_oracle {
+    mod needs_host {
+        use crate::alloc::{blocks_in_group, uninit_block_bitmap};
+        use crate::bgd::BgdFlags;
+        use crate::block_io::FileDevice;
+        use crate::fs::Filesystem;
+        use std::collections::BTreeMap;
+        use std::sync::Arc;
+
+        /// Group number -> its "Free blocks:" list, as absolute ranges.
+        fn dumpe2fs_free(image: &str) -> BTreeMap<usize, Vec<(u64, u64)>> {
+            let out = fs_ext4_test_support::oracle("dumpe2fs")
+                .arg(image)
+                .judged()
+                .clean("dumpe2fs");
+            let text = String::from_utf8_lossy(&out.stdout).into_owned();
+            let mut free = BTreeMap::new();
+            let mut group = None;
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix("Group ") {
+                    group = rest.split(':').next().and_then(|g| g.parse().ok());
+                } else if let (Some(g), Some(list)) =
+                    (group, line.trim().strip_prefix("Free blocks:"))
+                {
+                    let ranges = list
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|r| !r.is_empty())
+                        .map(|r| match r.split_once('-') {
+                            Some((a, b)) => (a.parse().unwrap(), b.parse().unwrap()),
+                            None => (r.parse().unwrap(), r.parse().unwrap()),
+                        })
+                        .collect();
+                    free.insert(g, ranges);
+                }
+            }
+            free
+        }
+
+        fn check(
+            tag: &str,
+            block_size: u32,
+            blocks_per_group: u32,
+            kib: u64,
+            features: &str,
+            force_last_group: bool,
+        ) {
+            let image =
+                fs_ext4_test_support::temp_path!("fs_ext4_uninit_{tag}_{}.img", std::process::id());
+            std::fs::File::create(&image)
+                .and_then(|f| f.set_len(kib << 10))
+                .unwrap();
+            let mut mkfs = fs_ext4_test_support::oracle("mkfs.ext4").args([
+                "-q",
+                "-F",
+                "-b",
+                &block_size.to_string(),
+                "-g",
+                &blocks_per_group.to_string(),
+            ]);
+            if !features.is_empty() {
+                mkfs = mkfs.args(["-O", features]);
+            }
+            let out = mkfs.arg(&image).output();
+            assert!(
+                out.status.success(),
+                "[{tag}] {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+
+            if force_last_group {
+                // mkfs.ext4 never leaves the last group BLOCK_UNINIT, so the
+                // short group's padding is exercised by setting the flag
+                // with debugfs, as a resize could leave it. (dumpe2fs then
+                // lists the group as if it were full length, free blocks
+                // past the end of the volume included; only the blocks
+                // that exist are compared.)
+                let last = {
+                    let fs =
+                        Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
+                    let last = fs.groups.len() - 1;
+                    (last, fs.groups[last].flags | BgdFlags::BLOCK_UNINIT.bits())
+                };
+                let script = format!(
+                    "set_bg {0} flags {1}\nset_bg {0} checksum calc\n",
+                    last.0, last.1
+                );
+                let out = fs_ext4_test_support::oracle("debugfs")
+                    .args(["-w", "-f", "-", &image])
+                    .stdin(script)
+                    .output();
+                assert!(out.status.success(), "[{tag}] debugfs set_bg");
+            }
+            let free = dumpe2fs_free(&image);
+            let fs = Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
+            let bpg = u64::from(fs.sb.blocks_per_group);
+            let mut checked = 0;
+            for (gi, desc) in fs.groups.iter().enumerate() {
+                if !desc.flags().contains(BgdFlags::BLOCK_UNINIT) {
+                    continue;
+                }
+                checked += 1;
+                let first = u64::from(fs.sb.first_data_block) + gi as u64 * bpg;
+                let len = u64::from(blocks_in_group(&fs.sb, gi as u32));
+                let bitmap = uninit_block_bitmap(&fs.sb, &fs.groups, gi as u32);
+                let is_free = |block: u64| free[&gi].iter().any(|&(a, b)| (a..=b).contains(&block));
+                for bit in 0..bitmap.len() as u64 * 8 {
+                    let set = bitmap[(bit / 8) as usize] & (1 << (bit % 8)) != 0;
+                    if bit >= len {
+                        assert!(set, "[{tag}] group {gi}: padding bit {bit} is clear");
+                    } else {
+                        assert_eq!(
+                            !set,
+                            is_free(first + bit),
+                            "[{tag}] group {gi}, block {}",
+                            first + bit
+                        );
+                    }
+                }
+                assert_eq!(
+                    free[&gi]
+                        .iter()
+                        .filter(|&&(a, _)| a < first + len)
+                        .map(|&(a, b)| b.min(first + len - 1) - a + 1)
+                        .sum::<u64>(),
+                    u64::from(desc.free_blocks_count),
+                    "[{tag}] group {gi}: dumpe2fs's list and the descriptor"
+                );
+            }
+            assert!(checked >= 3, "[{tag}] only {checked} BLOCK_UNINIT groups");
+            drop(fs);
+            let _ = std::fs::remove_file(&image);
+        }
+
+        #[test]
+        fn a_1k_flex_bg_volume() {
+            check("1k_flex", 1024, 1024, 64 << 10, "", false);
+        }
+
+        #[test]
+        fn a_1k_volume_without_flex_bg() {
+            check("1k_noflex", 1024, 1024, 64 << 10, "^flex_bg", false);
+        }
+
+        #[test]
+        fn a_4k_flex_bg_volume() {
+            check("4k_flex", 4096, 2048, 256 << 10, "", false);
+        }
+
+        #[test]
+        fn a_4k_volume_without_flex_bg() {
+            check(
+                "4k_noflex",
+                4096,
+                2048,
+                256 << 10,
+                "^flex_bg,^resize_inode",
+                false,
+            );
+        }
+
+        #[test]
+        fn a_1k_meta_bg_volume_without_flex_bg() {
+            check(
+                "1k_meta",
+                1024,
+                1024,
+                64 << 10,
+                "meta_bg,^resize_inode,^flex_bg",
+                false,
+            );
+        }
+
+        #[test]
+        fn a_short_last_group() {
+            // 64 MiB + 300 KiB: the last group has 300 blocks.
+            check("1k_short", 1024, 1024, (64 << 10) + 300, "^flex_bg", true);
+        }
     }
 }
