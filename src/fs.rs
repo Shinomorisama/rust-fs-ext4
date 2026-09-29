@@ -4486,7 +4486,7 @@ impl Filesystem {
     /// block over whatever it held -- another file's data, a directory --
     /// and a block whose checksum failed was edited and restamped, which
     /// blessed the corruption. `h_refcount` was decremented on the same
-    /// trust. The kernel refuses all of them with EFSCORRUPTED, and so does
+    /// trust. The kernel refuses all of them with EUCLEAN, and so does
     /// this (e2fsck agrees in tests/xattr_block_checked_oracle.rs): see
     /// [`crate::xattr::check_external_block`].
     fn buffer_read_xattr_block(&self, buf: &mut BlockBuffer, block_nr: u64) -> Result<Vec<u8>> {
@@ -6476,7 +6476,7 @@ impl Filesystem {
     }
 
     /// Refuse, with [`Error::TooManyLinks`], a new link to `inode` that the
-    /// link count has no room for: [`EXT4_LINK_MAX`] for a file, and for a
+    /// link count has no room for: [`MAX_LINKS`] for a file, and for a
     /// directory gaining a subdirectory the same limit unless `DIR_NLINK`
     /// lets the count go to 1 (see [`next_links_count`]).
     ///
@@ -7992,8 +7992,8 @@ impl Filesystem {
     }
 }
 
-/// `EXT4_LINK_MAX`: the most links the kernel gives one inode.
-pub(crate) const EXT4_LINK_MAX: u16 = 65000;
+/// The most links one inode may have: 65,000 (inodes.html, `i_links_count`).
+pub(crate) const MAX_LINKS: u16 = 65000;
 
 /// The link count `count` becomes after `delta` links are added (positive)
 /// or dropped (negative), one at a time. The rules are the `i_links_count`
@@ -8001,7 +8001,7 @@ pub(crate) const EXT4_LINK_MAX: u16 = 65000;
 /// `DIR_NLINK` a directory past that is 1, "not known"), as the kernel
 /// applies them:
 ///
-/// - adding: a count already at [`EXT4_LINK_MAX`] takes no more
+/// - adding: a count already at [`MAX_LINKS`] takes no more
 ///   links ([`Error::TooManyLinks`]) -- except a directory on a `DIR_NLINK`
 ///   volume, whose count is pinned at 1, "too many to count". A directory
 ///   already at 1 stays at 1.
@@ -8019,7 +8019,7 @@ pub(crate) fn next_links_count(
         count = if delta > 0 {
             if is_dir && count == 1 {
                 1
-            } else if count >= EXT4_LINK_MAX {
+            } else if count >= MAX_LINKS {
                 if is_dir && dir_nlink {
                     1
                 } else {
@@ -10828,7 +10828,7 @@ mod tests {
     /// A FILE WHOSE EXTENT LEAF FAILS ITS CHECKSUM IS NOT FREED AROUND.
     /// Freeing walks the tree to learn which blocks to release; a node that
     /// does not verify may name blocks that belong to something else. The
-    /// kernel refuses the removal (EFSBADCRC); so does this, before any
+    /// kernel refuses the removal (EBADMSG); so does this, before any
     /// bitmap is touched.
     #[test]
     fn unlinking_a_file_whose_extent_leaf_fails_its_checksum_is_refused() {
@@ -12019,7 +12019,7 @@ mod tests {
     }
 
     /// #385: the subdirectory that takes a DIR_NLINK parent past
-    /// EXT4_LINK_MAX pins the count at 1, as the kernel does.
+    /// MAX_LINKS pins the count at 1, as the kernel does.
     #[test]
     fn audit70_mkdir_past_the_maximum_pins_a_dir_nlink_parent_at_one() {
         let dev = formatted();
@@ -12032,7 +12032,7 @@ mod tests {
         assert_eq!(audit70_links(&fs, p), 1);
     }
 
-    /// #385: without DIR_NLINK a directory at EXT4_LINK_MAX takes no more
+    /// #385: without DIR_NLINK a directory at MAX_LINKS takes no more
     /// subdirectories: EMLINK, and nothing is written.
     #[test]
     fn audit70_mkdir_past_the_maximum_without_dir_nlink_is_refused() {
@@ -12071,10 +12071,10 @@ mod tests {
         assert_eq!(audit70_links(&fs, f), 65535);
     }
 
-    /// #385: EXT4_LINK_MAX (65000) is the ceiling the format documentation
+    /// #385: MAX_LINKS (65000) is the ceiling the format documentation
     /// gives for `i_links_count`, not the width of the field.
     #[test]
-    fn audit70_a_link_at_ext4_link_max_is_refused() {
+    fn audit70_a_link_at_max_links_is_refused() {
         let dev = formatted();
         let fs = mount(&dev);
         let f = fs.apply_create("/f", 0o644).unwrap();
@@ -12089,7 +12089,7 @@ mod tests {
         assert_eq!(audit70_links(&fs, f), 65000);
     }
 
-    /// #385: renaming a directory into a parent at EXT4_LINK_MAX on a
+    /// #385: renaming a directory into a parent at MAX_LINKS on a
     /// volume without DIR_NLINK is refused, like mkdir there.
     #[test]
     fn audit70_rename_of_a_dir_into_a_full_parent_is_refused() {
@@ -12113,7 +12113,7 @@ mod tests {
     /// #385: the documented link-count rules, step by step.
     #[test]
     fn next_links_count_follows_the_kernel() {
-        // Files: up to EXT4_LINK_MAX and no further; down to 0 and no further.
+        // Files: up to MAX_LINKS and no further; down to 0 and no further.
         assert_eq!(next_links_count(false, 64999, 1, true).unwrap(), 65000);
         assert!(matches!(
             next_links_count(false, 65000, 1, true),

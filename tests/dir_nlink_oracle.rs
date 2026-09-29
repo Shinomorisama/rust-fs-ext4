@@ -1,7 +1,7 @@
 //! A directory with more subdirectories than `i_links_count` can count keeps
 //! the `DIR_NLINK` value e2fsck expects (#385).
 //!
-//! On a `dir_nlink` volume a directory past `EXT4_LINK_MAX` (65000) links is
+//! On a `dir_nlink` volume a directory past `MAX_LINKS` (65000) links is
 //! written with a count of 1, "too many to count": the kernel pins it there
 //! and e2fsck pass 4 expects exactly that. The driver treated the 1 as a
 //! literal count, so a mkdir under such a directory wrote 2 and an rmdir
@@ -19,7 +19,7 @@ use fs_ext4::block_io::FileDevice;
 use fs_ext4::fs::Filesystem;
 use std::sync::Arc;
 
-/// Past EXT4_LINK_MAX: `.`, the entry in `/`, and one `..` per subdirectory
+/// Past MAX_LINKS: `.`, the entry in `/`, and one `..` per subdirectory
 /// come to 65003.
 const SUBDIRS: usize = 65001;
 

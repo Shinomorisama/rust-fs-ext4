@@ -641,7 +641,7 @@ Not caught by the compiler — the same source builds and behaves differently:
   patched only `i_size`, past what the inline area holds, which the reader
   rejects as corrupt. Replace, pwrite, and truncate in both directions now
   fail with `Unsupported` on an inline-data file and leave it whole.
-- **Link counts stop at `EXT4_LINK_MAX`, and a `DIR_NLINK` count of 1
+- **Link counts stop at 65,000, and a `DIR_NLINK` count of 1
   stays 1 (#385).** A count was moved by plain arithmetic into a `u16`: the
   65536th hard link wrapped the count to 0, a name on an inode the next
   orphan pass or e2fsck treats as deleted, and nothing enforced the kernel's

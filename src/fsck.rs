@@ -506,7 +506,7 @@ fn audit_inner(
                 }
                 // On a DIR_NLINK volume a directory count of 1 means "not
                 // known" (the format documentation's `i_links_count` entry:
-                // a count past EXT4_LINK_MAX is stored as 1, and removing a
+                // a count past MAX_LINKS is stored as 1, and removing a
                 // subdirectory never moves it), not a count that is too
                 // low.
                 let uncounted = stored == 1 && inode.is_dir() && dir_nlink;
@@ -1390,10 +1390,10 @@ fn repair_link_count(
         return Ok(());
     }
     let (inode, mut raw) = fs.read_inode_verified(ino)?;
-    // A directory past EXT4_LINK_MAX is written as the DIR_NLINK "too many
+    // A directory past MAX_LINKS is written as the DIR_NLINK "too many
     // to count" value, as e2fsck pass 4 does; without DIR_NLINK there is
     // no count to write.
-    let count = if inode.is_dir() && observed > crate::fs::EXT4_LINK_MAX as u32 {
+    let count = if inode.is_dir() && observed > crate::fs::MAX_LINKS as u32 {
         if fs.sb.feature_ro_compat & crate::features::RoCompat::DIR_NLINK.bits() == 0 {
             return Ok(());
         }

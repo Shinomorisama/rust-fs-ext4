@@ -58,7 +58,7 @@ pub enum Error {
     Corrupt(&'static str),
 
     /// The inode's link count has no room for another link (POSIX
-    /// EMLINK): a file at `EXT4_LINK_MAX` (65000) links, or a directory
+    /// EMLINK): a file at `MAX_LINKS` (65000) links, or a directory
     /// with that many on a volume without `DIR_NLINK`.
     TooManyLinks,
 

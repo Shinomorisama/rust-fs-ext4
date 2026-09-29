@@ -89,7 +89,7 @@ pub struct XattrEntry {
     /// the EA-inode case has not: the value then comes from another
     /// inode's body, and without this there is nothing to compare what
     /// was read against. The kernel makes exactly that comparison and
-    /// fails with `EFSCORRUPTED` when the two disagree; this driver
+    /// fails with `EUCLEAN` when the two disagree; this driver
     /// returned the EA inode's whole body and
     /// reported success (#121).
     pub value_size: u32,
@@ -895,7 +895,7 @@ pub fn plan_remove_from_external_block(
 /// other than 1, or (on `metadata_csum`) a checksum that does not verify.
 ///
 /// The kernel makes the same checks before it reads or edits the block,
-/// and answers EFSCORRUPTED. Every block ext4
+/// and answers EUCLEAN ("Structure needs cleaning"). Every block ext4
 /// has ever written is exactly one block long; a larger `h_blocks` is not
 /// a layout anybody can edit in place.
 pub(crate) fn check_external_block(
