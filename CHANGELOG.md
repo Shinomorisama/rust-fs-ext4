@@ -328,6 +328,21 @@ Not caught by the compiler — the same source builds and behaves differently:
   `debugfs`'s: `tests/htree_hash_differential.rs` compares 14,400 hashes
   (2,400 names across six seeds, in all six hash versions) with it. See
   `PROVENANCE.md`.
+- **The provenance record and its remediation.** `PROVENANCE.md` records
+  where the code comes from, the sources it may be written from, and the
+  2026-09-29 audit against the Linux ext4 and JBD2 sources. Besides the
+  clean-room `src/hash.rs` above, the inode timestamp helpers and five
+  format-driven routines (the xattr entry and block hashes, the JBD2 tag
+  sizes and checksum-declaration rules, descriptor placement and group-head
+  size, directory block roles, and the `BLOCK_UNINIT` bitmap) are restated
+  and checked against e2fsprogs and a Linux kernel in the harness VM;
+  comments cite the format documentation or an oracle instead of kernel
+  internals; and `chore check:provenance`, also a CI job, fails when the
+  tree names kernel or e2fsprogs internals. Every earlier release on
+  crates.io, 0.3.2 to 0.5.1, contains htree hash code derived from the
+  Linux kernel, and 0.5.0 and 0.5.1 also quote one line of kernel C; the
+  README's statement that no code derives from GPL, LGPL or AGPL source
+  holds from 0.6.0.
 - **The release tarball is laid out as an install prefix.** It holds
   `bin/mkfs.ext4`, `share/rust-fs-ext4/CAVEATS` (from `packaging/CAVEATS`,
   the notes an installer shows) and `LICENSE`, so an installer copies it
