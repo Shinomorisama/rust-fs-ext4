@@ -645,29 +645,27 @@ fn decode_external_block_entries(block: &[u8]) -> Result<Vec<DecodedEntry>> {
 /// - `[0x00..0x04]` magic = `EXT4_XATTR_MAGIC`
 /// - `[0x04..0x08]` `h_refcount` (caller-provided; default 1)
 /// - `[0x08..0x0C]` `h_blocks` = 1 (always single-block)
-/// - `[0x0C..0x10]` `h_hash` = 0 (kernel recomputes lazily; readers tolerate 0)
+/// - `[0x0C..0x10]` `h_hash`, the [`block_hash`] of the entries' hashes
 /// - `[0x10..0x14]` `h_checksum` slot — left as 0 here; caller patches via
 ///   `Checksummer::patch_xattr_block` after layout.
 /// - `[0x14..0x20]` reserved zeros
 /// - `[0x20..]`     entries growing forward, values growing backward from
 ///   end of block. `e_value_offs` is BLOCK-relative
-///   (different from in-inode where it's region-relative).
+///   (different from in-inode where it's region-relative). Every entry's
+///   `e_hash` is its [`entry_hash`].
 fn encode_external_block(block: &mut [u8], entries: &[DecodedEntry], refcount: u32) {
-    for b in block.iter_mut() {
-        *b = 0;
-    }
+    block.fill(0);
     block[0x00..0x04].copy_from_slice(&EXT4_XATTR_MAGIC.to_le_bytes());
     block[0x04..0x08].copy_from_slice(&refcount.to_le_bytes());
     block[0x08..0x0C].copy_from_slice(&1u32.to_le_bytes());
-    // h_hash + h_checksum + reserved: stay zero until checksum patch.
 
     // THE KERNEL'S ORDER, WHICH IS NOT ALPHABETICAL: namespace, then name
-    // LENGTH, then name bytes. Its block lookup (`xattr_find_entry` with
-    // `sorted=1`) compares in exactly that order and stops at the first
-    // entry at or past the target, so a block sorted by name alone hides
-    // every attribute that follows a longer name sorting earlier — with
-    // `user.abc` first, the kernel's `getxattr("user.zz")` stops at `abc`
-    // and answers ENODATA (#379). `e2fsck` does not check the order.
+    // LENGTH, then name bytes -- the order its own blocks are written in.
+    // Its lookup in a block stops at the first entry at or past the
+    // target in that order, so a block sorted by name alone hides every
+    // attribute that follows a longer name sorting earlier: with
+    // `user.abc` first, `getxattr("user.zz")` answered ENODATA (#379).
+    // `e2fsck` does not check the order.
     let mut sorted: Vec<&DecodedEntry> = entries.iter().collect();
     sorted.sort_by(|a, b| {
         a.name_index
@@ -676,13 +674,9 @@ fn encode_external_block(block: &mut [u8], entries: &[DecodedEntry], refcount: u
             .then_with(|| a.name_bytes.cmp(&b.name_bytes))
     });
 
-    let block_len = block.len();
     let mut entry_cursor: usize = 0x20;
-    let mut value_cursor: usize = block_len;
-    // Fold each entry's e_hash into the block hash (h_hash). Mirrors the
-    // kernel's ext4_xattr_rehash: any zero entry hash forces h_hash = 0.
-    let mut block_hash: u32 = 0;
-    let mut any_zero_hash = false;
+    let mut value_cursor: usize = block.len();
+    let mut hashes = Vec::with_capacity(sorted.len());
 
     for e in &sorted {
         let name_len = e.name_bytes.len();
@@ -697,9 +691,10 @@ fn encode_external_block(block: &mut [u8], entries: &[DecodedEntry], refcount: u
             value_cursor
         };
 
-        // External-block entries carry a real e_hash (over name + value); the
-        // kernel and e2fsck reject a zero hash ("has a hash (0) which is invalid").
-        let e_hash = xattr_entry_hash(&e.name_bytes, &e.value);
+        // e2fsck checks every block entry's e_hash against its name and
+        // value ("has a hash (N) which is invalid"), so it is always real.
+        let e_hash = entry_hash(&e.name_bytes, &e.value);
+        hashes.push(e_hash);
 
         block[entry_cursor] = name_len as u8;
         block[entry_cursor + 1] = e.name_index;
@@ -711,37 +706,62 @@ fn encode_external_block(block: &mut [u8], entries: &[DecodedEntry], refcount: u
         block[entry_cursor + 12..entry_cursor + 16].copy_from_slice(&e_hash.to_le_bytes());
         block[entry_cursor + 16..entry_cursor + 16 + name_len].copy_from_slice(&e.name_bytes);
         entry_cursor += entry_padded;
-
-        if e_hash == 0 {
-            any_zero_hash = true;
-        } else if !any_zero_hash {
-            block_hash = (block_hash << 16) ^ (block_hash >> 16) ^ e_hash;
-        }
     }
-    // h_hash (0x0C): zero if any entry hash was zero, else the folded value.
-    let h_hash = if any_zero_hash { 0 } else { block_hash };
-    block[0x0C..0x10].copy_from_slice(&h_hash.to_le_bytes());
+    block[0x0C..0x10].copy_from_slice(&block_hash(&hashes).to_le_bytes());
     // Terminator already zero from the wipe.
 }
 
-/// ext4 xattr entry hash (`ext4_xattr_hash_entry`): a rolling hash over the
-/// name bytes (shift 5), then the value as little-endian 32-bit words (shift
-/// 16) with the final partial word zero-padded. External-block entries store
-/// this in `e_hash`; in-inode entries leave it zero.
-fn xattr_entry_hash(name: &[u8], value: &[u8]) -> u32 {
-    const NAME_SHIFT: u32 = 5;
-    const VALUE_SHIFT: u32 = 16;
-    let mut hash: u32 = 0;
-    for &b in name {
-        hash = (hash << NAME_SHIFT) ^ (hash >> (32 - NAME_SHIFT)) ^ (b as u32);
-    }
-    for chunk in value.chunks(4) {
+// ---------------------------------------------------------------------------
+// Entry and block hashes
+// ---------------------------------------------------------------------------
+//
+// kernel.org's attributes.html says only that `e_hash` is a hash of the
+// name and value and `h_hash` a hash of all the attributes. The exact
+// rules below were read off the harness VM: blocks the kernel wrote with
+// `setfattr`, and blocks `debugfs ea_set` wrote, dumped byte for byte,
+// with `e2fsck -fn` (which checks `e_hash` and not `h_hash`) as the judge.
+//
+// - An entry's hash starts at zero. Each byte of the name (without its
+//   namespace prefix) is folded in by rotating the running value left 5
+//   bits and XOR-ing the byte in, taken as an unsigned 0..=255. Then the
+//   value, as little-endian 32-bit words with the last one zero-padded,
+//   each folded in with a 16-bit left rotation. An empty value adds
+//   nothing.
+// - `user.qé` (a name byte above 0x7F) is written with the unsigned
+//   reading by both debugfs and the kernel; e2fsck also accepts the hash
+//   a sign-extending reading gives, but never requires it.
+// - The block's hash folds the entries' hashes, in on-disk order, the
+//   same way with a 16-bit rotation -- unless any entry's hash is zero
+//   (a name and value can be chosen to make it so), in which case the
+//   kernel writes a block hash of zero, wherever that entry falls.
+
+/// Left rotation applied before each name byte is folded in.
+const NAME_BYTE_ROTATION: u32 = 5;
+/// Left rotation applied before each value word, or entry hash, is folded in.
+const WORD_ROTATION: u32 = 16;
+
+/// `e_hash` of an attribute with this name (suffix after the namespace
+/// prefix) and value.
+fn entry_hash(name: &[u8], value: &[u8]) -> u32 {
+    let after_name = name.iter().fold(0u32, |acc, &byte| {
+        acc.rotate_left(NAME_BYTE_ROTATION) ^ u32::from(byte)
+    });
+    value.chunks(4).fold(after_name, |acc, piece| {
         let mut word = [0u8; 4];
-        word[..chunk.len()].copy_from_slice(chunk);
-        let v = u32::from_le_bytes(word);
-        hash = (hash << VALUE_SHIFT) ^ (hash >> (32 - VALUE_SHIFT)) ^ v;
+        word[..piece.len()].copy_from_slice(piece);
+        acc.rotate_left(WORD_ROTATION) ^ u32::from_le_bytes(word)
+    })
+}
+
+/// `h_hash` of a block whose entries, in on-disk order, have these hashes.
+/// Zero when any of them is zero.
+fn block_hash(entry_hashes: &[u32]) -> u32 {
+    if entry_hashes.contains(&0) {
+        return 0;
     }
-    hash
+    entry_hashes
+        .iter()
+        .fold(0u32, |acc, &hash| acc.rotate_left(WORD_ROTATION) ^ hash)
 }
 
 /// Set (create-or-replace) an xattr in an external block buffer.
@@ -1217,5 +1237,236 @@ mod tests {
                 (4, b"a".to_vec()),
             ]
         );
+    }
+}
+
+/// The entry and block hashes, against words the kernel and debugfs
+/// wrote in the harness VM (see the comment above [`entry_hash`]).
+#[cfg(test)]
+mod hash_tests {
+    use super::{block_hash, entry_hash};
+
+    /// `(name suffix, value, e_hash)` as found in kernel- and
+    /// debugfs-written blocks.
+    const OBSERVED: &[(&[u8], &[u8], u32)] = &[
+        (b"a", b"x", 0x0061_0078),
+        (b"bb", b"hello", 0x6568_6021),
+        (b"empty", b"", 0x0667_4EF9),
+        (b"z", b"0123456789", 0x067C_3F3E),
+        (b"q", b"1", 0x0071_0031),
+        (b"a", b"hi", 0x0061_6968),
+        ("q\u{e9}".as_bytes(), b"val", 0xDCA5_6177),
+        // Values chosen so the hash comes out zero.
+        (b"a", &[0x00, 0x00, 0x61, 0x00], 0),
+        (b"zzz", &[0x01, 0x00, 0x3A, 0xE7], 0),
+    ];
+
+    #[test]
+    fn entry_hashes_match_the_observed_words() {
+        for &(name, value, want) in OBSERVED {
+            assert_eq!(
+                entry_hash(name, value),
+                want,
+                "{:?}={value:?}",
+                String::from_utf8_lossy(name)
+            );
+        }
+    }
+
+    /// The kernel's block for `user.a`, `user.bb`, `user.empty` and
+    /// `trusted.z`, in its on-disk order.
+    #[test]
+    fn the_block_hash_folds_the_entry_hashes_in_order() {
+        let hashes = [0x0061_0078, 0x6568_6021, 0x0667_4EF9, 0x067C_3F3E];
+        assert_eq!(block_hash(&hashes), 0x2D95_5919);
+        assert_eq!(
+            block_hash(&hashes[..1]),
+            hashes[0],
+            "one entry is its own hash"
+        );
+        assert_eq!(block_hash(&[]), 0);
+    }
+
+    #[test]
+    fn a_zero_entry_hash_anywhere_zeroes_the_block_hash() {
+        assert_eq!(block_hash(&[0, 0x6568_6021]), 0);
+        assert_eq!(block_hash(&[0x0061_6968, 0]), 0);
+    }
+
+    /// Tests that ask the kernel and e2fsprogs in the harness VM.
+    mod needs_host {
+        use super::super::{
+            block_hash, decode_external_block_entries, encode_external_block, entry_hash,
+        };
+        use crate::block_io::FileDevice;
+        use crate::fs::Filesystem;
+        use std::sync::Arc;
+
+        /// Two attribute sets: one ordinary (with an empty value, a value
+        /// that is not a whole number of words, and a name byte above 0x7F),
+        /// and one whose last attribute hashes to zero.
+        /// A file name and the `(attribute, value)` pairs set on it.
+        type AttributeSet = (&'static str, &'static [(&'static str, &'static [u8])]);
+
+        const FILES: &[AttributeSet] = &[
+            (
+                "plain",
+                &[
+                    ("user.a", b"x"),
+                    ("user.bb", b"hello"),
+                    ("user.empty", b""),
+                    ("trusted.z", b"0123456789"),
+                    ("user.q\u{e9}", b"val"),
+                ],
+            ),
+            (
+                "zero",
+                &[("user.a", b"hi"), ("user.zzz", &[0x01, 0x00, 0x3A, 0xE7])],
+            ),
+        ];
+
+        fn volume(tag: &str) -> String {
+            let image = fs_ext4_test_support::temp_path!(
+                "fs_ext4_xattr_hash_{tag}_{}.img",
+                std::process::id()
+            );
+            std::fs::File::create(&image)
+                .and_then(|f| f.set_len(8 << 20))
+                .unwrap();
+            // 128-byte inodes leave no in-inode room: every attribute goes
+            // to the external block.
+            let out = fs_ext4_test_support::oracle("mkfs.ext4")
+                .args(["-q", "-F", "-b", "1024", "-I", "128", &image])
+                .output();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            image
+        }
+
+        fn hex(bytes: &[u8]) -> String {
+            bytes.iter().map(|b| format!("{b:02x}")).collect()
+        }
+
+        /// `(e_hash of each entry in on-disk order, h_hash)` of `path`'s
+        /// external block.
+        fn block_hashes(fs: &Filesystem, path: &str) -> (Vec<u32>, u32, Vec<u8>) {
+            let ino = fs.lookup_path_bytes(path.as_bytes()).unwrap();
+            let inode = fs.read_inode_verified(ino).unwrap().0;
+            assert_ne!(inode.file_acl, 0, "{path} has no external block");
+            let block = fs.read_block(inode.file_acl).unwrap();
+            let mut hashes = Vec::new();
+            let mut at = 0x20;
+            while u32::from_le_bytes(block[at..at + 4].try_into().unwrap()) != 0 {
+                hashes.push(u32::from_le_bytes(
+                    block[at + 12..at + 16].try_into().unwrap(),
+                ));
+                at += (16 + block[at] as usize + 3) & !3;
+            }
+            let h_hash = u32::from_le_bytes(block[0x0C..0x10].try_into().unwrap());
+            (hashes, h_hash, block)
+        }
+
+        /// The kernel writes each attribute set; every hash it stored is the
+        /// one computed here, and re-encoding its entries reproduces them.
+        #[test]
+        fn hashes_in_kernel_written_blocks_are_the_ones_computed_here() {
+            let image = volume("kernel");
+            let mut script = String::from("set -e\n");
+            for (file, attrs) in FILES {
+                script.push_str(&format!("touch \"$MNT/{file}\"\n"));
+                for (name, value) in *attrs {
+                    script.push_str(&format!(
+                        "setfattr -n '{name}' -v 0x{} \"$MNT/{file}\"\n",
+                        hex(value)
+                    ));
+                }
+            }
+            let script = script.replace("-v 0x \"", "\"");
+            let out = fs_ext4_test_support::guest_kernel_write(&image, &script);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+
+            let fs = Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
+            for (file, attrs) in FILES {
+                let path = format!("/{file}");
+                let (hashes, h_hash, block) = block_hashes(&fs, &path);
+                assert_eq!(hashes.len(), attrs.len(), "{path}");
+                let entries = decode_external_block_entries(&block).unwrap();
+                for (entry, &stored) in entries.iter().zip(&hashes) {
+                    assert_eq!(
+                        entry_hash(&entry.name_bytes, &entry.value),
+                        stored,
+                        "{path}"
+                    );
+                }
+                assert_eq!(block_hash(&hashes), h_hash, "{path}'s h_hash");
+
+                let mut ours = vec![0u8; block.len()];
+                encode_external_block(&mut ours, &entries, 1);
+                assert_eq!(
+                    ours[0x0C..0x10],
+                    block[0x0C..0x10],
+                    "{path}: h_hash re-encoded"
+                );
+            }
+            drop(fs);
+            fs_ext4_test_support::assert_e2fsck_clean(&image, "the kernel's blocks");
+            let _ = std::fs::remove_file(&image);
+        }
+
+        /// This crate writes the same attribute sets: e2fsck accepts every
+        /// e_hash, and the hashes match the ones the kernel stores for the
+        /// same attributes.
+        #[test]
+        fn blocks_this_crate_writes_carry_the_kernels_hashes() {
+            let image = volume("ours");
+            {
+                let fs = Filesystem::mount(Arc::new(FileDevice::open_rw(&image).unwrap())).unwrap();
+                for (file, attrs) in FILES {
+                    let path = format!("/{file}");
+                    fs.apply_create(&path, 0o644).unwrap();
+                    for (name, value) in *attrs {
+                        fs.apply_setxattr(&path, name, value).unwrap();
+                    }
+                }
+            }
+            fs_ext4_test_support::assert_e2fsck_clean(&image, "this crate's blocks");
+
+            // The kernel's hashes for these sets, as observed.
+            let expected: &[(&str, &[u32], u32)] = &[
+                (
+                    "/plain",
+                    &[
+                        0x0061_0078,
+                        0x6568_6021,
+                        0xDCA5_6177,
+                        0x0667_4EF9,
+                        0x067C_3F3E,
+                    ],
+                    block_hash(&[
+                        0x0061_0078,
+                        0x6568_6021,
+                        0xDCA5_6177,
+                        0x0667_4EF9,
+                        0x067C_3F3E,
+                    ]),
+                ),
+                ("/zero", &[0x0061_6968, 0], 0),
+            ];
+            let fs = Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
+            for &(path, hashes, h_hash) in expected {
+                let (got, got_h, _) = block_hashes(&fs, path);
+                assert_eq!(got, hashes, "{path}");
+                assert_eq!(got_h, h_hash, "{path}");
+            }
+            drop(fs);
+            let _ = std::fs::remove_file(&image);
+        }
     }
 }
