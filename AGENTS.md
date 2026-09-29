@@ -206,10 +206,12 @@ fine: `struct ext4_extent_header`, `journal_header_t`, `s_inodes_count`,
 
 **The check.** `scripts/check-provenance.sh` (`chore check:provenance`,
 run by `chore lint` and by CI's `provenance` job) fails on kernel and
-e2fsprogs source paths and links, on kernel function names and on
-kernel-internal macros anywhere in the tracked tree. A documented format
-name it flags goes into the script's allowlist with the reason; nothing
-else does, and an entry nothing uses fails the check.
+e2fsprogs source paths and links, on kernel and e2fsck function names,
+kernel-internal macros and e2fsck problem codes anywhere in the tracked
+tree, file names included, and on C written out in a comment or a doc. A
+documented format name it flags goes into the script's allowlist with the
+reason; nothing else does, and an entry nothing uses fails the check. It
+is a denylist: passing it is necessary, not sufficient.
 
 
 ## Running tests
