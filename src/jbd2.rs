@@ -1,6 +1,6 @@
 //! JBD2 journal superblock parser.
 //!
-//! Spec: `fs/jbd2/journal.c` + `include/linux/jbd2.h` in the Linux kernel.
+//! Spec: kernel.org/doc/html/latest/filesystems/ext4/journal.html.
 //!
 //! JBD2 writes journal metadata in **big-endian**, unlike the ext4 filesystem
 //! body which is little-endian. Every block in the journal begins with a
@@ -175,26 +175,35 @@ impl JournalSuperblock {
         self.feature_incompat & !SUPPORTED_JBD_INCOMPAT
     }
 
-    /// Why this journal's checksum declaration is one JBD2 refuses, or `None`.
+    /// Why this journal's checksum declaration is one that cannot be
+    /// honoured, or `None` when it names a single, usable scheme.
     ///
-    /// The kernel's `journal_check_superblock`: CSUM_V2 and CSUM_V3 exclude
-    /// each other and the v1 `COMPAT_CHECKSUM`, and either needs
-    /// `s_checksum_type` crc32c. Both bits are supported one at a time, so
-    /// `unsupported_incompat` passes a journal declaring both, and replay and
-    /// the writer would pick a layout the declaration does not name.
+    /// A journal declares at most one way of checksumming its blocks: the
+    /// v1 commit-block checksum (compat bit 0x1), or the per-block v2
+    /// (incompat 0x8) or v3 (incompat 0x10) scheme, whose checksums are
+    /// crc32c (`s_checksum_type` 4). journal.html lists the bits and the
+    /// type codes; which combinations are refused was observed in the
+    /// harness VM by patching the superblock of a clean journal (tests/
+    /// jbd2_layouts_oracle.rs): the kernel will not load, and `e2fsck -fn`
+    /// calls "Journal superblock is corrupt", exactly the three cases below.
+    /// A journal without v2 or v3 is accepted whatever its type byte says.
+    ///
+    /// Replay and the writer each support v2 and v3 one at a time, so a
+    /// journal naming both would otherwise pass the incompat check and be
+    /// read with a layout its declaration does not name.
     pub fn checksum_declaration_error(&self) -> Option<&'static str> {
-        let v2 = self.feature_incompat & JbdIncompat::CSUM_V2.bits() != 0;
-        let v3 = self.feature_incompat & JbdIncompat::CSUM_V3.bits() != 0;
-        if v2 && v3 {
-            return Some("journal declares both CSUM_V2 and CSUM_V3");
+        let has = |bit: JbdIncompat| self.feature_incompat & bit.bits() != 0;
+        let per_block = [has(JbdIncompat::CSUM_V2), has(JbdIncompat::CSUM_V3)];
+        let commit_only = self.feature_compat & JBD2_FEATURE_COMPAT_CHECKSUM != 0;
+        match per_block {
+            [false, false] => None,
+            [true, true] => Some("journal declares both CSUM_V2 and CSUM_V3"),
+            _ if commit_only => Some("journal declares v1 checksums alongside CSUM_V2/V3"),
+            _ if self.checksum_type != JBD2_CRC32C_CHKSUM => {
+                Some("journal checksum type is not crc32c")
+            }
+            _ => None,
         }
-        if (v2 || v3) && self.feature_compat & JBD2_FEATURE_COMPAT_CHECKSUM != 0 {
-            return Some("journal declares v1 checksums alongside CSUM_V2/V3");
-        }
-        if (v2 || v3) && self.checksum_type != JBD2_CRC32C_CHKSUM {
-            return Some("journal checksum type is not crc32c");
-        }
-        None
     }
 
     /// `j_csum_seed`: the crc32c of the journal's UUID, from `~0`. Every
@@ -203,25 +212,41 @@ impl JournalSuperblock {
         crate::checksum::linux_crc32c(!0, &self.uuid)
     }
 
-    /// Bytes per descriptor tag, as the kernel's `journal_tag_bytes`
-    /// computes it: 16 for CSUM_V3 whatever the block-number width, else
-    /// the classical 12 -- with two more for CSUM_V2 -- less the four of
-    /// `t_blocknr_high` without 64BIT. A 16-byte UUID follows any tag
-    /// without `TAG_SAME_UUID`, in every layout.
+    /// Bytes per descriptor-block tag, not counting the 16-byte UUID that
+    /// follows a tag without the "same UUID" flag.
+    ///
+    /// journal.html describes two tag records: the v3 one (block number,
+    /// flags, high block number, 32-bit checksum -- always all four
+    /// words) and the older one (block number, 16-bit checksum, 16-bit
+    /// flags, and the high block number only under `64BIT`). It does not
+    /// say the older record's checksum slot exists only under v2; that was
+    /// measured on journals `debugfs jo`/`jw` wrote in the harness VM
+    /// (tests/jbd2_layouts_oracle.rs), where the distance between
+    /// consecutive tags is exactly this table.
     pub fn tag_bytes(&self) -> usize {
-        if self.uses_csum_v3() {
-            return 16;
-        }
-        let mut size = 12;
-        if self.feature_incompat & JbdIncompat::CSUM_V2.bits() != 0 {
-            size += 2;
-        }
-        if self.uses_64bit() {
-            size
+        let per_block_scheme = if self.uses_csum_v3() {
+            TagChecksum::V3
+        } else if self.feature_incompat & JbdIncompat::CSUM_V2.bits() != 0 {
+            TagChecksum::V2
         } else {
-            size - 4
+            TagChecksum::None
+        };
+        match (per_block_scheme, self.uses_64bit()) {
+            (TagChecksum::None, false) => 8,
+            (TagChecksum::None, true) => 12,
+            (TagChecksum::V2, false) => 10,
+            (TagChecksum::V2, true) => 14,
+            (TagChecksum::V3, _) => 16,
         }
     }
+}
+
+/// Which per-block checksum a descriptor tag carries, for [`JournalSuperblock::tag_bytes`].
+#[derive(Clone, Copy)]
+enum TagChecksum {
+    None,
+    V2,
+    V3,
 }
 
 /// `JBD2_FEATURE_COMPAT_CHECKSUM`: the v1 commit-block checksum.
@@ -396,10 +421,11 @@ mod tests {
         jsb
     }
 
-    /// `journal_tag_bytes` for every layout: CSUM_V3 is 16 whatever the
-    /// width; CSUM_V2 adds two bytes to the classical 8/12.
+    /// The tag sizes measured on debugfs-written journals: the distance
+    /// between the second and third tag of a descriptor block, for each
+    /// scheme with and without 64BIT.
     #[test]
-    fn tag_bytes_follow_journal_tag_bytes() {
+    fn tag_sizes_are_the_measured_table() {
         let b64 = JbdIncompat::BIT64.bits();
         let v2 = JbdIncompat::CSUM_V2.bits();
         let v3 = JbdIncompat::CSUM_V3.bits();
@@ -419,23 +445,49 @@ mod tests {
         }
     }
 
-    /// The kernel's `journal_check_superblock` rules on the checksum bits.
+    /// The accept/refuse table the kernel and e2fsck gave for patched
+    /// journal superblocks (tests/jbd2_layouts_oracle.rs runs it live).
     #[test]
-    fn checksum_declarations_jbd2_refuses() {
+    fn checksum_declarations_follow_the_observed_table() {
         let v2 = JbdIncompat::CSUM_V2.bits();
         let v3 = JbdIncompat::CSUM_V3.bits();
-        let with = |incompat: u32, compat: u32, kind: u8| {
+        let v1 = JBD2_FEATURE_COMPAT_CHECKSUM;
+        let with = |compat: u32, incompat: u32, kind: u8| {
             let mut jsb = jsb_with(incompat);
             jsb.feature_compat = compat;
             jsb.checksum_type = kind;
-            jsb.checksum_declaration_error()
+            jsb.checksum_declaration_error().is_none()
         };
-        assert_eq!(with(v3, 0, JBD2_CRC32C_CHKSUM), None);
-        assert_eq!(with(v2, 0, JBD2_CRC32C_CHKSUM), None);
-        assert_eq!(with(0, JBD2_FEATURE_COMPAT_CHECKSUM, 1), None, "v1 alone");
-        assert!(with(v2 | v3, 0, JBD2_CRC32C_CHKSUM).is_some());
-        assert!(with(v3, JBD2_FEATURE_COMPAT_CHECKSUM, JBD2_CRC32C_CHKSUM).is_some());
-        assert!(with(v3, 0, 1).is_some(), "crc32 is not a v3 checksum type");
+        let accepted = [
+            (0, 0, 0),
+            (0, 0, 4),
+            (v1, 0, 0),
+            (v1, 0, 1),
+            (v1, 0, 4),
+            (0, v2, 4),
+            (0, v3, 4),
+        ];
+        let refused = [
+            (0, v2 | v3, 4),
+            (v1, v2, 4),
+            (v1, v3, 4),
+            (0, v2, 1),
+            (0, v3, 1),
+            (0, v3, 2),
+            (0, v3, 0),
+        ];
+        for (compat, incompat, kind) in accepted {
+            assert!(
+                with(compat, incompat, kind),
+                "{compat:#x}/{incompat:#x}/{kind}"
+            );
+        }
+        for (compat, incompat, kind) in refused {
+            assert!(
+                !with(compat, incompat, kind),
+                "{compat:#x}/{incompat:#x}/{kind}"
+            );
+        }
     }
 
     #[test]
