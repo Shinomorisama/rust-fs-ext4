@@ -41,5 +41,5 @@ is interrupted under both immediate-durability and volatile-until-flush models,
 then independently recovered by `e2fsck`. These tests do not model torn sectors, lying
 flush acknowledgements, concurrent writers or real USB transports.
 
-References: [Linux JBD2 recovery](https://github.com/torvalds/linux/blob/master/fs/jbd2/recovery.c)
-and [ext4 journal format](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html).
+Reference: the [ext4 journal format](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html)
+documentation, with `e2fsck` as the recovery oracle.
