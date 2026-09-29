@@ -187,6 +187,7 @@ fn random_names_agree_with_debugfs() {
         for (case, &(major, minor)) in batch.iter().zip(&answers) {
             let version = HashVersion::from_u8(case.version).unwrap();
             let got = name_hash(&case.name, version, &case.seed);
+            let major = remap_reserved(major);
             if (got.major, got.minor) != (major, minor) {
                 wrong.push(format!(
                     "v{} seed {} len {} {:02x?}: got ({:#010x}, {:#010x}) debugfs ({major:#010x}, {minor:#010x})",
@@ -214,12 +215,30 @@ fn random_names_agree_with_debugfs() {
     );
 }
 
+/// The value a directory index stores for a name `debugfs dx_hash` says
+/// hashes to `major`.
+///
+/// 0xFFFFFFFE is the index's end-of-directory marker, so a name that
+/// hashes to it is stored as 0xFFFFFFFC instead (the BSD references do
+/// this, and so does `name_hash`). `debugfs dx_hash` (e2fsprogs 1.47.0 and
+/// 1.47.2) prints the value before that remap, so its answer for this one
+/// value is translated here; every other value is compared as printed.
+fn remap_reserved(major: u32) -> u32 {
+    if major == 0xFFFF_FFFE {
+        0xFFFF_FFFC
+    } else {
+        major
+    }
+}
+
 /// A major hash whose value before the low bit is cleared is 0xFFFFFFFF.
-/// TEA on the empty name reports the seed's first word, so this is
-/// reachable directly; debugfs leaves the result at 0xFFFFFFFE.
+/// TEA and half MD4 on the empty name report seed words directly, so the
+/// reserved value is reachable on purpose: debugfs prints 0xFFFFFFFE, and
+/// `name_hash` must give 0xFFFFFFFC.
 #[test]
-fn top_of_range_major_matches_debugfs() {
-    let seed = [0xFFFF_FFFF, 0x1234_5678, 0, 0];
+fn reserved_end_of_directory_major_is_remapped() {
+    // Word 0 feeds the TEA major, word 1 the half MD4 major.
+    let seed = [0xFFFF_FFFF, 0xFFFF_FFFF, 0x1234_5678, 0];
     let cases: Vec<Case> = (0..=5)
         .map(|version| Case {
             seed,
@@ -228,10 +247,23 @@ fn top_of_range_major_matches_debugfs() {
         })
         .collect();
     let answers = ask_debugfs(&cases);
+    let mut remapped = 0;
     for (case, &(major, minor)) in cases.iter().zip(&answers) {
+        if major == 0xFFFF_FFFE {
+            remapped += 1;
+        }
         let got = name_hash(b"", HashVersion::from_u8(case.version).unwrap(), &seed);
-        assert_eq!((got.major, got.minor), (major, minor), "v{}", case.version);
+        assert_eq!(
+            (got.major, got.minor),
+            (remap_reserved(major), minor),
+            "v{}",
+            case.version
+        );
     }
-    let tea = name_hash(b"", HashVersion::Tea, &seed);
-    assert_eq!(tea.major, 0xFFFF_FFFE);
+    // debugfs really does print the reserved value for the four
+    // TEA and half MD4 cases, so the remap above is exercised.
+    assert_eq!(remapped, 4, "debugfs answers: {answers:x?}");
+    for version in [HashVersion::Tea, HashVersion::HalfMd4Unsigned] {
+        assert_eq!(name_hash(b"", version, &seed).major, 0xFFFF_FFFC);
+    }
 }

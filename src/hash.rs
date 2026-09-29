@@ -94,17 +94,22 @@ pub fn name_hash(name: &[u8], version: HashVersion, seed: &[u32; 4]) -> NameHash
     // The lowest bit of a major hash is never part of the value (every
     // `debugfs dx_hash` major is even, for every version): index entries
     // keep that bit free for their own bookkeeping.
-    //
-    // Note: a major that comes out as 0xFFFFFFFE is reported unchanged by
-    // `debugfs dx_hash` (e2fsprogs 1.47.0 and 1.47.2), and this function
-    // agrees with it. The BSD references additionally step that one value
-    // down to 0xFFFFFFFC; `tests/htree_hash_differential.rs` pins the
-    // debugfs behaviour.
-    NameHash {
-        major: major & !1,
-        minor,
+    let mut major = major & !1;
+    // 0xFFFFFFFE is reserved: the directory index uses it as its
+    // end-of-directory marker, so no name may hash to it. A name that
+    // would is given the next even value down, 0xFFFFFFFC, as both BSD
+    // references do; that is what directories written by other ext4
+    // implementations contain. (`debugfs dx_hash` prints the value before
+    // this remap, which `tests/htree_hash_differential.rs` accounts for.)
+    if major == END_OF_DIRECTORY_MAJOR {
+        major = END_OF_DIRECTORY_MAJOR - 2;
     }
+    NameHash { major, minor }
 }
+
+/// The major hash value the directory index reserves to mean "end of
+/// directory". No name is ever given it (see [`name_hash`]).
+const END_OF_DIRECTORY_MAJOR: u32 = 0xFFFF_FFFE;
 
 /// The version to use for a directory whose `dx_root` records
 /// `root_version`, given the superblock's `EXT2_FLAGS_UNSIGNED_HASH` flag.
