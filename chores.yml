@@ -765,6 +765,7 @@ tasks:
     cmds:
       - scripts/agents-core-check.sh
       - scripts/ci-gate.sh
+      - scripts/check-provenance.sh
       - cargo fmt --all --check
       # `--features cli`: the command-line tools' target requires it, and
       # clippy silently leaves out a target whose features are off.
@@ -812,6 +813,16 @@ tasks:
       - 'cd "{{.OUT}}" && pwd -P'
     vars:
       OUT: 'dist'
+
+  check:provenance:
+    desc: No tracked file names Linux kernel or e2fsprogs internals
+    # A chore task naming a script, and nothing else, like check:ci-gate.
+    # The denylist, the allowlist of documented format names and the reason
+    # for each entry are in the script; AGENTS.md ("Clean room") has the
+    # rule it enforces. CI runs it as its own job, `provenance`, and `lint`
+    # runs it too, so a local `chore lint` reproduces that job.
+    cmds:
+      - scripts/check-provenance.sh
 
   check:ci-gate:
     desc: The one required check stands for every job in ci.yml

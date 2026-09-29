@@ -48,6 +48,10 @@ name: CI
 #                fails the pull request, not the release. No VM: what
 #                e2fsprogs makes of the tools' output is judged in the
 #                oracle tier (tests/cli_*_oracle.rs).
+#   provenance   `chore check:provenance`: no tracked file names a Linux
+#                kernel or e2fsprogs function, internal macro or source
+#                path (AGENTS.md, "Clean room"). No toolchain, no fixtures:
+#                it reads the tree, so it answers in seconds.
 #   ci-ok        the one required check: green only when every job above
 #                ran and succeeded (failed, cancelled OR skipped fails it).
 #
@@ -504,10 +508,21 @@ jobs:
           path: tmp/logs/*.log
           if-no-files-found: error
 
+  provenance:
+    name: provenance (no kernel or e2fsprogs internals named)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore check:provenance
+        run: chore check:provenance
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [unit, fixtures, test, test-arm64, suite-in-vm, wasm, semver, msrv, cli]
+    needs: [unit, fixtures, test, test-arm64, suite-in-vm, wasm, semver, msrv, cli, provenance]
     runs-on: ubuntu-latest
     steps:
       - name: Every job ran and succeeded
