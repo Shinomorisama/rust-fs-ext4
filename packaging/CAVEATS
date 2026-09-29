@@ -1,3 +1,4 @@
-The mkfs.ext4 on your PATH is this one: `mkfs.ext4 --version` names am-fs-ext4.
-Homebrew's e2fsprogs is keg-only, so its mkfs.ext4 stays at
-  $(brew --prefix e2fsprogs)/sbin/mkfs.ext4
+The tools on your PATH are these: `mkfs.ext4 --version` names am-fs-ext4.
+Homebrew's e2fsprogs is keg-only; its mkfs.ext4 stays at $(brew --prefix e2fsprogs)/sbin/mkfs.ext4.
+On Linux, the system's /usr/sbin/mkfs.ext4 wins if /usr/sbin is earlier on PATH.
+Run `rust-fs-ext4 doctor` if a tool behaves unexpectedly.
