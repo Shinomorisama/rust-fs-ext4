@@ -481,19 +481,32 @@ impl Superblock {
     //   the whole run right after it, followed by the reserved GDT blocks
     //   kept for growing the table.
     // - With META_BG the groups are split into meta groups of as many groups
-    //   as one block holds descriptors for. From meta group
-    //   `s_first_meta_bg` on, each meta group's single descriptor block sits
-    //   at the head of its first group (after that group's superblock copy,
-    //   if it has one), with copies at the head of its second and last
-    //   groups. Meta groups before `s_first_meta_bg` still use the run after
-    //   the superblock, which is then `s_first_meta_bg` blocks long.
+    //   as one block holds descriptors for. A meta group's single
+    //   descriptor block sits at the head of its first group (after that
+    //   group's superblock copy, if it has one), with copies at the head of
+    //   its second and last groups.
+    //
+    // Where that starts is `s_first_meta_bg`, which super.html lists as
+    // "First metablock block group, if the meta_bg feature is enabled". The
+    // documentation does not say whether it counts meta groups or block
+    // groups, nor what becomes of the groups before it. `dumpe2fs` does:
+    // on a volume the kernel converted to META_BG by growing it online (1
+    // KiB blocks, 32-byte descriptors, 32 to a block), it reports "First
+    // meta block group: 1", the descriptors of groups 32 to 63 at the heads
+    // of groups 32, 33 and 63, and group 0's table after the superblock
+    // one block long. So it is a meta group number: meta groups from
+    // `s_first_meta_bg` on have their own blocks, and those before it keep
+    // the run after the superblock, which is then `s_first_meta_bg` blocks
+    // long, one per meta group.
     //
     // Checked against `dumpe2fs` on mke2fs-made volumes with and without
     // META_BG, SPARSE_SUPER and SPARSE_SUPER2, at 1 KiB and 4 KiB, with
-    // many groups (tests/group_layout_oracle.rs). On a META_BG volume whose
-    // last meta group is short, dumpe2fs shows no copy in the volume's last
-    // group: the copy belongs to the meta group's last *possible* group,
-    // which does not exist.
+    // many groups, and on two volumes the kernel grew online, with 32- and
+    // 64-byte descriptors (tests/group_layout_oracle.rs). mke2fs left
+    // `s_first_meta_bg` at 0 on each of its META_BG volumes there, so only
+    // the kernel-grown ones tell the two readings apart. On a META_BG volume whose last meta group is short,
+    // dumpe2fs shows no copy in the volume's last group: the copy belongs to
+    // the meta group's last *possible* group, which does not exist.
 
     /// The block holding the primary superblock (the one at byte 1024).
     fn primary_superblock_block(&self) -> u64 {
