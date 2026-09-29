@@ -10,7 +10,9 @@
 //! relative to the journal file (logical block 0 = superblock); the caller
 //! resolves them to physical fs blocks via [`jbd2::journal_block_to_physical`].
 //!
-//! Tag layout per `fs/jbd2/journal.c`:
+//! Tag layout per the "Descriptor Block" section of the kernel.org journal
+//! format documentation, confirmed against journals the kernel and
+//! e2fsprogs write:
 //!
 //! - **Classical tag** (JBD1 / no CSUM_V3): at least 8 bytes
 //!   - `__be32 t_blocknr`         (low 32 bits of fs block)
@@ -19,8 +21,7 @@
 //!   - `__be32 t_blocknr_high`    (iff INCOMPAT_BIT64)
 //!   - If `SAME_UUID` flag is not set, a 16-byte UUID follows inline.
 //!
-//!   - The tag is 12 bytes with BIT64 and 8 without, plus 2 with CSUM_V2
-//!     (`journal_tag_bytes`).
+//!   - The tag is 12 bytes with BIT64 and 8 without, plus 2 with CSUM_V2.
 //!
 //! - **CSUM_V3 tag** (JBD2_FEATURE_INCOMPAT_CSUM_V3): 16 bytes
 //!   - `__be32 t_blocknr`
@@ -45,8 +46,10 @@
 //!
 //! A transaction's writes and revokes join the plan only once its commit
 //! block has been read and, on a CSUM_V2/V3 journal, has passed its
-//! checksum. A commit block failing its checksum ends the log there, as
-//! `do_one_pass` treats it: that is what a crash mid-commit leaves. A
+//! checksum. A commit block failing its checksum ends the log there: the
+//! format documentation says a transaction with no commit record, or one
+//! whose checksums do not match, is discarded during replay, and that is
+//! what a crash mid-commit leaves. A
 //! committed transaction -- one whose commit checks out -- with a
 //! descriptor, data or revoke block failing its checksum is corruption
 //! rather than a crash, and the walk refuses with [`Error::BadChecksum`]
@@ -108,8 +111,8 @@ pub struct ReplayPlan {
 
 impl ReplayPlan {
     /// Apply revoke records to the write list: drop any write whose fs_block
-    /// was revoked by a later-or-equal transaction. This is what the kernel's
-    /// do_one_pass / scan_revoke_records does in spirit.
+    /// was revoked by a later-or-equal transaction: the rule the format
+    /// documentation gives for revoke blocks ("Revocation Block").
     pub fn filter_revoked(&mut self) {
         if self.revokes.is_empty() {
             return;
@@ -207,7 +210,7 @@ pub fn walk(fs: &Filesystem, jsb: &JournalSuperblock) -> Result<ReplayPlan> {
         match hdr.block_type {
             JBD2_DESCRIPTOR_BLOCK => {
                 // A descriptor failing its checksum is judged at the commit,
-                // as the kernel's `need_check_commit_time` judges it: with no
+                // as the kernel's journal recovery judges it: with no
                 // valid commit after it, a crash tore the transaction and the
                 // log ends; with one, the log is corrupt. Its tags still say
                 // how many data blocks to step over, if they parse at all.
@@ -427,8 +430,8 @@ fn parse_revoke_block(
     let r_count = u32::from_be_bytes(block[12..16].try_into().unwrap()) as usize;
     let record_size = if jsb.uses_64bit() { 8 } else { 4 };
     // `r_count` is bounded by the block less its `r_checksum` tail, never
-    // clamped to it: the kernel's `scan_revoke_records` refuses a larger
-    // count, and reading on would take the checksum for a record (#301).
+    // clamped to it: a larger count is corrupt (e2fsck refuses it too), and
+    // reading on would take the checksum for a record (#301).
     let usable = if jsb.uses_csum_v2_or_v3() {
         block.len() - jbd2::BLOCK_TAIL_BYTES
     } else {
@@ -555,8 +558,8 @@ mod tests {
     }
 
     /// On a CSUM_V3 journal the last four bytes are `r_checksum`, not a
-    /// record: an `r_count` reaching into them is refused, as the kernel's
-    /// `scan_revoke_records` refuses it, rather than letting the checksum
+    /// record: an `r_count` reaching into them is refused, as e2fsck refuses
+    /// it, rather than letting the checksum
     /// revoke a committed write (#301).
     #[test]
     fn a_csum_v3_revoke_count_reaching_the_tail_is_refused() {

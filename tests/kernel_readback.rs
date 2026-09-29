@@ -75,8 +75,8 @@ fn resolve(fs: &Filesystem, path: &str) -> u32 {
 /// NOT LOOK AT. The version is ext4's own (1), not the userspace xattr
 /// format's (2). And AN ENTRY WITHOUT AN ID IS FOUR BYTES, NOT EIGHT. `ACL_USER_OBJ`,
 /// `ACL_GROUP_OBJ`, `ACL_MASK` and `ACL_OTHER` name nobody, so ext4
-/// stores them as `ext4_acl_entry_short` — tag and permissions and
-/// nothing else. Writing the eight-byte form for them produces a blob
+/// stores them in the short form — tag and permissions and nothing
+/// else. Writing the eight-byte form for them produces a blob
 /// the kernel rejects outright (`getfacl` answers "Invalid argument"),
 /// which is exactly what this oracle is for.
 fn acl_blob(entries: &[(u16, u16, Option<u32>)]) -> Vec<u8> {

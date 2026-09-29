@@ -132,8 +132,8 @@ fn read_leaf_entries(root: &[u8]) -> Result<(ExtentHeader, Vec<Extent>)> {
 /// Longest extent `ee_len` can describe in `uninitialized` state: 32768
 /// initialized blocks, 32767 uninitialized (an `ee_len` above 32768 is what
 /// marks an extent uninitialized, so 32768 itself is reserved for the
-/// initialized one). The kernel's `ext4_can_extents_be_merged` caps at the
-/// same two values.
+/// initialized one). These are the two maxima the format documentation
+/// gives with `ee_len`, and a merge never crosses them.
 fn max_extent_len(uninitialized: bool) -> u32 {
     if uninitialized {
         u32::from(EXT_INIT_MAX_LEN) - 1
@@ -784,7 +784,8 @@ pub fn plan_insert_extent_deep(
     // logical block. An insert in front of everything moves it, and a parent
     // still naming the old one describes a tree e2fsck rejects:
     // "Logical start N does not match logical start M at next level" (#260).
-    // The kernel corrects the same keys in `ext4_ext_correct_indexes`.
+    // Each index key must equal the first logical block of the subtree it
+    // points at, so every ancestor's key is corrected here.
     let first_key_before = leaf_entries.first().map(|e| e.logical_block);
     insert_into_leaf_sorted(&mut leaf_entries, new);
 

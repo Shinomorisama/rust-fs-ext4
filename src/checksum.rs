@@ -32,9 +32,10 @@
 use crate::features::{Incompat, RoCompat};
 use crate::superblock::Superblock;
 
-/// Linux-semantics CRC32C: no final XOR at either end. The `crc32c` crate's
-/// `crc32c_append(s, d)` is `~iterate(~s, d)`; the kernel's `__crc32c_le(c, d, l)`
-/// is `iterate(c, d)`. Wrap to get the kernel's semantics out of the crate.
+/// CRC32C as ext4 and JBD2 chain it: the seed goes in as the register
+/// value and nothing is inverted at either end. The `crc32c` crate's
+/// `crc32c_append(s, d)` is `~iterate(~s, d)`; the chaining form is
+/// `iterate(c, d)`. Wrap to get that form out of the crate.
 ///
 /// Public so write-path callers that rewrite a metadata block (dir, BGD, SB)
 /// can recompute the tail checksum inline without rebuilding a `Checksummer`.
@@ -43,8 +44,9 @@ pub fn linux_crc32c(seed: u32, data: &[u8]) -> u32 {
     !crc32c::crc32c_append(!seed, data)
 }
 
-/// The kernel's `crc16()` (`lib/crc16.c`): polynomial 0x8005, reflected,
-/// no final XOR. Only `GDT_CSUM` group descriptors use it.
+/// CRC-16 with polynomial 0x8005, reflected, no final XOR (the parameters
+/// catalogued as CRC-16/ARC). Only `GDT_CSUM` group descriptors use it; the
+/// format documentation's checksum table names it as their `crc16`.
 pub fn crc16(mut crc: u16, data: &[u8]) -> u16 {
     for &b in data {
         crc ^= u16::from(b);
@@ -62,7 +64,8 @@ pub fn crc16(mut crc: u16, data: &[u8]) -> u16 {
 /// The checksum group descriptor `group` must carry at 0x1E, or `None`
 /// when the volume asks for none.
 ///
-/// Mirrors the kernel's `ext4_group_desc_csum`. With `METADATA_CSUM` it is
+/// The ingredients are the "Group Descriptors" row of the checksum table
+/// in the kernel.org ext4 format documentation. With `METADATA_CSUM` it is
 /// the low 16 bits of `crc32c(seed, group_le32 || desc)`. Otherwise, with
 /// `GDT_CSUM`, it is `crc16(~0, uuid || group_le32 || desc[..0x1E])`, plus
 /// the bytes past the checksum field only when `INCOMPAT_64BIT` is set.
@@ -106,7 +109,8 @@ pub struct Checksummer {
 }
 
 /// `file_type` of the fake dirent that ends a checksummed directory
-/// block — `EXT4_FT_DIR_CSUM` in e2fsprogs.
+/// block: the `det_reserved_ft` value the format documentation gives for
+/// `struct ext4_dir_entry_tail`.
 ///
 /// Not a real file type: it is out of range for one, which is how a
 /// reader tells the tail apart from an entry.
@@ -116,8 +120,9 @@ impl Checksummer {
     /// Derive the checksum context from a parsed superblock.
     ///
     /// Per spec: if `INCOMPAT_CSUM_SEED` is set, use the explicit
-    /// `s_checksum_seed` field. Otherwise, the seed is the kernel's
-    /// `__crc32c_le(~0, UUID, 16)` — i.e. our `linux_crc32c(!0, UUID)`.
+    /// `s_checksum_seed` field. Otherwise, the seed is crc32c(~0, UUID)
+    /// (format documentation, `s_checksum_seed`) — i.e. our
+    /// `linux_crc32c(!0, UUID)`.
     pub fn from_superblock(sb: &Superblock) -> Self {
         let enabled = (sb.feature_ro_compat & RoCompat::METADATA_CSUM.bits()) != 0;
         let seed = if (sb.feature_incompat & Incompat::CSUM_SEED.bits()) != 0 {
@@ -190,8 +195,9 @@ impl Checksummer {
     /// `struct ext4_dir_entry_tail { u32 det_reserved_zero1; u16 det_rec_len;
     /// u8 det_reserved_zero2; u8 det_reserved_ft; u32 det_checksum; }`.
     ///
-    /// Per Linux `fs/ext4/dir.c::ext4_dirent_csum_set` the CRC covers
-    /// **`block[0..block_size - 12]`** — i.e. everything BEFORE the tail.
+    /// The format documentation's checksum table ("Directory Entries"): the
+    /// CRC covers **`block[0..block_size - 12]`** — i.e. everything BEFORE
+    /// the fake entry that holds it.
     /// The tail's own bytes (including `det_checksum`) are excluded:
     ///
     /// ```text
@@ -286,7 +292,8 @@ impl Checksummer {
 
     /// Recompute the checksum in an htree block's `dx_tail`.
     ///
-    /// The kernel's `ext4_dx_csum`: crc32c over the inode number and
+    /// The "HTREE Nodes" row of the format documentation's checksum table:
+    /// crc32c over the inode number and
     /// generation, the block up to the last used `dx_entry`, and the tail's
     /// reserved word, with the checksum field itself counted as zero. The
     /// tail sits right after `limit` entries. `count_offset` is where the
@@ -322,10 +329,9 @@ impl Checksummer {
     ///
     /// Extent index/leaf blocks (those read off-inode when the tree has
     /// internal nodes) end in a 4-byte `struct ext4_extent_tail
-    /// { u32 et_checksum; }`. Per Linux
-    /// `fs/ext4/extents.c::ext4_extent_block_csum_set` the CRC covers
-    /// **`block[0..len-4]`** — only the trailing `et_checksum` field is
-    /// excluded:
+    /// { u32 et_checksum; }`. Per the "Extents" row of the format
+    /// documentation's checksum table the CRC covers **`block[0..len-4]`**
+    /// — only the trailing `et_checksum` field is excluded:
     ///
     /// ```text
     ///   crc32c(seed, ino_le) → crc32c(., gen_le) → crc32c(., block[..len-4])
@@ -403,7 +409,10 @@ impl Checksummer {
 
     /// Verify an external xattr block's checksum.
     ///
-    /// Per Linux `fs/ext4/xattr.c::ext4_xattr_block_csum`, the recipe is:
+    /// The format documentation's checksum table gives the block with its
+    /// checksum field zeroed; the block number goes in ahead of it as well,
+    /// and blocks the kernel and e2fsprogs write verify this way. The
+    /// recipe is:
     ///
     /// ```text
     ///   crc32c(seed, block_nr_le_u64)
@@ -459,8 +468,10 @@ impl Checksummer {
             return None;
         }
         // i_checksum_hi (0x82) is part of the checksum only when i_extra_isize
-        // (0x80) is large enough to cover it — the kernel's EXT4_FITS_IN_INODE
-        // test, which here means i_extra_isize >= 4. On a zeroed freed inode
+        // (0x80) is large enough to cover it: a field past the 128-byte base
+        // exists only if i_extra_isize reaches its end, which here means
+        // i_extra_isize >= 4 (the format documentation's inode table puts
+        // i_checksum_hi at 0x82). On a zeroed freed inode
         // (i_extra_isize = 0) the kernel uses ONLY the 16-bit lo checksum and
         // treats 0x82 as ordinary (zero) data; zeroing hi and storing a full
         // 32-bit value there mismatches ("checksum does not match inode").
@@ -504,7 +515,8 @@ impl Checksummer {
 }
 
 /// Whether the inode has an `i_checksum_hi`: `i_extra_isize` (0x80) covers
-/// 0x82..0x84 -- the kernel's `EXT4_FITS_IN_INODE` test.
+/// 0x82..0x84. A field in the extended part of the inode exists only when
+/// `i_extra_isize` reaches its end (format documentation, "Inode Size").
 fn checksum_hi_fits(inode_raw: &[u8]) -> bool {
     inode_raw.len() >= 0x84 && u16::from_le_bytes(inode_raw[0x80..0x82].try_into().unwrap()) >= 4
 }

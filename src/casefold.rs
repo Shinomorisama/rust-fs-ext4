@@ -1,31 +1,36 @@
 //! Case-folded directory lookup (E12, Phase 5).
 //!
-//! When the filesystem super-block has `s_encoding` set (INCOMPAT_CASEFOLD is
-//! really the superblock field + per-inode `EXT4_CASEFOLD_FL`), Linux uses
-//! SipHash-2-4 over a Unicode-normalised + case-folded form of the filename
-//! instead of the half_md4/tea hashes used for normal htree directories.
-//! See `fs/ext4/hash.c::ext4fs_dirhash_casefold` and `fs/unicode/utf8-core.c`.
+//! A volume with `INCOMPAT_CASEFOLD` records its encoding in `s_encoding`,
+//! and a directory with `EXT4_CASEFOLD_FL` compares names case-insensitively.
 //!
-//! ### Algorithm
+//! **This module's hash is not the one such a directory uses (#438).** It
+//! hashes the folded name with SipHash-2-4 keyed by the first 16 bytes of
+//! `s_hash_seed`. `debugfs dx_hash -c` shows that a casefolded directory
+//! instead hashes the folded name with its ordinary htree hash version and
+//! seed; SipHash (hash version 6) is for directories that are both
+//! encrypted and casefolded, whose entries carry the hash because it needs
+//! the key (format documentation, `ext4_extended_dir_entry_2`). Nothing
+//! calls this yet.
 //!
-//! The Linux kernel's `utf8_casefold_hash` (lib/unicode/utf8-core.c) applies
-//! NFD normalisation followed by Unicode case-folding using precomputed tables
-//! for the filesystem's declared Unicode version. We replicate that with:
+//! ### Folding
+//!
+//! A name is compared in a normalised, case-folded form, using the Unicode
+//! version the volume declares. We compute that form with:
 //!
 //! 1. Decode UTF-8 → codepoints (invalid sequences fall back to ASCII fold).
 //! 2. NFD-decompose with the `unicode-normalization` crate.
 //! 3. Apply Unicode full case fold with the `caseless` crate
 //!    (`caseless::default_case_fold_str`). `char::to_lowercase()` is not
 //!    used — it is simple lowercase, not full case fold (e.g. ß → "ss").
-//! 4. Re-encode as UTF-8. The result is what SipHash-2-4 hashes.
+//! 4. Re-encode as UTF-8. The result is what the hash is computed over.
 //!
 //! This matches the kernel for the overwhelming majority of real filenames.
 //! The kernel uses frozen tables for a specific Unicode version
 //! (`s_encoding_flags`), so there can be differences for codepoints added
 //! after that version; those are edge cases in practice.
 //!
-//! - **SipHash-2-4** keyed with the 16-byte prefix of `sb.hash_seed` —
-//!   matches the kernel's `EXT4_CASEFOLD_HASH_SEED_SLOT` scheme.
+//! - **SipHash-2-4** keyed with the 16-byte prefix of `sb.hash_seed`, which
+//!   is this module's current (wrong, #438) choice of hash.
 
 use unicode_normalization::UnicodeNormalization;
 
@@ -33,7 +38,8 @@ use crate::hash::NameHash;
 
 /// Produce the NFD + case-folded form of `name` for SipHash input.
 ///
-/// Algorithm mirrors the Linux kernel's `utf8_casefold_hash`:
+/// The folding (Unicode Standard Annex #15 for NFD, `CaseFolding.txt` for
+/// the fold):
 /// 1. NFD-decompose using the `unicode-normalization` crate.
 /// 2. Apply Unicode full case fold to each NFD codepoint using `caseless`.
 ///    `char::to_lowercase()` is NOT used because it doesn't implement case

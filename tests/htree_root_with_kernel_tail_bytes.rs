@@ -110,9 +110,9 @@ fn a_root_whose_dx_tail_looks_like_a_dirent_tail_takes_creates_and_unlinks() {
 /// dirent tail, has the shape of an htree node. A leaf emptied on a volume
 /// without checksums looks like this, and so does one written before
 /// `metadata_csum` was enabled. The kernel does not verify a node-shaped
-/// block that a linear scan reads (`__ext4_read_dirblock` with
-/// `DIRENT`), so a create's existence scan must not refuse it as a bad
-/// index block (CodeRabbit on #256).
+/// block that a linear scan reads as an index block, so a create's
+/// existence scan must not refuse it as a bad index block (CodeRabbit on
+/// #256).
 #[test]
 fn a_node_shaped_leaf_does_not_stop_a_create() {
     let (root, image) = indexed_root("leaf");

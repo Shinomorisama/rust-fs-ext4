@@ -33,8 +33,8 @@ use crate::inode::{Inode, InodeFlags};
 /// An xattr entry says how long its value is, and for an EA-inode-backed
 /// value nothing compared the two: `getxattr` reported success and handed
 /// back the EA inode's whole body — plausible bytes rather than an error.
-/// The kernel's `ext4_xattr_inode_iget` makes this comparison and returns
-/// `-EFSCORRUPTED`.
+/// The kernel makes this comparison too, and fails the read with
+/// `EFSCORRUPTED` rather than returning the body.
 ///
 /// It is made BEFORE the body is read because the disagreement bounds the
 /// work: an entry declaring 64 bytes against an inode declaring 2 GiB

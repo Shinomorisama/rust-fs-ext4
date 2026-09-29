@@ -257,7 +257,7 @@ fn gdt_csum_large_write_64_byte_4k() {
     large_write_and_check("large64_4k", true, 4096);
 }
 
-/// The kernel's `crc16` is CRC-16/ARC's polynomial; seeded with `~0` it is
+/// ext4's descriptor `crc16` is CRC-16/ARC's polynomial; seeded with `~0` it is
 /// CRC-16/MODBUS, whose published check value over "123456789" is 0x4B37.
 #[test]
 fn crc16_matches_the_published_check_value() {

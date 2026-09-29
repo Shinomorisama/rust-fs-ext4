@@ -4,8 +4,7 @@
 //! from the inode to the external block when it grows, and back when it
 //! shrinks. The move used to leave the old copy where it was, so the name
 //! was listed twice and the first copy -- the stale one -- was the one
-//! read. The kernel (`ext4_xattr_set_handle`) removes the other copy in
-//! both directions.
+//! read. The kernel removes the other copy in both directions.
 //!
 //! The driver writes; `debugfs ea_list`, which walks the in-inode area
 //! and the block independently, lists each copy it finds, and `e2fsck -fn`

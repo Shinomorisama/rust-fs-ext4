@@ -1,8 +1,8 @@
 //! Buffer cache wrapping a `BlockDevice`.
 //!
 //! `CachedDevice` is the single source of truth for block contents
-//! within a mount session. Mirrors Linux's buffer-cache role for
-//! journaled filesystems: reads are served from the cache, writes
+//! within a mount session. It plays the part a buffer cache plays for a
+//! journaled filesystem: reads are served from the cache, writes
 //! update the cache, and the cache holds journaled-but-not-yet-
 //! checkpointed bytes so that subsequent reads see them before the
 //! data area on disk catches up.

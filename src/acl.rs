@@ -6,16 +6,19 @@
 //! when storing and expands back to POSIX format on getxattr. When we read the
 //! xattr value directly from disk we see the compact form.
 //!
-//! Reference: `fs/ext4/acl.h` in the Linux kernel.
+//! The kernel.org format documentation does not describe this layout. It
+//! is established by the oracles: the kernel reads back, with `getfacl`,
+//! ACLs this crate wrote (tests/kernel_readback.rs), and this crate reads
+//! the ACLs the kernel set on the fixtures (test-disks/ext4-acl.img).
 //!
-//! Layout:
-//!   u32 a_version = 0x0001 (EXT4_ACL_VERSION)
+//! Layout (all little-endian):
+//!   u32 version = 0x0001 (EXT4_ACL_VERSION)
 //!   Then entries back-to-back:
-//!     struct ext4_acl_entry_short { u16 e_tag; u16 e_perm; }          (4 bytes)
-//!     struct ext4_acl_entry       { u16 e_tag; u16 e_perm; u32 e_id; } (8 bytes)
+//!     short entry { u16 tag; u16 perm; }          (4 bytes)
+//!     full entry  { u16 tag; u16 perm; u32 id; }  (8 bytes)
 //!
-//! Short form (no e_id) is used for USER_OBJ, GROUP_OBJ, MASK, OTHER.
-//! Full form (with e_id) is used for USER and GROUP entries.
+//! Short form (no id) is used for USER_OBJ, GROUP_OBJ, MASK, OTHER.
+//! Full form (with id) is used for USER and GROUP entries.
 
 use crate::block_io::BlockDevice;
 use crate::error::{Error, Result};

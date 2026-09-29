@@ -8,7 +8,7 @@
 //! block there and inode writes put an inode image there, over the metadata
 //! every mount reads first.
 //!
-//! The rule is the one the kernel's `ext4_check_descriptors` applies: no
+//! The rule is the one the kernel enforces at mount: no
 //! pointer inside group 0's superblock and descriptor table, and, without
 //! `FLEX_BG`, no pointer outside the descriptor's own group. The volumes are
 //! the crate's own `mkfs`, which lays groups out the classic, non-flex_bg

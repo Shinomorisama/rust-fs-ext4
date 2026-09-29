@@ -277,9 +277,10 @@ pub fn lookup_verified(
         // first index says so by holding no extent that contains it. Refusing
         // here instead called a sound filesystem corrupt, and made every
         // sparse file whose data starts past block 0 unreadable at its
-        // leading hole (#260). It is what `ext4_ext_binsearch_idx` does: the
-        // path is left at `EXT_FIRST_INDEX` when the search runs off the
-        // front.
+        // leading hole (#260). A block no extent covers is a hole, and
+        // e2fsck accepts such a file (tests/leading_hole_deep_tree.rs), so a
+        // lookup below every index key descends through the first entry and
+        // finds no extent there.
         let mut chosen_idx: Option<ExtentIdx> = None;
         let mut first_idx: Option<ExtentIdx> = None;
         for i in 0..header.entries {

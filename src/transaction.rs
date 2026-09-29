@@ -346,8 +346,8 @@ impl Transaction {
 /// past the last commit -- takes for a descriptor or commit block: a file's
 /// contents could then be replayed as a transaction of its own. JBD2 has the
 /// writer zero those four bytes in the logged copy and set `TAG_ESCAPED` on
-/// its tag; replay puts the magic back (the kernel's
-/// `jbd2_journal_write_metadata_buffer` and `do_one_pass`).
+/// its tag; replay puts the magic back (format documentation, "Journal
+/// (jbd2)": the block tag's "escaped" flag).
 fn needs_escape(bytes: &[u8]) -> bool {
     bytes.get(0..4) == Some(&JBD2_MAGIC_NUMBER.to_be_bytes()[..])
 }

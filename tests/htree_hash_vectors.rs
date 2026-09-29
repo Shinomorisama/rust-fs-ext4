@@ -1,8 +1,8 @@
 //! The htree hash agrees with e2fsprogs, byte for byte.
 //!
 //! Every value below was produced by `debugfs -R "dx_hash -h <version> -s
-//! <seed> <name>"` (e2fsprogs 1.47.0), which computes the hash with the same
-//! `ext2fs_dirhash` code `mke2fs` and `e2fsck -D` use to build an index. The
+//! <seed> <name>"` (e2fsprogs 1.47.0), which computes the hash the same way
+//! `mke2fs` and `e2fsck -D` do when they build an index. The
 //! old tests only compared this crate's hash to itself, so an implementation
 //! that packed bytes in the wrong order and used the wrong legacy hash passed
 //! all of them (#96).

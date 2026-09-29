@@ -86,7 +86,7 @@ pub(crate) fn strip(raw: &mut [u8], inode_size: u16) -> Result<()> {
 const DIR_HEAD: std::ops::Range<usize> = 0x2C..0x64;
 
 /// The smallest continuation the kernel creates: room for one entry with a
-/// one-byte name (`ext4_update_inline_dir` refuses less).
+/// one-byte name. Less could hold no entry at all.
 const MIN_CONTINUATION: usize = crate::dir::entry_rec_len(1);
 
 /// An inline-data directory's entries, as its inode holds them, for an
@@ -160,8 +160,10 @@ impl InlineDir {
     }
 
     /// Give a directory with no continuation the largest one the inode's
-    /// attribute area holds, as one empty record, as the kernel's
-    /// `ext4_update_inline_dir` does when `i_block` is full. `false`, and
+    /// attribute area holds, as one empty record, which is the shape the
+    /// kernel gives a continuation it creates when `i_block` is full (the
+    /// kernel reads back directories this edits, in
+    /// tests/kernel_inline_writes.rs). `false`, and
     /// nothing changed, when it already has one or there is no room for
     /// the smallest entry.
     pub(crate) fn expand(&mut self, raw: &[u8], inode_size: u16) -> bool {

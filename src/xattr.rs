@@ -88,9 +88,9 @@ pub struct XattrEntry {
     /// KEPT EVEN THOUGH THE INLINE CASE HAS ALREADY USED IT, because
     /// the EA-inode case has not: the value then comes from another
     /// inode's body, and without this there is nothing to compare what
-    /// was read against. The kernel's `ext4_xattr_inode_iget` makes
-    /// exactly that comparison and returns `-EFSCORRUPTED` when the two
-    /// disagree; this driver returned the EA inode's whole body and
+    /// was read against. The kernel makes exactly that comparison and
+    /// fails with `EFSCORRUPTED` when the two disagree; this driver
+    /// returned the EA inode's whole body and
     /// reported success (#121).
     pub value_size: u32,
 }
@@ -147,8 +147,10 @@ pub fn read_all(
         let extra_isize = u16::from_le_bytes(inode_raw[128..130].try_into().unwrap()) as usize;
         let xattr_region_start = 128 + extra_isize;
         // `i_extra_isize = 0` means the extra fields are unused and there
-        // is no in-inode area: the kernel (`ext4_iget`) and libext2fs parse
-        // none, so neither does this. Bytes at 0x80 that look like one are
+        // is no in-inode area: the format documentation places the area
+        // after the `i_extra_isize` bytes ("Inode Size"), the kernel and
+        // e2fsprogs see none, and neither does this. Bytes at 0x80 that look
+        // like one are
         // not an attribute anybody else can see (#380).
         if extra_isize != 0
             && xattr_region_start + 4 <= inode_size as usize
@@ -890,8 +892,8 @@ pub fn plan_remove_from_external_block(
 /// Refuse an external xattr block that is not one: no magic, an `h_blocks`
 /// other than 1, or (on `metadata_csum`) a checksum that does not verify.
 ///
-/// The kernel's `ext4_xattr_check_block` makes the same checks before it
-/// reads or edits the block, and answers EFSCORRUPTED. Every block ext4
+/// The kernel makes the same checks before it reads or edits the block,
+/// and answers EFSCORRUPTED. Every block ext4
 /// has ever written is exactly one block long; a larger `h_blocks` is not
 /// a layout anybody can edit in place.
 pub(crate) fn check_external_block(

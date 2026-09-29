@@ -282,8 +282,8 @@ fn a_damaged_commit_block_ends_the_log() {
 }
 
 /// A damaged descriptor with a commit that checks out after it is
-/// corruption, as the kernel's `need_check_commit_time` judges it: refused,
-/// nothing replayed.
+/// corruption, as the kernel's journal recovery judges it: refused, nothing
+/// replayed.
 #[test]
 fn a_damaged_descriptor_in_a_committed_transaction_is_refused() {
     let image = debugfs_journal("descriptor");
@@ -343,8 +343,8 @@ fn revoke_count_into_the_tail(image: &str) {
 }
 
 /// A revoke block whose `r_count` covers its checksum tail, the tail itself
-/// valid: the kernel's recovery code, which `e2fsck` shares, stops at
-/// `scan_revoke_records` and replays nothing, so this crate refuses it too
+/// valid: `e2fsck` stops at that block and replays nothing, so this crate
+/// refuses it too
 /// rather than read the checksum as a record (#301). `e2fsck` replaying
 /// the same journal untouched shows its refusal is this block's doing.
 #[test]

@@ -504,10 +504,11 @@ fn audit_inner(
                     report.anomalies_count += 1;
                     continue;
                 }
-                // On a DIR_NLINK volume a directory count of 1 is the
-                // kernel's "too many to count" (`ext4_inc_count` pins it
-                // there past EXT4_LINK_MAX and `ext4_dec_count` never moves
-                // it), not a count that is too low.
+                // On a DIR_NLINK volume a directory count of 1 means "not
+                // known" (the format documentation's `i_links_count` entry:
+                // a count past EXT4_LINK_MAX is stored as 1, and removing a
+                // subdirectory never moves it), not a count that is too
+                // low.
                 let uncounted = stored == 1 && inode.is_dir() && dir_nlink;
                 if (stored as u32) < count && !uncounted {
                     let a = Anomaly::LinkCountTooLow {
@@ -792,10 +793,11 @@ enum DirBlockChecksum {
 ///
 /// An htree index block is checked as one: block 0 of an indexed directory
 /// is the dx_root and a block whose first record is an empty entry spanning
-/// it is a dx_node (`Filesystem::is_htree_index_block`, the kernel's rule).
+/// it is a dx_node (`Filesystem::is_htree_index_block`, the format's rule).
 /// Its checksum is the `dx_tail`'s, and only a count/limit pair that leaves
-/// exactly room for one says there is a tail to check, which is also how
-/// the kernel's `get_dx_countlimit` decides it. A kernel-grown dx_root ends
+/// exactly room for one says there is a tail to check: the format
+/// documentation places `struct dx_tail` right after the `limit` entries a
+/// block holds. A kernel-grown dx_root ends
 /// in bytes that look like a dirent tail (#233), which is why the index
 /// test comes first.
 fn dir_block_checksum(
