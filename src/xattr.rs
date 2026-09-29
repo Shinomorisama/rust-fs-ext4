@@ -727,9 +727,12 @@ fn encode_external_block(block: &mut [u8], entries: &[DecodedEntry], refcount: u
 //   value, as little-endian 32-bit words with the last one zero-padded,
 //   each folded in with a 16-bit left rotation. An empty value adds
 //   nothing.
-// - `user.qé` (a name byte above 0x7F) is written with the unsigned
-//   reading by both debugfs and the kernel; e2fsck also accepts the hash
-//   a sign-extending reading gives, but never requires it.
+// - A name byte above 0x7F (`user.qé`) has two readings. debugfs writes
+//   the unsigned one, and so does the kernel of the harness's aarch64
+//   guest; the kernel of its x86_64 guest, the same Debian 12 image built
+//   for amd64, writes the hash that sign-extending the byte gives. e2fsck
+//   accepts either. This crate writes the unsigned reading on every
+//   platform, as debugfs does.
 // - The block's hash folds the entries' hashes, in on-disk order, the
 //   same way with a 16-bit rotation -- unless any entry's hash is zero
 //   (a name and value can be chosen to make it so), in which case the
@@ -1244,7 +1247,7 @@ mod tests {
 /// wrote in the harness VM (see the comment above [`entry_hash`]).
 #[cfg(test)]
 mod hash_tests {
-    use super::{block_hash, entry_hash};
+    use super::{block_hash, entry_hash, NAME_BYTE_ROTATION, WORD_ROTATION};
 
     /// `(name suffix, value, e_hash)` as found in kernel- and
     /// debugfs-written blocks.
@@ -1293,11 +1296,43 @@ mod hash_tests {
         assert_eq!(block_hash(&[0x0061_6968, 0]), 0);
     }
 
+    /// [`entry_hash`] with each name byte above 0x7F sign-extended
+    /// instead, the reading the x86_64 guest's kernel writes.
+    fn sign_extending_entry_hash(name: &[u8], value: &[u8]) -> u32 {
+        let after_name = name.iter().fold(0u32, |acc, &byte| {
+            acc.rotate_left(NAME_BYTE_ROTATION) ^ (i32::from(byte as i8) as u32)
+        });
+        value.chunks(4).fold(after_name, |acc, piece| {
+            let mut word = [0u8; 4];
+            word[..piece.len()].copy_from_slice(piece);
+            acc.rotate_left(WORD_ROTATION) ^ u32::from_le_bytes(word)
+        })
+    }
+
+    /// The two readings differ only for a name byte above 0x7F, and the
+    /// sign-extending one is the word the x86_64 guest's kernel stored for
+    /// `user.qé` = `val`.
+    #[test]
+    fn a_high_name_byte_has_two_readings() {
+        for &(name, value, _) in OBSERVED {
+            if name.iter().all(|&byte| byte <= 0x7F) {
+                assert_eq!(
+                    sign_extending_entry_hash(name, value),
+                    entry_hash(name, value)
+                );
+            }
+        }
+        let name = "q\u{e9}".as_bytes();
+        assert_eq!(entry_hash(name, b"val"), 0xDCA5_6177);
+        assert_eq!(sign_extending_entry_hash(name, b"val"), 0xC3BA_6177);
+    }
+
     /// Tests that ask the kernel and e2fsprogs in the harness VM.
     mod needs_host {
         use super::super::{
             block_hash, decode_external_block_entries, encode_external_block, entry_hash,
         };
+        use super::sign_extending_entry_hash;
         use crate::block_io::FileDevice;
         use crate::fs::Filesystem;
         use std::sync::Arc;
@@ -1369,8 +1404,12 @@ mod hash_tests {
             (hashes, h_hash, block)
         }
 
-        /// The kernel writes each attribute set; every hash it stored is the
-        /// one computed here, and re-encoding its entries reproduces them.
+        /// The kernel writes each attribute set. Every hash it stored is the
+        /// one computed here, except that for a name with a byte above 0x7F
+        /// it may be the sign-extending reading instead (the x86_64 guest's
+        /// kernel writes that one), and its block hash folds the hashes it
+        /// stored. Re-encoding its entries reproduces its block hash
+        /// whenever its entry hashes are this crate's.
         #[test]
         fn hashes_in_kernel_written_blocks_are_the_ones_computed_here() {
             let image = volume("kernel");
@@ -1398,11 +1437,25 @@ mod hash_tests {
                 let (hashes, h_hash, block) = block_hashes(&fs, &path);
                 assert_eq!(hashes.len(), attrs.len(), "{path}");
                 let entries = decode_external_block_entries(&block).unwrap();
-                for (entry, &stored) in entries.iter().zip(&hashes) {
+                assert_eq!(entries.len(), hashes.len(), "{path}");
+                let computed: Vec<u32> = entries
+                    .iter()
+                    .map(|entry| entry_hash(&entry.name_bytes, &entry.value))
+                    .collect();
+                for ((entry, &stored), &ours) in entries.iter().zip(&hashes).zip(&computed) {
+                    let name = String::from_utf8_lossy(&entry.name_bytes);
+                    if stored == ours {
+                        continue;
+                    }
+                    assert!(
+                        entry.name_bytes.iter().any(|&byte| byte > 0x7F),
+                        "{path} {name}: the kernel stored {stored:#010x}, and this crate \
+                         computes {ours:#010x}"
+                    );
                     assert_eq!(
-                        entry_hash(&entry.name_bytes, &entry.value),
+                        sign_extending_entry_hash(&entry.name_bytes, &entry.value),
                         stored,
-                        "{path}"
+                        "{path} {name}: the kernel's hash is neither reading"
                     );
                 }
                 assert_eq!(block_hash(&hashes), h_hash, "{path}'s h_hash");
@@ -1411,9 +1464,16 @@ mod hash_tests {
                 encode_external_block(&mut ours, &entries, 1);
                 assert_eq!(
                     ours[0x0C..0x10],
-                    block[0x0C..0x10],
+                    block_hash(&computed).to_le_bytes(),
                     "{path}: h_hash re-encoded"
                 );
+                if computed == hashes {
+                    assert_eq!(
+                        ours[0x0C..0x10],
+                        block[0x0C..0x10],
+                        "{path}: h_hash re-encoded"
+                    );
+                }
             }
             drop(fs);
             fs_ext4_test_support::assert_e2fsck_clean(&image, "the kernel's blocks");
@@ -1421,8 +1481,8 @@ mod hash_tests {
         }
 
         /// This crate writes the same attribute sets: e2fsck accepts every
-        /// e_hash, and the hashes match the ones the kernel stores for the
-        /// same attributes.
+        /// e_hash, and the hashes are the unsigned readings, the ones debugfs
+        /// and the aarch64 guest's kernel store for the same attributes.
         #[test]
         fn blocks_this_crate_writes_carry_the_kernels_hashes() {
             let image = volume("ours");
@@ -1438,7 +1498,7 @@ mod hash_tests {
             }
             fs_ext4_test_support::assert_e2fsck_clean(&image, "this crate's blocks");
 
-            // The kernel's hashes for these sets, as observed.
+            // The unsigned readings for these sets, as observed.
             let expected: &[(&str, &[u32], u32)] = &[
                 (
                     "/plain",
