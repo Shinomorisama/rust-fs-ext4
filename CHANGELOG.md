@@ -28,6 +28,9 @@ Source-breaking, each caught by the compiler downstream:
   that applied anything now reloads the mount's superblock and descriptors and
   reopens its journal writer, which a shared borrow cannot. The C entry point
   is unchanged.
+- `hash::HTREE_EOF` is removed with the clean-room `src/hash.rs` (see
+  Changed). The value it named, `0xFFFF_FFFE`, is the directory index's
+  end-of-directory marker, and `hash::name_hash` never returns it.
 
 Not caught by the compiler — the same source builds and behaves differently:
 
