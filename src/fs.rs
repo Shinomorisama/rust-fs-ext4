@@ -4644,7 +4644,7 @@ impl Filesystem {
         // inode exactly as it was rather than half-updated.
         for (update, _, extra) in fields {
             if let TimeUpdate::Set(sec, _) = update {
-                if crate::inode::encode_extra_time(sec).1 != 0 && extra.is_none() {
+                if crate::inode::pack_seconds(sec).1 != 0 && extra.is_none() {
                     return Err(Error::InvalidArgument(
                         "timestamp past 2038 needs an *_extra field this inode is too small to hold",
                     ));
@@ -4656,7 +4656,7 @@ impl Filesystem {
             let TimeUpdate::Set(sec, nsec) = update else {
                 continue;
             };
-            let (base, epoch) = crate::inode::encode_extra_time(sec);
+            let (base, epoch) = crate::inode::pack_seconds(sec);
             raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
             if let Some(off) = extra {
                 let packed = pack_nsec_lo(nsec) | epoch;

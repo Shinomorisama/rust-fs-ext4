@@ -150,9 +150,9 @@ pub struct Inode {
     /// The on-disk base field is a signed 32-bit value, so dates before
     /// 1970 are representable and must not be read as far-future ones.
     /// When `i_extra_isize` is large enough, the low two bits of the
-    /// matching `*_extra` field extend the seconds by `<< 32`, widening
-    /// the range from 1901..2038 to roughly 1901..2446. Both are
-    /// applied here; see `decode_extra_time`.
+    /// matching `*_extra` field add whole multiples of 2^32 seconds,
+    /// widening the range from 1901..2038 to 1901..2446. Both are
+    /// applied here; see `unpack_seconds`.
     pub atime: i64,
     pub mtime: i64,
     pub ctime: i64,
@@ -173,63 +173,78 @@ pub struct Inode {
     pub checksum: u32,
 }
 
-/// Combine a base timestamp with its `*_extra` field.
+// ---------------------------------------------------------------------------
+// Timestamps
+// ---------------------------------------------------------------------------
+//
+// The format (kernel.org ext4 documentation, inodes.html, "Inode
+// Timestamps"): each of atime, ctime, mtime and crtime has a 32-bit base
+// word holding a *signed* count of seconds from 1970-01-01 UTC, and --
+// where `i_extra_isize` reaches it -- a 32-bit companion word. The
+// companion's two low bits count whole 2^32-second "eras" to add to the
+// signed base, and its upper thirty bits are nanoseconds. dtime has no
+// companion.
+//
+// The documentation tabulates the result: era 0 covers 1901-12-13 ..
+// 2038-01-19 (the signed base on its own), and each further era slides
+// that window 2^32 seconds later, so era 3 ends on 2446-05-10. The
+// windows abut, so every second in 1901..2446 has exactly one encoding.
+// A kernel in the harness VM, asked to `touch -d @N` files on a 256-byte
+// inode volume, wrote exactly those words for every boundary tested
+// (`needs_host::the_kernel_writes_and_reads_the_documented_words`), and
+// clamped anything later than 2446 to the last second of era 3.
+
+/// Seconds one era step adds: 2^32.
+const ERA_SECONDS: i64 = 1 << 32;
+
+/// The two low bits of a companion word: the era count.
+const ERA_FIELD: u32 = 0b11;
+
+/// Read a timestamp from its base word and its companion word (pass 0
+/// for the companion when the inode has none).
 ///
-/// ext4 stores seconds in two places once `i_extra_isize` is large
-/// enough. The base field is a **signed** 32-bit count from the Unix
-/// epoch — negative values are dates before 1970 and are legal. The
-/// `*_extra` field packs two things: its **low two bits extend the
-/// seconds by 2^32**, and the upper thirty are nanoseconds.
-///
-/// Reading only the base gives 1901..2038. Adding the two epoch bits
-/// gives roughly 1901..2446, which is what the format actually means.
-/// The nanosecond half was already being read (`extra >> 2`); the
-/// epoch half was discarded, so every timestamp past 2038 came back
-/// 136 years early.
-///
-/// Matches `ext4_decode_extra_time` in `fs/ext4/ext4.h`.
-fn decode_extra_time(base: u32, extra: u32) -> i64 {
-    // The base is signed on disk: reinterpret before widening, or a
-    // pre-1970 date becomes a date in 2106.
-    let secs = base as i32 as i64;
-    let epoch_bits = (extra & EXT4_EPOCH_MASK) as i64;
-    secs + (epoch_bits << 32)
+/// The base is signed: a base with its top bit set is a date before
+/// 1970 in era 0, and a date 2^32 seconds later than that in each
+/// further era. The nanosecond bits of `extra` are ignored here.
+fn unpack_seconds(base: u32, extra: u32) -> i64 {
+    let signed_base = i64::from(base as i32);
+    let era = i64::from(extra & ERA_FIELD);
+    signed_base + era * ERA_SECONDS
 }
 
-/// Low two bits of an `*_extra` field: the seconds extension.
-const EXT4_EPOCH_MASK: u32 = 0x3;
-
-/// The inverse of [`decode_extra_time`]: split a POSIX seconds value
-/// into the on-disk base and the two epoch bits that belong in the low
-/// end of the matching `*_extra` field.
+/// Split a count of seconds into the base word and the era bits for
+/// the low end of the companion word -- the inverse of
+/// [`unpack_seconds`] for every value in
+/// [`MIN_ENCODABLE_TIME`]`..=`[`MAX_ENCODABLE_TIME`].
 ///
-/// Matches `ext4_encode_extra_time` in `fs/ext4/ext4.h`:
+/// The era is the number of 2^32-second windows the value lies past the
+/// window centred on the epoch, `[-2^31, 2^31)`. Counted in half-windows
+/// of 2^31 (an arithmetic shift, so it floors for negative values too),
+/// that is the half-window index plus one, halved. The base word is
+/// then simply the low 32 bits: the signed reading of those bits plus
+/// the era's 2^32-multiples gives the value back.
 ///
-/// ```c
-/// extra = ((time->tv_sec - (s32)time->tv_sec) >> 32) & EXT4_EPOCH_MASK;
-/// ```
+/// 2100-01-01 (4 102 444 800) shows why the era is not just "the bits
+/// above bit 31": it lies in the second window, so it is stored with
+/// era 1 and a base whose signed reading is negative (-192 522 496).
 ///
-/// The epoch bits account for the **signed** reinterpretation of the
-/// base, not merely for the bits above 32. 2100-01-01 is 4102444800,
-/// which fits in a `u32` but is negative as an `i32` — so it is stored
-/// as that negative base *plus* an epoch of 1, and the two cancel back
-/// to the right answer. Splitting the value at bit 32 instead would
-/// compute an epoch of 0 and store the wrong date.
-pub(crate) fn encode_extra_time(secs: i64) -> (u32, u32) {
-    let base = secs as u32;
-    let epoch = (((secs - (secs as i32 as i64)) >> 32) as u32) & EXT4_EPOCH_MASK;
-    (base, epoch)
+/// Values outside the encodable range have their era taken modulo four;
+/// callers clamp or refuse first.
+pub(crate) fn pack_seconds(secs: i64) -> (u32, u32) {
+    let half_windows = secs >> 31;
+    let era = (((half_windows + 1) >> 1) as u32) & ERA_FIELD;
+    (secs as u32, era)
 }
 
-/// The range [`encode_extra_time`] can represent: a signed 32-bit base
-/// plus two epoch bits, so 1901-12-13 through 2446-05-10. A caller
-/// asking to store a time outside this is asking for something the
-/// format cannot hold.
+/// The earliest second the base-plus-era encoding holds: era 0 with
+/// the most negative base, 1901-12-13 20:45:52 UTC.
 pub(crate) const MIN_ENCODABLE_TIME: i64 = i32::MIN as i64;
-pub(crate) const MAX_ENCODABLE_TIME: i64 = i32::MAX as i64 + (3i64 << 32);
+/// The latest: era 3 with the most positive base, 2446-05-10 22:38:55
+/// UTC. The kernel clamps later times to exactly this value.
+pub(crate) const MAX_ENCODABLE_TIME: i64 = i32::MAX as i64 + 3 * ERA_SECONDS;
 
 /// One of an inode's four timestamps, by where its base and its
-/// `*_extra` word live.
+/// companion word live.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InodeTime {
     Atime,
@@ -249,7 +264,7 @@ impl InodeTime {
         }
     }
 
-    /// Offset of the `*_extra` word (nanoseconds << 2 | epoch bits).
+    /// Offset of the companion word (nanoseconds above, era below).
     fn extra_offset(self) -> usize {
         match self {
             InodeTime::Ctime => 0x84,
@@ -260,43 +275,45 @@ impl InodeTime {
     }
 }
 
-/// Whether `raw` carries the byte range `[offset, offset + 4)` inside
-/// its extra section: both the buffer and `i_extra_isize` must reach it.
-/// This is the kernel's `EXT4_FITS_IN_INODE`.
+/// Whether the four bytes at `offset` lie inside the part of the inode
+/// that `i_extra_isize` declares in use (and inside `raw`). A field
+/// past that point is not part of this inode, whatever the inode size.
 fn extra_field_fits(raw: &[u8], offset: usize) -> bool {
-    if raw.len() < OFF_EXTRA_ISIZE + 2 {
+    let Some(size_bytes) = raw.get(OFF_EXTRA_ISIZE..OFF_EXTRA_ISIZE + 2) else {
         return false;
-    }
-    let i_extra_isize = u16::from_le_bytes(
-        raw[OFF_EXTRA_ISIZE..OFF_EXTRA_ISIZE + 2]
-            .try_into()
-            .unwrap(),
-    ) as usize;
-    let end = offset + 4;
-    raw.len() >= end && INODE_EXTRA_OFFSET + i_extra_isize >= end
+    };
+    let declared_end =
+        INODE_EXTRA_OFFSET + usize::from(u16::from_le_bytes([size_bytes[0], size_bytes[1]]));
+    let field_end = offset + 4;
+    field_end <= raw.len() && field_end <= declared_end
 }
 
-/// Store `secs` (whole seconds; nanoseconds zero) as `field`, the way
-/// the kernel's `EXT4_INODE_SET_XTIME` / `EXT4_EINODE_SET_XTIME` do.
+/// Store `secs` (whole seconds; nanoseconds zero) as `field`.
 ///
-/// - With the field's `*_extra` word present: the base and the two
-///   epoch bits, via [`encode_extra_time`], after clamping to what those
-///   34 bits can hold.
-/// - Without it (a 128-byte inode, or an `i_extra_isize` too small): the
-///   base alone, **clamped** to the signed 32-bit range. A time past 2038
-///   becomes 2038-01-19 03:14:07 rather than wrapping to 1901.
-/// - `crtime`'s base is itself in the extra section; without room for
-///   it, nothing is written.
+/// - Where the field's companion word is present: the base and the era
+///   bits from [`pack_seconds`], after clamping to the encodable range.
+///   The companion's nanosecond bits are cleared.
+/// - Where it is not (a 128-byte inode, or an `i_extra_isize` too small
+///   to reach it): the base alone, clamped to the signed 32-bit range,
+///   so a time after 2038 is stored as 2038-01-19 03:14:07 rather than
+///   wrapping round to 1901.
+/// - crtime's base word is itself in the extended area; if even that is
+///   out of reach, nothing is written.
 pub(crate) fn set_inode_time(raw: &mut [u8], field: InodeTime, secs: i64) {
-    let base_off = field.base_offset();
-    let extra_off = field.extra_offset();
-    if extra_field_fits(raw, extra_off) {
-        let (base, epoch) = encode_extra_time(secs.clamp(MIN_ENCODABLE_TIME, MAX_ENCODABLE_TIME));
-        raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
-        raw[extra_off..extra_off + 4].copy_from_slice(&epoch.to_le_bytes());
-    } else if field != InodeTime::Crtime || extra_field_fits(raw, base_off) {
-        let base = secs.clamp(i32::MIN as i64, i32::MAX as i64) as i32 as u32;
-        raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
+    let base_at = field.base_offset();
+    let extra_at = field.extra_offset();
+    let (base, extra) = if extra_field_fits(raw, extra_at) {
+        let (base, era) = pack_seconds(secs.clamp(MIN_ENCODABLE_TIME, MAX_ENCODABLE_TIME));
+        (base, Some(era))
+    } else if field != InodeTime::Crtime || extra_field_fits(raw, base_at) {
+        let clamped = secs.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+        (clamped as u32, None)
+    } else {
+        return;
+    };
+    raw[base_at..base_at + 4].copy_from_slice(&base.to_le_bytes());
+    if let Some(era) = extra {
+        raw[extra_at..extra_at + 4].copy_from_slice(&era.to_le_bytes());
     }
 }
 
@@ -424,13 +441,13 @@ impl Inode {
             uid: join16(uid_hi, uid_lo),
             gid: join16(gid_hi, gid_lo),
             size: join32(size_hi, size_lo),
-            atime: decode_extra_time(atime_base, atime_extra),
-            mtime: decode_extra_time(mtime_base, mtime_extra),
-            ctime: decode_extra_time(ctime_base, ctime_extra),
+            atime: unpack_seconds(atime_base, atime_extra),
+            mtime: unpack_seconds(mtime_base, mtime_extra),
+            ctime: unpack_seconds(ctime_base, ctime_extra),
             // dtime has no *_extra field in the format: deletion time
             // is a plain signed 32-bit value with no epoch extension.
             dtime: dtime as i32 as i64,
-            crtime: decode_extra_time(crtime_base, crtime_extra),
+            crtime: unpack_seconds(crtime_base, crtime_extra),
             atime_nsec,
             mtime_nsec,
             ctime_nsec,
@@ -496,104 +513,230 @@ fn join32<H: Into<u64>>(hi: H, lo: u32) -> u64 {
 
 #[cfg(test)]
 mod timestamp_tests {
-    use super::decode_extra_time;
+    use super::{pack_seconds, unpack_seconds, MAX_ENCODABLE_TIME, MIN_ENCODABLE_TIME};
 
-    /// With no `*_extra` field, a timestamp is the plain signed
-    /// 32-bit value — the pre-2038 behaviour, unchanged.
+    /// `(seconds, base word, era bits)` as the kernel in the harness VM
+    /// wrote them for `touch -m -d @seconds` on a 256-byte-inode volume,
+    /// read back with `debugfs stat` (`mtime: 0xBASE:EXTRA`). The same
+    /// list drives the live check in `needs_host` below, so a change in
+    /// what the kernel writes fails there rather than going unnoticed.
+    const KERNEL_WORDS: &[(i64, u32, u32)] = &[
+        (-2_147_483_648, 0x8000_0000, 0), // 1901-12-13, the earliest
+        (-1_000, 0xFFFF_FC18, 0),         // 1969
+        (-1, 0xFFFF_FFFF, 0),             // the second before the epoch
+        (0, 0x0000_0000, 0),              // 1970-01-01
+        (1, 0x0000_0001, 0),
+        (2_147_483_647, 0x7FFF_FFFF, 0),  // 2038-01-19 03:14:07
+        (2_147_483_648, 0x8000_0000, 1),  // one second later: era 1
+        (4_294_967_295, 0xFFFF_FFFF, 1),  // 2106-02-07 06:28:15
+        (4_294_967_296, 0x0000_0000, 1),  // 2106-02-07 06:28:16
+        (6_442_450_943, 0x7FFF_FFFF, 1),  // 2174
+        (6_442_450_944, 0x8000_0000, 2),  // 2174: era 2
+        (8_589_934_592, 0x0000_0000, 2),  // 2242-03-16
+        (12_884_901_887, 0xFFFF_FFFF, 3), // 2378, already era 3
+        (12_884_901_888, 0x0000_0000, 3),
+        (15_032_385_535, 0x7FFF_FFFF, 3), // 2446-05-10 22:38:55, the last
+    ];
+
     #[test]
-    fn without_an_extra_field_the_base_is_used_as_is() {
-        assert_eq!(decode_extra_time(0, 0), 0);
-        assert_eq!(decode_extra_time(946_684_800, 0), 946_684_800);
+    fn every_kernel_written_word_pair_reads_back_as_its_seconds() {
+        for &(secs, base, era) in KERNEL_WORDS {
+            assert_eq!(unpack_seconds(base, era), secs, "{base:#x}:{era}");
+        }
     }
 
-    /// **The base field is signed.** A value with the top bit set is a
-    /// date before 1970, not a date in 2106. Reading it as `u32` was
-    /// the second half of this bug.
     #[test]
-    fn a_pre_1970_timestamp_stays_negative() {
-        // -1 as a u32 bit pattern: 1969-12-31T23:59:59Z.
-        assert_eq!(decode_extra_time(0xFFFF_FFFF, 0), -1);
-        // 1901-12-13, the earliest a signed 32-bit count reaches.
-        assert_eq!(decode_extra_time(0x8000_0000, 0), i32::MIN as i64);
+    fn every_second_in_the_table_packs_to_the_kernels_words() {
+        for &(secs, base, era) in KERNEL_WORDS {
+            assert_eq!(pack_seconds(secs), (base, era), "{secs}");
+        }
     }
 
-    /// **The fix.** The low two bits of `*_extra` extend the seconds
-    /// by 2^32 each, moving the ceiling from 2038 to roughly 2446.
-    ///
-    /// Previously these bits were discarded by the `>> 2` that
-    /// extracts nanoseconds, so every timestamp past 2038 came back
-    /// 136 years early.
+    /// The bounds are the table's first and last rows.
     #[test]
-    fn the_epoch_bits_extend_the_range_past_2038() {
-        // epoch=1 adds 2^32 seconds.
-        assert_eq!(decode_extra_time(0, 0b01), 1i64 << 32);
-        assert_eq!(decode_extra_time(0, 0b10), 2i64 << 32);
-        assert_eq!(decode_extra_time(0, 0b11), 3i64 << 32);
+    fn the_encodable_range_is_1901_to_2446() {
+        assert_eq!(MIN_ENCODABLE_TIME, KERNEL_WORDS[0].0);
+        assert_eq!(MAX_ENCODABLE_TIME, KERNEL_WORDS[KERNEL_WORDS.len() - 1].0);
     }
 
-    /// The nanosecond bits must not leak into the seconds. `*_extra`
-    /// packs both, and only the low two bits are the epoch.
+    /// Nanoseconds live above the era bits and never reach the seconds.
     #[test]
-    fn the_nanosecond_bits_do_not_affect_the_seconds() {
-        // All thirty nsec bits set, epoch bits clear.
-        let nsec_only = 0xFFFF_FFFCu32;
+    fn nanosecond_bits_are_not_seconds() {
+        let all_nanosecond_bits = !0b11u32;
+        assert_eq!(unpack_seconds(1_000, all_nanosecond_bits), 1_000);
         assert_eq!(
-            decode_extra_time(1_000, nsec_only),
-            1_000,
-            "nanoseconds must not be added to the seconds"
+            unpack_seconds(1_000, all_nanosecond_bits | 0b10),
+            1_000 + (2 << 32)
         );
     }
 
-    /// A real post-2038 timestamp round-trips.
-    ///
-    /// Encoded the way the kernel does it, which is subtler than
-    /// splitting the value at bit 32:
-    ///
-    /// ```c
-    /// extra = ((time->tv_sec - (s32)time->tv_sec) >> 32) & EXT4_EPOCH_MASK;
-    /// ```
-    ///
-    /// The epoch bits account for the **signed** reinterpretation of
-    /// the base, not merely for bits above 32. 2100-01-01 is
-    /// 4102444800, which fits in a `u32` but is negative as an `i32` —
-    /// so it is stored as that negative base *plus* an epoch of 1, and
-    /// the two cancel back to the right answer. A test that split at
-    /// bit 32 would compute epoch=0 and assert the wrong encoding.
-    use super::encode_extra_time as encode;
-
+    /// Every window edge, and a second either side of it, survives a
+    /// pack and an unpack.
     #[test]
-    fn a_date_in_2100_decodes_correctly() {
-        const SECS_2100: i64 = 4_102_444_800;
-        let (base, epoch) = encode(SECS_2100);
-        assert_eq!(epoch, 1, "2100 needs the epoch extension");
-        assert_eq!(
-            decode_extra_time(base, epoch),
-            SECS_2100,
-            "a date in 2100 must not come back 136 years early"
-        );
+    fn window_edges_survive_a_round_trip() {
+        for era in 0..4i64 {
+            let lowest = i64::from(i32::MIN) + (era << 32);
+            let highest = i64::from(i32::MAX) + (era << 32);
+            for secs in [lowest, lowest + 1, highest - 1, highest] {
+                let (base, bits) = pack_seconds(secs);
+                assert_eq!(bits as i64, era, "{secs}");
+                assert_eq!(unpack_seconds(base, bits), secs, "{secs}");
+            }
+        }
     }
 
-    /// Round-trip across the interesting boundaries, so the encoder
-    /// and decoder are checked against each other rather than against
-    /// hand-computed constants.
-    #[test]
-    fn timestamps_round_trip_across_the_2038_boundary() {
-        for secs in [
-            i32::MIN as i64,       // 1901
-            -1,                    // 1969
-            0,                     // 1970
-            946_684_800,           // 2000
-            i32::MAX as i64,       // 2038-01-19, the old ceiling
-            i32::MAX as i64 + 1,   // one second past it
-            4_102_444_800,         // 2100
-            (1i64 << 33) + 12_345, // needs both epoch bits
-        ] {
-            let (base, epoch) = encode(secs);
-            assert_eq!(
-                decode_extra_time(base, epoch),
-                secs,
-                "round trip for {secs}"
+    /// Tests that ask the kernel and debugfs in the harness VM.
+    mod needs_host {
+        use super::KERNEL_WORDS;
+        use crate::block_io::FileDevice;
+        use crate::fs::Filesystem;
+        use std::sync::Arc;
+
+        /// The kernel stamps one file per row of [`KERNEL_WORDS`] (and three
+        /// past the end of the range, which it clamps); `debugfs` reports
+        /// the raw words it wrote and `stat` the seconds it reads back.
+        /// Both must match the table, and this crate must read every file's
+        /// mtime as the kernel does.
+        #[test]
+        fn the_kernel_writes_and_reads_the_documented_words() {
+            let image =
+                fs_ext4_test_support::temp_path!("fs_ext4_inode_times_{}.img", std::process::id());
+            std::fs::File::create(&image)
+                .and_then(|f| f.set_len(8 << 20))
+                .unwrap();
+            let out = fs_ext4_test_support::oracle("mkfs.ext4")
+                .args(["-q", "-F", "-I", "256", &image])
+                .output();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
             );
+
+            let past_the_end = [15_032_385_536i64, 17_179_869_184, 99_999_999_999];
+            let mut all: Vec<i64> = KERNEL_WORDS.iter().map(|row| row.0).collect();
+            all.extend(past_the_end);
+            let mut script = String::from("set -e\n");
+            for secs in &all {
+                script.push_str(&format!(
+                    "touch \"$MNT/t{secs}\"; touch -m -d @{secs} \"$MNT/t{secs}\"\n"
+                ));
+            }
+            for secs in &all {
+                script.push_str(&format!(
+                    "printf '%s %s\\n' {secs} \"$(stat -c %Y \"$MNT/t{secs}\")\"\n"
+                ));
+            }
+            let out = fs_ext4_test_support::guest_kernel_write(&image, &script);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let kernel_reads: std::collections::BTreeMap<i64, i64> =
+                String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .filter_map(|l| {
+                        let (a, b) = l.split_once(' ')?;
+                        Some((a.parse().ok()?, b.trim().parse().ok()?))
+                    })
+                    .collect();
+
+            let fs = Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
+            let last = KERNEL_WORDS[KERNEL_WORDS.len() - 1];
+            for &secs in &all {
+                let (want_secs, want_base, want_era) = KERNEL_WORDS
+                    .iter()
+                    .copied()
+                    .find(|row| row.0 == secs)
+                    .unwrap_or(last);
+                assert_eq!(
+                    kernel_reads.get(&secs),
+                    Some(&want_secs),
+                    "kernel stat of @{secs}"
+                );
+
+                let out = fs_ext4_test_support::oracle("debugfs")
+                    .args(["-R", &format!("stat /t{secs}"), &image])
+                    .output();
+                let text = String::from_utf8_lossy(&out.stdout).into_owned();
+                let words = text
+                    .lines()
+                    .find_map(|l| l.trim().strip_prefix("mtime: 0x"))
+                    .unwrap_or_else(|| panic!("no mtime line for @{secs}: {text}"));
+                let (base, extra) = words.split_once(":").unwrap();
+                let base = u32::from_str_radix(base, 16).unwrap();
+                let extra = u32::from_str_radix(&extra[..8], 16).unwrap();
+                assert_eq!(
+                    (base, extra & 3),
+                    (want_base, want_era),
+                    "debugfs words for @{secs}"
+                );
+
+                let mut lookup = |ino: u32| fs.read_inode_verified(ino).map(|(inode, _)| inode);
+                let ino =
+                    crate::path::lookup(fs.dev.as_ref(), &fs.sb, &mut lookup, &format!("/t{secs}"))
+                        .unwrap();
+                let inode = fs.read_inode_verified(ino).unwrap().0;
+                assert_eq!(inode.mtime, want_secs, "this crate's reading of @{secs}");
+            }
+            drop(fs);
+            let _ = std::fs::remove_file(&image);
+        }
+
+        /// The other direction: this crate stamps each row's seconds with
+        /// `apply_utimens`, and the kernel's `stat` must read them back.
+        #[test]
+        fn the_kernel_reads_what_this_crate_stamps() {
+            let image = fs_ext4_test_support::temp_path!(
+                "fs_ext4_inode_times_w_{}.img",
+                std::process::id()
+            );
+            std::fs::File::create(&image)
+                .and_then(|f| f.set_len(8 << 20))
+                .unwrap();
+            let out = fs_ext4_test_support::oracle("mkfs.ext4")
+                .args(["-q", "-F", "-I", "256", &image])
+                .output();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            {
+                let fs = Filesystem::mount(Arc::new(FileDevice::open_rw(&image).unwrap())).unwrap();
+                for &(secs, _, _) in KERNEL_WORDS {
+                    let path = format!("/w{secs}");
+                    fs.apply_create(&path, 0o644).unwrap();
+                    fs.apply_utimens(&path, secs, 0, secs, 0).unwrap();
+                }
+            }
+            // No `e2fsck` verdict here: e2fsck 1.47 reports a time in era 3
+            // whose base is negative (2310-04-04 .. 2378-04-22) as "likely
+            // pre-1970" -- the documentation's note on old kernels that
+            // wrote era 3 for 1901..1970 -- although the kernel above wrote
+            // those same words for those same seconds. The kernel is the
+            // reader that matters.
+            let mut script = String::from("set -e\n");
+            for &(secs, _, _) in KERNEL_WORDS {
+                script.push_str(&format!(
+                    "printf '%s %s\\n' {secs} \"$(stat -c %Y \"$MNT/w{secs}\")\"\n"
+                ));
+            }
+            let out = fs_ext4_test_support::guest_kernel_write(&image, &script);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for &(secs, _, _) in KERNEL_WORDS {
+                assert!(
+                    stdout.lines().any(|l| l == format!("{secs} {secs}")),
+                    "the kernel did not read @{secs} back:\n{stdout}"
+                );
+            }
+            let _ = std::fs::remove_file(&image);
         }
     }
 }
@@ -656,9 +799,8 @@ mod tests {
     }
 }
 
-/// `set_inode_time` stores what the kernel's `EXT4_INODE_SET_XTIME`
-/// stores: epoch bits where the inode has room for them, a clamp where
-/// it does not.
+/// `set_inode_time` stores the era bits where the inode has room for
+/// them, and a clamp where it does not.
 #[cfg(test)]
 mod set_inode_time_tests {
     use super::{set_inode_time, Inode, InodeTime, OFF_ATIME, OFF_CRTIME, OFF_EXTRA_ISIZE};
@@ -693,7 +835,7 @@ mod set_inode_time_tests {
         assert_eq!(parsed.ctime, PAST_2038);
         assert_eq!(parsed.mtime, PAST_2038);
         assert_eq!(parsed.crtime, PAST_2038);
-        // The kernel's own encoding: negative base, epoch 1, no nsec.
+        // Era 1 with a base whose signed reading is negative; no nsec.
         assert_eq!(le32(&raw, OFF_ATIME), 0x8000_000A);
         assert_eq!(le32(&raw, 0x8C), 1);
     }
