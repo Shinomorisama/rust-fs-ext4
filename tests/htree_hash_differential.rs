@@ -136,9 +136,9 @@ fn ask_debugfs(cases: &[Case]) -> Vec<(u32, u32)> {
     answers
 }
 
-/// Requests per `debugfs` call. The script travels to the tool inside a
-/// single shell argument, which Linux caps at 128 KiB; 400 requests of at
-/// most ~320 bytes each stay under that once base64-encoded.
+/// Requests per `debugfs` call. The script reaches the tool through a
+/// file (`Oracle::stdin`), so this is not a size limit: it keeps each
+/// call's script and answers small enough to read when one goes wrong.
 const BATCH: usize = 400;
 
 #[test]
