@@ -535,9 +535,12 @@ Research references credited under their own licenses:
   cross-validator (`tests/lwext4_cross_validate.rs`), never linked into
   the shipping binary.
 
-Spec sources: kernel.org ext4 wiki documentation; Carrier, *File
-System Forensic Analysis* (Addison-Wesley, 2005). The driver does
-not derive from any GPL/LGPL/AGPL source.
+Spec sources: the kernel.org ext4 and JBD2 format documentation; RFC
+1320 and the TEA paper; Carrier, *File System Forensic Analysis*
+(Addison-Wesley, 2005); BSD-licensed implementations for format facts;
+and e2fsprogs and the Linux kernel used as black-box oracles. From 0.6.0
+the driver contains no code derived from GPL, LGPL or AGPL source; see
+[PROVENANCE.md](PROVENANCE.md) for the audit and for earlier releases.
 
 ## Building
 

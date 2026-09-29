@@ -9,12 +9,10 @@ came to be and what was done when a problem was found.
 
 - **Origins in an application.** The driver started life as the ext4 support
   inside a macOS application that mounts disk images and remote storage as
-  Finder volumes through FSKit. It was developed in a research repository,
-  `ext4-fskit`, alongside that application's FSKit extension.
-- **Extraction as a standalone library (2026-04-18).** The driver was
-  extracted from `ext4-fskit@aaa63cf` into this repository as a generic,
-  host-independent Rust crate with a C ABI. Commit `32061f5` ("initial import
-  from ext4-fskit@aaa63cf") is the first commit here; history before the
+  Finder volumes through FSKit.
+- **A separate library (2026-04-18).** The driver was extracted from that
+  application into this repository as a generic, host-independent Rust crate
+  with a C ABI. Commit `32061f5` is the first commit here; history before the
   extraction is not part of this repository.
 - **Since then** the crate has been developed here as an independent library,
   with its own releases; the application it came from consumes it like any
@@ -32,7 +30,7 @@ The rule for all code written here, including every new contribution, is
 that it comes from public, permissively usable sources only:
 
 - the ext4 and JBD2 on-disk format documentation published at
-  kernel.org (`Documentation/filesystems/ext4`);
+  kernel.org (docs.kernel.org/filesystems/ext4/, the rendered documentation);
 - RFCs and papers (RFC 1320 MD4, CRC32C, the TEA paper, the SipHash paper)
   and the Unicode Character Database;
 - permissively licensed implementations (BSD/MIT/Apache), with attribution;
@@ -40,11 +38,15 @@ that it comes from public, permissively usable sources only:
   real Linux mount, and comparing their outputs and the bytes they write.
   Observing what a tool does is not copying its source.
 
-Linux kernel and e2fsprogs *source code* is not a permitted input.
+Linux kernel and e2fsprogs *source code* is not a permitted input. The rule,
+with what it forbids and permits in detail, is the "Clean room" section of
+`AGENTS.md`, and `scripts/check-provenance.sh` enforces the part of it a
+denylist can check.
 
-The current tree does not yet fully meet this rule: the 2026-09-29 audit
-below found two exceptions, in `src/hash.rs` and `src/inode.rs`, and their
-remediation is still open (see [Remediation status](#remediation-status)).
+Releases before 0.6.0 did not meet this rule: the 2026-09-29 audit below
+found two exceptions, in `src/hash.rs` and `src/inode.rs`. Both were
+remediated before 0.6.0 (see "Remediation" and "Published versions"
+below).
 
 ## Audit of 2026-09-29
 
@@ -79,17 +81,34 @@ behaviour instead.
 (#379, fixed in #396) and the extent merge length cap (#387) were already
 fixed on `main`; the casefold hash premise is #438.
 
-## Remediation status
+## Remediation (2026-09-29 – [date merged])
 
-| Item | Status |
-|---|---|
-| Clean-room rewrite of `src/hash.rs` | open |
-| Remove kernel C quotes and re-derive timestamp helpers in `src/inode.rs` | open |
-| Restate the format-driven routines listed above | open |
-| Reword comments and docs that name kernel internals | open |
-| Clean-room rule in `AGENTS.md` and a CI denylist check | open |
+| Item | What was done | Status |
+|---|---|---|
+| `src/hash.rs` | Re-implemented clean-room. The implementer worked from RFC 1320, the TEA paper, the kernel.org directory documentation, and the BSD-licensed FreeBSD `ext2_hash.c` and lwext4 `ext4_hash.c` (for format facts: constants, byte packing, block sizes, output words), with `debugfs dx_hash` as the oracle. They did not have access to the previous implementation, Linux or e2fsprogs source, or the audit report. Verified against 180 fixed and 14,400 random `debugfs` vectors across all six hash versions. | done ([PR]) |
+| `src/inode.rs` timestamps | The quoted kernel C line was removed. The timestamp helpers were restated from the kernel.org inode timestamp table, in the same way as the routines in the next row (not clean-room), and pinned to the raw words a Linux kernel writes and reads back for times from 1901 to 2446. | done ([PR]) |
+| Format-driven routines (xattr entry/block hash, JBD2 tag size and checksum-declaration rules, descriptor placement and group-head size, directory block roles, `BLOCK_UNINIT` bitmap) | Restated with a new structure and names by an author who had the previous implementation in view. They were not written clean-room. Each is now checked black-box against e2fsprogs tools and a Linux kernel in a VM. The meaning of `s_first_meta_bg` when it is nonzero, which came over from the previous implementation, was confirmed against volumes the Linux kernel converted to META_BG by online resize, as read by `dumpe2fs`, and is pinned by `tests/group_layout_oracle.rs`. | done ([PR]) |
+| Comments and docs naming kernel internals | Reworded to state the format rule or the observed behaviour. A CI check (`scripts/check-provenance.sh`) rejects kernel and e2fsprogs source paths, links and internal identifiers, in file contents and file names, and C written out in comments and docs. It is a denylist and cannot catch everything. | done ([PR]) |
+| Clean-room rule | Added to `AGENTS.md`. | done ([PR]) |
+| Independent verification | A separate review of the merged result compared the new code with the Linux v6.17 sources and the previous implementation. It found no remaining code derived from GPL sources beyond what the on-disk format requires. The corrections it asked for (five comments still naming kernel or e2fsprogs internals, one comment citing the wrong documentation page, gaps in the CI check) were made before release. | done (2026-09-29) |
 
-Until the first two items are complete, the README's statement that the driver
-"does not derive from any GPL/LGPL/AGPL source" does not hold for
-`src/hash.rs` and the two quoted lines in `src/inode.rs`. This document will be
-updated as each item lands.
+### Published versions
+
+| Versions | Where | What they contain | Status |
+|---|---|---|---|
+| 0.1.0 to 0.3.1 | Git tags `v0.1.0`–`v0.3.1` and a draft GitHub release of `v0.1.0`, under the package name `fs-ext4`, which was never published to crates.io | The previous `src/hash.rs`, whose half-MD4 transform followed the Linux kernel's implementation. | Git tags cannot be yanked. They remain in the repository and carry this code. |
+| 0.3.2, 0.3.3, 0.4.0, 0.4.1 | crates.io (`am-fs-ext4`) and their git tags | The same `src/hash.rs`. | Yanked from crates.io when 0.6.0 is published. |
+| 0.5.0, 0.5.1 | crates.io (`am-fs-ext4`) and their git tags | The same `src/hash.rs`, and one line of kernel C quoted in two doc comments in `src/inode.rs`. | Yanked from crates.io when 0.6.0 is published. |
+| 0.6.0 and later | crates.io | None of the above. | Use these. |
+
+Every version before 0.6.0 carries hash code derived from the Linux kernel.
+The full transcription of the kernel's hash code (commits `410abe0` and
+`00d9121`, 2026-09-17) came after 0.5.1 and was never released. Version 0.6.0
+is the first release that contains none of this code.
+
+### Repository history
+
+Git history before the remediation commits still contains the previous
+implementations, including the transcription (`410abe0`, `00d9121`) and the
+quoted C line (`4b09f56`). History that has been published is not rewritten.
+None of it is part of any release from 0.6.0 onwards.
