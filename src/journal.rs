@@ -132,8 +132,8 @@ impl ReplayPlan {
     }
 }
 
-/// JBD2 transaction IDs wrap at u32, so they are ordered the way the kernel's
-/// `tid_gt` orders them: by the sign of their wrapping difference.
+/// JBD2 transaction IDs wrap at u32, so they are compared in wrapping
+/// serial-number order (RFC 1982): by the sign of their wrapping difference.
 fn sequence_after(a: u32, b: u32) -> bool {
     (a.wrapping_sub(b) as i32) > 0
 }

@@ -206,8 +206,8 @@ impl JournalSuperblock {
         }
     }
 
-    /// `j_csum_seed`: the crc32c of the journal's UUID, from `~0`. Every
-    /// transaction-block checksum starts from it.
+    /// The journal checksum seed: the crc32c of the journal's UUID, from
+    /// `~0`. Every transaction-block checksum starts from it.
     pub fn csum_seed(&self) -> u32 {
         crate::checksum::linux_crc32c(!0, &self.uuid)
     }

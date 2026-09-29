@@ -191,9 +191,11 @@ pub fn read_all(
 fn parse_entries(entries_buf: &[u8], _region_len: usize, out: &mut Vec<XattrEntry>) -> Result<()> {
     let mut pos = 0;
     while pos + 16 <= entries_buf.len() {
-        // Kernel's IS_LAST_ENTRY: the terminator has the full first 4-byte
-        // header word all zero. We cannot short-circuit on name_len == 0
-        // alone, because ACL xattrs (name_index 2 / 3 for
+        // The list ends at an entry whose leading fields are zero
+        // (attributes.html: "the first four fields ... are set to zero to
+        // mark the end"); the first 4-byte word, name length, name index
+        // and value offset, is what is read. We cannot short-circuit on
+        // name_len == 0 alone, because ACL xattrs (name_index 2 / 3 for
         // system.posix_acl_{access,default}) legitimately store name_len=0
         // — their full name is implied by the index.
         let header = u32::from_le_bytes(entries_buf[pos..pos + 4].try_into().unwrap());
@@ -1209,10 +1211,10 @@ mod tests {
         assert!(matches!(err, Error::InvalidArgument(_)));
     }
 
-    /// The kernel looks external-block entries up sorted by
-    /// `(name_index, name_len, name)` and stops at the first entry that
-    /// compares at or past the target (`xattr_find_entry(..., sorted=1)`),
-    /// so the block must be written in that order. Sorted by name alone,
+    /// attributes.html: external-block entries are sorted by
+    /// `(name_index, name_len, name)`. The kernel's lookup stops at the
+    /// first entry that sorts at or after the target, so the block must be
+    /// written in that order. Sorted by name alone,
     /// `user.abc` goes before `user.zz`, and the kernel's lookup of `zz`
     /// stops at `abc` and answers ENODATA (#379).
     #[test]
