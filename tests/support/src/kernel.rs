@@ -55,8 +55,30 @@ pub fn guest_kernel_write(image: &str, script: &str) -> Output {
     run(image, script, true)
 }
 
+/// [`guest_kernel_write`] for a test whose answer may be that the kernel
+/// refuses the mount.
+///
+/// Where `guest_kernel_write` panics, this returns `Err` with the same
+/// account: the call ended before `script`'s status was recorded, and
+/// what the guest printed says why. A refused mount is one such ending;
+/// a harness that could not run at all is another, so a test reads the
+/// text to tell them apart. Returning it rather than panicking keeps an
+/// expected refusal out of the panic hook's output.
+#[track_caller]
+pub fn guest_kernel_try_write(image: &str, script: &str) -> Result<Output, String> {
+    try_run(image, script, true)
+}
+
 #[track_caller]
 fn run(image: &str, script: &str, writable: bool) -> Output {
+    match try_run(image, script, writable) {
+        Ok(out) => out,
+        Err(stopped) => panic!("{stopped}"),
+    }
+}
+
+#[track_caller]
+fn try_run(image: &str, script: &str, writable: bool) -> Result<Output, String> {
     session();
     assert!(
         std::path::Path::new(image).starts_with(repo()),
@@ -69,25 +91,27 @@ fn run(image: &str, script: &str, writable: bool) -> Output {
     let guest = guest_script(image, script, writable, &run);
     let out = guest_shell(&guest)
         .unwrap_or_else(|error| panic!("cannot run the kernel oracle in the guest: {error}"));
+    let options = if writable { "rw" } else { "ro" };
     let Some(code) = run.code() else {
-        panic!(
+        println!(
+            "[kernel vm] mount -o {options} {image} -> stopped (harness exited {:?})",
+            out.status.code()
+        );
+        return Err(format!(
             "the kernel oracle could not run in the fs-linux-test-harness VM \
              (the harness exited {:?}). `chore vm:status` shows the VM.\n{}{}",
             out.status.code(),
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
-        );
+        ));
     };
     let (stdout, stderr) = run.streams();
-    println!(
-        "[kernel vm] mount -o {} {image} -> {code}",
-        if writable { "rw" } else { "ro" }
-    );
-    Output {
+    println!("[kernel vm] mount -o {options} {image} -> {code}");
+    Ok(Output {
         status: std::os::unix::process::ExitStatusExt::from_raw(code << 8),
         stdout,
         stderr,
-    }
+    })
 }
 
 /// The guest side: copy in, mount, run, unmount, copy back.

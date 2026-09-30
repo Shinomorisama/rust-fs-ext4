@@ -466,68 +466,118 @@ impl Superblock {
             .map_or(0, |f| u64::from(u32::from_le_bytes(f.try_into().unwrap())))
     }
 
-    fn in_meta_bg(&self, group: u64) -> bool {
-        self.feature_incompat & crate::features::Incompat::META_BG.bits() != 0
-            && group / self.descs_per_block() >= self.first_meta_bg()
+    // -----------------------------------------------------------------
+    // Where descriptors live, and what heads a group
+    // -----------------------------------------------------------------
+    //
+    // From kernel.org's ext4 documentation (blockgroup.html "Layout" and
+    // "Meta Block Groups", group_descr.html):
+    //
+    // - The superblock is always at byte 1024. With 1 KiB blocks that is
+    //   block 1 (block 0 is left for a boot sector); with larger blocks it
+    //   is inside block 0. The descriptor table starts in the next block.
+    // - Without META_BG the table is one run of blocks, and each group that
+    //   carries a superblock copy (see `group_has_super`) carries a copy of
+    //   the whole run right after it, followed by the reserved GDT blocks
+    //   kept for growing the table.
+    // - With META_BG the groups are split into meta groups of as many groups
+    //   as one block holds descriptors for. A meta group's single
+    //   descriptor block sits at the head of its first group (after that
+    //   group's superblock copy, if it has one), with copies at the head of
+    //   its second and last groups.
+    //
+    // Where that starts is `s_first_meta_bg`, which super.html lists as
+    // "First metablock block group, if the meta_bg feature is enabled". The
+    // documentation does not say whether it counts meta groups or block
+    // groups, nor what becomes of the groups before it. `dumpe2fs` does:
+    // on a volume the kernel converted to META_BG by growing it online (1
+    // KiB blocks, 32-byte descriptors, 32 to a block), it reports "First
+    // meta block group: 1", the descriptors of groups 32 to 63 at the heads
+    // of groups 32, 33 and 63, and group 0's table after the superblock
+    // one block long. So it is a meta group number: meta groups from
+    // `s_first_meta_bg` on have their own blocks, and those before it keep
+    // the run after the superblock, which is then `s_first_meta_bg` blocks
+    // long, one per meta group.
+    //
+    // Checked against `dumpe2fs` on mke2fs-made volumes with and without
+    // META_BG, SPARSE_SUPER and SPARSE_SUPER2, at 1 KiB and 4 KiB, with
+    // many groups, and on two volumes the kernel grew online, with 32- and
+    // 64-byte descriptors (tests/group_layout_oracle.rs). mke2fs left
+    // `s_first_meta_bg` at 0 on each of its META_BG volumes there, so only
+    // the kernel-grown ones tell the two readings apart. On a META_BG volume whose last meta group is short,
+    // dumpe2fs shows no copy in the volume's last group: the copy belongs to
+    // the meta group's last *possible* group, which does not exist.
+
+    /// The block holding the primary superblock (the one at byte 1024).
+    fn primary_superblock_block(&self) -> u64 {
+        SUPERBLOCK_OFFSET / u64::from(self.block_size())
+    }
+
+    /// The first block of group `group`.
+    fn first_block_of_group(&self, group: u64) -> u64 {
+        u64::from(self.first_data_block) + group * u64::from(self.blocks_per_group)
+    }
+
+    /// The meta group whose own descriptor block describes `group`, or
+    /// `None` when `group` is described by the run after the superblock.
+    fn meta_group_holding(&self, group: u64) -> Option<u64> {
+        if self.feature_incompat & crate::features::Incompat::META_BG.bits() == 0 {
+            return None;
+        }
+        let meta_group = group / self.descs_per_block();
+        (meta_group >= self.first_meta_bg()).then_some(meta_group)
+    }
+
+    /// Length in blocks of the descriptor run that follows a superblock.
+    fn shared_descriptor_run(&self) -> u64 {
+        if self.feature_incompat & crate::features::Incompat::META_BG.bits() != 0 {
+            self.first_meta_bg()
+        } else {
+            self.block_group_count().div_ceil(self.descs_per_block())
+        }
     }
 
     /// Where group `group`'s descriptor lives: the block, and the byte
-    /// offset within it. The kernel's `descriptor_loc` (#73).
-    ///
-    /// Without `META_BG` -- or for a meta group before `s_first_meta_bg` --
-    /// the descriptors are one table starting the block after the
-    /// superblock. With it, meta group `m` (the `descs_per_block` groups
-    /// from `m * descs_per_block`) keeps its one descriptor block at the head
-    /// of its own first group, after that group's superblock backup if it has
-    /// one. The copies in the meta group's second and last groups are
-    /// backups.
+    /// offset within it (#73). The primary copy; backups are elsewhere.
     pub fn descriptor_location(&self, group: u64) -> (u64, usize) {
-        let dpb = self.descs_per_block();
-        let metagroup = group / dpb;
-        let offset = ((group % dpb) * u64::from(self.desc_size)) as usize;
-        if !self.in_meta_bg(group) {
-            // The table follows the superblock's own block, which is
-            // `first_data_block` on every volume but one: a 1 KiB bigalloc
-            // volume, whose groups start at block 0 while the superblock is
-            // still in block 1 (#75).
-            return (
-                SUPERBLOCK_OFFSET / u64::from(self.block_size()) + 1 + metagroup,
-                offset,
-            );
-        }
-        let first = metagroup * dpb;
-        let mut has_super = u64::from(self.group_has_super(first));
-        // A 1 KiB filesystem whose groups start at block 0 has the primary
-        // superblock in block 1.
-        if self.block_size() == 1024 && metagroup == 0 && self.first_data_block == 0 {
-            has_super += 1;
-        }
-        let group_start =
-            u64::from(self.first_data_block) + first * u64::from(self.blocks_per_group);
-        (group_start + has_super, offset)
+        let per_block = self.descs_per_block();
+        let offset = ((group % per_block) * u64::from(self.desc_size)) as usize;
+        let block = match self.meta_group_holding(group) {
+            // The run begins the block after the superblock's own block.
+            // That is `first_data_block + 1` on every volume but a 1 KiB
+            // bigalloc one, whose groups start at block 0 while the
+            // superblock is still in block 1 (#75).
+            None => self.primary_superblock_block() + 1 + group / per_block,
+            Some(meta_group) => {
+                let head_group = meta_group * per_block;
+                if head_group == 0 {
+                    self.primary_superblock_block() + 1
+                } else {
+                    self.first_block_of_group(head_group)
+                        + u64::from(self.group_has_super(head_group))
+                }
+            }
+        };
+        (block, offset)
     }
 
-    /// Blocks at the head of `group` that belong to the superblock backup,
-    /// the descriptor table and its reserved growth: the kernel's
-    /// `ext4_num_base_meta_clusters` less the bitmaps and inode table.
+    /// How many blocks at the head of `group` are superblock copy,
+    /// descriptor blocks and reserved GDT blocks: what precedes any bitmap
+    /// or inode table the group holds.
     pub fn group_head_metadata_blocks(&self, group: u64) -> u64 {
-        let has_super = u64::from(self.group_has_super(group));
-        if self.in_meta_bg(group) {
-            let dpb = self.descs_per_block();
-            let first = (group / dpb) * dpb;
-            let gdt = u64::from(group == first || group == first + 1 || group == first + dpb - 1);
-            return has_super + gdt;
+        let superblock = u64::from(self.group_has_super(group));
+        match self.meta_group_holding(group) {
+            Some(meta_group) => {
+                let per_block = self.descs_per_block();
+                let place = group - meta_group * per_block;
+                let holds_descriptor_copy = place == 0 || place == 1 || place == per_block - 1;
+                superblock + u64::from(holds_descriptor_copy)
+            }
+            None if superblock == 1 => {
+                1 + self.shared_descriptor_run() + u64::from(self.reserved_gdt_blocks)
+            }
+            None => 0,
         }
-        if has_super == 0 {
-            return 0;
-        }
-        let gdt = if self.feature_incompat & crate::features::Incompat::META_BG.bits() != 0 {
-            self.first_meta_bg()
-        } else {
-            (self.block_group_count() * u64::from(self.desc_size))
-                .div_ceil(u64::from(self.block_size()))
-        };
-        1 + gdt + u64::from(self.reserved_gdt_blocks)
     }
 
     /// Whether directory names are hashed as unsigned bytes: `s_flags`
@@ -677,6 +727,89 @@ mod backup_layout_tests {
         assert_eq!(
             sb_with(0, RoCompat::SPARSE_SUPER.bits(), [0, 0], 0).reserved_gdt_blocks,
             0
+        );
+    }
+}
+
+/// Descriptor placement and group heads on synthetic superblocks, for
+/// the layouts mke2fs does not produce on its own (a nonzero
+/// `s_first_meta_bg`, a 1 KiB volume whose groups start at block 0).
+/// tests/group_layout_oracle.rs checks the layouts it does produce
+/// against dumpe2fs.
+#[cfg(test)]
+mod descriptor_layout_tests {
+    use super::*;
+    use crate::features::{Incompat, RoCompat};
+
+    /// 1 KiB blocks, 1024 blocks per group, 64-byte descriptors (16 to a
+    /// block), 100 groups, classic sparse backups.
+    fn sb(first_data_block: u32, meta_bg_from: Option<u32>, reserved_gdt: u16) -> Superblock {
+        let mut raw = vec![0u8; SUPERBLOCK_SIZE];
+        raw[0x38..0x3A].copy_from_slice(&EXT4_MAGIC.to_le_bytes());
+        raw[0x00..0x04].copy_from_slice(&25600u32.to_le_bytes()); // inodes_count
+        raw[0x04..0x08].copy_from_slice(&(102_400 + first_data_block).to_le_bytes());
+        raw[0x14..0x18].copy_from_slice(&first_data_block.to_le_bytes());
+        raw[0x20..0x24].copy_from_slice(&1024u32.to_le_bytes()); // blocks_per_group
+        raw[0x24..0x28].copy_from_slice(&1024u32.to_le_bytes()); // clusters_per_group
+        raw[0x28..0x2C].copy_from_slice(&256u32.to_le_bytes()); // inodes_per_group
+        raw[0x4C..0x50].copy_from_slice(&1u32.to_le_bytes()); // rev_level
+        raw[0x58..0x5A].copy_from_slice(&256u16.to_le_bytes()); // inode_size
+        raw[0x64..0x68].copy_from_slice(&RoCompat::SPARSE_SUPER.bits().to_le_bytes());
+        let mut incompat = Incompat::BIT64.bits();
+        if let Some(first) = meta_bg_from {
+            incompat |= Incompat::META_BG.bits();
+            raw[0x104..0x108].copy_from_slice(&first.to_le_bytes());
+        }
+        raw[0x60..0x64].copy_from_slice(&incompat.to_le_bytes());
+        raw[0xCE..0xD0].copy_from_slice(&reserved_gdt.to_le_bytes());
+        raw[0xFE..0x100].copy_from_slice(&64u16.to_le_bytes()); // desc_size
+        Superblock::parse(raw).expect("superblock")
+    }
+
+    #[test]
+    fn without_meta_bg_the_table_follows_the_superblock() {
+        let sb = sb(1, None, 50);
+        assert_eq!(sb.descriptor_location(0), (2, 0));
+        assert_eq!(sb.descriptor_location(17), (3, 64));
+        assert_eq!(sb.descriptor_location(99), (8, 3 * 64));
+        // 100 groups need 7 descriptor blocks.
+        assert_eq!(sb.group_head_metadata_blocks(0), 1 + 7 + 50);
+        assert_eq!(sb.group_head_metadata_blocks(1), 1 + 7 + 50);
+        assert_eq!(sb.group_head_metadata_blocks(2), 0);
+        assert_eq!(sb.group_head_metadata_blocks(49), 1 + 7 + 50);
+    }
+
+    /// Meta groups 0 and 1 (groups 0..32) keep the run after the
+    /// superblock, two blocks long; from group 32 each meta group keeps
+    /// its own block.
+    #[test]
+    fn meta_groups_before_first_meta_bg_keep_the_shared_run() {
+        let sb = sb(1, Some(2), 0);
+        assert_eq!(sb.descriptor_location(5), (2, 5 * 64));
+        assert_eq!(sb.descriptor_location(31), (3, 15 * 64));
+        // Group 32 starts at block 1 + 32 * 1024 and has no superblock.
+        assert_eq!(sb.descriptor_location(32), (1 + 32 * 1024, 0));
+        assert_eq!(sb.descriptor_location(47), (1 + 32 * 1024, 15 * 64));
+        // Group 48's meta group starts at group 48; 49 = 7^2 has a backup
+        // but 48 does not.
+        assert_eq!(sb.descriptor_location(50), (1 + 48 * 1024, 2 * 64));
+        assert_eq!(sb.group_head_metadata_blocks(0), 1 + 2);
+        assert_eq!(sb.group_head_metadata_blocks(1), 1 + 2);
+        assert_eq!(sb.group_head_metadata_blocks(3), 1 + 2);
+        assert_eq!(sb.group_head_metadata_blocks(32), 1);
+        assert_eq!(sb.group_head_metadata_blocks(33), 1);
+        assert_eq!(sb.group_head_metadata_blocks(34), 0);
+        assert_eq!(sb.group_head_metadata_blocks(47), 1);
+        assert_eq!(sb.group_head_metadata_blocks(49), 1 + 1, "backup and copy");
+        assert_eq!(
+            sb.group_head_metadata_blocks(27),
+            1 + 2,
+            "3^3, before first_meta_bg"
+        );
+        assert_eq!(
+            sb.group_head_metadata_blocks(81),
+            1 + 1,
+            "3^4, second of its meta group"
         );
     }
 }

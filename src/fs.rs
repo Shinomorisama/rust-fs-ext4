@@ -466,6 +466,17 @@ impl std::ops::Deref for AllocationGroups<'_> {
     }
 }
 
+/// What one block of a directory holds (see [`Filesystem::dir_block_role`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DirBlockRole {
+    /// Block 0 of an indexed directory: `.`, `..` and the tree's root.
+    IndexRoot,
+    /// An interior tree node, hidden behind one empty whole-block entry.
+    IndexNode,
+    /// Directory entries: a linear directory's block, or a tree leaf.
+    Entries,
+}
+
 pub struct Filesystem {
     runtime: Arc<dyn crate::runtime::Runtime>,
     managed_recovery: bool,
@@ -3264,50 +3275,20 @@ impl Filesystem {
         // block ("corrupt directory entry: bad rec_len during add") because
         // its content block silently reused the directory's block number.
         //
-        // Unlike an uninit inode bitmap, "all blocks free" isn't quite
-        // right here: a group still owns whatever fixed overhead physically
-        // lives inside it, and zeroing the bitmap without putting that back
-        // hands the group's own metadata out as free space. Two kinds of
-        // overhead can be there — the RO_COMPAT_SPARSE_SUPER superblock +
-        // GDT backup (groups 0, 1, and powers of 3/5/7), and the group's own
-        // block bitmap, inode bitmap and inode table.
-        //
-        // With flex_bg those last three usually sit in the cohort's head
-        // group, and a group is only left BLOCK_UNINIT when mkfs had no real
-        // bitmap/table data to write for it — so on a flex_bg volume they are
-        // reliably elsewhere. That is an assumption about the formatter,
-        // though, not something the on-disk format guarantees: without
-        // flex_bg every group holds its own. So rather than assume, ask where
-        // the descriptor actually points and reserve whatever lands inside
-        // this group.
+        // Unlike an uninit inode bitmap, "all blocks free" is not the
+        // starting point: the group keeps its own fixed metadata in use
+        // (see the comment above `alloc::uninit_group_used_ranges`).
         let was_uninit = self.clear_bgd_uninit_flag_if_set(buf, gi, BgdUninitFlag::Block)?;
-        let reserved_runs = if was_uninit {
-            crate::alloc::group_owned_metadata_runs(&self.sb, &self.groups, gi)
-        } else {
-            Vec::new()
-        };
+        // The bitmap block of a group that was BLOCK_UNINIT holds nothing
+        // meaningful: it starts from what the flag stood for, which is the
+        // same bitmap the planner and fsck assumed (`uninit_block_bitmap`).
+        let implied = was_uninit
+            .then(|| crate::alloc::uninit_block_bitmap(&self.sb, &self.groups, gi as u32));
         let bitmap_block = self.groups[gi].block_bitmap;
         let bm = buf.get_mut(self, bitmap_block)?;
-        if was_uninit {
-            bm.iter_mut().for_each(|byte| *byte = 0);
-            for (first_bit, count) in reserved_runs {
-                for bit in first_bit..(first_bit + count).min(bpg) {
-                    let byte = (bit / 8) as usize;
-                    let mask = 1u8 << (bit % 8);
-                    if byte < bm.len() {
-                        bm[byte] |= mask;
-                    }
-                }
-            }
-            // Bits past the group's last block are set, as the kernel's
-            // `ext4_mark_bitmap_end` sets them: e2fsck reports "Padding at
-            // end of block bitmap is not set" otherwise. Every group whose
-            // blocks_per_group is under the bitmap block's 8 * block_size
-            // bits has some, and a short last group more.
-            let in_group = u64::from(crate::alloc::blocks_in_group(&self.sb, gi as u32));
-            for bit in in_group..(bm.len() as u64 * 8) {
-                bm[(bit / 8) as usize] |= 1u8 << (bit % 8);
-            }
+        if let Some(implied) = implied {
+            let n = implied.len().min(bm.len());
+            bm[..n].copy_from_slice(&implied[..n]);
         }
         for i in 0..len {
             let bit = bit_start as u64 + i;
@@ -4644,7 +4625,7 @@ impl Filesystem {
         // inode exactly as it was rather than half-updated.
         for (update, _, extra) in fields {
             if let TimeUpdate::Set(sec, _) = update {
-                if crate::inode::encode_extra_time(sec).1 != 0 && extra.is_none() {
+                if crate::inode::pack_seconds(sec).1 != 0 && extra.is_none() {
                     return Err(Error::InvalidArgument(
                         "timestamp past 2038 needs an *_extra field this inode is too small to hold",
                     ));
@@ -4656,7 +4637,7 @@ impl Filesystem {
             let TimeUpdate::Set(sec, nsec) = update else {
                 continue;
             };
-            let (base, epoch) = crate::inode::encode_extra_time(sec);
+            let (base, epoch) = crate::inode::pack_seconds(sec);
             raw[base_off..base_off + 4].copy_from_slice(&base.to_le_bytes());
             if let Some(off) = extra {
                 let packed = pack_nsec_lo(nsec) | epoch;
@@ -6197,43 +6178,59 @@ impl Filesystem {
         Ok(())
     }
 
-    /// Whether logical block `logical` of directory `dir` is an htree index
-    /// block (the dx_root, or a dx_node) rather than a block of entries.
+    /// What logical block `logical` of directory `dir` holds: part of the
+    /// hash-tree index, or directory entries.
     ///
-    /// The kernel's rule in `__ext4_read_dirblock`: in an indexed directory,
-    /// block 0 is the root, and a block whose first record is an empty entry
-    /// spanning the whole block is a node. Nothing at the END of the block
-    /// decides it. A kernel-grown dx_root keeps the bytes of the dirent tail
-    /// the directory had before it was indexed, so it ends in what looks
-    /// exactly like one (#233).
-    pub(crate) fn is_htree_index_block(dir: &Inode, logical: u64, block: &[u8]) -> bool {
-        if dir.flags & crate::inode::InodeFlags::INDEX.bits() == 0 || block.len() < 8 {
-            return false;
+    /// directory.html ("Hash Tree Directories"): in a directory with the
+    /// INDEX flag the root of the tree always occupies the first data
+    /// block, and every interior node is disguised as one unused entry
+    /// (inode 0) whose record length is the whole block, so a reader
+    /// that scans entries sees nothing there. Leaves are ordinary entry
+    /// blocks. Nothing at the end of a block takes part: a root the kernel
+    /// grew from a linear directory keeps the old block's final twelve
+    /// bytes, which look exactly like an entry-block checksum tail (#233).
+    pub(crate) fn dir_block_role(dir: &Inode, logical: u64, block: &[u8]) -> DirBlockRole {
+        let indexed = dir.flags & crate::inode::InodeFlags::INDEX.bits() != 0;
+        if !indexed || block.len() < 8 {
+            return DirBlockRole::Entries;
         }
-        let first_inode = u32::from_le_bytes(block[0..4].try_into().unwrap());
-        let first_len = u16::from_le_bytes(block[4..6].try_into().unwrap()) as usize;
-        logical == 0 || (first_inode == 0 && first_len == block.len())
+        if logical == 0 {
+            return DirBlockRole::IndexRoot;
+        }
+        let leading_inode = u32::from_le_bytes([block[0], block[1], block[2], block[3]]);
+        let leading_span = usize::from(u16::from_le_bytes([block[4], block[5]]));
+        if leading_inode == 0 && leading_span == block.len() {
+            DirBlockRole::IndexNode
+        } else {
+            DirBlockRole::Entries
+        }
     }
 
-    /// Refuse a directory block whose tail checksum does not verify, before
-    /// anything reads entries out of it.
+    /// Whether [`Self::dir_block_role`] puts the block in the index.
+    pub(crate) fn is_htree_index_block(dir: &Inode, logical: u64, block: &[u8]) -> bool {
+        Self::dir_block_role(dir, logical, block) != DirBlockRole::Entries
+    }
+
+    /// Refuse a directory block whose checksum does not verify, before
+    /// anything reads entries out of it to edit them.
     ///
-    /// THE WRITE ENGINE WALKS BLOCKS WITH `DirBlockIter`, WHICH TAKES NO
-    /// `Checksummer`. The read path goes through `dir::parse_block_verified`,
-    /// which does; the three scans in this file that find the entry a
-    /// mutation is about to edit did not. So on a `metadata_csum` volume a
-    /// corrupt directory block was refused by `stat` and accepted by
-    /// `unlink`, `rename`, `mkdir`, `rmdir`, `link`, `chmod` and the rest.
+    /// The write paths walk blocks with `DirBlockIter`, which knows nothing
+    /// of checksums, and then re-stamp the block's tail after the edit; a
+    /// corrupt block verified nowhere would come out of `unlink`, `rename`,
+    /// `mkdir`, `link` and the rest with a fresh, valid checksum over the
+    /// damage. This is the check they make first. It verifies exactly
+    /// what `dir::parse_block_verified` does on the read path.
     ///
-    /// AND THE EDIT RE-STAMPED IT. Every one of those paths calls
-    /// `patch_dir_entry_tail` after editing the block, computing a fresh and
-    /// correct CRC32C over the corrupted contents — so before the write the
-    /// damage was detectable and after it, nothing in this crate could see
-    /// it. The defect destroyed the evidence of what it had failed to check.
-    ///
-    /// Same predicate as `dir::parse_block_verified` (`dir.rs`), deliberately:
-    /// `csum.enabled` AND a recognisable tail. A volume without the feature,
-    /// and a block predating the tail, are both parsed exactly as before.
+    /// By role:
+    /// - the index root carries the index's own checksum, and is verified
+    ///   as an index (#233: read as an entry block, a kernel-grown root's
+    ///   leftover tail bytes made every create in it fail);
+    /// - an interior node is not verified here. Its shape is also the
+    ///   shape of a tail-less leaf that begins with one empty entry, so it
+    ///   is left to the tree walk, which verifies real nodes as it
+    ///   descends;
+    /// - an entry block is verified when the volume has `metadata_csum` and
+    ///   the block carries a tail. A block without one is left as it is.
     fn refuse_unverified_dir_block(
         &self,
         ino: u32,
@@ -6241,27 +6238,10 @@ impl Filesystem {
         logical: u64,
         block: &[u8],
     ) -> Result<()> {
-        // AN INDEX BLOCK IS VERIFIED AS ONE (#233). An htree directory's
-        // block 0 is its dx_root and a block whose first record is an empty
-        // entry spanning the whole block is a dx_node, and their checksum is
-        // the dx_tail's. The kernel's __ext4_read_dirblock tells them apart
-        // this way. The dirent-tail test alone does not: when the kernel
-        // turns a linear directory into an index it keeps the old tail's
-        // bytes in dt_reserved, so a kernel-grown dx_root ENDS in what looks
-        // exactly like a dirent tail, whose "checksum" is the index's. Every
-        // create in such a directory was refused as a bad directory block.
-        if Self::is_htree_index_block(dir, logical, block) {
-            // Only the root is verified as an index here. A node is known by
-            // its shape alone, and a leaf with no dirent tail whose first
-            // record is an empty entry spanning the block has the same shape,
-            // so the kernel does not verify a node-shaped block a linear scan
-            // reads either (`__ext4_read_dirblock` with `DIRENT`). The
-            // htree walk verifies real nodes as it descends (CodeRabbit on
-            // #256).
-            if logical == 0 {
-                return self.check_dx_block(ino, dir, block, true);
-            }
-            return Ok(());
+        match Self::dir_block_role(dir, logical, block) {
+            DirBlockRole::IndexRoot => return self.check_dx_block(ino, dir, block, true),
+            DirBlockRole::IndexNode => return Ok(()),
+            DirBlockRole::Entries => {}
         }
         if self.csum.enabled
             && crate::dir::has_csum_tail(block)
@@ -12381,6 +12361,208 @@ mod tests {
                     .collect();
             want.sort();
             assert_eq!(listed, want);
+        }
+    }
+}
+
+/// [`Filesystem::dir_block_role`] against indexed directories the kernel
+/// and debugfs built.
+#[cfg(test)]
+mod dir_block_role_tests {
+    use super::{DirBlockRole, Filesystem};
+    use crate::inode::{Inode, InodeFlags};
+
+    fn dir(indexed: bool) -> Inode {
+        let mut raw = vec![0u8; 256];
+        raw[0..2].copy_from_slice(&0x41EDu16.to_le_bytes());
+        if indexed {
+            raw[0x20..0x24].copy_from_slice(&InodeFlags::INDEX.bits().to_le_bytes());
+        }
+        Inode::parse(&raw).unwrap()
+    }
+
+    fn block_starting_with(inode: u32, span: u16) -> Vec<u8> {
+        let mut block = vec![0u8; 1024];
+        block[0..4].copy_from_slice(&inode.to_le_bytes());
+        block[4..6].copy_from_slice(&span.to_le_bytes());
+        block
+    }
+
+    #[test]
+    fn roles_follow_the_documented_shapes() {
+        let node = block_starting_with(0, 1024);
+        let leaf = block_starting_with(12, 16);
+        let empty_leaf_start = block_starting_with(0, 16);
+        let role = Filesystem::dir_block_role;
+        assert_eq!(role(&dir(true), 0, &leaf), DirBlockRole::IndexRoot);
+        assert_eq!(role(&dir(true), 3, &node), DirBlockRole::IndexNode);
+        assert_eq!(role(&dir(true), 3, &leaf), DirBlockRole::Entries);
+        assert_eq!(
+            role(&dir(true), 3, &empty_leaf_start),
+            DirBlockRole::Entries
+        );
+        // Without the INDEX flag nothing is index, whatever it looks like.
+        assert_eq!(role(&dir(false), 0, &node), DirBlockRole::Entries);
+        assert_eq!(role(&dir(false), 3, &node), DirBlockRole::Entries);
+    }
+
+    /// Tests that ask the kernel and debugfs in the harness VM.
+    mod needs_host {
+        use super::super::{DirBlockRole, Filesystem};
+        use crate::block_io::FileDevice;
+        use std::collections::BTreeSet;
+        use std::sync::Arc;
+
+        /// `(interior node blocks, leaf blocks)` of `path`, from `debugfs
+        /// htree`: the root's map names the nodes when the tree has an
+        /// indirect level, and every leaf is announced as it is read.
+        fn debugfs_tree(image: &str, path: &str) -> (BTreeSet<u64>, BTreeSet<u64>) {
+            let out = fs_ext4_test_support::oracle("debugfs")
+                .args(["-R", &format!("htree {path}"), image])
+                .output();
+            let text = String::from_utf8_lossy(&out.stdout).into_owned();
+            let levels: u32 = text
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("Indirect levels: "))
+                .unwrap_or_else(|| panic!("{path} is not indexed:\n{text}"))
+                .trim()
+                .parse()
+                .unwrap();
+            assert_eq!(
+                levels, 1,
+                "{path}: the fixture should have one interior level"
+            );
+            let block_of = |l: &str| -> Option<u64> {
+                l.split("block ")
+                    .nth(1)?
+                    .split(|c: char| !c.is_ascii_digit())
+                    .next()?
+                    .parse()
+                    .ok()
+            };
+            // The root's own map comes first, up to the first blank line.
+            let root_map: BTreeSet<u64> = text
+                .lines()
+                .skip_while(|l| !l.starts_with("Entry #"))
+                .take_while(|l| !l.trim().is_empty())
+                .filter_map(block_of)
+                .collect();
+            let leaves: BTreeSet<u64> = text
+                .lines()
+                .filter(|l| l.starts_with("Reading directory block "))
+                .filter_map(|l| l.trim_start_matches("Reading directory ").split(',').next())
+                .filter_map(block_of)
+                .collect();
+            (root_map, leaves)
+        }
+
+        fn classify(built_by: &str, image: &str) {
+            let (nodes, leaves) = debugfs_tree(image, "/d");
+            assert!(
+                nodes.len() >= 2 && leaves.len() > 100,
+                "[{built_by}] tree too small"
+            );
+            let fs = Filesystem::mount(Arc::new(FileDevice::open(image).unwrap())).unwrap();
+            let ino = fs.lookup_path_bytes(b"/d").unwrap();
+            let (inode, _) = fs.read_inode_verified(ino).unwrap();
+            let bytes = crate::file_io::read_all(&fs, &inode).unwrap();
+            let bs = fs.sb.block_size() as usize;
+            let mut seen = (0, 0, 0);
+            for (logical, block) in bytes.chunks(bs).enumerate() {
+                let logical = logical as u64;
+                let want = if logical == 0 {
+                    seen.0 += 1;
+                    DirBlockRole::IndexRoot
+                } else if nodes.contains(&logical) {
+                    seen.1 += 1;
+                    DirBlockRole::IndexNode
+                } else {
+                    assert!(leaves.contains(&logical), "[{built_by}] block {logical}");
+                    seen.2 += 1;
+                    DirBlockRole::Entries
+                };
+                assert_eq!(
+                    Filesystem::dir_block_role(&inode, logical, block),
+                    want,
+                    "[{built_by}] logical block {logical}"
+                );
+                // And the pre-edit check passes every block of a clean tree.
+                fs.refuse_unverified_dir_block(ino, &inode, logical, block)
+                    .unwrap_or_else(|e| panic!("[{built_by}] block {logical}: {e:?}"));
+            }
+            assert_eq!(seen, (1, nodes.len(), leaves.len()), "[{built_by}]");
+            drop(fs);
+
+            // Edits that walk the blocks go through, and e2fsck agrees.
+            {
+                let fs = Filesystem::mount(Arc::new(FileDevice::open_rw(image).unwrap())).unwrap();
+                fs.apply_create("/d/added", 0o644).unwrap();
+                fs.apply_unlink(&format!("/d/{}", name(7))).unwrap();
+            }
+            fs_ext4_test_support::assert_e2fsck_clean(image, built_by);
+        }
+
+        fn name(i: usize) -> String {
+            format!("entry_{i:04}_{}", "n".repeat(180))
+        }
+
+        fn volume(tag: &str, source: Option<&str>) -> String {
+            let image = fs_ext4_test_support::temp_path!(
+                "fs_ext4_dx_role_{tag}_{}.img",
+                std::process::id()
+            );
+            std::fs::File::create(&image)
+                .and_then(|f| f.set_len(32 << 20))
+                .unwrap();
+            let mut mkfs =
+                fs_ext4_test_support::oracle("mkfs.ext4").args(["-q", "-F", "-b", "1024"]);
+            if let Some(dir) = source {
+                mkfs = mkfs.args(["-d", dir]);
+            }
+            let out = mkfs.arg(&image).output();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            image
+        }
+
+        /// The kernel grows `/d` from a linear directory into a two-level
+        /// tree as the entries arrive.
+        #[test]
+        fn a_kernel_grown_tree_is_classified_as_debugfs_reads_it() {
+            let image = volume("kernel", None);
+            let script = format!(
+                "mkdir \"$MNT/d\"\ncd \"$MNT/d\"\nfor i in $(seq 0 699); do : > \"$(printf 'entry_%04d_' $i){}\"; done\nsync\n",
+                "n".repeat(180)
+            );
+            let out = fs_ext4_test_support::guest_kernel_write(&image, &script);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            classify("kernel", &image);
+            let _ = std::fs::remove_file(&image);
+        }
+
+        /// e2fsck rebuilds `/d`, written linear by mkfs.ext4 -d, as an index.
+        #[test]
+        fn an_e2fsck_built_tree_is_classified_as_debugfs_reads_it() {
+            let root =
+                fs_ext4_test_support::temp_path!("fs_ext4_dx_role_src_{}", std::process::id());
+            std::fs::create_dir_all(format!("{root}/d")).unwrap();
+            for i in 0..700 {
+                std::fs::write(format!("{root}/d/{}", name(i)), b"").unwrap();
+            }
+            let image = volume("e2fsck", Some(&root));
+            let _ = fs_ext4_test_support::oracle("e2fsck")
+                .args(["-fyD", &image])
+                .judged();
+            classify("e2fsck -D", &image);
+            let _ = std::fs::remove_dir_all(&root);
+            let _ = std::fs::remove_file(&image);
         }
     }
 }
