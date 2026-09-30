@@ -8,10 +8,19 @@
 //! `tune2fs -L`, and the backup superblock of both is read with
 //! `dumpe2fs -o superblock=`: the driver's write matches the tool's, backup
 //! included. `tests/volume_label.rs` checks the same write from the bytes.
+//!
+//! A label of all 16 bytes, set by `tune2fs -L`, is the one the C ABI's
+//! `fs_ext4_get_volume_info` reports, byte for byte as `dumpe2fs` reads it
+//! (#463).
 
 use fs_ext4::block_io::FileDevice;
+use fs_ext4::capi::{
+    fs_ext4_get_volume_info, fs_ext4_mount, fs_ext4_umount, fs_ext4_volume_info_t,
+};
 use fs_ext4::fs::Filesystem;
 use fs_ext4_test_support::{assert_e2fsck_clean, oracle, temp_path};
+use std::ffi::{CStr, CString};
+use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 fn run(tool: &str, args: &[&str], tag: &str) -> String {
@@ -125,4 +134,34 @@ fn ext3_4k_blocks() {
 #[test]
 fn ext2_1k_blocks() {
     matches_tune2fs("ext2_1k", "ext2", 1024, 32 << 20);
+}
+
+#[test]
+fn a_sixteen_byte_label_tune2fs_sets_is_reported_whole() {
+    let tag = "sixteen";
+    let image = mke2fs(tag, "tune2fs", "ext4", 4096, 32 << 20);
+    run("tune2fs", &["-L", "0123456789abcdef", &image], tag);
+    assert_eq!(
+        label(&image, None, tag),
+        "0123456789abcdef",
+        "[{tag}] dumpe2fs"
+    );
+
+    let path = CString::new(image.as_str()).unwrap();
+    let fs = unsafe { fs_ext4_mount(path.as_ptr()) };
+    assert!(!fs.is_null(), "[{tag}] mount");
+    let mut info = MaybeUninit::<fs_ext4_volume_info_t>::uninit();
+    assert_eq!(unsafe { fs_ext4_get_volume_info(fs, info.as_mut_ptr()) }, 0);
+    let info = unsafe { info.assume_init() };
+    unsafe { fs_ext4_umount(fs) };
+    let ours = unsafe { CStr::from_ptr(info.volume_name.as_ptr()) }
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(
+        ours,
+        label(&image, None, tag),
+        "[{tag}] the C ABI, then dumpe2fs"
+    );
+
+    let _ = std::fs::remove_file(&image);
 }

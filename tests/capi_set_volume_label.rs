@@ -1,7 +1,8 @@
 //! `fs_ext4_set_volume_label` (#447): the label it sets is the one
 //! `fs_ext4_get_volume_info` reports, on the same handle and after a
 //! remount; a label longer than 16 bytes is EINVAL and a read-only mount is
-//! EROFS, and neither changes the label.
+//! EROFS, and neither changes the label. A label of all 16 bytes, which has
+//! no terminator on disk, is reported whole (#463).
 
 use fs_ext4::block_io::{BlockDevice, FileDevice};
 use fs_ext4::capi::*;
@@ -64,6 +65,22 @@ fn the_label_set_is_the_label_reported() {
     unsafe { fs_ext4_umount(fs) };
 
     assert_eq!(label_after_remount(&img), "after");
+    let _ = std::fs::remove_file(img.to_str().unwrap());
+}
+
+#[test]
+fn a_sixteen_byte_label_is_reported_whole() {
+    // s_volume_name is 16 bytes and a label that fills it has no NUL on disk,
+    // so a volume_name of 16 bytes held 15 of them and the terminator (#463).
+    let img = formatted("sixteen");
+    let fs = unsafe { fs_ext4_mount_rw(img.as_ptr()) };
+    assert!(!fs.is_null());
+    let full = CString::new("0123456789abcdef").unwrap();
+    assert_eq!(unsafe { fs_ext4_set_volume_label(fs, full.as_ptr()) }, 0);
+    assert_eq!(label_of(fs), "0123456789abcdef", "the same handle");
+    unsafe { fs_ext4_umount(fs) };
+
+    assert_eq!(label_after_remount(&img), "0123456789abcdef");
     let _ = std::fs::remove_file(img.to_str().unwrap());
 }
 
