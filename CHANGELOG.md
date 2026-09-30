@@ -19,7 +19,9 @@
   2,900/232,000 → 3,800/295,000 and `vm` 3,050/148,000 → 3,900/193,000,
   from CI run 36692879573, where the lost+found oracle put them at
   2,920/226,413 and 2,972/148,017 and both tiers failed with exit 65 and
-  nothing red inside them.
+  nothing red inside them. The whole-suite `test:native` row follows,
+  2,900/140,000 → 3,700/183,000, from CI run 36701295909, which put it at
+  2,827/140,724 on the same exit 65.
 
 ## [0.6.0] — 2026-09-30
 
