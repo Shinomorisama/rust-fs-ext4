@@ -136,8 +136,17 @@ Not caught by the compiler — the same source builds and behaves differently:
     argument definitions (`rust-fs-ext4 generate man|completions SHARE`),
     so they cannot describe a flag the tools do not take. `chore
     cli:install` stages them in `tmp/cli/share`.
-  - The `mkfs_ext4` target is unchanged for now; it is retired when the
-    release packages the multi-call binary.
+  - **The `mkfs_ext4` cargo target is retired**: it is the `mkfs` arm of
+    `rust-fs-ext4`. `cargo install am-fs-ext4` users get `rust-fs-ext4`
+    (with `--features cli`) and link `mkfs.ext4` to it, or run
+    `rust-fs-ext4 mkfs`.
+  - **The release tarball is the multi-call binary as an install prefix**:
+    `bin/rust-fs-ext4` with `mkfs.ext4`, `fsck.ext4` and `fs.ext4` as
+    relative symlinks to it, the man pages and zsh, bash and fish
+    completions under `share/`, a four-line `share/rust-fs-ext4/CAVEATS`
+    (which points at `rust-fs-ext4 doctor`), and `LICENSE`.
+    `scripts/package-cli.sh` builds and checks it in the release and in
+    CI's `cli` job on every pull request.
 - **Content writes to inline-data files** (#428). pwrite, replace and
   truncate, through paths and through inode numbers, now write an inline
   file instead of refusing it with `Unsupported` (#383). A write whose

@@ -538,7 +538,7 @@ Standard cargo:
 cargo build --release
 # produces target/release/libfs_ext4.a (static lib for FFI consumers)
 #         + target/release/libfs_ext4.rlib
-#         + target/release/mkfs_ext4 (the standalone formatter binary)
+#         + target/release/rust-fs-ext4 with --features cli (the tools)
 ```
 
 Cross-compile to a specific target the usual way:

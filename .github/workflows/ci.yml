@@ -44,7 +44,8 @@ name: CI
 #   cli          `chore cli:install` then `chore test:cli`: the command-line
 #                tools built in release mode, staged under every name first
 #                on PATH, and tested AS INSTALLED -- `rust-fs-ext4 doctor`
-#                first, then tests/cli/*.sh. A change that breaks a tool
+#                first, then tests/cli/*.sh. It also packages the release
+#                tarball with scripts/package-cli.sh, which checks its layout. A change that breaks a tool
 #                fails the pull request, not the release. No VM: what
 #                e2fsprogs makes of the tools' output is judged in the
 #                oracle tier (tests/cli_*_oracle.rs).
@@ -489,6 +490,19 @@ jobs:
         run: chore cli:install
       # FIRST on PATH, ahead of the runner's own /usr/sbin/mkfs.ext4 and
       # fsck.ext4 -- which doctor then reports as present and not run.
+      # THE RELEASE TARBALL, put together on every pull request by the script
+      # release.yml uses, and checked by it: every path of the install-prefix
+      # layout, each dotted name a relative symlink to bin/rust-fs-ext4, every
+      # man page and completion, CAVEATS at most four lines, and every name
+      # answering --version as this crate. So a release is not the first time
+      # the tarball is made.
+      - name: The release tarball's layout
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          mkdir -p tmp/tarball
+          cd tmp/tarball
+          "$GITHUB_WORKSPACE/scripts/package-cli.sh" "$version" linux-x86_64 "$GITHUB_WORKSPACE/target/release"
       - name: The staged tools first on PATH
         run: scripts/cli-install.sh --print-bin-dir >> "$GITHUB_PATH"
       - name: chore test:cli
