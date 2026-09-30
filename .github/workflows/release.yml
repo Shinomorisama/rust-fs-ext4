@@ -56,10 +56,13 @@ jobs:
           toolchain: 1.95.0
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: chore tools
-        run: chore tools
+      # The VM host first: `chore tools` fails a Linux host without
+      # Vagrant, QEMU and /dev/kvm, and this is the step that installs
+      # them (tests/scripts/test-vm-host-before-tools.sh).
       - name: KVM, QEMU and Vagrant
         run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: chore tools
+        run: chore tools
       - name: chore fixtures
         run: chore fixtures
       - name: chore lint
