@@ -376,6 +376,35 @@ ticked. Numbering follows the plan doc.
 
 Highlights from the last 50 commits, grouped by date.
 
+### 2026-09-30 — 0.6.0 — the provenance remediation, and the tools as one binary
+
+- **Provenance.** `PROVENANCE.md` records where the code comes from and
+  the 2026-09-29 audit. `src/hash.rs` is re-implemented clean-room; the
+  inode timestamp helpers and five format-driven routines are restated and
+  checked against e2fsprogs and a Linux kernel in the harness VM; and a CI
+  check fails when the tree names kernel or e2fsprogs internals. Every
+  earlier release on crates.io, 0.3.2 to 0.5.1, contains htree hash code
+  derived from the Linux kernel; the claim that no code derives from GPL,
+  LGPL or AGPL source holds from 0.6.0.
+- **Breaking:** `XattrEntry` and `Error` are `#[non_exhaustive]` and gained
+  fields and a variant, and `fsck::Anomaly` is `#[non_exhaustive]` too;
+  `fs_ext4_readlink` returns the target's length;
+  `Runtime::now_unix_seconds` returns `i64`;
+  `casefold::casefold_name_hash` takes the directory's hash version and
+  returns the hash a casefolded directory uses (#438). `chore check:semver`
+  now refuses a public-API break the version does not declare.
+- A major hash of `0xFFFFFFFE`, which the directory index reserves, is
+  given as `0xFFFFFFFC`.
+- The command-line tools are one multi-call binary, `rust-fs-ext4`, behind
+  the `cli` feature: `mkfs.ext4`, an `fs.ext4` that lists, reads and writes
+  an image without mounting it, and an `fsck.ext4` with fsck(8)'s exit
+  statuses. The binary writes its own man pages and shell completions.
+- Inline-data files and directories are written, not refused; the parsers
+  are fuzzed; and the driver's writes are read back by a real Linux kernel.
+- Dozens of format fixes: extent trees, htree splits, xattr placement,
+  journal replay, group descriptor counters, link counts and timestamps
+  past 2038. See [CHANGELOG.md](CHANGELOG.md#060--2026-09-30).
+
 ### 2026-09-06 — 0.5.1 — what the image says is checked before it is believed
 
 - A journal entry that names a block outside the filesystem is refused
