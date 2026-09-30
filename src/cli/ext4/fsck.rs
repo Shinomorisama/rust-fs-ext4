@@ -364,6 +364,12 @@ fn finding(a: &Anomaly) -> Json {
             ("block", (*logical_block).into()),
             ("htree", (*htree).into()),
         ],
+        // The enum is non_exhaustive: a finding this tool does not name
+        // yet is still reported, with the library's own description.
+        other => vec![
+            ("kind", "other".into()),
+            ("detail", format!("{other:?}").into()),
+        ],
     };
     Json::object(pairs)
 }

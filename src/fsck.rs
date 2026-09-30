@@ -39,7 +39,11 @@ use std::time::Duration;
 
 /// One problem found by [`audit`]. Each variant carries the inode or
 /// path needed to act on the finding.
+///
+/// `#[non_exhaustive]`: the audit learns new findings, and a `match` on
+/// this outside the crate needs a `_` arm so a new one does not break it.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Anomaly {
     /// A directory entry references an inode whose `i_links_count` is
     /// *less than* the observed reference count. Stored value is too

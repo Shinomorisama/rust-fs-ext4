@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-30
+
 ### Breaking
 
-The next release is **0.6.0**, not 0.5.2: each change below breaks code
+This release is **0.6.0**, not 0.5.2: each change below breaks code
 written against 0.5.1 (#120). `chore check:semver` now refuses a pull request
 whose public-API break the version does not declare (see Added).
 
@@ -18,6 +20,9 @@ Source-breaking, each caught by the compiler downstream:
 - **`Error` gained `Unsupported(&'static str)`** (#101), and is now
   `#[non_exhaustive]`: a `match` on it outside this crate needs a `_` arm,
   and later variants will not break it again.
+- **`fsck::Anomaly` is `#[non_exhaustive]`**, for the same reason: the
+  audit learns new findings (#445 is the next), and a `match` on it outside
+  this crate needs a `_` arm.
 - `ea_inode::read_value_inode` takes the size the entry declared as a third
   argument, and refuses a body that does not match it (#121).
 - `journal::ReplayPlan` gained `next_sequence: Option<u32>` (#146).
