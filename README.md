@@ -140,6 +140,7 @@ fs.ext4 disk.img read /etc/fstab > fstab
 fs.ext4 disk.img write /notes.txt < notes.txt
 fs.ext4 disk.img mkdir /backup
 fs.ext4 disk.img get label --text
+fs.ext4 disk.img set label ARCHIVE
 fs.ext4 --offset 1048576 whole-disk.img info
 tar cf - ./dir | fs.ext4 disk.img write /dir.tar
 rust-fs-ext4 doctor                        # is every tool on PATH ours?
@@ -153,8 +154,9 @@ rust-fs-ext4 doctor                        # is every tool on PATH ours?
   operational error, 16 usage.
 - **`get`/`info`** report `fs`, `label`, `total_bytes`, `free_bytes`,
   `block_size` and `dirty`, with ext4's own fields under `ext4`.
-- **Not yet:** `set label` answers `not implemented` until the library has
-  a label writer (#447); `resize` does too, and no resize is planned.
+- **`set label <value>`** rewrites the label, at most 16 bytes, in the
+  primary superblock and every backup; an empty value clears it.
+- **Not yet:** `resize` answers `not implemented`, and no resize is planned.
   `fsck.ext4` checks this crate's audit, a subset of e2fsck's; a directory
   it cannot read is a finding it cannot repair (#445).
 - **`--version`** on every name prints `<tool> (am-fs-ext4) <version>`.

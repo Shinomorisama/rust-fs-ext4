@@ -409,6 +409,24 @@ int fs_ext4_fresh_read(fs_ext4_fs_t *fs);
 int fs_ext4_get_volume_info(fs_ext4_fs_t *fs,
                                 fs_ext4_volume_info_t *info);
 
+/*
+ * Set the volume label (s_volume_name) to the NUL-terminated `label`: at
+ * most 16 bytes, stored NUL-padded, so a 16-byte label has no terminator on
+ * disk. An empty string clears it. Written to the primary superblock and to
+ * every backup the volume's layout places, each with its checksum restamped
+ * on a metadata_csum volume, as `tune2fs -L` does.
+ *
+ * NOT concurrent: the caller must serialise -- no other call on this handle
+ * may be in flight. fs_ext4_get_volume_info() reports the new label
+ * afterwards (its volume_name holds 15 bytes and a NUL, so a 16-byte label
+ * reads back without its last byte).
+ *
+ * Returns 0 on success, -1 on failure with fs_ext4_last_error() /
+ * fs_ext4_last_errno() set: EINVAL for a label longer than 16 bytes,
+ * EROFS on a read-only mount.
+ */
+int fs_ext4_set_volume_label(fs_ext4_fs_t *fs, const char *label);
+
 /* ---- File attributes ---- */
 
 /*

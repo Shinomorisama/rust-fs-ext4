@@ -148,13 +148,14 @@ fn command() -> Cmd {
         ))
         .subcommand(
             Cmd::new("set")
-                .about("Change a property (label: not implemented yet)")
+                .about("Change a property: the label is the one that can be set")
                 .arg(Arg::new("key").value_name("KEY").required(true))
                 .arg(Arg::new("value").value_name("VALUE").required(true))
                 .after_help(
-                    "Examples:\n  fs.ext4 disk.img set label BACKUP\n\n\
-                     Answers `not implemented` (exit 3) until the library can write the \
-                     label.",
+                    "Examples:\n  fs.ext4 disk.img set label BACKUP\n  \
+                     fs.ext4 disk.img set label ''\n\n\
+                     The label is at most 16 bytes; an empty one clears it. It is written \
+                     to the primary superblock and to every backup.",
                 ),
         )
         .subcommand(
@@ -215,7 +216,7 @@ fn run(matches: &ArgMatches) -> Result<Outcome, CliError> {
             &open(target, offset)?,
             sub.get_one::<String>("key").map(String::as_str),
         ),
-        "set" => set(sub),
+        "set" => set(target, offset, sub),
         "resize" => Err(CliError::not_implemented(
             "resize: this library cannot resize an ext4 filesystem",
         )),
@@ -537,12 +538,21 @@ fn get(fs: &Filesystem, key: Option<&str>) -> Result<Outcome, CliError> {
     Ok(Outcome::report(Json::object([(key, value.clone())])).with_text(text))
 }
 
-fn set(sub: &ArgMatches) -> Result<Outcome, CliError> {
+fn set(target: &OsString, offset: u64, sub: &ArgMatches) -> Result<Outcome, CliError> {
     let key = sub.get_one::<String>("key").expect("clap requires the key");
     match key.as_str() {
-        "label" => Err(CliError::not_implemented(
-            "set label: this library has no writer for the ext4 volume label yet",
-        )),
+        "label" => {
+            let value = sub
+                .get_one::<String>("value")
+                .expect("clap requires the value");
+            let mut fs = super::device::mount(target, offset, true)?;
+            fs.set_volume_label(value.as_bytes())
+                .map_err(|e| CliError::failed(format!("set label: {e}")))?;
+            fs.finish()
+                .map_err(|e| CliError::failed(format!("set label: finishing the write: {e}")))?;
+            let report = Json::object([("label", Json::from(value.as_str()))]);
+            Ok(Outcome::report(report).with_text(format!("label set to {value:?}")))
+        }
         k if KEYS.contains(&k) || k.starts_with("ext4.") => {
             Err(CliError::refused(format!("{k} is read-only")))
         }
