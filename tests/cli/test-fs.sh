@@ -1,6 +1,6 @@
 # fs.ext4's read verbs on an image our own mkfs.ext4 makes: ls, read,
-# get/info with the canonical keys and their types, the verbs that answer
-# `not implemented`, and structured errors with nothing on stdout.
+# get/info with the canonical keys and their types, set label, the verb that
+# answers `not implemented`, and structured errors with nothing on stdout.
 source "$(dirname "$0")/lib.sh"
 
 img="$SANDBOX/fs.img"
@@ -38,14 +38,19 @@ check "get label --text is CLITEST" test "$(fs.ext4 "$img" get label --text)" = 
 check "get ext4.uuid --text is a UUID" \
     grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$(fs.ext4 "$img" get ext4.uuid --text)"
 
-# Verbs the library cannot do yet: status 3, `not implemented`, nothing on stdout.
-for verb in "set label X" "resize 128M"; do
-    # shellcheck disable=SC2086  # the words are the point
-    fs.ext4 "$img" $verb >"$SANDBOX/ni.out" 2>"$SANDBOX/ni.err"
-    check "$verb exits 3" test $? -eq 3
-    check "$verb prints nothing on stdout" test ! -s "$SANDBOX/ni.out"
-    jq_check "$verb says not implemented" '.code == 3 and (.error | startswith("not implemented"))' "$SANDBOX/ni.err"
-done
+# set label rewrites the label, and get reads the new one back.
+fs.ext4 "$img" set label RELABELLED >"$SANDBOX/set.json" 2>/dev/null
+check "set label exits 0" test $? -eq 0
+jq_check "set label reports the new label" '. == {"label": "RELABELLED"}' "$SANDBOX/set.json"
+check "get label --text is the new label" test "$(fs.ext4 "$img" get label --text)" = RELABELLED
+fs.ext4 "$img" set label CLITEST >/dev/null 2>&1
+check "set label puts the old label back" test "$(fs.ext4 "$img" get label --text)" = CLITEST
+
+# A verb the library cannot do: status 3, `not implemented`, nothing on stdout.
+fs.ext4 "$img" resize 128M >"$SANDBOX/ni.out" 2>"$SANDBOX/ni.err"
+check "resize exits 3" test $? -eq 3
+check "resize prints nothing on stdout" test ! -s "$SANDBOX/ni.out"
+jq_check "resize says not implemented" '.code == 3 and (.error | startswith("not implemented"))' "$SANDBOX/ni.err"
 
 # Failures: status 1, a structured error, nothing on stdout.
 fs.ext4 "$img" read / >"$SANDBOX/dir.out" 2>"$SANDBOX/dir.err"

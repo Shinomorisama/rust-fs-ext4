@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The volume label can be set after the volume is made (#447).**
+  `Filesystem::set_volume_label` rewrites `s_volume_name` (at most
+  `VOLUME_LABEL_MAX`, 16, bytes, NUL-padded; an empty label clears it) in
+  the primary superblock and in every backup the layout places, in one
+  transaction, restamping each checksum on a metadata_csum volume, as
+  `tune2fs -L` leaves them. `fs_ext4_set_volume_label` exposes it in the C
+  ABI (EINVAL past 16 bytes, EROFS on a read-only mount), and `fs.ext4
+  <image> set label <value>` uses it where it answered `not implemented`.
+  `tests/volume_label_oracle.rs` has `dumpe2fs` read the primary and group
+  1's backup against a `tune2fs -L` twin, and `e2fsck -fn` pass the volume.
+
 ### Fixed
 
 - **A formatted volume has `/lost+found` (#443).** `format_filesystem`

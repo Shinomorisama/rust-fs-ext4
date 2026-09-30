@@ -597,6 +597,10 @@ pub(crate) enum BgdUninitFlag {
 /// one extent.
 const PWRITE_CHUNK_MAX_BYTES: u64 = 32 * 1024 * 1024;
 
+/// The longest volume label [`Filesystem::set_volume_label`] takes: the
+/// 16 bytes of `s_volume_name`.
+pub const VOLUME_LABEL_MAX: usize = 16;
+
 /// Clean blocks the buffer cache of a [`Filesystem::mount`] keeps: about
 /// 1 MiB at 4 KiB blocks. `docs/read-path-cost.md` records what it buys on a
 /// measured tree (#68).
@@ -1099,6 +1103,73 @@ impl Filesystem {
         self.state_found.store(self.sb.state, Ordering::SeqCst);
         self.write_superblock_state(self.sb.state & !crate::superblock::EXT4_VALID_FS)?;
         self.marked_not_clean.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// Set the volume label, `s_volume_name`: the 16 bytes at superblock
+    /// offset 0x78, NUL-padded (#447).
+    ///
+    /// `label` is at most [`VOLUME_LABEL_MAX`] bytes and holds no NUL,
+    /// since the field ends at its first NUL; anything else is
+    /// `InvalidArgument`, and nothing is written. An empty label clears it.
+    /// The label is bytes, as the format stores it: UTF-8 is what tools
+    /// print, not what the format requires.
+    ///
+    /// Written to the primary superblock and to every backup the volume's
+    /// own layout places (the groups [`Superblock::group_has_super`]
+    /// names), each with its checksum restamped on metadata_csum volumes,
+    /// in one transaction. `tune2fs -L` does the same: after it, the
+    /// backup in group 1 carries the new label too, and `e2fsck -fn` passes
+    /// the volume (`tests/volume_label_oracle.rs`). A backup slot that does
+    /// not hold a superblock (no magic) is left as it is.
+    pub fn set_volume_label(&mut self, label: &[u8]) -> Result<()> {
+        if label.len() > VOLUME_LABEL_MAX {
+            return Err(Error::InvalidArgument(
+                "volume label: longer than the 16 bytes s_volume_name holds",
+            ));
+        }
+        if label.contains(&0) {
+            return Err(Error::InvalidArgument(
+                "volume label: a NUL byte would end it early",
+            ));
+        }
+        self.refuse_write()?;
+        let mut field = [0u8; VOLUME_LABEL_MAX];
+        field[..label.len()].copy_from_slice(label);
+
+        let bs = u64::from(self.sb.block_size());
+        let primary = crate::superblock::SUPERBLOCK_OFFSET;
+        let mut buf = BlockBuffer::new(self.sb.block_size());
+        for g in 0..self.sb.block_group_count() {
+            if !self.sb.group_has_super(g) {
+                continue;
+            }
+            // The primary is at byte 1024; a backup opens its group's
+            // first block.
+            let (block, at) = if g == 0 {
+                (primary / bs, (primary % bs) as usize)
+            } else {
+                let start =
+                    u64::from(self.sb.first_data_block) + g * u64::from(self.sb.blocks_per_group);
+                (start, 0)
+            };
+            let bytes = buf.get_mut(self, block)?;
+            let sb = &mut bytes[at..at + crate::superblock::SUPERBLOCK_SIZE];
+            if u16::from_le_bytes([sb[0x38], sb[0x39]]) != crate::superblock::EXT4_MAGIC {
+                continue;
+            }
+            sb[0x78..0x88].copy_from_slice(&field);
+            if self.csum.enabled {
+                let csum = crate::checksum::linux_crc32c(!0, &sb[..0x3FC]);
+                sb[0x3FC..0x400].copy_from_slice(&csum.to_le_bytes());
+            }
+        }
+        self.commit_block_buffer(buf)?;
+
+        if self.sb.raw.len() >= 0x88 {
+            self.sb.raw[0x78..0x88].copy_from_slice(&field);
+        }
+        self.sb.volume_name = String::from_utf8_lossy(label).into_owned();
         Ok(())
     }
 
