@@ -378,6 +378,21 @@ ticked. Numbering follows the plan doc.
 
 Highlights from the last 50 commits, grouped by date.
 
+### 2026-09-30 — 0.7.0 — the volume label, whole and writable
+
+- **Breaking (C ABI):** `fs_ext4_volume_info_t.volume_name` is 17 bytes, so
+  a label that fills `s_volume_name`'s 16 is reported whole; every field
+  after it moves, and C callers rebuild against the new header (#463).
+- The volume label can be set after the volume is made:
+  `Filesystem::set_volume_label` and `fs_ext4_set_volume_label` rewrite the
+  primary superblock and every backup, as `tune2fs -L` does (#447).
+- A formatted volume has `/lost+found`, laid out as `mke2fs` lays it out
+  (#443).
+- The fsck audit reports a directory it cannot read, and `fsck.ext4` exits
+  4, where the volume used to audit clean (#445).
+
+See [CHANGELOG.md](CHANGELOG.md#070--2026-09-30) for the full notes.
+
 ### 2026-09-30 — 0.6.0 — the provenance remediation, and the tools as one binary
 
 - **Provenance.** `PROVENANCE.md` records where the code comes from and
