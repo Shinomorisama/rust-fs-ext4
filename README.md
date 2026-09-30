@@ -155,8 +155,8 @@ rust-fs-ext4 doctor                        # is every tool on PATH ours?
   `block_size` and `dirty`, with ext4's own fields under `ext4`.
 - **Not yet:** `set label` answers `not implemented` until the library has
   a label writer (#447); `resize` does too, and no resize is planned.
-  `fsck.ext4` checks this crate's audit, a subset of e2fsck's, and today
-  skips a directory it cannot read (#445).
+  `fsck.ext4` checks this crate's audit, a subset of e2fsck's; a directory
+  it cannot read is a finding it cannot repair (#445).
 - **`--version`** on every name prints `<tool> (am-fs-ext4) <version>`.
   `rust-fs-ext4 doctor` resolves each name on PATH, checks it answers that
   way, and says what wins and the fix when it does not.

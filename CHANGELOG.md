@@ -12,6 +12,18 @@
   `mke2fs` sizes it (16 KiB of blocks, at least two, at most twelve), on
   every flavour and block size. `tests/mkfs_lost_found_oracle.rs` compares
   it with the one `mke2fs` makes, as `debugfs` reports both.
+- **A directory the audit cannot read is a finding (#445).** The fsck
+  walk noted a directory whose inode did not verify, or whose entries could
+  not be listed, as incomplete and reported nothing, so a volume whose root
+  could not be listed audited clean and `fsck.ext4 -n` exited 0 on it.
+  `fsck::Anomaly::UnreadableDirectory { ino, reason }` now reports it, the
+  C ABI as the finding kind `unreadable_directory`, and `fsck.ext4` exits
+  4. The repair pass leaves it standing: the only repair is clearing the
+  inode and everything beneath it. `tests/fsck_unreadable_dir_oracle.rs`
+  has `e2fsck -fn` call the same volumes damaged. A block-mapped directory
+  (ext2, ext3) is read rather than refused: the walk used to give up on
+  every one of them, so on those volumes it examined nothing below the
+  root and suppressed every link-count finding.
 
 ### Changed
 

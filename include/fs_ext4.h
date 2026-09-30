@@ -933,11 +933,14 @@ typedef void (*fs_ext4_fsck_progress_fn)(void *context,
  * Per-finding callback. `kind` is one of: "link_count_low",
  * "link_count_high", "dangling_entry", "wrong_dotdot", "bogus_entry",
  * "duplicate_dir_inode", "block_group_free_count_drift",
- * "superblock_free_count_drift", "dir_block_checksum". `inode` is the
+ * "superblock_free_count_drift", "dir_block_checksum",
+ * "unreadable_directory". `inode` is the
  * most relevant inode (affected inode for link-count cases; child for
  * dangling_entry and bogus_entry; directory for wrong_dotdot and
  * dir_block_checksum, whose detail names the logical block and whether
- * it is an htree index; duplicated dir inode for
+ * it is an htree index; directory for unreadable_directory, whose inode
+ * or entries could not be read and whose detail names the error;
+ * duplicated dir inode for
  * duplicate_dir_inode; group_index for block_group_free_count_drift;
  * 0 for superblock_free_count_drift — i.e. for the drift kinds the
  * field is overloaded and does not carry an inode number). `detail`

@@ -3362,6 +3362,9 @@ fn anomaly_to_capi(a: &crate::fsck::Anomaly) -> (&'static str, u32, String) {
             dir_ino,
             format!("logical_block={logical_block} htree={}", u8::from(htree)),
         ),
+        Anomaly::UnreadableDirectory { ino, reason } => {
+            ("unreadable_directory", *ino, format!("reason={reason}"))
+        }
     }
 }
 
