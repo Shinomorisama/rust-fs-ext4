@@ -3,8 +3,8 @@
 //! Every writer of the block read it off the device and edited it without
 //! checking what it read: a block without the xattr magic was formatted as
 //! an empty xattr block, and one whose checksum failed was edited and
-//! restamped, blessing the corruption. They now refuse, as the kernel's
-//! `ext4_xattr_check_block` does.
+//! restamped, blessing the corruption. They now refuse, as the kernel
+//! does.
 //!
 //! What only an independent writer can prove is that the check accepts a
 //! GOOD block: a checksum recipe that disagreed with e2fsprogs would refuse

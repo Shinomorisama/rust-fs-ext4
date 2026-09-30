@@ -90,7 +90,7 @@ pub struct JournalSuperblock {
     pub sequence: u32,
     /// Start block of the log. **0 means clean unmount** (nothing to replay).
     pub start: u32,
-    /// Error code set by `jbd2_journal_abort`, 0 if healthy.
+    /// `s_errno`: the error an aborted journal records, 0 if healthy.
     pub errno: u32,
     /// V2-only feature flags (zero on V1 superblocks).
     pub feature_compat: u32,
@@ -206,8 +206,8 @@ impl JournalSuperblock {
         }
     }
 
-    /// `j_csum_seed`: the crc32c of the journal's UUID, from `~0`. Every
-    /// transaction-block checksum starts from it.
+    /// The journal checksum seed: the crc32c of the journal's UUID, from
+    /// `~0`. Every transaction-block checksum starts from it.
     pub fn csum_seed(&self) -> u32 {
         crate::checksum::linux_crc32c(!0, &self.uuid)
     }
@@ -270,8 +270,9 @@ pub const BLOCK_TAIL_BYTES: usize = 4;
 pub const COMMIT_CHECKSUM_AT: usize = 16;
 
 /// A tag's checksum: crc32c of the big-endian transaction sequence then
-/// the journal copy of the block, from the journal's seed
-/// (`jbd2_block_tag_csum_set`). CSUM_V3 stores all 32 bits; CSUM_V2 the
+/// the journal copy of the block, from the journal's seed (the tag's
+/// `t_checksum` in the format documentation). CSUM_V3 stores all 32 bits;
+/// CSUM_V2 the
 /// low 16.
 pub fn tag_checksum(seed: u32, sequence: u32, data: &[u8]) -> u32 {
     let seq = crate::checksum::linux_crc32c(seed, &sequence.to_be_bytes());
@@ -279,8 +280,8 @@ pub fn tag_checksum(seed: u32, sequence: u32, data: &[u8]) -> u32 {
 }
 
 /// A descriptor or revoke block's tail checksum: crc32c of the whole
-/// block with the last four bytes taken as zero
-/// (`jbd2_descriptor_block_csum_set`, `jbd2_revoke_csum_set`).
+/// block with the last four bytes taken as zero (the format
+/// documentation's `jbd2_journal_block_tail` and `r_checksum`).
 pub fn block_tail_checksum(seed: u32, block: &[u8]) -> u32 {
     let body = block.len().saturating_sub(BLOCK_TAIL_BYTES);
     let crc = crate::checksum::linux_crc32c(seed, &block[..body]);
@@ -288,7 +289,7 @@ pub fn block_tail_checksum(seed: u32, block: &[u8]) -> u32 {
 }
 
 /// A commit block's checksum: crc32c of the whole block with `h_chksum[0]`
-/// taken as zero (`jbd2_commit_block_csum_set`).
+/// taken as zero (the format documentation's `h_chksum`).
 pub fn commit_block_checksum(seed: u32, block: &[u8]) -> u32 {
     let at = COMMIT_CHECKSUM_AT;
     let crc = crate::checksum::linux_crc32c(seed, &block[..at]);

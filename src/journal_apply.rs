@@ -83,8 +83,8 @@ fn mark_journal_clean(fs: &Filesystem, jsb: &JournalSuperblock, plan: &ReplayPla
         ));
     }
     // Restart the log one past the first transaction the walk did not find
-    // committed, as the kernel's `jbd2_journal_recover` does
-    // (`++info.end_transaction`): a torn tail may already carry that ID, and
+    // committed, skipping that ID rather than reusing it: a torn tail may
+    // already carry it, and
     // reusing it could let a stale block pass as part of the next transaction.
     // `next_sequence` rather than `last_commit`, whose 0 is also a real ID.
     let sequence = plan.next_sequence.unwrap_or(jsb.sequence).wrapping_add(1);

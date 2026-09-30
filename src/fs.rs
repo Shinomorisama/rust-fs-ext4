@@ -1182,7 +1182,7 @@ impl Filesystem {
     ///
     /// The chain has TWO kinds of member, and they are not distinguished
     /// here — see [`Filesystem::recover_orphans`], which branches on
-    /// `i_links_count` the way `ext4_orphan_cleanup` does. An inode with
+    /// `i_links_count` to tell them apart. An inode with
     /// no links is an unlink-while-open: its blocks and its inode should
     /// be reclaimed. An inode that still has links is a `truncate()` a
     /// crash interrupted: it is still named by its directory entries and
@@ -1221,9 +1221,8 @@ impl Filesystem {
 
     /// The orphan chain as recovery walks it: [`Self::orphan_list`], except
     /// that it stops at a member that is not allocated in the inode bitmap
-    /// and whose `i_dtime` is no longer a link, as the kernel's
-    /// `ext4_orphan_cleanup` stops at a "bad orphan inode" before clearing
-    /// `s_last_orphan`.
+    /// and whose `i_dtime` is no longer a link. The kernel stops at such a
+    /// member too (a "bad orphan inode") and then clears `s_last_orphan`.
     ///
     /// Such a member is an orphan an earlier recovery already reclaimed and
     /// stamped with a deletion time. Following that time as an inode number
@@ -1288,8 +1287,9 @@ impl Filesystem {
     /// # THE CHAIN HAS TWO KINDS OF MEMBER AND THEY GET OPPOSITE
     /// TREATMENT
     ///
-    /// The kernel branches on `i_links_count` in `ext4_orphan_cleanup`,
-    /// and so does this:
+    /// The format documentation ("Orphan file") names both reasons an
+    /// inode is on the chain; `i_links_count` tells them apart, and this
+    /// branches on it:
     ///
     /// - **No links** — an unlink-while-open. Nothing names it any more,
     ///   so its data blocks and its inode-bitmap slot are freed and its
@@ -1666,7 +1666,8 @@ impl Filesystem {
     ///
     /// A target shorter than `i_block` (60 bytes) is a fast symlink, held
     /// inline in `i_block`; a longer one is a slow symlink, held in data
-    /// blocks. That is the boundary the kernel's `ext4_symlink` writes.
+    /// blocks. That is the boundary the format documentation gives
+    /// ("Symbolic Links": inline if the target is less than 60 bytes).
     ///
     /// `Error::InvalidArgument` when the inode is not a symlink,
     /// `Error::Corrupt` when it declares a target longer than any path,
@@ -2379,8 +2380,10 @@ impl Filesystem {
     // writers below refuse it (#382). Each of them hands an inline directory
     // to these instead. An entry is added and removed in the inode while it
     // fits, and a directory whose entries outgrow it is converted to a
-    // one-block directory holding them, in the same transaction, as the
-    // kernel's `ext4_convert_inline_dir` does. Every edit reads the
+    // one-block directory holding them, in the same transaction, which is
+    // what the kernel does with a directory it made inline (the kernel
+    // oracle tier edits those, tests/kernel_inline_writes.rs). Every edit
+    // reads the
     // directory through the open transaction, so a second edit of the same
     // directory in one operation (a rename within it) sees the first.
 
@@ -3848,8 +3851,9 @@ impl Filesystem {
     }
 
     /// Turn an indexed directory back into a linear one, which is what the
-    /// kernel's `ext4_add_entry` does when it cannot insert through the
-    /// index (`dx_fallback`).
+    /// kernel does when it cannot insert through the index: the format keeps
+    /// every htree block readable as a linear directory block, so dropping
+    /// `EXT4_INDEX_FL` leaves a valid directory.
     ///
     /// Every leaf is already an ordinary directory block, and so, read
     /// linearly, is the root (`.`, then a `..` spanning the rest) and each
@@ -4255,8 +4259,8 @@ impl Filesystem {
         // `i_*_extra` words. An area written at 0x80 was invisible to it,
         // and on `metadata_csum` the checksum's high half was then stored
         // over the area's magic. The kernel gives such an inode its extra
-        // fields, zeroed, before it writes an attribute
-        // (`__ext4_expand_extra_isize`); so does this, in the same write.
+        // fields, zeroed, before it writes an attribute; so does this, in
+        // the same write.
         let extra = crate::inode::EXTRA_ISIZE_DEFAULT as usize;
         if i_extra_isize == 0 && inode_size.min(raw.len()) >= 128 + extra {
             raw[0x80..0x80 + extra].fill(0);
@@ -4278,7 +4282,8 @@ impl Filesystem {
         // ONE COPY, WHEREVER IT LANDS (#377). The name may already live in
         // the other place: a value that grew past the inode, or shrank back
         // into it. That copy is removed in the same transaction, as the
-        // kernel's `ext4_xattr_set_handle` does; left behind, the reader
+        // kernel removes it (debugfs lists one copy afterwards,
+        // tests/xattr_one_copy_oracle.rs); left behind, the reader
         // returned whichever copy it met first -- the in-inode one, stale
         // or not -- and a remove brought the other back.
         match inline_result {
@@ -4338,9 +4343,9 @@ impl Filesystem {
         // BGD + SB when fresh-block) + inode body. Atomic across the op.
         let mut buf = BlockBuffer::new(bs);
         // An xattr block on a volume without COMPAT_EXT_ATTR is one e2fsck
-        // ignores: it clears i_file_acl and frees the block. The kernel's
-        // `ext4_xattr_update_super_block` sets the feature on the first
-        // xattr; so does this, in the same transaction (#88). This crate's
+        // ignores: it clears i_file_acl and frees the block. The kernel sets
+        // the feature when it writes the first xattr; so does this, in the
+        // same transaction (#88). This crate's
         // mkfs does not set it.
         if self.sb.feature_compat & features::Compat::EXT_ATTR.bits() == 0 {
             self.buffer_patch_sb_compat(&mut buf, features::Compat::EXT_ATTR.bits())?;
@@ -4481,8 +4486,8 @@ impl Filesystem {
     /// block over whatever it held -- another file's data, a directory --
     /// and a block whose checksum failed was edited and restamped, which
     /// blessed the corruption. `h_refcount` was decremented on the same
-    /// trust. The kernel's `ext4_xattr_check_block` refuses all of them
-    /// with EFSCORRUPTED, and so does this: see
+    /// trust. The kernel refuses all of them with EUCLEAN, and so does
+    /// this (e2fsck agrees in tests/xattr_block_checked_oracle.rs): see
     /// [`crate::xattr::check_external_block`].
     fn buffer_read_xattr_block(&self, buf: &mut BlockBuffer, block_nr: u64) -> Result<Vec<u8>> {
         let block = buf.get_mut(self, block_nr)?.clone();
@@ -5094,9 +5099,10 @@ impl Filesystem {
 
         // Fast-symlink if target strictly fits inline (i_block is 60 bytes);
         // otherwise allocate a block and stage its bytes into the buffer.
-        // Linux's `ext4_symlink` switches to the slow path when
-        // `target.len() >= sizeof(i_block)` (i.e. >= 60), and our readlink
-        // path mirrors that boundary, so we match here.
+        // The format stores a target inline only when it is less than 60
+        // bytes (the size of i_block; format documentation, "Symbolic
+        // Links"), and our readlink path uses that boundary, so we match
+        // here.
         let raw = if target.len() < 60 {
             self.build_fast_symlink_inode(new_ino, target)?
         } else {
@@ -6470,8 +6476,9 @@ impl Filesystem {
     }
 
     /// Refuse, with [`Error::TooManyLinks`], a new link to `inode` that the
-    /// link count has no room for: the kernel's `ext4_link` check for files
-    /// and `EXT4_DIR_LINK_MAX` for a directory gaining a subdirectory.
+    /// link count has no room for: [`MAX_LINKS`] for a file, and for a
+    /// directory gaining a subdirectory the same limit unless `DIR_NLINK`
+    /// lets the count go to 1 (see [`next_links_count`]).
     ///
     /// Called before anything is staged, so a refusal writes nothing.
     fn check_link_room(&self, inode: &Inode) -> Result<()> {
@@ -6480,8 +6487,8 @@ impl Filesystem {
 
     /// Adjust `i_links_count` on a raw inode image. Recomputes CSUM.
     ///
-    /// The count moves as the kernel's `ext4_inc_count` / `ext4_dec_count`
-    /// move it (see [`next_links_count`]): it never wraps, and a directory
+    /// The count moves as [`next_links_count`] says: it never wraps, and a
+    /// directory
     /// count of 1 stays 1.
     fn patch_inode_nlink(&self, ino: u32, raw: &mut [u8], inode: &Inode, delta: i32) -> Result<()> {
         let new_count = next_links_count(
@@ -7269,7 +7276,7 @@ impl Filesystem {
 
         // An indexed directory reaches here when the leaf its index picks
         // is full. Split that leaf where the index has room for another
-        // entry, as the kernel's `ext4_dx_add_entry` does (#195); only
+        // entry, as the kernel does for a directory it indexed (#195); only
         // where it does not is the index dropped, so the block appended
         // below is one a linear scan finds.
         if self.buffer_split_htree_leaf_and_add_entry(
@@ -7293,10 +7300,10 @@ impl Filesystem {
 
     /// Split the full htree leaf that `name` routes to, add the entry to the
     /// half its hash belongs in, and route the new half from the parent index
-    /// block: the kernel's `do_split` and `dx_insert_block` (#195).
+    /// block, so e2fsck and the kernel find every name through it (#195).
     ///
     /// `Ok(false)` when this is not a split it makes, and the caller drops the
-    /// index instead, as the kernel's `dx_fallback` does: the directory is not
+    /// index instead, leaving a valid linear directory: the directory is not
     /// indexed, or is casefolded or encrypted (hashed some way this crate does
     /// not), the index has more than one interior level, the parent index
     /// block is full, every name in the leaf has one hash, or the new entry
@@ -7985,17 +7992,20 @@ impl Filesystem {
     }
 }
 
-/// `EXT4_LINK_MAX`: the most links the kernel gives one inode.
-pub(crate) const EXT4_LINK_MAX: u16 = 65000;
+/// The most links one inode may have: 65,000 (inodes.html, `i_links_count`).
+pub(crate) const MAX_LINKS: u16 = 65000;
 
 /// The link count `count` becomes after `delta` links are added (positive)
-/// or dropped (negative), one at a time, by the kernel's rules:
+/// or dropped (negative), one at a time. The rules are the `i_links_count`
+/// entry of the format documentation's inode table (65,000 at most; with
+/// `DIR_NLINK` a directory past that is 1, "not known"), as the kernel
+/// applies them:
 ///
-/// - `ext4_inc_count`: a count already at [`EXT4_LINK_MAX`] takes no more
+/// - adding: a count already at [`MAX_LINKS`] takes no more
 ///   links ([`Error::TooManyLinks`]) -- except a directory on a `DIR_NLINK`
 ///   volume, whose count is pinned at 1, "too many to count". A directory
 ///   already at 1 stays at 1.
-/// - `ext4_dec_count`: a directory's count only drops while it is above 2,
+/// - dropping: a directory's count only drops while it is above 2,
 ///   so a pinned 1 is never taken to 0 (which Linux refuses to load); a
 ///   file's count stops at 0.
 pub(crate) fn next_links_count(
@@ -8009,7 +8019,7 @@ pub(crate) fn next_links_count(
         count = if delta > 0 {
             if is_dir && count == 1 {
                 1
-            } else if count >= EXT4_LINK_MAX {
+            } else if count >= MAX_LINKS {
                 if is_dir && dir_nlink {
                     1
                 } else {
@@ -8155,8 +8165,8 @@ mod tests {
     // ---------------------------------------------------------------
     //
     // The kernel puts an inode on the `s_last_orphan` chain for two
-    // different reasons, and `ext4_orphan_cleanup` branches on
-    // `i_links_count` to tell them apart. Zero means unlinked-while-open:
+    // different reasons (format documentation, "Orphan file"), and
+    // `i_links_count` tells them apart. Zero means unlinked-while-open:
     // really delete it. Non-zero means a `truncate()` that a crash
     // interrupted: the file is still named by its directory entries, and
     // recovery is supposed to finish the truncate and leave it in place.
@@ -10818,7 +10828,7 @@ mod tests {
     /// A FILE WHOSE EXTENT LEAF FAILS ITS CHECKSUM IS NOT FREED AROUND.
     /// Freeing walks the tree to learn which blocks to release; a node that
     /// does not verify may name blocks that belong to something else. The
-    /// kernel refuses the removal (EFSBADCRC); so does this, before any
+    /// kernel refuses the removal (EBADMSG); so does this, before any
     /// bitmap is touched.
     #[test]
     fn unlinking_a_file_whose_extent_leaf_fails_its_checksum_is_refused() {
@@ -12009,7 +12019,7 @@ mod tests {
     }
 
     /// #385: the subdirectory that takes a DIR_NLINK parent past
-    /// EXT4_LINK_MAX pins the count at 1, as the kernel does.
+    /// MAX_LINKS pins the count at 1, as the kernel does.
     #[test]
     fn audit70_mkdir_past_the_maximum_pins_a_dir_nlink_parent_at_one() {
         let dev = formatted();
@@ -12022,7 +12032,7 @@ mod tests {
         assert_eq!(audit70_links(&fs, p), 1);
     }
 
-    /// #385: without DIR_NLINK a directory at EXT4_LINK_MAX takes no more
+    /// #385: without DIR_NLINK a directory at MAX_LINKS takes no more
     /// subdirectories: EMLINK, and nothing is written.
     #[test]
     fn audit70_mkdir_past_the_maximum_without_dir_nlink_is_refused() {
@@ -12061,10 +12071,10 @@ mod tests {
         assert_eq!(audit70_links(&fs, f), 65535);
     }
 
-    /// #385: EXT4_LINK_MAX (65000) is the ceiling, as in the kernel's
-    /// `ext4_link`, not the width of the field.
+    /// #385: MAX_LINKS (65000) is the ceiling the format documentation
+    /// gives for `i_links_count`, not the width of the field.
     #[test]
-    fn audit70_a_link_at_ext4_link_max_is_refused() {
+    fn audit70_a_link_at_max_links_is_refused() {
         let dev = formatted();
         let fs = mount(&dev);
         let f = fs.apply_create("/f", 0o644).unwrap();
@@ -12079,7 +12089,7 @@ mod tests {
         assert_eq!(audit70_links(&fs, f), 65000);
     }
 
-    /// #385: renaming a directory into a parent at EXT4_LINK_MAX on a
+    /// #385: renaming a directory into a parent at MAX_LINKS on a
     /// volume without DIR_NLINK is refused, like mkdir there.
     #[test]
     fn audit70_rename_of_a_dir_into_a_full_parent_is_refused() {
@@ -12100,10 +12110,10 @@ mod tests {
         );
     }
 
-    /// #385: the kernel's `ext4_inc_count` / `ext4_dec_count`, step by step.
+    /// #385: the documented link-count rules, step by step.
     #[test]
     fn next_links_count_follows_the_kernel() {
-        // Files: up to EXT4_LINK_MAX and no further; down to 0 and no further.
+        // Files: up to MAX_LINKS and no further; down to 0 and no further.
         assert_eq!(next_links_count(false, 64999, 1, true).unwrap(), 65000);
         assert!(matches!(
             next_links_count(false, 65000, 1, true),

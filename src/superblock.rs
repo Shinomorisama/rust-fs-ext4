@@ -19,7 +19,8 @@ pub const EXT4_VALID_FS: u16 = 0x0001;
 pub const EXT4_ERROR_FS: u16 = 0x0002;
 
 /// Parsed in-memory representation of the ext4 superblock.
-/// Field names mirror the kernel's `struct ext4_super_block` (s_ prefix dropped).
+/// Field names follow `struct ext4_super_block` in the kernel.org format
+/// documentation (s_ prefix dropped).
 #[derive(Debug, Clone)]
 pub struct Superblock {
     pub inodes_count: u32,
@@ -317,10 +318,11 @@ impl Superblock {
         // "range end index 12 out of range for slice of length 8" during
         // mount.
         let sixty_four_bit = feature_incompat & crate::features::Incompat::BIT64.bits() != 0;
-        // WITHOUT 64BIT THE FIELD IS NOT READ AT ALL (#140). The kernel's
-        // `ext4_fill_super` sets the descriptor size to 32 on such a volume
-        // whatever `s_desc_size` says, and range-checks the field only
-        // under 64BIT: a power of two from 64 to 1024. A floor alone let a
+        // WITHOUT 64BIT THE FIELD IS NOT READ AT ALL (#140). The format
+        // documentation defines `s_desc_size` only "if the 64bit incompat
+        // feature flag is set"; without it a descriptor is 32 bytes whatever
+        // the field says, and the kernel mounts such a volume. Under 64BIT
+        // it is a power of two from 64 to 1024. A floor alone let a
         // non-64BIT volume with a padded field of 64 have its descriptors
         // read at 64-byte stride with the 64-bit halves filled from the
         // next descriptor -- and refusing it instead would refuse a volume
@@ -343,8 +345,8 @@ impl Superblock {
         // first_data_block + bit`, so a first data block at or past the
         // end put every allocation outside the filesystem -- and on a
         // device larger than it, as an FSKit mount routinely is, inside
-        // somebody else's bytes. The kernel refuses both of these in
-        // `ext4_fill_super` ("bad geometry").
+        // somebody else's bytes. The kernel refuses both of these at mount
+        // ("bad geometry").
         if u64::from(first_data_block) >= blocks_count {
             return Err(Error::Corrupt(
                 "superblock: first_data_block is at or past the end of the filesystem",
@@ -618,8 +620,9 @@ impl Superblock {
 
     /// Number of block groups.
     ///
-    /// Counted from `s_first_data_block`, as the kernel's `ext4_fill_super`
-    /// does: on a 1 KiB-block filesystem block 0 is the boot block and the
+    /// Counted from `s_first_data_block` (format documentation: "at least 1
+    /// for 1k-block filesystems"): on a 1 KiB-block filesystem block 0 is the
+    /// boot block and the
     /// groups start at block 1. Dividing the whole of `s_blocks_count`
     /// gave one group too many whenever it was one past a multiple of
     /// `s_blocks_per_group`, and the phantom group's descriptor -- zeros --
@@ -929,8 +932,9 @@ mod geometry_tests {
     }
 }
 
-/// The kernel's largest `s_log_cluster_size`: `EXT4_MAX_CLUSTER_LOG_SIZE`
-/// (30) less `EXT4_MIN_BLOCK_LOG_SIZE` (10), a 1 GiB cluster.
+/// The largest `s_log_cluster_size` the kernel mounts: 20, a cluster of
+/// 2^(10 + 20) bytes, 1 GiB (the field is a log2 above 1 KiB, as the format
+/// documentation defines it).
 const MAX_LOG_CLUSTER_SIZE: u32 = 20;
 
 /// A GROUP FITS ITS BITMAP (#321). Each group has one bitmap block, so it
@@ -942,7 +946,7 @@ const MAX_LOG_CLUSTER_SIZE: u32 = 20;
 /// The unit is a block, or under BIGALLOC a cluster: there the bitmap
 /// counts clusters, `s_clusters_per_group` is what is bounded, and
 /// `s_blocks_per_group` must be exactly that many clusters in blocks.
-/// These are `ext4_handle_clustersize`'s checks.
+/// The kernel refuses to mount a volume that breaks any of these.
 fn check_group_fits_bitmap(
     raw: &[u8],
     log_block_size: u32,

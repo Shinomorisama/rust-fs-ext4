@@ -32,7 +32,8 @@ pub enum DirEntryType {
 
 impl DirEntryType {
     /// The entry type for an inode of mode `mode` (only its `S_IFMT` bits
-    /// are read): the kernel's `fs_umode_to_ftype`. Every writer that
+    /// are read), per the format documentation's `file_type` table. Every
+    /// writer that
     /// names an inode maps its mode here, so an entry's type byte cannot
     /// disagree with its inode by a writer knowing fewer types than another
     /// (#386). A mode that is no file type maps to `Unknown`.

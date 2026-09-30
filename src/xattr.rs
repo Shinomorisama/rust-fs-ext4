@@ -88,9 +88,9 @@ pub struct XattrEntry {
     /// KEPT EVEN THOUGH THE INLINE CASE HAS ALREADY USED IT, because
     /// the EA-inode case has not: the value then comes from another
     /// inode's body, and without this there is nothing to compare what
-    /// was read against. The kernel's `ext4_xattr_inode_iget` makes
-    /// exactly that comparison and returns `-EFSCORRUPTED` when the two
-    /// disagree; this driver returned the EA inode's whole body and
+    /// was read against. The kernel makes exactly that comparison and
+    /// fails with `EUCLEAN` when the two disagree; this driver
+    /// returned the EA inode's whole body and
     /// reported success (#121).
     pub value_size: u32,
 }
@@ -147,8 +147,10 @@ pub fn read_all(
         let extra_isize = u16::from_le_bytes(inode_raw[128..130].try_into().unwrap()) as usize;
         let xattr_region_start = 128 + extra_isize;
         // `i_extra_isize = 0` means the extra fields are unused and there
-        // is no in-inode area: the kernel (`ext4_iget`) and libext2fs parse
-        // none, so neither does this. Bytes at 0x80 that look like one are
+        // is no in-inode area: the format documentation places the area
+        // after the `i_extra_isize` bytes ("Inode Size"), the kernel and
+        // e2fsprogs see none, and neither does this. Bytes at 0x80 that look
+        // like one are
         // not an attribute anybody else can see (#380).
         if extra_isize != 0
             && xattr_region_start + 4 <= inode_size as usize
@@ -189,9 +191,11 @@ pub fn read_all(
 fn parse_entries(entries_buf: &[u8], _region_len: usize, out: &mut Vec<XattrEntry>) -> Result<()> {
     let mut pos = 0;
     while pos + 16 <= entries_buf.len() {
-        // Kernel's IS_LAST_ENTRY: the terminator has the full first 4-byte
-        // header word all zero. We cannot short-circuit on name_len == 0
-        // alone, because ACL xattrs (name_index 2 / 3 for
+        // The list ends at an entry whose leading fields are zero
+        // (attributes.html: "the first four fields ... are set to zero to
+        // mark the end"); the first 4-byte word, name length, name index
+        // and value offset, is what is read. We cannot short-circuit on
+        // name_len == 0 alone, because ACL xattrs (name_index 2 / 3 for
         // system.posix_acl_{access,default}) legitimately store name_len=0
         // — their full name is implied by the index.
         let header = u32::from_le_bytes(entries_buf[pos..pos + 4].try_into().unwrap());
@@ -890,8 +894,8 @@ pub fn plan_remove_from_external_block(
 /// Refuse an external xattr block that is not one: no magic, an `h_blocks`
 /// other than 1, or (on `metadata_csum`) a checksum that does not verify.
 ///
-/// The kernel's `ext4_xattr_check_block` makes the same checks before it
-/// reads or edits the block, and answers EFSCORRUPTED. Every block ext4
+/// The kernel makes the same checks before it reads or edits the block,
+/// and answers EUCLEAN ("Structure needs cleaning"). Every block ext4
 /// has ever written is exactly one block long; a larger `h_blocks` is not
 /// a layout anybody can edit in place.
 pub(crate) fn check_external_block(
@@ -1207,10 +1211,10 @@ mod tests {
         assert!(matches!(err, Error::InvalidArgument(_)));
     }
 
-    /// The kernel looks external-block entries up sorted by
-    /// `(name_index, name_len, name)` and stops at the first entry that
-    /// compares at or past the target (`xattr_find_entry(..., sorted=1)`),
-    /// so the block must be written in that order. Sorted by name alone,
+    /// attributes.html: external-block entries are sorted by
+    /// `(name_index, name_len, name)`. The kernel's lookup stops at the
+    /// first entry that sorts at or after the target, so the block must be
+    /// written in that order. Sorted by name alone,
     /// `user.abc` goes before `user.zz`, and the kernel's lookup of `zz`
     /// stops at `abc` and answers ENODATA (#379).
     #[test]

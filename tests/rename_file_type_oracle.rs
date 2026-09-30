@@ -8,10 +8,9 @@
 //! `mkfs.ext4`, the driver makes and renames one of each kind -- to a new
 //! name and over an existing file -- and e2fsck must find nothing to fix.
 //!
-//! `e2fsck -fy`, not `-fn`: a type byte of 0 is `PR_2_SET_FILETYPE`, which
-//! e2fsck flags `PR_NO_NOMSG`, so under `-n` it neither prints it nor counts
-//! it, and `-fn` calls this volume clean. Under `-y` it fixes it, says so and
-//! exits 1. The image is this test's own scratch copy. Fails without
+//! `e2fsck -fy`, not `-fn`: `e2fsck -n` does not report an entry whose type
+//! byte is 0, and calls this volume clean. Under `-y` it fixes the entry,
+//! says so and exits 1. The image is this test's own scratch copy. Fails without
 //! e2fsprogs (they run in the harness VM).
 
 use fs_ext4::block_io::FileDevice;

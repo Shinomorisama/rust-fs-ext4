@@ -250,7 +250,7 @@ fn open(target: &OsString, offset: u64) -> Result<Filesystem, CliError> {
     super::device::mount(target, offset, false)
 }
 
-fn ext4_error(what: &[u8], e: fs_ext4::Error) -> CliError {
+fn driver_error(what: &[u8], e: fs_ext4::Error) -> CliError {
     CliError::failed(format!("{}: {e}", show(what)))
 }
 
@@ -338,11 +338,11 @@ fn entry_text(e: &Json) -> String {
 fn ls(fs: &Filesystem, path: &[u8]) -> Result<Outcome, CliError> {
     let ino = fs
         .lookup_path_bytes(path)
-        .map_err(|e| ext4_error(path, e))?;
-    let inode = fs.stat_ino(ino).map_err(|e| ext4_error(path, e))?;
+        .map_err(|e| driver_error(path, e))?;
+    let inode = fs.stat_ino(ino).map_err(|e| driver_error(path, e))?;
     let entries = if inode.is_dir() {
         let mut listed = Vec::new();
-        for d in fs.read_dir_ino(ino).map_err(|e| ext4_error(path, e))? {
+        for d in fs.read_dir_ino(ino).map_err(|e| driver_error(path, e))? {
             if d.name == b"." || d.name == b".." {
                 continue;
             }
@@ -352,7 +352,7 @@ fn ls(fs: &Filesystem, path: &[u8]) -> Result<Outcome, CliError> {
                     full.push(b'/');
                 }
                 full.extend_from_slice(&d.name);
-                ext4_error(&full, e)
+                driver_error(&full, e)
             })?;
             listed.push(entry(fs, &d.name, d.inode, &child));
         }
@@ -383,10 +383,10 @@ fn ls(fs: &Filesystem, path: &[u8]) -> Result<Outcome, CliError> {
 fn read(fs: &Filesystem, path: &[u8], output: Option<&OsString>) -> Result<Outcome, CliError> {
     let ino = fs
         .lookup_path_bytes(path)
-        .map_err(|e| ext4_error(path, e))?;
-    let inode = fs.stat_ino(ino).map_err(|e| ext4_error(path, e))?;
+        .map_err(|e| driver_error(path, e))?;
+    let inode = fs.stat_ino(ino).map_err(|e| driver_error(path, e))?;
     if inode.is_dir() {
-        return Err(ext4_error(path, fs_ext4::Error::IsADirectory));
+        return Err(driver_error(path, fs_ext4::Error::IsADirectory));
     }
     if inode.is_symlink() {
         let target = fs.read_link_ino(ino).map(|t| show(&t)).unwrap_or_default();
@@ -409,7 +409,7 @@ fn read(fs: &Filesystem, path: &[u8], output: Option<&OsString>) -> Result<Outco
             let want = CHUNK.min((inode.size - offset) as usize);
             let got = fs
                 .read_ino(ino, offset, &mut buf[..want])
-                .map_err(|e| ext4_error(path, e))?;
+                .map_err(|e| driver_error(path, e))?;
             if got == 0 {
                 return Err(CliError::failed(format!(
                     "{}: short read at byte {offset} of {}",
@@ -573,7 +573,7 @@ fn edit<T>(
     edit: impl FnOnce(&Filesystem) -> fs_ext4::Result<T>,
 ) -> Result<T, CliError> {
     let fs = super::device::mount(target, offset, true)?;
-    let done = edit(&fs).map_err(|e| ext4_error(what, e))?;
+    let done = edit(&fs).map_err(|e| driver_error(what, e))?;
     fs.finish()
         .map_err(|e| CliError::failed(format!("{}: finishing the write: {e}", show(what))))?;
     Ok(done)

@@ -154,6 +154,66 @@ it**. Do not silence output to fit, and do not route around `tier.sh`.
 <!-- END SHARED BLOCK: agent-core v2 -->
 
 
+## Clean room
+
+This crate is MIT-licensed, and it can only stay that way if nothing in it
+is derived from copyleft source. "No GPL dependencies" above is about
+linking; this is about **reading**. It binds every contributor, human or
+agent, on every task.
+
+**Never open, and never reproduce:**
+
+- **Linux kernel source.** Its ext4, JBD2 and Unicode code, its headers,
+  its library routines (CRCs included), in any form: a checkout, a web
+  viewer, a mirror, a patch on a mailing list, a quote in an issue.
+- **e2fsprogs source.** libext2fs, e2fsck, debugfs, mke2fs, in any form.
+  The *tools* are fine; their source is not.
+- **The previous, non-clean implementations in this repository.** Code
+  replaced because a provenance audit found it derived, or too close to be
+  sure of, is off limits in its old form: the htree name hashes in
+  `src/hash.rs` from before their clean-room rewrite, and the routines
+  restated alongside them. Not in git history, not in another checkout,
+  not in a published crate.
+- **Your own memory of any of the above.** A model has read the kernel.
+  Recalling a routine's shape or its name and writing it down is copying
+  with extra steps. If you notice you are about to, stop, and derive the
+  answer from the sources below instead.
+
+**What you may use:**
+
+- **Public specifications.** The ext4 and JBD2 format documentation as
+  published on docs.kernel.org / kernel.org (the rendered documentation,
+  not the source tree it is built from), the ext4 wiki, RFCs (RFC 1320
+  MD4, RFC 3720 CRC32C), papers (TEA, SipHash) and the Unicode Character
+  Database.
+- **Permissively licensed code** (BSD, MIT, Apache), credited.
+- **Black-box oracles.** Run `mke2fs`, `e2fsck`, `debugfs`, `dumpe2fs`, a
+  real kernel mount and the other oracles below, and compare what they
+  print and the bytes they write. Observing what a tool does is not
+  copying it. Where the documentation is silent, find out this way: have
+  a tool write the structure, read the bytes, and pin what you learned
+  with a test.
+
+**Write down the fact, not whose code does it.** A comment or doc states
+the on-disk rule or the observed behaviour and cites where it comes from:
+the documentation section, or the oracle test that shows it. It never
+names a kernel or e2fsprogs function, an internal macro or a source file,
+and never links into either source tree. "Mirrors the kernel's function
+so-and-so in such-and-such a file" makes code read as derived whether or
+not it is, and sends the next reader to open that file. Names that belong to the documented format are
+fine: `struct ext4_extent_header`, `journal_header_t`, `s_inodes_count`,
+`EXT4_EXTENTS_FL`.
+
+**The check.** `scripts/check-provenance.sh` (`chore check:provenance`,
+run by `chore lint` and by CI's `provenance` job) fails on kernel and
+e2fsprogs source paths and links, on kernel and e2fsck function names,
+kernel-internal macros and e2fsck problem codes anywhere in the tracked
+tree, file names included, and on C written out in a comment or a doc. A
+documented format name it flags goes into the script's allowlist with the
+reason; nothing else does, and an entry nothing uses fails the check. It
+is a denylist: passing it is necessary, not sufficient.
+
+
 ## Running tests
 
 The tasks are the interface; CI runs exactly these (`chores.yml` has the

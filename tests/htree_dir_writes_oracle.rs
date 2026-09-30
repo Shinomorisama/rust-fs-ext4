@@ -224,8 +224,9 @@ fn a_full_leaf_splits_with_metadata_csum() {
 }
 
 /// When the index block routing a full leaf has no room for another entry,
-/// the index is dropped and the directory carries on as a linear one, as the
-/// kernel's `dx_fallback` does. Splitting an interior node is not done here.
+/// the index is dropped and the directory carries on as a linear one, which
+/// the format allows because every htree block also reads as a linear
+/// directory block. Splitting an interior node is not done here.
 /// A block appended to a still-indexed directory is one no lookup through
 /// the index would reach.
 ///

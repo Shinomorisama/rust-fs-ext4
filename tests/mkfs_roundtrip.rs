@@ -284,8 +284,8 @@ impl BlockDevice for SparseDev {
     }
 }
 
-/// The format's ceiling on a block group: `EXT2_MAX_BLOCKS_PER_GROUP`,
-/// 2^16 - 8, which e2fsprogs' `ext2fs_open2` enforces and `mke2fs` caps at.
+/// The ceiling on a block group: 2^16 - 8, which e2fsprogs enforces when it
+/// opens a volume and `mke2fs` caps at.
 const MAX_BLOCKS_PER_GROUP: u32 = 65528;
 
 /// At 16 KiB blocks and larger, `8 * block_size` is more blocks than a group

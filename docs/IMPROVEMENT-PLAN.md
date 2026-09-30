@@ -124,7 +124,7 @@ what’s journaled (nothing yet), ordering guarantees (none yet).
 
 ## Non-goals / Deferred
 
-- **Encryption (`ext4_encrypt`)** — large surface; no consumer demand.
+- **Encryption (`INCOMPAT_ENCRYPT`)** — large surface; no consumer demand.
 - **Casefold** — stub exists; no consumer demand.
 - **`quota`, `verity`, `project_quota`** — out of scope.
 - **Inline directory data** — rare; ext4 default is extent-based dirs.

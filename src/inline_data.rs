@@ -80,7 +80,8 @@ pub fn read_all(
 
 /// Bytes at the head of an inline directory's `i_block` that are not
 /// entries: the parent directory's inode number, the implicit `..`
-/// (`EXT4_INLINE_DOTDOT_SIZE` in the kernel's `fs/ext4/inline.c`).
+/// (format documentation, "Inline Directories": "The first four bytes of
+/// i_block are the inode number of the parent directory").
 pub const INLINE_DOTDOT_SIZE: usize = 4;
 
 /// Size of the `i_block` area that holds inline data.

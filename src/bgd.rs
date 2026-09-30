@@ -229,7 +229,8 @@ pub fn read_all<D: BlockDevice + ?Sized>(
 /// The bound in [`read_all`] was from above only, so a pointer of 0 -- or 1
 /// on a 1 KiB volume -- was accepted, and a bitmap update or inode write then
 /// put a whole block over the primary superblock or the descriptor table.
-/// This is the rule the kernel's `ext4_check_descriptors` applies:
+/// This is the rule the kernel enforces at mount, which refuses a volume
+/// whose descriptors break it:
 ///
 /// - no pointer inside group 0's head: block 0 through the superblock, its
 ///   descriptor table and the table's reserved growth

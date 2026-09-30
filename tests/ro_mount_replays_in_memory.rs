@@ -6,7 +6,7 @@
 //! writes landed. A read-only mount used to skip replay and report the
 //! directory absent and the counters as they were. It now replays into the
 //! buffer cache. The reference is the same image after `e2fsck -fy`, which
-//! recovers the journal with the kernel's code.
+//! replays the journal independently of this crate.
 //!
 //! The e2fsprogs tools run in the harness VM; a test fails when it cannot reach them.
 

@@ -31,12 +31,14 @@ const I_EXTRA_ISIZE: u16 = 32; // covers checksum_hi, ctime/mtime/atime extra, c
 const ROOT_MODE: u16 = 0o40755; // S_IFDIR | 0755
 const EXTENT_MAGIC: u16 = 0xF30A;
 
-/// The most blocks a group may hold: `EXT2_MAX_BLOCKS_PER_GROUP`, 2^16 - 8.
+/// The most blocks a group may hold: 2^16 - 8, the largest group e2fsprogs
+/// will open.
 ///
 /// A group's bitmap block has `8 * block_size` bits, which is the natural
 /// group size up to 8 KiB blocks and too many from 16 KiB on (#429).
-/// e2fsprogs' `ext2fs_open2` refuses a larger group as a corrupt superblock
-/// before checking anything, so `e2fsck`, `dumpe2fs` and `debugfs` cannot
+/// e2fsprogs refuses a larger group as a corrupt superblock ("The ext2
+/// superblock is corrupt") before checking anything, so `e2fsck`,
+/// `dumpe2fs` and `debugfs` cannot
 /// open the volume, and `mke2fs` caps its groups here for the same reason.
 pub const MAX_BLOCKS_PER_GROUP: u32 = (1 << 16) - 8;
 
@@ -378,7 +380,8 @@ pub fn format_filesystem_with_flavor(
     let root_dir = build_root_dir(block_size, dir_csum_tail, &csum)?;
 
     // ----- BGD bitmap-csums + final BGD csum -------------------------------
-    // Per Linux `fs/ext4/bitmap.c::ext4_{block,inode}_bitmap_csum_set`:
+    // Per the "Bitmaps" row of the format documentation's checksum table
+    // (the bitmap covers one group's worth of bits):
     //   bb_csum = crc32c(seed, bitmap[0..blocks_per_group / 8])
     //   ib_csum = crc32c(seed, bitmap[0..inodes_per_group / 8])
     // Stored split into 16-bit lo (BGD 0x18 / 0x1A) + 16-bit hi
@@ -723,8 +726,7 @@ fn build_jbd2_superblock(block_size: u32, max_len: u32, uuid: &[u8; 16]) -> Vec<
 fn write_journal_inode(slot: &mut [u8], size_bytes: u64, blocks_512: u64, i_block: &[u8; 60]) {
     // i_mode = S_IFREG | 0600, as mke2fs writes it. e2fsck refuses a
     // journal inode that is not a regular file ("Superblock has an invalid
-    // journal (inode 8)"), and so does the kernel's `ext4_get_journal_inode`
-    // (#89).
+    // journal (inode 8)"), and so does the kernel at mount (#89).
     slot[0x00..0x02].copy_from_slice(&(0o100600u16).to_le_bytes());
     // i_size_lo
     slot[0x04..0x08].copy_from_slice(&((size_bytes & 0xFFFF_FFFF) as u32).to_le_bytes());

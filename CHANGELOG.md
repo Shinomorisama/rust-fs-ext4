@@ -244,8 +244,8 @@ Not caught by the compiler — the same source builds and behaves differently:
   having run nothing.
 
 - `META_BG` volumes mount and take writes. Their group descriptors are
-  found per meta group (`Superblock::descriptor_location`, the kernel's
-  `descriptor_loc`), and waking a `BLOCK_UNINIT` group reserves the
+  found per meta group (`Superblock::descriptor_location`, the placement the
+  format documentation's "Meta Block Groups" section describes), and waking a `BLOCK_UNINIT` group reserves the
   descriptor block or backup at its head. `mke2fs` enables the feature on
   large volumes, which were refused at mount.
 - `BIGALLOC` volumes mount and read. The refusal assumed clusters replace
@@ -587,8 +587,7 @@ Not caught by the compiler — the same source builds and behaves differently:
   decremented on unlink. `setxattr`, `removexattr`, the release an unlink
   or truncate does, and `getxattr` / `listxattr` now refuse a block without
   the magic or with `h_blocks` other than 1 (`Corrupt`) and one that fails
-  its checksum (`BadChecksum`), as the kernel's `ext4_xattr_check_block`
-  does.
+  its checksum (`BadChecksum`), as the kernel does.
 - **An xattr set on an inode with `i_extra_isize = 0` goes where the kernel
   reads it (#380).** Such an inode -- left by `ext2.ko`, older kernels, or
   a 256-byte-inode ext2 volume -- has no in-inode xattr area as far as the
@@ -596,8 +595,7 @@ Not caught by the compiler — the same source builds and behaves differently:
   `setxattr` put the area at 0x80 anyway, invisible to the kernel and over
   its timestamp bits, and on `metadata_csum` then stored a checksum high
   half of 0 over the area's magic. `setxattr` now gives the inode
-  `i_extra_isize = 32` (zeroed, as the kernel's `__ext4_expand_extra_isize`
-  does) before writing the area, and the readers and `removexattr` no longer
+  `i_extra_isize = 32` (zeroed, as the kernel does) before writing the area, and the readers and `removexattr` no longer
   treat bytes at 0x80 as an area. Every inode-checksum writer now stores
   `i_checksum_hi` only where `i_extra_isize` covers it, and verification
   compares only the low 16 bits where it does not, as the kernel does.
@@ -643,14 +641,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   patched only `i_size`, past what the inline area holds, which the reader
   rejects as corrupt. Replace, pwrite, and truncate in both directions now
   fail with `Unsupported` on an inline-data file and leave it whole.
-- **Link counts stop at `EXT4_LINK_MAX`, and a `DIR_NLINK` count of 1
+- **Link counts stop at 65,000, and a `DIR_NLINK` count of 1
   stays 1 (#385).** A count was moved by plain arithmetic into a `u16`: the
   65536th hard link wrapped the count to 0, a name on an inode the next
   orphan pass or e2fsck treats as deleted, and nothing enforced the kernel's
   65000. On a `dir_nlink` volume a directory past 65000 links is written as
   1, "too many to count"; an rmdir under one wrote 0, which Linux refuses to
   load, and a mkdir wrote 2, which e2fsck reports. Counts now move as the
-  kernel's `ext4_inc_count` / `ext4_dec_count` move them: a link, mkdir or
+  format documentation's `i_links_count` entry says: a link, mkdir or
   directory rename that has no room returns the new `Error::TooManyLinks`
   (`EMLINK`) and writes nothing, a directory past the maximum is pinned at 1
   where `DIR_NLINK` allows it, and a directory count of 1 or 2 is never
@@ -755,8 +753,7 @@ Not caught by the compiler — the same source builds and behaves differently:
   and without checksums a count past the block was silently cut short. A
   checksum that happened to match a logged block revoked a committed write.
   A count past the block, less its tail when the journal has checksums, is
-  now `Corrupt`, as the kernel's `scan_revoke_records` and `e2fsck` refuse
-  it (#301).
+  now `Corrupt`, as the kernel and `e2fsck` refuse it (#301).
 - **Moving a directory to another parent refuses a corrupt directory block
   instead of re-stamping it.** On a `metadata_csum` volume the rename
   rewrote `..` in the moved directory's first block and recomputed its tail
@@ -781,7 +778,7 @@ Not caught by the compiler — the same source builds and behaves differently:
   were bounded only by the end of the filesystem, so a pointer of 0 -- or 1
   on a 1 KiB volume -- was accepted at mount, and the next create wrote a
   bitmap block over the primary superblock or the descriptor table. Mount now
-  refuses, as the kernel's `ext4_check_descriptors` does, any pointer inside
+  refuses, as the kernel does at mount, any pointer inside
   group 0's superblock, descriptor table or reserved growth, and, without
   `flex_bg`, any pointer outside the descriptor's own group, with
   `Corrupt` (#320).
@@ -918,16 +915,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   sparse file holds. An ordinary file whose data starts past block 0 was
   therefore unreadable at its leading hole, and the error called the extent
   tree corrupt on a volume `e2fsck` accepts. The descent now falls back to
-  the first index entry, as `ext4_ext_binsearch_idx` does, and the leaf below
-  it reports the hole (#260).
+  the first index entry, and the leaf below it reports the hole (#260).
 - **An insert in front of a leaf corrects the keys above it.** Every index
   entry holds the first logical block of the child it names, and an extent
   inserted before a leaf's first entry moves it. The keys were left as they
   were, so `e2fsck` reported `Logical start N does not match logical start M
   at next level` — reachable as soon as a leading hole could be written at
   all. `plan_insert_extent_deep` now carries the correction up the path
-  beside any split it is propagating, as `ext4_ext_correct_indexes` does
-  (#260).
+  beside any split it is propagating (#260).
 - A directory the kernel indexed takes creates and unlinks. When the kernel
   turns a directory into an htree it keeps the old dirent tail's bytes in
   the root's `dt_reserved`, so the root ends in what looks like a dirent

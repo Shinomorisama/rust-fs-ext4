@@ -6,15 +6,15 @@
 //! whose data starts past block 0 could not be read at its leading hole, and
 //! the error said the extent tree was corrupt on a volume `e2fsck` accepts.
 //!
-//! The kernel's `ext4_ext_binsearch_idx` leaves the path at the first index
-//! entry in that case, descends, finds no extent covering the block, and
-//! reports a hole.
+//! In the format a block no extent covers is a hole, wherever it lies, so
+//! the lookup descends through the first index entry in that case, finds no
+//! extent covering the block, and reports a hole.
 //!
 //! Writing into that hole is the other half: the new extent becomes its
 //! leaf's first, and every index entry naming the leaf holds the leaf's first
 //! logical block. Leaving them as they were describes a tree e2fsck rejects
 //! with "Logical start N does not match logical start M at next level", so
-//! the keys are corrected up the path, as `ext4_ext_correct_indexes` does.
+//! the keys are corrected up the path.
 //!
 //! Here a file is written one block every 16 blocks from logical block 16
 //! upward, so the tree is deeper than the inode and nothing covers block 0.
