@@ -28,6 +28,9 @@ Source-breaking, each caught by the compiler downstream:
   that applied anything now reloads the mount's superblock and descriptors and
   reopens its journal writer, which a shared borrow cannot. The C entry point
   is unchanged.
+- `hash::HTREE_EOF` is removed with the clean-room `src/hash.rs` (see
+  Changed). The value it named, `0xFFFF_FFFE`, is the directory index's
+  end-of-directory marker, and `hash::name_hash` never returns it.
 
 Not caught by the compiler — the same source builds and behaves differently:
 
@@ -308,6 +311,20 @@ Not caught by the compiler — the same source builds and behaves differently:
 
 ### Changed
 
+- **`hash::name_hash` never returns the reserved major hash
+  `0xFFFFFFFE`.** The directory index reserves that value as its
+  end-of-directory marker, so a name whose major hash would be it now gets
+  `0xFFFFFFFC`, as the BSD-licensed implementations of the format do. This
+  affects roughly one name in 2^31. `debugfs dx_hash` prints the value
+  before the remap; `tests/htree_hash_differential.rs` checks that it
+  prints `0xFFFFFFFE` for such a name and that `name_hash` gives
+  `0xFFFFFFFC`.
+- **`src/hash.rs` is re-implemented clean-room** from RFC 1320 (MD4), the
+  TEA paper and the kernel.org ext4 directory documentation, with
+  `debugfs dx_hash` as the oracle. Apart from that remap its output is
+  `debugfs`'s: `tests/htree_hash_differential.rs` compares 14,400 hashes
+  (2,400 names across six seeds, in all six hash versions) with it. See
+  `PROVENANCE.md`.
 - **The release tarball is laid out as an install prefix.** It holds
   `bin/mkfs.ext4`, `share/rust-fs-ext4/CAVEATS` (from `packaging/CAVEATS`,
   the notes an installer shows) and `LICENSE`, so an installer copies it

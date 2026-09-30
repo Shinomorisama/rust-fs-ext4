@@ -96,7 +96,25 @@ pub(crate) fn vm(command: &str, argument: &str) -> io::Result<Output> {
 ///
 /// From the host that is `vm.sh exec` over the harness's one shared
 /// connection. Inside the guest it is the shell itself.
+///
+/// Either way the script is ONE command-line argument (to `vm.sh`, or to
+/// `bash -c`), and Linux refuses to start a program with a single argument
+/// longer than 32 pages: 128 KiB on a 4 KiB-page kernel, which is what the
+/// CI runners and the guest have, but 512 KiB on a 16 KiB-page host such
+/// as a Raspberry Pi 5. So the limit is checked here, at the smaller
+/// size, on every host: a script that would fail with "Argument list too
+/// long" in CI fails the same way on a machine that could have run it.
+/// Bulk data goes in a file instead ([`Oracle::stdin`] does this).
+#[track_caller]
 pub(crate) fn guest_shell(script: &str) -> io::Result<Output> {
+    assert!(
+        script.len() < MAX_SCRIPT_BYTES,
+        "a {}-byte script for the guest is one command-line argument, and Linux \
+         refuses any argument of {MAX_SCRIPT_BYTES} bytes or more on a kernel with \
+         4 KiB pages. Pass bulk data in a file under the repository, as \
+         Oracle::stdin does, rather than inside the script.",
+        script.len()
+    );
     if in_guest() {
         return Command::new("bash")
             .arg("-c")
@@ -107,6 +125,11 @@ pub(crate) fn guest_shell(script: &str) -> io::Result<Output> {
     }
     vm("exec", script)
 }
+
+/// Linux's limit on one command-line argument on a kernel with 4 KiB
+/// pages: 32 pages, counting the terminating NUL, so a script must be
+/// shorter than this.
+const MAX_SCRIPT_BYTES: usize = 32 * 4096;
 
 /// Boot the VM once per test process, and hold the result.
 ///
@@ -298,6 +321,11 @@ impl Oracle {
     }
 
     /// Bytes on the tool's standard input (a `debugfs -f -` script).
+    ///
+    /// They travel in a file in this repository's scratch directory, which
+    /// the guest sees at the same path, and the tool reads that file on its
+    /// standard input. Nothing about them goes on a command line, so their
+    /// size is not limited by it (see `guest_shell`).
     pub fn stdin(mut self, bytes: impl Into<Vec<u8>>) -> Self {
         self.stdin = Some(bytes.into());
         self
@@ -359,7 +387,22 @@ impl Oracle {
         }
 
         let run = Run::new();
-        let out = guest_shell(&self.script(&run)).unwrap_or_else(|error| {
+        if let Some(bytes) = &self.stdin {
+            std::fs::create_dir_all(&run.dir)
+                .and_then(|()| std::fs::write(&run.stdin, bytes))
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "cannot write the standard input for `{}` to {}: {error}",
+                        self.tool,
+                        run.stdin.display()
+                    )
+                });
+        }
+        let out = guest_shell(&self.script(&run));
+        if self.stdin.is_some() {
+            let _ = std::fs::remove_file(&run.stdin);
+        }
+        let out = out.unwrap_or_else(|error| {
             panic!("cannot run the oracle tool in the guest: {error}");
         });
         let Some(code) = run.code() else {
@@ -427,9 +470,9 @@ impl Oracle {
         // travels in a file of its own rather than as the exit status of
         // the call, where the two would be the same number.
         let command = match &self.stdin {
-            Some(bytes) => format!(
-                "printf %s {} | base64 -d | {line} {redirect}",
-                guest_quote(&guest_base64(bytes))
+            Some(_) => format!(
+                "{line} < {} {redirect}",
+                guest_quote(&run.stdin.to_string_lossy())
             ),
             None => format!("{line} {redirect}"),
         };
@@ -463,10 +506,12 @@ impl Oracle {
     }
 }
 
-/// The three files one call leaves behind, named so that two calls —
-/// from two threads or two test binaries — never share one.
+/// The files one call uses, named so that two calls — from two threads or
+/// two test binaries — never share one: the tool's standard input, when it
+/// has one, and the three it leaves behind.
 pub(crate) struct Run {
     pub(crate) dir: PathBuf,
+    pub(crate) stdin: PathBuf,
     pub(crate) stdout: PathBuf,
     pub(crate) stderr: PathBuf,
     pub(crate) status: PathBuf,
@@ -482,6 +527,7 @@ impl Run {
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
         Self {
+            stdin: dir.join(format!("{name}.in")),
             stdout: dir.join(format!("{name}.out")),
             stderr: dir.join(format!("{name}.err")),
             status: dir.join(format!("{name}.status")),
