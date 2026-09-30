@@ -98,7 +98,10 @@ fn check_and_done(path: &str, tag: &str, block_size: u32, expect_groups: usize) 
         assert!(fs.sb.is_clean(), "[{tag}] fresh fs must be clean");
         let (root, _) = fs.read_inode_verified(2).expect("root inode verifies");
         assert!(root.is_dir(), "[{tag}] root must be a directory");
-        assert_eq!(root.links_count, 2, "[{tag}] root links = 2");
+        assert_eq!(
+            root.links_count, 3,
+            "[{tag}] root links = 3, with lost+found"
+        );
 
         // Structural audit: the freshly-formatted block/inode bitmaps and the
         // stored free counters must already agree. This catches the

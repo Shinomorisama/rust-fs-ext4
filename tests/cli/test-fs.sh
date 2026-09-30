@@ -7,14 +7,17 @@ img="$SANDBOX/fs.img"
 mkfs.ext4 -q --size 64M --label CLITEST "$img" >/dev/null 2>&1
 check "mkfs.ext4 made the image" test -s "$img"
 
-# ls /: a fresh image of ours has an empty root -- no lost+found yet
-# (#443; mke2fs makes one). Flip this when the formatter does.
+# ls /: a fresh image of ours holds lost+found and nothing else, as one
+# mke2fs made would (#443).
 fs.ext4 "$img" ls / >"$SANDBOX/ls.json" 2>"$SANDBOX/ls.err"
 rc=$?
 check "ls / exits 0 ($(cat "$SANDBOX/ls.err"))" test "$rc" -eq 0
-jq_check "ls / of a fresh image is an empty array (#443)" '. == []' "$SANDBOX/ls.json"
+jq_check "ls / of a fresh image is lost+found alone (#443)" \
+    '. | length == 1 and .[0].name == "lost+found" and .[0].type == "dir" and .[0].inode == 11 and .[0].mode == "0700"' \
+    "$SANDBOX/ls.json"
 fs.ext4 "$img" ls --text / >"$SANDBOX/ls.txt" 2>/dev/null
-check "ls --text / of a fresh image prints nothing" test ! -s "$SANDBOX/ls.txt"
+check "ls --text / of a fresh image names lost+found alone" \
+    test "$(awk '{print $NF}' "$SANDBOX/ls.txt")" = "lost+found"
 fs.ext4 "$img" ls /missing >"$SANDBOX/lsm.out" 2>"$SANDBOX/lsm.err"
 check "ls of a missing path exits 1" test $? -eq 1
 check "ls of a missing path prints nothing on stdout" test ! -s "$SANDBOX/lsm.out"

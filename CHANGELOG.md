@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A formatted volume has `/lost+found` (#443).** `format_filesystem`
+  made a root holding only `.` and `..`; `mke2fs` always makes
+  `/lost+found`, where `e2fsck` reconnects orphaned inodes, and without it
+  a repair has to allocate a directory on the volume it is repairing. The
+  formatter now makes it as inode 11, mode 0700 with two links, sized as
+  `mke2fs` sizes it (16 KiB of blocks, at least two, at most twelve), on
+  every flavour and block size. `tests/mkfs_lost_found_oracle.rs` compares
+  it with the one `mke2fs` makes, as `debugfs` reports both.
+
 ## [0.6.0] — 2026-09-30
 
 ### Breaking
