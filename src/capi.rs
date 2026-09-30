@@ -207,7 +207,9 @@ pub struct fs_ext4_dirent_t {
 #[repr(C)]
 pub struct fs_ext4_volume_info_t {
     /* ----- Identity ----- */
-    pub volume_name: [c_char; 16],
+    /// The label and a terminating NUL: 17 bytes, because a label that
+    /// fills `s_volume_name`'s 16 has no terminator on disk (#463).
+    pub volume_name: [c_char; 17],
     /// Raw 16-byte UUID. Caller formats as 8-4-4-4-12 hyphenated hex
     /// to match comparable inspection tools.
     pub uuid: [u8; 16],
@@ -1046,9 +1048,10 @@ pub unsafe extern "C" fn fs_ext4_get_volume_info(
             std::ptr::write_bytes(info as *mut fs_ext4_volume_info_t, 0, 1);
 
             // ----- Identity -----
-            // Volume name (up to 16 bytes incl. NUL).
+            // Volume name: up to 16 bytes, then the NUL the struct's
+            // 17th byte always has room for.
             let name_bytes = fs.sb.volume_name.as_bytes();
-            let copy_len = name_bytes.len().min(15);
+            let copy_len = name_bytes.len().min(16);
             for (i, &b) in name_bytes[..copy_len].iter().enumerate() {
                 info.volume_name[i] = b as c_char;
             }
