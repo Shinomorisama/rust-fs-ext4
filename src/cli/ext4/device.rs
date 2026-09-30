@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::common::CliError;
+use fs_core::cli::CliError;
 use fs_ext4::block_io::{BlockDevice, FileDevice};
 use fs_ext4::Filesystem;
 

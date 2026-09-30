@@ -221,8 +221,10 @@ vars:
   # scripts/tier.sh reads scripts/output-budget.sh out of core. v0.2.11 is the
   # first release that packages it and v0.2.13 is the first that carries the
   # quiet-failure behaviour, so this pin cannot go back below v0.2.13 while
-  # the tiers read the wrapper from core.
-  FS_CORE_REF: v0.2.13
+  # the tiers read the wrapper from core. It is v0.2.15 because the tools'
+  # command-line plumbing is the `cli` feature, with the SHARE fix this
+  # repository's copy had gained.
+  FS_CORE_REF: v0.2.15
   LINUX_HARNESS_URL: https://github.com/antimatter-studios/fs-linux-test-harness.git
   LINUX_HARNESS_REF: v0.1.0
 
