@@ -114,10 +114,11 @@ fn mkfs_ext2_then_mount_and_read_root() {
     );
 
     // Parse the entries and assert `.` + `..` are present and both point at
-    // the root inode itself.
+    // the root inode itself, and `lost+found` at inode 11 (#443).
     let entries = dir::parse_block(&dir_data, true).expect("parse dir entries");
     let mut saw_dot = false;
     let mut saw_dotdot = false;
+    let mut saw_lost_found = false;
     for e in &entries {
         let name = std::str::from_utf8(&e.name).unwrap_or("<bad utf8>");
         match name {
@@ -129,10 +130,17 @@ fn mkfs_ext2_then_mount_and_read_root() {
                 saw_dotdot = true;
                 assert_eq!(e.inode, ROOT_INODE, ".. of root must point at root");
             }
+            "lost+found" => {
+                saw_lost_found = true;
+                assert_eq!(e.inode, 11, "lost+found is inode 11");
+            }
             other => panic!("unexpected entry in fresh root dir: {other:?}"),
         }
     }
-    assert!(saw_dot && saw_dotdot, "root must contain `.` and `..`");
+    assert!(
+        saw_dot && saw_dotdot && saw_lost_found,
+        "root must contain `.`, `..` and `lost+found`"
+    );
 }
 
 /// Cover the four indirect-tree tiers in one test by stamping payloads that

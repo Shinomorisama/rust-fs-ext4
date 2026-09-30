@@ -109,10 +109,26 @@ chore_min_version: 0.6.0
 #                                                    without a measurement
 #                                                    asking for it measures
 #                                                    nothing
-#     oracle    2,214 / 178,467    2,900 / 232,000   ~31% / ~30%. --show-output
+#     oracle    2,920 / 226,413    3,800 / 295,000   ~30% / ~30%. --show-output
 #                                                    is most of it, and it is
 #                                                    the evidence, so it
 #                                                    stays -- in the log.
+#                                                    RE-MEASURED for #443 on
+#                                                    the x86_64 CI job of run
+#                                                    36692879573: its
+#                                                    lost+found oracle, which
+#                                                    compares a debugfs stat
+#                                                    and two listings of our
+#                                                    volume and of mke2fs's
+#                                                    for seven layouts, put
+#                                                    the tier at 2,920 /
+#                                                    226,413 -- twenty lines
+#                                                    over 2,900 -- and it
+#                                                    failed with exit 65 and
+#                                                    nothing red inside it.
+#                                                    #445 and #447 add two
+#                                                    more oracle binaries.
+#                                                    Was 2,214 / 178,467.
 #                                                    Measured for #146 at
 #                                                    1,786 / 140,018 against
 #                                                    2,300 / 180,000, and
@@ -169,10 +185,15 @@ chore_min_version: 0.6.0
 #                                                    lines, so one more
 #                                                    compared fixture is a
 #                                                    visible step
-#     suite     2,220 / 107,754    2,900 / 140,000   ~31% / ~30%: the whole
+#     suite     2,827 / 140,724    3,700 / 183,000   ~31% / ~30%: the whole
 #                                                    native suite, so every
 #                                                    tier above it grows this
-#                                                    one too
+#                                                    one too. RE-MEASURED for
+#                                                    #443 on the x86_64 CI job
+#                                                    of run 36701295909 (its
+#                                                    suite.log artifact), 724
+#                                                    bytes over 140,000.
+#                                                    Was 2,220 / 107,754
 #     scripts      28 /   1,427       50 /   3,000   ~75%: three tests
 #     wasm        127 /   5,302      170 /   8,000   ~25% / ~34%. Lines measured
 #                                                    cold on arm64 macOS (no
@@ -183,7 +204,14 @@ chore_min_version: 0.6.0
 #                                                    bytes in CI (PR #312: 113
 #                                                    lines), whose longer paths
 #                                                    and colour codes cost more
-#     vm        2,347 / 114,164    3,050 / 148,000   ~30%. Measured in CI
+#     vm        2,972 / 148,017    3,900 / 193,000   ~31% / ~30%. RE-MEASURED
+#                                                    for #443 (suite-in-vm, run
+#                                                    36692879573), 17 bytes
+#                                                    over 148,000: the whole
+#                                                    suite, so every tier's
+#                                                    growth lands here too.
+#                                                    Was 2,347 / 114,164,
+#                                                    measured in CI
 #                                                    (suite-in-vm), which is
 #                                                    a FIRST run: the guest
 #                                                    build's per-crate lines
@@ -469,7 +497,7 @@ tasks:
     # behind by a run that was interrupted.
     cmds:
       - scripts/tools.sh --check
-      - 'scripts/tier.sh test:oracle oracle 2900 232000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh oracle) -- --show-output'
+      - 'scripts/tier.sh test:oracle oracle 3800 295000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh oracle) -- --show-output'
       - 'scripts/test-floor.sh oracle 140'
 
   test:kernel:
@@ -575,7 +603,7 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        scripts/tier.sh test:vm vm 3050 148000 -- \
+        scripts/tier.sh test:vm vm 3900 193000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         scripts/test-floor.sh vm 1060
 
@@ -617,7 +645,7 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 2900 140000 -- scripts/test.sh --locked --release'
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 183000 -- scripts/test.sh --locked --release'
       - 'scripts/test-floor.sh suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then

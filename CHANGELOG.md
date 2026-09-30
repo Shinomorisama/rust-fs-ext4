@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A formatted volume has `/lost+found` (#443).** `format_filesystem`
+  made a root holding only `.` and `..`; `mke2fs` always makes
+  `/lost+found`, where `e2fsck` reconnects orphaned inodes, and without it
+  a repair has to allocate a directory on the volume it is repairing. The
+  formatter now makes it as inode 11, mode 0700 with two links, sized as
+  `mke2fs` sizes it (16 KiB of blocks, at least two, at most twelve), on
+  every flavour and block size. `tests/mkfs_lost_found_oracle.rs` compares
+  it with the one `mke2fs` makes, as `debugfs` reports both.
+
+### Changed
+
+- **The `oracle` and `vm` output budgets are re-measured** (#443): `oracle`
+  2,900/232,000 → 3,800/295,000 and `vm` 3,050/148,000 → 3,900/193,000,
+  from CI run 36692879573, where the lost+found oracle put them at
+  2,920/226,413 and 2,972/148,017 and both tiers failed with exit 65 and
+  nothing red inside them. The whole-suite `test:native` row follows,
+  2,900/140,000 → 3,700/183,000, from CI run 36701295909, which put it at
+  2,827/140,724 on the same exit 65.
+
 ## [0.6.0] — 2026-09-30
 
 ### Breaking

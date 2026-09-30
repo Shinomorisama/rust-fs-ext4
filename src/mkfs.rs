@@ -11,12 +11,14 @@
 //! - Block 3                     : group 0 inode bitmap
 //! - Blocks 4..N                 : group 0 inode table
 //! - Block (4+itable_blocks)     : root directory data block
+//! - The blocks after it         : `/lost+found`'s directory blocks
 //!
 //! Features enabled: FILETYPE, EXTENTS, 64BIT, METADATA_CSUM, SPARSE_SUPER.
 //! Journal is intentionally OFF for v1, as the resulting FS mounts cleanly
 //! without it.
 //!
-//! Inode 1 is reserved (unused), inode 2 is the root `/` directory.
+//! Inode 1 is reserved (unused), inode 2 is the root `/` directory, and
+//! inode 11, the first one past the reserved range, is `/lost+found`.
 
 use crate::block_io::BlockDevice;
 use crate::checksum::{linux_crc32c, Checksummer};
@@ -29,6 +31,11 @@ const EXT4_VALID_FS: u16 = 0x0001;
 const EXT4_ROOT_INO: u32 = 2;
 const I_EXTRA_ISIZE: u16 = 32; // covers checksum_hi, ctime/mtime/atime extra, crtime
 const ROOT_MODE: u16 = 0o40755; // S_IFDIR | 0755
+/// `/lost+found`: the first inode past the reserved ones (`s_first_ino`),
+/// a directory only root may enter, as `mke2fs` makes it (#443).
+const LOST_FOUND_INO: u32 = 11;
+const LOST_FOUND_MODE: u16 = 0o40700; // S_IFDIR | 0700
+const LOST_FOUND_NAME: &[u8] = b"lost+found";
 const EXTENT_MAGIC: u16 = 0xF30A;
 
 /// The most blocks a group may hold: 2^16 - 8, the largest group e2fsprogs
@@ -46,6 +53,20 @@ pub const MAX_BLOCKS_PER_GROUP: u32 = (1 << 16) - 8;
 /// capped at [`MAX_BLOCKS_PER_GROUP`] -- the value `mke2fs -b <size>` picks.
 fn blocks_per_group_for(block_size: u32) -> u32 {
     (8 * block_size).min(MAX_BLOCKS_PER_GROUP)
+}
+
+/// How many blocks `/lost+found` is given at format time.
+///
+/// `e2fsck` reconnects an orphaned inode into `/lost+found` and has to add
+/// an entry to it while repairing, so the directory is made with room to
+/// spare rather than one block. What `mke2fs` 1.47 does, read back with
+/// `debugfs -R 'stat /lost+found'` at every block size from 1 KiB to
+/// 64 KiB: 16 KiB of blocks, never fewer than two, and at most twelve,
+/// which is every block reachable from `i_block` without an indirect block
+/// on a volume without extents. `tests/mkfs_lost_found_oracle.rs` compares
+/// against `mke2fs` directly.
+fn lost_found_blocks(block_size: u32) -> u32 {
+    (16 * 1024 / block_size).clamp(2, 12)
 }
 
 /// The block size `mkfs` uses when the caller does not choose one.
@@ -178,16 +199,20 @@ pub fn format_filesystem_with_flavor(
     //   inode bitmap         : block first_data_block + 3
     //   inode table          : blocks first_data_block + 4 .. + 4 + itable_blocks
     //   root dir data block  : block first_data_block + 4 + itable_blocks
+    //   lost+found blocks    : the `lost_found_blocks` blocks after it
     let bgt_block: u64 = first_data_block as u64 + 1;
     let blk_bitmap: u64 = first_data_block as u64 + 2;
     let ino_bitmap: u64 = first_data_block as u64 + 3;
     let inode_table_start: u64 = first_data_block as u64 + 4;
     let root_dir_block: u64 = inode_table_start + inode_table_blocks as u64;
-    // ext3 journal data lives immediately after the root dir block. Layout
+    let lf_blocks = lost_found_blocks(block_size);
+    let lost_found_start: u64 = root_dir_block + 1;
+    let lost_found_end: u64 = lost_found_start + u64::from(lf_blocks);
+    // ext3 journal data lives immediately after lost+found. Layout
     // gap-free so the journal inode's i_block tree maps to a single
     // contiguous physical run — the writer (`indirect_mut::plan_contiguous`)
     // is then a one-shot call.
-    let journal_data_start: u64 = root_dir_block + 1;
+    let journal_data_start: u64 = lost_found_end;
     let journal_data_end: u64 = journal_data_start + ext3_journal_blocks as u64;
     // The ext3 journal inode maps its data run with legacy indirect blocks.
     // Those mapping blocks are allocated contiguously right after the data run
@@ -215,15 +240,16 @@ pub fn format_filesystem_with_flavor(
     // in the bitmap regardless of whether the FS actually populates them.
     // build_superblock pins s_first_ino = 11, so inodes 1..=10 are all
     // marked used. ext3's journal at inode 8 falls inside that range, so
-    // no flavor-specific bookkeeping is needed for free_inodes.
-    const RESERVED_INODES: u32 = 10;
+    // no flavor-specific bookkeeping is needed for free_inodes. Inode 11,
+    // lost+found, is the one inode in use past it, so inodes 1..=11 are
+    // the used ones.
     let used_blocks: u64 = if matches!(flavor, FsFlavor::Ext3) {
         journal_end // journal data run + its indirect-tree blocks
     } else {
-        root_dir_block + 1
+        lost_found_end
     };
     let free_blocks: u64 = blocks_count - used_blocks;
-    let free_inodes: u32 = inodes_per_group - RESERVED_INODES;
+    let free_inodes: u32 = inodes_per_group - LOST_FOUND_INO;
 
     let uuid = uuid.unwrap_or_else(generate_uuid);
 
@@ -273,7 +299,7 @@ pub fn format_filesystem_with_flavor(
         inode_table_start,
         free_blocks,
         free_inodes,
-        /* used_dirs */ 1, // root dir lives in group 0
+        /* used_dirs */ 2, // root and lost+found live in group 0
         desc_size,
     );
     // (BGD CRC is patched LATER, once the bitmap csums have been written
@@ -292,7 +318,7 @@ pub fn format_filesystem_with_flavor(
     let mut block_bitmap = vec![0u8; block_size as usize];
     // Metadata occupies absolute blocks [first_data_block, used_blocks) (for
     // ext3 this includes the journal data run; for ext2/ext4 it stops at
-    // root_dir_block), i.e. bits [0, used_blocks - first_data_block).
+    // lost+found's last block), i.e. bits [0, used_blocks - first_data_block).
     set_bitmap_range(&mut block_bitmap, 0, used_blocks - fdb);
     // Tail-pad: bits whose block (first_data_block + bit) is >= blocks_count
     // are out of range and must read "used" so the allocator never tries them
@@ -313,21 +339,21 @@ pub fn format_filesystem_with_flavor(
     // bits past inodes_per_group up to the bitmap block boundary so the
     // bitmap checksum matches what e2fsck recomputes (which assumes all
     // out-of-range bits are 1 — "Padding at end of inode bitmap is not set").
+    // Bit 10 is lost+found, inode 11.
     let mut inode_bitmap = vec![0u8; block_size as usize];
-    set_bitmap_range(&mut inode_bitmap, 0, RESERVED_INODES as u64);
+    set_bitmap_range(&mut inode_bitmap, 0, u64::from(LOST_FOUND_INO));
     set_bitmap_range(
         &mut inode_bitmap,
         inodes_per_group as u64,
         block_size as u64 * 8,
     );
 
-    // ----- Inode table (group 0) — only inode 2 has content ----------------
+    // ----- Inode table (group 0) — the root and lost+found ----------------
     let mut inode_table = vec![0u8; inode_table_blocks as usize * block_size as usize];
-    // Inode 2 lives at byte offset (2-1) * inode_size.
-    let root_inode_off = (EXT4_ROOT_INO as usize - 1) * inode_size as usize;
-    write_root_inode(
-        &mut inode_table[root_inode_off..root_inode_off + inode_size as usize],
+    write_dir_inodes(
+        &mut inode_table,
         root_dir_block,
+        lost_found_start,
         block_size,
         flavor,
         inode_size,
@@ -378,6 +404,7 @@ pub fn format_filesystem_with_flavor(
     }
 
     let root_dir = build_root_dir(block_size, dir_csum_tail, &csum)?;
+    let lost_found = build_lost_found_dir(block_size, lf_blocks, dir_csum_tail, &csum)?;
 
     // ----- BGD bitmap-csums + final BGD csum -------------------------------
     // Per the "Bitmaps" row of the format documentation's checksum table
@@ -420,6 +447,7 @@ pub fn format_filesystem_with_flavor(
     dev.write_at(ino_bitmap * block_size as u64, &inode_bitmap)?;
     dev.write_at(inode_table_start * block_size as u64, &inode_table)?;
     dev.write_at(root_dir_block * block_size as u64, &root_dir)?;
+    dev.write_at(lost_found_start * block_size as u64, &lost_found)?;
 
     // ext3 journal: write the JBD2 superblock at the head of the journal
     // data run, leave the rest as zeros (clean state — `s_start = 0` in
@@ -449,37 +477,71 @@ fn set_bitmap_range(bitmap: &mut [u8], start: u64, end: u64) {
     }
 }
 
-/// Build the root directory's data block i.e., a `.`/`..` pair filling the
-/// block, plus the `ext4_dir_entry_tail` checksum slot on metadata_csum
-/// volumes.
-fn build_root_dir(block_size: u32, dir_csum_tail: usize, csum: &Checksummer) -> Result<Vec<u8>> {
-    let mut root_dir = vec![0u8; block_size as usize];
+/// One empty directory block: a single unused entry (`inode = 0`) spanning
+/// the block, and the `ext4_dir_entry_tail` checksum slot on metadata_csum
+/// volumes, left for the caller to stamp.
+fn empty_dir_block(block_size: u32, dir_csum_tail: usize) -> Vec<u8> {
+    let mut block = vec![0u8; block_size as usize];
     let usable = block_size as usize - dir_csum_tail;
-    // Bootstrap: one big tombstone entry that fills the usable region. The
-    // dir helper splits this on each add.
-    root_dir[0..4].copy_from_slice(&0u32.to_le_bytes()); // inode = 0 (tombstone)
-    root_dir[4..6].copy_from_slice(&(usable as u16).to_le_bytes());
+    // One big tombstone entry that fills the usable region. The dir helper
+    // splits this on each add.
+    block[0..4].copy_from_slice(&0u32.to_le_bytes()); // inode = 0 (tombstone)
+    block[4..6].copy_from_slice(&(usable as u16).to_le_bytes());
+    block
+}
 
-    dir::add_entry_to_block(
-        &mut root_dir,
-        EXT4_ROOT_INO,
-        b".",
-        DirEntryType::Directory,
-        true,
-        dir_csum_tail,
-    )?;
-    dir::add_entry_to_block(
-        &mut root_dir,
-        EXT4_ROOT_INO,
-        b"..",
-        DirEntryType::Directory,
-        true,
-        dir_csum_tail,
-    )?;
+/// Build the root directory's data block: `.`, `..` and `lost+found`, plus
+/// the `ext4_dir_entry_tail` checksum slot on metadata_csum volumes.
+fn build_root_dir(block_size: u32, dir_csum_tail: usize, csum: &Checksummer) -> Result<Vec<u8>> {
+    let mut root_dir = empty_dir_block(block_size, dir_csum_tail);
+    for (ino, name) in [
+        (EXT4_ROOT_INO, &b"."[..]),
+        (EXT4_ROOT_INO, b".."),
+        (LOST_FOUND_INO, LOST_FOUND_NAME),
+    ] {
+        dir::add_entry_to_block(
+            &mut root_dir,
+            ino,
+            name,
+            DirEntryType::Directory,
+            true,
+            dir_csum_tail,
+        )?;
+    }
 
     // Generation 0: a freshly formatted root has never been reused.
     csum.patch_dir_entry_tail(EXT4_ROOT_INO, 0, &mut root_dir);
     Ok(root_dir)
+}
+
+/// Build `/lost+found`'s `blocks` directory blocks, back to back: `.` and
+/// `..` in the first, and every other block empty, each with its checksum
+/// tail on metadata_csum volumes.
+fn build_lost_found_dir(
+    block_size: u32,
+    blocks: u32,
+    dir_csum_tail: usize,
+    csum: &Checksummer,
+) -> Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(blocks as usize * block_size as usize);
+    for i in 0..blocks {
+        let mut block = empty_dir_block(block_size, dir_csum_tail);
+        if i == 0 {
+            for (ino, name) in [(LOST_FOUND_INO, &b"."[..]), (EXT4_ROOT_INO, b"..")] {
+                dir::add_entry_to_block(
+                    &mut block,
+                    ino,
+                    name,
+                    DirEntryType::Directory,
+                    true,
+                    dir_csum_tail,
+                )?;
+            }
+        }
+        csum.patch_dir_entry_tail(LOST_FOUND_INO, 0, &mut block);
+        out.extend_from_slice(&block);
+    }
+    Ok(out)
 }
 
 /// Write the block/inode bitmap checksums and the descriptor's own CRC into a
@@ -517,8 +579,6 @@ fn format_block_groups(
     size_bytes: u64,
     block_size: u32,
 ) -> Result<()> {
-    const RESERVED_INODES: u32 = 10;
-
     let (inode_size, desc_size, _, dir_csum_tail) = FsFlavor::Ext4.geometry();
 
     let bs = block_size as u64;
@@ -542,7 +602,9 @@ fn format_block_groups(
     if inodes_count > u32::MAX as u64 {
         return Err(Error::InvalidArgument("mkfs: too many inodes for layout"));
     }
-    let total_free_inodes: u64 = inodes_count - RESERVED_INODES as u64;
+    // The reserved inodes, and lost+found (inode 11) past them.
+    let total_free_inodes: u64 = inodes_count - u64::from(LOST_FOUND_INO);
+    let lf_blocks = lost_found_blocks(block_size);
 
     let uuid = uuid.unwrap_or_else(generate_uuid);
     let csum = Checksummer {
@@ -567,7 +629,8 @@ fn format_block_groups(
         let ib_block = bb_block + 1;
         let it_block = ib_block + 1;
         let data_start = it_block + inode_table_blocks as u64;
-        let used = (data_start - gstart) + u64::from(g == 0);
+        // Group 0 also holds the root's directory block and lost+found's.
+        let used = (data_start - gstart) + if g == 0 { 1 + u64::from(lf_blocks) } else { 0 };
         if g == 0 {
             root_dir_block = data_start;
         }
@@ -586,17 +649,17 @@ fn format_block_groups(
 
         let mut inode_bitmap = vec![0u8; block_size as usize];
         if g == 0 {
-            set_bitmap_range(&mut inode_bitmap, 0, RESERVED_INODES as u64);
+            set_bitmap_range(&mut inode_bitmap, 0, u64::from(LOST_FOUND_INO));
         }
         set_bitmap_range(&mut inode_bitmap, inodes_per_group as u64, bs * 8);
         let ib_csum = csum.crc(&inode_bitmap[..inodes_per_group as usize / 8]);
 
         let mut inode_table = vec![0u8; inode_table_blocks as usize * block_size as usize];
         if g == 0 {
-            let off = (EXT4_ROOT_INO as usize - 1) * inode_size as usize;
-            write_root_inode(
-                &mut inode_table[off..off + inode_size as usize],
+            write_dir_inodes(
+                &mut inode_table,
                 root_dir_block,
+                root_dir_block + 1,
                 block_size,
                 FsFlavor::Ext4,
                 inode_size,
@@ -605,11 +668,11 @@ fn format_block_groups(
         }
 
         let free_inodes_g = if g == 0 {
-            inodes_per_group - RESERVED_INODES
+            inodes_per_group - LOST_FOUND_INO
         } else {
             inodes_per_group
         };
-        let used_dirs_g = u32::from(g == 0);
+        let used_dirs_g = if g == 0 { 2 } else { 0 };
         let bgd = &mut gdt[g as usize * desc_size as usize..(g as usize + 1) * desc_size as usize];
         write_bgd_group(
             bgd,
@@ -648,11 +711,13 @@ fn format_block_groups(
     sb[0x3FC..0x400].copy_from_slice(&c.to_le_bytes());
 
     let root_dir = build_root_dir(block_size, dir_csum_tail, &csum)?;
+    let lost_found = build_lost_found_dir(block_size, lf_blocks, dir_csum_tail, &csum)?;
 
     dev.write_at(0, &vec![0u8; block_size as usize])?;
     dev.write_at(crate::superblock::SUPERBLOCK_OFFSET, &sb)?;
     dev.write_at(bs, &gdt)?;
     dev.write_at(root_dir_block * bs, &root_dir)?;
+    dev.write_at((root_dir_block + 1) * bs, &lost_found)?;
 
     // Superblock/GDT backups go into sparse-super groups 0, 1, and further
     // following powers of 3/5/7.
@@ -977,28 +1042,87 @@ fn write_bgd_group(
     }
 }
 
-/// Write the root directory inode (ino 2). Layout depends on `flavor`:
-/// ext4 uses an extent header pointing at `root_dir_block`; ext2/3 use the
-/// legacy direct/indirect scheme with `i_block[0] = root_dir_block`.
-/// Caller patches the CRC slots afterwards on metadata_csum volumes.
-fn write_root_inode(
-    slot: &mut [u8],
+/// Write the two directories a fresh volume holds into group 0's inode
+/// table: the root (inode 2), one block at `root_dir_block`, and
+/// `/lost+found` (inode 11), [`lost_found_blocks`] blocks from
+/// `lost_found_start`.
+fn write_dir_inodes(
+    inode_table: &mut [u8],
     root_dir_block: u64,
+    lost_found_start: u64,
     block_size: u32,
     flavor: FsFlavor,
     inode_size: u16,
     csum: &Checksummer,
 ) {
-    // i_mode
-    slot[0x00..0x02].copy_from_slice(&ROOT_MODE.to_le_bytes());
-    // i_uid_lo, i_size_lo. Size = one directory data block.
-    slot[0x04..0x08].copy_from_slice(&(block_size).to_le_bytes());
-    // i_atime, i_ctime, i_mtime — left zero; mkfs convention but not required.
-    // i_links_count = 2 (`.` and `..`)
-    slot[0x1A..0x1C].copy_from_slice(&2u16.to_le_bytes());
-    // i_blocks_lo: 512-byte units. One 4 KiB block = 8 sectors.
-    let i_blocks = block_size / 512;
-    slot[0x1C..0x20].copy_from_slice(&i_blocks.to_le_bytes());
+    let slot = |ino: u32| {
+        let off = (ino as usize - 1) * inode_size as usize;
+        off..off + inode_size as usize
+    };
+    // The root's links: its own `.` and `..`, and lost+found's `..`.
+    write_dir_inode(
+        &mut inode_table[slot(EXT4_ROOT_INO)],
+        DirInode {
+            ino: EXT4_ROOT_INO,
+            mode: ROOT_MODE,
+            links: 3,
+            first_block: root_dir_block,
+            blocks: 1,
+        },
+        block_size,
+        flavor,
+        inode_size,
+        csum,
+    );
+    write_dir_inode(
+        &mut inode_table[slot(LOST_FOUND_INO)],
+        DirInode {
+            ino: LOST_FOUND_INO,
+            mode: LOST_FOUND_MODE,
+            links: 2,
+            first_block: lost_found_start,
+            blocks: lost_found_blocks(block_size),
+        },
+        block_size,
+        flavor,
+        inode_size,
+        csum,
+    );
+}
+
+/// A directory inode `mkfs` writes: its number, mode and link count, and
+/// the contiguous run of `blocks` blocks from `first_block` that holds it.
+struct DirInode {
+    ino: u32,
+    mode: u16,
+    links: u16,
+    first_block: u64,
+    blocks: u32,
+}
+
+/// Write one directory inode. Layout depends on `flavor`: ext4 maps the run
+/// with one extent in an extent header in `i_block`; ext2/3 use direct
+/// pointers, one per block, which is why a run is at most twelve blocks.
+/// The inode checksum is stamped on metadata_csum volumes.
+fn write_dir_inode(
+    slot: &mut [u8],
+    dir: DirInode,
+    block_size: u32,
+    flavor: FsFlavor,
+    inode_size: u16,
+    csum: &Checksummer,
+) {
+    assert!(
+        (1..=12).contains(&dir.blocks),
+        "a directory mkfs writes spans 1 to 12 blocks"
+    );
+    let size = dir.blocks * block_size;
+    slot[0x00..0x02].copy_from_slice(&dir.mode.to_le_bytes()); // i_mode
+    slot[0x04..0x08].copy_from_slice(&size.to_le_bytes()); // i_size_lo
+                                                           // i_atime, i_ctime, i_mtime — left zero; mkfs convention but not required.
+    slot[0x1A..0x1C].copy_from_slice(&dir.links.to_le_bytes()); // i_links_count
+                                                                // i_blocks_lo: 512-byte units.
+    slot[0x1C..0x20].copy_from_slice(&(size / 512).to_le_bytes());
 
     if flavor.uses_extents() {
         // i_flags: EXT4_EXTENTS_FL
@@ -1011,44 +1135,43 @@ fn write_root_inode(
         slot[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // max
         slot[0x2E..0x30].copy_from_slice(&0u16.to_le_bytes()); // depth
         slot[0x30..0x34].copy_from_slice(&0u32.to_le_bytes()); // generation
-                                                               // First extent at 0x34..0x40:
-                                                               //   ee_block (logical=0), ee_len=1, ee_start_hi, ee_start_lo
+                                                               // First extent at 0x34..0x40: ee_block (logical 0), ee_len,
+                                                               // ee_start_hi, ee_start_lo. The rest of i_block stays zero.
         slot[0x34..0x38].copy_from_slice(&0u32.to_le_bytes()); // ee_block
-        slot[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes()); // ee_len
-        slot[0x3A..0x3C].copy_from_slice(&((root_dir_block >> 32) as u16).to_le_bytes()); // ee_start_hi
-        slot[0x3C..0x40].copy_from_slice(&(root_dir_block as u32).to_le_bytes());
-    // ee_start_lo
-    // Remaining 0x40..0x64 in i_block region stays zero (padding).
+        slot[0x38..0x3A].copy_from_slice(&(dir.blocks as u16).to_le_bytes()); // ee_len
+        slot[0x3A..0x3C].copy_from_slice(&((dir.first_block >> 32) as u16).to_le_bytes());
+        slot[0x3C..0x40].copy_from_slice(&(dir.first_block as u32).to_le_bytes());
     } else {
-        // ext2/3: i_flags clear, i_block[0] = direct pointer to the root dir
-        // data block. ext2/3 cap addresses at 32 bits, so the high half of
-        // `root_dir_block` is asserted zero by the geometry the caller picked
-        // (single-group fixtures fit comfortably in u32).
+        // ext2/3: i_flags clear, i_block[0..blocks] = direct pointers to the
+        // run. ext2/3 cap addresses at 32 bits, so the high half of the run
+        // is asserted zero by the geometry the caller picked (single-group
+        // volumes fit comfortably in u32).
         debug_assert!(
-            root_dir_block <= u32::MAX as u64,
+            dir.first_block + u64::from(dir.blocks) <= u32::MAX as u64,
             "ext2 i_block pointer overflow"
         );
         slot[0x20..0x24].copy_from_slice(&0u32.to_le_bytes()); // i_flags = 0
-        slot[0x28..0x2C].copy_from_slice(&(root_dir_block as u32).to_le_bytes());
-        // i_block[1..15] stays zero — no further direct/indirect pointers
-        // since the directory fits in one block.
+        for i in 0..dir.blocks as usize {
+            let block = (dir.first_block + i as u64) as u32;
+            slot[0x28 + 4 * i..0x2C + 4 * i].copy_from_slice(&block.to_le_bytes());
+        }
     }
 
     slot[0x64..0x68].copy_from_slice(&0u32.to_le_bytes()); // i_generation
                                                            // i_file_acl_lo (0x68), i_size_hi (0x6C), obso_faddr (0x70) — zero.
                                                            // i_blocks_hi (0x74), i_file_acl_hi (0x76), i_uid_hi (0x78), i_gid_hi (0x7A)
-                                                           // — zero. i_checksum_lo at 0x7C — caller patches when csum is on.
+                                                           // — zero. i_checksum_lo at 0x7C — patched below when csum is on.
 
     // Extra section (only present when on-disk inode size >= 160 bytes).
     // Ext2's 128-byte inodes skip this entirely.
     if inode_size >= 160 && slot.len() > 0x80 {
         slot[0x80..0x82].copy_from_slice(&I_EXTRA_ISIZE.to_le_bytes());
-        // i_checksum_hi (0x82..0x84) patched by caller on csum volumes.
+        // i_checksum_hi (0x82..0x84) patched below on csum volumes.
         // 0x84..0x98 *_extra timestamps + crtime — zero.
     }
 
     if csum.enabled {
-        csum.patch_inode_checksum(EXT4_ROOT_INO, 0, slot);
+        csum.patch_inode_checksum(dir.ino, 0, slot);
     }
 }
 

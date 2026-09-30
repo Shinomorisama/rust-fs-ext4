@@ -56,7 +56,7 @@ impl BlockDevice for MemDev {
 }
 
 #[test]
-fn mkfs_then_mount_yields_empty_root() {
+fn mkfs_then_mount_yields_a_root_holding_lost_found() {
     let size: u64 = 32 * 1024 * 1024; // 32 MiB
     let block_size: u32 = 4096;
     let dev = MemDev::new(size);
@@ -83,17 +83,20 @@ fn mkfs_then_mount_yields_empty_root() {
     assert!(fs.csum.enabled, "metadata_csum should be on");
     assert!(fs.sb.is_clean(), "fresh FS must be marked clean");
 
-    // Root inode (ino 2): mode 0o40755, type=dir, links=2.
+    // Root inode (ino 2): mode 0o40755, type=dir, links=3.
     let (root, _raw) = fs
         .read_inode_verified(2)
         .expect("root inode parses + verifies");
     assert!(root.is_dir(), "root must be a directory");
     assert_eq!(root.mode & S_IFDIR, S_IFDIR);
     assert_eq!(root.mode & 0o7777, 0o755, "root permission bits");
-    assert_eq!(root.links_count, 2, "root link count = 2 for `.`+`..`");
+    assert_eq!(
+        root.links_count, 3,
+        "root link count = 3 for `.`, `..` and lost+found's `..`"
+    );
     assert!(root.has_extents(), "root must use extents");
 
-    // Walk the root directory: expect exactly `.` and `..`.
+    // Walk the root directory: expect exactly `.`, `..` and `lost+found`.
     let bs = fs.sb.block_size();
     let phys = extent::map_logical(&root.block, dev_dyn.as_ref(), bs, 0)
         .expect("map_logical")
@@ -114,15 +117,18 @@ fn mkfs_then_mount_yields_empty_root() {
 
     let entries = dir::parse_block(&block, /* has_filetype */ true).expect("parse root dir");
     let names: Vec<Vec<u8>> = entries.iter().map(|e| e.name.clone()).collect();
-    assert!(names.iter().any(|n| n == b"."), "root dir missing `.`");
-    assert!(names.iter().any(|n| n == b".."), "root dir missing `..`");
     assert_eq!(
-        entries.len(),
-        2,
-        "expected only `.` and `..`, got {names:?}",
+        names,
+        [&b"."[..], b"..", b"lost+found"],
+        "expected only `.`, `..` and `lost+found`"
+    );
+    let inodes: Vec<u32> = entries.iter().map(|e| e.inode).collect();
+    assert_eq!(
+        inodes,
+        [2, 2, 11],
+        "`.` and `..` are the root; lost+found is 11"
     );
     for e in &entries {
-        assert_eq!(e.inode, 2, "both `.` and `..` point to root inode 2");
         assert_eq!(e.file_type, dir::DirEntryType::Directory);
     }
 }
@@ -172,7 +178,7 @@ fn mkfs_multi_group_reads_root() {
     assert!(root.is_dir(), "root must be a directory");
     assert_eq!(root.mode & S_IFDIR, S_IFDIR);
     assert_eq!(root.mode & 0o7777, 0o755, "invalid root permissions");
-    assert_eq!(root.links_count, 2, "invalid root link count (!= 2)");
+    assert_eq!(root.links_count, 3, "invalid root link count (!= 3)");
     assert!(root.has_extents(), "root must have extents");
 
     let bs = fs.sb.block_size();
@@ -195,9 +201,13 @@ fn mkfs_multi_group_reads_root() {
         "fs.csum does not verify"
     );
     let entries = dir::parse_block(&block, true).expect("parsing root directory block failed");
-    assert_eq!(entries.len(), 2, "expected only `.` and `..`");
+    assert_eq!(entries.len(), 3, "expected only `.`, `..` and `lost+found`");
     assert_eq!(entries[0].name, b".", "first entry must be `.`");
     assert_eq!(entries[1].name, b"..", "second entry must be `..`");
+    assert_eq!(
+        entries[2].name, b"lost+found",
+        "third entry must be `lost+found`"
+    );
 }
 
 /// The directory hash seed is written where the superblock keeps it, and
