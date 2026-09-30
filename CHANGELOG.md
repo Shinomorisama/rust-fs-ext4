@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-30
+
 ### Breaking
+
+This release is **0.7.0**, not 0.6.1: the change below breaks C callers
+built against 0.6.0's header.
+
 
 - **`fs_ext4_volume_info_t.volume_name` is 17 bytes (#463).** A label that
   fills `s_volume_name`'s 16 bytes has no terminator on disk, and the
