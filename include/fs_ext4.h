@@ -112,7 +112,7 @@ typedef struct {
  */
 typedef struct {
     /* ----- Identity ----- */
-    char     volume_name[16];     /* NUL-terminated, <= 16 bytes */
+    char     volume_name[17];     /* NUL-terminated; a label is <= 16 bytes */
     uint8_t  uuid[16];            /* raw 16-byte UUID */
     char     last_mounted[64];    /* NUL-terminated last-mount path, or "" */
 
@@ -418,8 +418,7 @@ int fs_ext4_get_volume_info(fs_ext4_fs_t *fs,
  *
  * NOT concurrent: the caller must serialise -- no other call on this handle
  * may be in flight. fs_ext4_get_volume_info() reports the new label
- * afterwards (its volume_name holds 15 bytes and a NUL, so a 16-byte label
- * reads back without its last byte).
+ * afterwards, all 16 bytes of it.
  *
  * Returns 0 on success, -1 on failure with fs_ext4_last_error() /
  * fs_ext4_last_errno() set: EINVAL for a label longer than 16 bytes,

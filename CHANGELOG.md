@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Breaking
+
+- **`fs_ext4_volume_info_t.volume_name` is 17 bytes (#463).** A label that
+  fills `s_volume_name`'s 16 bytes has no terminator on disk, and the
+  16-byte field held 15 of them and a NUL, so `fs_ext4_get_volume_info`
+  reported `0123456789abcdef` as `0123456789abcde`. It now holds all 16 and
+  the NUL. Every field after it moves, so C callers rebuild against the new
+  header. `tests/volume_label_oracle.rs` compares the C ABI's reading of a
+  label `tune2fs -L` wrote with `dumpe2fs -h`'s.
+
 ### Added
 
 - **The volume label can be set after the volume is made (#447).**
