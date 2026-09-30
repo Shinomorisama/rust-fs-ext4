@@ -225,28 +225,25 @@ fn checksum_declarations_are_accepted_and_refused_as_the_kernel_and_e2fsck_do() 
             );
         }
 
-        // The kernel oracle mounts before it runs anything, and fails the
-        // call when the mount is refused; that failure is the answer here.
-        let kernel =
-            std::panic::catch_unwind(|| fs_ext4_test_support::guest_kernel_write(&image, "true"));
+        // The kernel oracle mounts before it runs anything, and ends the
+        // call when the mount is refused; that ending is the answer here.
+        let kernel = fs_ext4_test_support::guest_kernel_try_write(&image, "true");
         match (kernel, accepted) {
             (Ok(out), true) => assert!(
                 out.status.success(),
                 "the kernel on {what}:\n{}",
                 String::from_utf8_lossy(&out.stderr)
             ),
-            (Err(refusal), false) => {
-                let said = refusal
-                    .downcast_ref::<String>()
-                    .cloned()
-                    .unwrap_or_default();
+            (Err(said), false) => {
                 assert!(
                     said.contains("mount:") && said.contains("bad superblock"),
                     "the kernel on {what} failed, but not by refusing the mount:\n{said}"
                 );
             }
             (Ok(_), false) => panic!("the kernel mounted {what}, which it should refuse"),
-            (Err(_), true) => panic!("the kernel refused {what}, which it should mount"),
+            (Err(said), true) => {
+                panic!("the kernel refused {what}, which it should mount:\n{said}")
+            }
         }
         let _ = std::fs::remove_file(&image);
     }

@@ -133,8 +133,24 @@ chore_min_version: 0.6.0
 #                                                    36404048578), which failed
 #                                                    the tier with exit 65 and
 #                                                    nothing red inside it
-#     kernel      135 /   7,875      175 /  10,200   ~30% / ~30%. Eight tests
-#                                                    since #428 added the
+#     kernel      352 /  27,924      460 /  36,300   ~31% / ~30%. Two binaries
+#                                                    more: group_layout_oracle.rs
+#                                                    (nine tests, two of them
+#                                                    kernel resizes) and
+#                                                    jbd2_layouts_oracle.rs (seven,
+#                                                    fourteen journal checksum
+#                                                    declarations each put to
+#                                                    e2fsck and a kernel mount).
+#                                                    Their x86_64 CI job (run
+#                                                    36630459115) printed 388 /
+#                                                    30,357 with the panic
+#                                                    messages of seven expected
+#                                                    mount refusals in it; with
+#                                                    each refusal one [kernel
+#                                                    vm] line instead, that log
+#                                                    is 352 / 27,924. Was 135 /
+#                                                    7,875 for eight tests, since
+#                                                    #428 added the
 #                                                    inline file and directory
 #                                                    write readbacks: the
 #                                                    x86_64 CI job of PR #436
@@ -468,7 +484,7 @@ tasks:
     # written — plus the reverse direction, and a deliberate corruption
     # that must fail.
     cmds:
-      - 'scripts/tier.sh test:kernel kernel 175 10200 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
+      - 'scripts/tier.sh test:kernel kernel 460 36300 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
       - 'scripts/test-floor.sh kernel 3'
 
   test:lwext4:
