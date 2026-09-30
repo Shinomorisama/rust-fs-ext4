@@ -81,7 +81,7 @@ behaviour instead.
 (#379, fixed in #396) and the extent merge length cap (#387) were already
 fixed on `main`; the casefold hash premise is #438.
 
-## Remediation (2026-09-29 – [date merged])
+## Remediation (2026-09-29 – 2026-09-30)
 
 | Item | What was done | Status |
 |---|---|---|
