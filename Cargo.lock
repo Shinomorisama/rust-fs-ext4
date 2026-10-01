@@ -4,7 +4,12 @@ version = 4
 
 [[package]]
 name = "am-fs-core"
-version = "0.2.13"
+version = "0.2.15"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "clap_mangen",
+]
 
 [[package]]
 name = "am-fs-ext4"
@@ -14,8 +19,6 @@ dependencies = [
  "bitflags",
  "caseless",
  "clap",
- "clap_complete",
- "clap_mangen",
  "crc32c",
  "fs-ext4-test-support",
  "hex",

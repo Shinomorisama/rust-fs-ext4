@@ -21,7 +21,7 @@ use std::ffi::OsString;
 
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command as Cmd};
 
-use crate::common::{CliError, Json, Outcome, Tool};
+use fs_core::cli::{CliError, Json, Outcome, Tool};
 use fs_ext4::fsck::{audit_with_repair, Anomaly, AuditReport};
 
 /// fsck(8): no errors.
@@ -110,7 +110,7 @@ fn command() -> Cmd {
                 )
                 .value_parser(value_parser!(u64)),
         )
-        .args(crate::common::format_args())
+        .args(fs_core::cli::format_args())
         .after_help(
             "Examples:\n  fsck.ext4 disk.img                 check, change nothing\n  \
              fsck.ext4 -fn disk.img             the same, as e2fsck spells it\n  \

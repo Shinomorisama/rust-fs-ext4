@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use clap::{Arg, ArgAction, ArgMatches, Command as Cmd};
 
-use crate::common::{CliError, Json, Outcome, Tool};
+use fs_core::cli::{CliError, Json, Outcome, Tool};
 use fs_ext4::block_io::{BlockDevice, FileDevice};
 use fs_ext4::mkfs::{
     format_filesystem, is_valid_block_size, DEFAULT_BLOCK_SIZE, MAX_BLOCK_SIZE, MIN_BLOCK_SIZE,
@@ -28,7 +28,7 @@ pub const TOOL: Tool = Tool {
     name: "mkfs.ext4",
     verb: "mkfs",
     section: 8,
-    usage_exit: crate::common::output::EXIT_USAGE,
+    usage_exit: fs_core::cli::output::EXIT_USAGE,
     about: "Create an ext4 filesystem on a device or an image file",
     command,
     run,
@@ -122,7 +122,7 @@ fn command() -> Cmd {
                 )
                 .value_parser(parse_size),
         )
-        .args(crate::common::format_args())
+        .args(fs_core::cli::format_args())
         .after_help(
             "Examples:\n  \
              mkfs.ext4 --size 64M --label BACKUP disk.img\n  \
