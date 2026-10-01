@@ -1,20 +1,23 @@
 # fs.ext4's read verbs on an image our own mkfs.ext4 makes: ls, read,
-# get/info with the canonical keys and their types, the verbs that answer
-# `not implemented`, and structured errors with nothing on stdout.
+# get/info with the canonical keys and their types, set label, the verb that
+# answers `not implemented`, and structured errors with nothing on stdout.
 source "$(dirname "$0")/lib.sh"
 
 img="$SANDBOX/fs.img"
 mkfs.ext4 -q --size 64M --label CLITEST "$img" >/dev/null 2>&1
 check "mkfs.ext4 made the image" test -s "$img"
 
-# ls /: a fresh image of ours has an empty root -- no lost+found yet
-# (#443; mke2fs makes one). Flip this when the formatter does.
+# ls /: a fresh image of ours holds lost+found and nothing else, as one
+# mke2fs made would (#443).
 fs.ext4 "$img" ls / >"$SANDBOX/ls.json" 2>"$SANDBOX/ls.err"
 rc=$?
 check "ls / exits 0 ($(cat "$SANDBOX/ls.err"))" test "$rc" -eq 0
-jq_check "ls / of a fresh image is an empty array (#443)" '. == []' "$SANDBOX/ls.json"
+jq_check "ls / of a fresh image is lost+found alone (#443)" \
+    '. | length == 1 and .[0].name == "lost+found" and .[0].type == "dir" and .[0].inode == 11 and .[0].mode == "0700"' \
+    "$SANDBOX/ls.json"
 fs.ext4 "$img" ls --text / >"$SANDBOX/ls.txt" 2>/dev/null
-check "ls --text / of a fresh image prints nothing" test ! -s "$SANDBOX/ls.txt"
+check "ls --text / of a fresh image names lost+found alone" \
+    test "$(awk '{print $NF}' "$SANDBOX/ls.txt")" = "lost+found"
 fs.ext4 "$img" ls /missing >"$SANDBOX/lsm.out" 2>"$SANDBOX/lsm.err"
 check "ls of a missing path exits 1" test $? -eq 1
 check "ls of a missing path prints nothing on stdout" test ! -s "$SANDBOX/lsm.out"
@@ -35,14 +38,19 @@ check "get label --text is CLITEST" test "$(fs.ext4 "$img" get label --text)" = 
 check "get ext4.uuid --text is a UUID" \
     grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$(fs.ext4 "$img" get ext4.uuid --text)"
 
-# Verbs the library cannot do yet: status 3, `not implemented`, nothing on stdout.
-for verb in "set label X" "resize 128M"; do
-    # shellcheck disable=SC2086  # the words are the point
-    fs.ext4 "$img" $verb >"$SANDBOX/ni.out" 2>"$SANDBOX/ni.err"
-    check "$verb exits 3" test $? -eq 3
-    check "$verb prints nothing on stdout" test ! -s "$SANDBOX/ni.out"
-    jq_check "$verb says not implemented" '.code == 3 and (.error | startswith("not implemented"))' "$SANDBOX/ni.err"
-done
+# set label rewrites the label, and get reads the new one back.
+fs.ext4 "$img" set label RELABELLED >"$SANDBOX/set.json" 2>/dev/null
+check "set label exits 0" test $? -eq 0
+jq_check "set label reports the new label" '. == {"label": "RELABELLED"}' "$SANDBOX/set.json"
+check "get label --text is the new label" test "$(fs.ext4 "$img" get label --text)" = RELABELLED
+fs.ext4 "$img" set label CLITEST >/dev/null 2>&1
+check "set label puts the old label back" test "$(fs.ext4 "$img" get label --text)" = CLITEST
+
+# A verb the library cannot do: status 3, `not implemented`, nothing on stdout.
+fs.ext4 "$img" resize 128M >"$SANDBOX/ni.out" 2>"$SANDBOX/ni.err"
+check "resize exits 3" test $? -eq 3
+check "resize prints nothing on stdout" test ! -s "$SANDBOX/ni.out"
+jq_check "resize says not implemented" '.code == 3 and (.error | startswith("not implemented"))' "$SANDBOX/ni.err"
 
 # Failures: status 1, a structured error, nothing on stdout.
 fs.ext4 "$img" read / >"$SANDBOX/dir.out" 2>"$SANDBOX/dir.err"

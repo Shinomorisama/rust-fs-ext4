@@ -67,7 +67,10 @@ fn check_and_done(path: &str, tag: &str, block_size: u32, expect_journal: bool) 
         assert!(fs.sb.is_clean(), "[{tag}] fresh fs must be clean");
         let (root, _) = fs.read_inode_verified(2).expect("root inode verifies");
         assert!(root.is_dir(), "[{tag}] root must be a directory");
-        assert_eq!(root.links_count, 2, "[{tag}] root links = 2");
+        assert_eq!(
+            root.links_count, 3,
+            "[{tag}] root links = 3, with lost+found"
+        );
 
         // For ext3, a jbd2 journal superblock must be present and consistent.
         let jsb = fs_ext4::jbd2::read_superblock(&fs).expect("jsb read");

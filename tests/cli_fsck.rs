@@ -2,9 +2,9 @@
 //! `mkfs.ext4` makes and then damages: clean (0), a wrong free-blocks
 //! count in a group descriptor found (4) and repaired (1, then 0), an
 //! image that cannot be opened (8), and a wrong command line (16). A
-//! destroyed root-directory extent header should be 4 as well; the audit
-//! skips a directory it cannot read today (#445), so that case checks the
-//! other verbs only, and gains its fsck assertion when #445 lands.
+//! destroyed root-directory extent header is found (4), and a repair pass
+//! leaves it standing (4), because the audit reports a directory it cannot
+//! read rather than skipping it (#445).
 //!
 //! What e2fsck makes of the same images is tests/cli_fsck_oracle.rs.
 
@@ -80,7 +80,8 @@ fn every_verb_on_a_destroyed_root_fails_with_a_structured_error() {
     let img = fresh("rootless");
     destroy_root_extent_header(&img);
     // No panic and no partial garbage: status 1, a JSON error on stderr,
-    // nothing on stdout. (fsck.ext4's own verdict on this image: #445.)
+    // nothing on stdout. (fsck.ext4's own verdict on this image is the
+    // next test.)
     for verb in [
         vec!["ls", "/"],
         vec!["read", "/x"],
@@ -150,4 +151,20 @@ fn a_target_that_is_not_utf8_is_opened_by_its_own_bytes() {
             stdout(&out)
         );
     }
+}
+
+#[test]
+fn a_destroyed_root_is_found_and_left_uncorrected() {
+    let img = fresh("rootless_fsck");
+    destroy_root_extent_header(&img);
+    let (code, json) = fsck(&["-n", &img]);
+    assert_eq!(code, Some(4), "{json}");
+    assert_eq!(json_field(&json, "clean"), "false");
+    assert!(
+        json.contains("\"kind\": \"unreadable_directory\""),
+        "{json}"
+    );
+    // Nothing a repair pass may do for it: still status 4.
+    let (code, json) = fsck(&["-y", &img]);
+    assert_eq!(code, Some(4), "{json}");
 }

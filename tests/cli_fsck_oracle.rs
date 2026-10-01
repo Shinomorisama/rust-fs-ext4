@@ -3,8 +3,7 @@
 //! free count and a destroyed root extent header both call damaged, so
 //! the damage is real and not something only our checker notices; and
 //! after `fsck.ext4 -y` repairs the free count, e2fsck calls it clean
-//! again. (fsck.ext4 itself misses the destroyed root today, #445: the
-//! assertion on its status joins this test when that is fixed.)
+//! again. fsck.ext4 calls the destroyed root damaged too (#445).
 
 mod cli_support;
 
@@ -44,6 +43,7 @@ fn fsck_ext4_and_e2fsck_agree_on_clean_damaged_and_repaired_images() {
 
     let rootless = fresh("oracle-rootless");
     destroy_root_extent_header(&rootless);
+    assert_eq!(our_status(&["-n", &rootless]), Some(4));
     oracle("e2fsck")
         .args(["-fn", &rootless])
         .judged()

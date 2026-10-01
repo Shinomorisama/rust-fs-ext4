@@ -29,6 +29,7 @@
 //! - fs_ext4_utimens(fs, path, atime_sec, atime_nsec, mtime_sec, mtime_nsec) -> int
 //! - fs_ext4_unlink(fs, path) -> int
 //! - fs_ext4_write_file(fs, path, data, len) -> i64 (save-as replace body)
+//! - fs_ext4_set_volume_label(fs, label) -> int
 //!
 //! Memory ownership rules (from ntfsbridge precedent, documented in docs/ext4-rs-capi.md):
 //! - `fs_ext4_fs_t*` is owned by the caller. Freed via `fs_ext4_umount`
@@ -206,7 +207,9 @@ pub struct fs_ext4_dirent_t {
 #[repr(C)]
 pub struct fs_ext4_volume_info_t {
     /* ----- Identity ----- */
-    pub volume_name: [c_char; 16],
+    /// The label and a terminating NUL: 17 bytes, because a label that
+    /// fills `s_volume_name`'s 16 has no terminator on disk (#463).
+    pub volume_name: [c_char; 17],
     /// Raw 16-byte UUID. Caller formats as 8-4-4-4-12 hyphenated hex
     /// to match comparable inspection tools.
     pub uuid: [u8; 16],
@@ -1045,9 +1048,10 @@ pub unsafe extern "C" fn fs_ext4_get_volume_info(
             std::ptr::write_bytes(info as *mut fs_ext4_volume_info_t, 0, 1);
 
             // ----- Identity -----
-            // Volume name (up to 16 bytes incl. NUL).
+            // Volume name: up to 16 bytes, then the NUL the struct's
+            // 17th byte always has room for.
             let name_bytes = fs.sb.volume_name.as_bytes();
-            let copy_len = name_bytes.len().min(15);
+            let copy_len = name_bytes.len().min(16);
             for (i, &b) in name_bytes[..copy_len].iter().enumerate() {
                 info.volume_name[i] = b as c_char;
             }
@@ -1099,6 +1103,37 @@ pub unsafe extern "C" fn fs_ext4_get_volume_info(
             info.mounted_dirty = if fs.sb.is_clean() { 0 } else { 1 };
 
             0
+        }),
+    )
+}
+
+/// Set the volume label to the NUL-terminated `label`: at most 16 bytes,
+/// written to the primary superblock and every backup
+/// (`Filesystem::set_volume_label`). An empty string clears it. Returns 0 on
+/// success, -1 with `fs_ext4_last_errno` set on failure: EINVAL for a label
+/// longer than 16 bytes, EROFS on a read-only mount. The caller must
+/// serialise: no other call on this handle may be in flight.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_set_volume_label(
+    fs: *mut fs_ext4_fs_t,
+    label: *const c_char,
+) -> c_int {
+    ffi_guard(
+        -1,
+        AssertUnwindSafe(|| {
+            clear_last_error();
+            if fs.is_null() || label.is_null() {
+                set_err_msg("null fs or label", EINVAL);
+                return -1;
+            }
+            let bytes = CStr::from_ptr(label).to_bytes();
+            match (*fs).fs.set_volume_label(bytes) {
+                Ok(()) => 0,
+                Err(e) => {
+                    set_err_from(&e, "set_volume_label");
+                    -1
+                }
+            }
         }),
     )
 }
@@ -3362,6 +3397,9 @@ fn anomaly_to_capi(a: &crate::fsck::Anomaly) -> (&'static str, u32, String) {
             dir_ino,
             format!("logical_block={logical_block} htree={}", u8::from(htree)),
         ),
+        Anomaly::UnreadableDirectory { ino, reason } => {
+            ("unreadable_directory", *ino, format!("reason={reason}"))
+        }
     }
 }
 

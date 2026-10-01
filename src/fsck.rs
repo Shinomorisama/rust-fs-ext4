@@ -28,7 +28,6 @@
 use crate::bgd;
 use crate::dir::{self, DirBlockIter, DirEntryType};
 use crate::error::{Error, Result};
-use crate::extent;
 use crate::features;
 use crate::fs::{BlockBuffer, Filesystem};
 use crate::inode::Inode;
@@ -39,7 +38,11 @@ use std::time::Duration;
 
 /// One problem found by [`audit`]. Each variant carries the inode or
 /// path needed to act on the finding.
+///
+/// `#[non_exhaustive]`: the audit learns new findings, and a `match` on
+/// this outside the crate needs a `_` arm so a new one does not break it.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Anomaly {
     /// A directory entry references an inode whose `i_links_count` is
     /// *less than* the observed reference count. Stored value is too
@@ -147,6 +150,16 @@ pub enum Anomaly {
         logical_block: u64,
         htree: bool,
     },
+    /// A directory the walk could not read: its inode does not verify, or
+    /// its entries cannot be listed (an extent tree that does not parse, a
+    /// block that cannot be read). Nothing beneath it was examined, so the
+    /// audit cannot call the volume clean (#445). `reason` is the error the
+    /// read failed with.
+    ///
+    /// Not repairable: e2fsck clears such an inode (`Inode 2 has corrupt
+    /// extent header.  Clear inode?`), which loses everything beneath it,
+    /// and that is not a decision this repair pass makes.
+    UnreadableDirectory { ino: u32, reason: String },
 }
 
 /// Summary returned by [`audit`]. Empty `anomalies` means the subset
@@ -336,6 +349,11 @@ fn audit_inner(
     // Directories we couldn't fully walk (parse failure, bound cap). Any link-count anomalies that could
     // have been explained by their missing entries are suppressed below.
     let mut incomplete_dirs: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    // Directories reported as `UnreadableDirectory`, so the link-count
+    // pass does not report the same unreadable inode a second time as a
+    // dangling entry.
+    let mut unreadable_dirs: std::collections::HashSet<u32> = std::collections::HashSet::new();
+
     // ino → list of (parent_ino, name_bytes) that reference it. Skips
     // "." / ".." (those are self-references, not aliases). Kept as
     // bytes so non-UTF-8 names (legal on ext4) round-trip; the
@@ -386,8 +404,14 @@ fn audit_inner(
 
         let (inode, raw) = match fs.read_inode_verified(dir_ino) {
             Ok(p) => p,
-            Err(_) => {
+            Err(e) => {
                 incomplete_dirs.insert(dir_ino);
+                unreadable_dirs.insert(dir_ino);
+                on_finding(&Anomaly::UnreadableDirectory {
+                    ino: dir_ino,
+                    reason: e.to_string(),
+                });
+                report.anomalies_count += 1;
                 emit_dir_progress(on_progress, report.directories_scanned, work.len());
                 continue;
             }
@@ -432,8 +456,14 @@ fn audit_inner(
         }
         let entries = match collected {
             Ok(e) => e,
-            Err(_) => {
+            Err(e) => {
                 incomplete_dirs.insert(dir_ino);
+                unreadable_dirs.insert(dir_ino);
+                on_finding(&Anomaly::UnreadableDirectory {
+                    ino: dir_ino,
+                    reason: e.to_string(),
+                });
+                report.anomalies_count += 1;
                 emit_dir_progress(on_progress, report.directories_scanned, work.len());
                 continue;
             }
@@ -528,6 +558,9 @@ fn audit_inner(
                     on_finding(&a);
                     report.anomalies_count += 1;
                 }
+            }
+            Err(_) if unreadable_dirs.contains(&ino) => {
+                // Already reported by the walk as an unreadable directory.
             }
             Err(_) => {
                 // Unreadable inode that somebody linked to. Surface
@@ -921,15 +954,19 @@ fn collect_dir_entries_checked(
         );
     }
     let mut entries = Vec::new();
-    if !inode.has_extents() {
-        return Err(Error::Corrupt(
-            "legacy non-extent dirs not supported by audit",
-        ));
-    }
+    // Extent-mapped or block-mapped (ext2, ext3): both are read. The walk
+    // used to refuse a block-mapped directory, so on those volumes it
+    // examined nothing below the root (#445).
     let total_blocks = inode.size.div_ceil(block_size as u64);
     let mut buf = vec![0u8; block_size as usize];
     for logical in 0..total_blocks {
-        let Some(phys) = extent::map_logical(&inode.block, fs.dev.as_ref(), block_size, logical)?
+        let Some(phys) = crate::indirect::map_logical_any(
+            &inode.block,
+            inode.flags,
+            fs.dev.as_ref(),
+            block_size,
+            logical,
+        )?
         else {
             continue;
         };
@@ -1183,6 +1220,7 @@ where
                 )?;
             }
             Anomaly::DirBlockChecksumMismatch { .. }
+            | Anomaly::UnreadableDirectory { .. }
             | Anomaly::DuplicateDirentForDirInode { .. }
             | Anomaly::WrongDotDot { .. }
             | Anomaly::BogusEntry { .. } => {}

@@ -2,9 +2,73 @@
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-30
+
 ### Breaking
 
-The next release is **0.6.0**, not 0.5.2: each change below breaks code
+This release is **0.7.0**, not 0.6.1: the change below breaks C callers
+built against 0.6.0's header.
+
+
+- **`fs_ext4_volume_info_t.volume_name` is 17 bytes (#463).** A label that
+  fills `s_volume_name`'s 16 bytes has no terminator on disk, and the
+  16-byte field held 15 of them and a NUL, so `fs_ext4_get_volume_info`
+  reported `0123456789abcdef` as `0123456789abcde`. It now holds all 16 and
+  the NUL. Every field after it moves, so C callers rebuild against the new
+  header. `tests/volume_label_oracle.rs` compares the C ABI's reading of a
+  label `tune2fs -L` wrote with `dumpe2fs -h`'s.
+
+### Added
+
+- **The volume label can be set after the volume is made (#447).**
+  `Filesystem::set_volume_label` rewrites `s_volume_name` (at most
+  `VOLUME_LABEL_MAX`, 16, bytes, NUL-padded; an empty label clears it) in
+  the primary superblock and in every backup the layout places, in one
+  transaction, restamping each checksum on a metadata_csum volume, as
+  `tune2fs -L` leaves them. `fs_ext4_set_volume_label` exposes it in the C
+  ABI (EINVAL past 16 bytes, EROFS on a read-only mount), and `fs.ext4
+  <image> set label <value>` uses it where it answered `not implemented`.
+  `tests/volume_label_oracle.rs` has `dumpe2fs` read the primary and group
+  1's backup against a `tune2fs -L` twin, and `e2fsck -fn` pass the volume.
+
+### Fixed
+
+- **A formatted volume has `/lost+found` (#443).** `format_filesystem`
+  made a root holding only `.` and `..`; `mke2fs` always makes
+  `/lost+found`, where `e2fsck` reconnects orphaned inodes, and without it
+  a repair has to allocate a directory on the volume it is repairing. The
+  formatter now makes it as inode 11, mode 0700 with two links, sized as
+  `mke2fs` sizes it (16 KiB of blocks, at least two, at most twelve), on
+  every flavour and block size. `tests/mkfs_lost_found_oracle.rs` compares
+  it with the one `mke2fs` makes, as `debugfs` reports both.
+- **A directory the audit cannot read is a finding (#445).** The fsck
+  walk noted a directory whose inode did not verify, or whose entries could
+  not be listed, as incomplete and reported nothing, so a volume whose root
+  could not be listed audited clean and `fsck.ext4 -n` exited 0 on it.
+  `fsck::Anomaly::UnreadableDirectory { ino, reason }` now reports it, the
+  C ABI as the finding kind `unreadable_directory`, and `fsck.ext4` exits
+  4. The repair pass leaves it standing: the only repair is clearing the
+  inode and everything beneath it. `tests/fsck_unreadable_dir_oracle.rs`
+  has `e2fsck -fn` call the same volumes damaged. A block-mapped directory
+  (ext2, ext3) is read rather than refused: the walk used to give up on
+  every one of them, so on those volumes it examined nothing below the
+  root and suppressed every link-count finding.
+
+### Changed
+
+- **The `oracle` and `vm` output budgets are re-measured** (#443): `oracle`
+  2,900/232,000 → 3,800/295,000 and `vm` 3,050/148,000 → 3,900/193,000,
+  from CI run 36692879573, where the lost+found oracle put them at
+  2,920/226,413 and 2,972/148,017 and both tiers failed with exit 65 and
+  nothing red inside them. The whole-suite `test:native` row follows,
+  2,900/140,000 → 3,700/183,000, from CI run 36701295909, which put it at
+  2,827/140,724 on the same exit 65.
+
+## [0.6.0] — 2026-09-30
+
+### Breaking
+
+This release is **0.6.0**, not 0.5.2: each change below breaks code
 written against 0.5.1 (#120). `chore check:semver` now refuses a pull request
 whose public-API break the version does not declare (see Added).
 
@@ -18,6 +82,9 @@ Source-breaking, each caught by the compiler downstream:
 - **`Error` gained `Unsupported(&'static str)`** (#101), and is now
   `#[non_exhaustive]`: a `match` on it outside this crate needs a `_` arm,
   and later variants will not break it again.
+- **`fsck::Anomaly` is `#[non_exhaustive]`**, for the same reason: the
+  audit learns new findings (#445 is the next), and a `match` on it outside
+  this crate needs a `_` arm.
 - `ea_inode::read_value_inode` takes the size the entry declared as a third
   argument, and refuses a body that does not match it (#121).
 - `journal::ReplayPlan` gained `next_sequence: Option<u32>` (#146).
@@ -31,6 +98,12 @@ Source-breaking, each caught by the compiler downstream:
 - `hash::HTREE_EOF` is removed with the clean-room `src/hash.rs` (see
   Changed). The value it named, `0xFFFF_FFFE`, is the directory index's
   end-of-directory marker, and `hash::name_hash` never returns it.
+- `casefold::casefold_name_hash` takes the directory's `HashVersion` as a
+  second argument and returns that version's hash of the folded name, the
+  hash a casefolded directory uses; it computed SipHash-2-4 keyed by
+  `s_hash_seed`, which no directory uses (#438). `casefold::siphash_2_4` is
+  removed: hash version 6 belongs to encrypted casefolded directories, whose
+  entries carry the hash. Nothing in the crate called either.
 
 Not caught by the compiler — the same source builds and behaves differently:
 
@@ -319,6 +392,14 @@ Not caught by the compiler — the same source builds and behaves differently:
   three against the real task.
 
 ### Changed
+
+- **The lwext4 cross-validation compares holes too (#272).** At its pin,
+  lwext4 read an unmapped block in the body of a file as block 0 of the
+  device, so a sparse file was the one thing it could not be compared on and
+  `tests/lwext4_cross_validate.rs` excused it. The guest now builds lwext4
+  with `tests/lwext4/fread-holes.patch`, which reads a hole as zeros, and the
+  excuse is gone. The guest's stamp records the patch's digest, and the
+  suite refuses a guest built without it.
 
 - **`hash::name_hash` never returns the reserved major hash
   `0xFFFFFFFE`.** The directory index reserves that value as its

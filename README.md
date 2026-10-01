@@ -140,6 +140,7 @@ fs.ext4 disk.img read /etc/fstab > fstab
 fs.ext4 disk.img write /notes.txt < notes.txt
 fs.ext4 disk.img mkdir /backup
 fs.ext4 disk.img get label --text
+fs.ext4 disk.img set label ARCHIVE
 fs.ext4 --offset 1048576 whole-disk.img info
 tar cf - ./dir | fs.ext4 disk.img write /dir.tar
 rust-fs-ext4 doctor                        # is every tool on PATH ours?
@@ -153,10 +154,11 @@ rust-fs-ext4 doctor                        # is every tool on PATH ours?
   operational error, 16 usage.
 - **`get`/`info`** report `fs`, `label`, `total_bytes`, `free_bytes`,
   `block_size` and `dirty`, with ext4's own fields under `ext4`.
-- **Not yet:** `set label` answers `not implemented` until the library has
-  a label writer (#447); `resize` does too, and no resize is planned.
-  `fsck.ext4` checks this crate's audit, a subset of e2fsck's, and today
-  skips a directory it cannot read (#445).
+- **`set label <value>`** rewrites the label, at most 16 bytes, in the
+  primary superblock and every backup; an empty value clears it.
+- **Not yet:** `resize` answers `not implemented`, and no resize is planned.
+  `fsck.ext4` checks this crate's audit, a subset of e2fsck's; a directory
+  it cannot read is a finding it cannot repair (#445).
 - **`--version`** on every name prints `<tool> (am-fs-ext4) <version>`.
   `rust-fs-ext4 doctor` resolves each name on PATH, checks it answers that
   way, and says what wins and the fix when it does not.
@@ -375,6 +377,50 @@ ticked. Numbering follows the plan doc.
 ## Changelog
 
 Highlights from the last 50 commits, grouped by date.
+
+### 2026-09-30 — 0.7.0 — the volume label, whole and writable
+
+- **Breaking (C ABI):** `fs_ext4_volume_info_t.volume_name` is 17 bytes, so
+  a label that fills `s_volume_name`'s 16 is reported whole; every field
+  after it moves, and C callers rebuild against the new header (#463).
+- The volume label can be set after the volume is made:
+  `Filesystem::set_volume_label` and `fs_ext4_set_volume_label` rewrite the
+  primary superblock and every backup, as `tune2fs -L` does (#447).
+- A formatted volume has `/lost+found`, laid out as `mke2fs` lays it out
+  (#443).
+- The fsck audit reports a directory it cannot read, and `fsck.ext4` exits
+  4, where the volume used to audit clean (#445).
+
+See [CHANGELOG.md](CHANGELOG.md#070--2026-09-30) for the full notes.
+
+### 2026-09-30 — 0.6.0 — the provenance remediation, and the tools as one binary
+
+- **Provenance.** `PROVENANCE.md` records where the code comes from and
+  the 2026-09-29 audit. `src/hash.rs` is re-implemented clean-room; the
+  inode timestamp helpers and five format-driven routines are restated and
+  checked against e2fsprogs and a Linux kernel in the harness VM; and a CI
+  check fails when the tree names kernel or e2fsprogs internals. Every
+  earlier release on crates.io, 0.3.2 to 0.5.1, contains htree hash code
+  derived from the Linux kernel; the claim that no code derives from GPL,
+  LGPL or AGPL source holds from 0.6.0.
+- **Breaking:** `XattrEntry` and `Error` are `#[non_exhaustive]` and gained
+  fields and a variant, and `fsck::Anomaly` is `#[non_exhaustive]` too;
+  `fs_ext4_readlink` returns the target's length;
+  `Runtime::now_unix_seconds` returns `i64`;
+  `casefold::casefold_name_hash` takes the directory's hash version and
+  returns the hash a casefolded directory uses (#438). `chore check:semver`
+  now refuses a public-API break the version does not declare.
+- A major hash of `0xFFFFFFFE`, which the directory index reserves, is
+  given as `0xFFFFFFFC`.
+- The command-line tools are one multi-call binary, `rust-fs-ext4`, behind
+  the `cli` feature: `mkfs.ext4`, an `fs.ext4` that lists, reads and writes
+  an image without mounting it, and an `fsck.ext4` with fsck(8)'s exit
+  statuses. The binary writes its own man pages and shell completions.
+- Inline-data files and directories are written, not refused; the parsers
+  are fuzzed; and the driver's writes are read back by a real Linux kernel.
+- Dozens of format fixes: extent trees, htree splits, xattr placement,
+  journal replay, group descriptor counters, link counts and timestamps
+  past 2038. See [CHANGELOG.md](CHANGELOG.md#060--2026-09-30).
 
 ### 2026-09-06 — 0.5.1 — what the image says is checked before it is believed
 

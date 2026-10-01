@@ -156,20 +156,16 @@ fn an_unknown_key_is_a_usage_error() {
 }
 
 #[test]
-fn set_label_and_resize_answer_not_implemented_with_status_3() {
+fn resize_answers_not_implemented_with_status_3() {
     let img = basic();
-    for args in [vec!["set", "label", "X"], vec!["resize", "128M"]] {
-        let mut full = vec![img.as_str()];
-        full.extend(&args);
-        let out = fs(&full);
-        assert_eq!(out.status.code(), Some(3), "{args:?}");
-        assert!(out.stdout.is_empty());
-        let err = stderr(&out);
-        assert!(
-            err.starts_with("{\"error\": \"not implemented: ") && err.contains("\"code\": 3"),
-            "{args:?}: {err}"
-        );
-    }
+    let out = fs(&[&img, "resize", "128M"]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(out.stdout.is_empty());
+    let err = stderr(&out);
+    assert!(
+        err.starts_with("{\"error\": \"not implemented: ") && err.contains("\"code\": 3"),
+        "{err}"
+    );
     let out = fs(&[&img, "set", "block_size", "1024"]);
     assert_eq!(out.status.code(), Some(3));
     assert!(

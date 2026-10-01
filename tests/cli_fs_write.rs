@@ -115,13 +115,36 @@ fn a_write_that_does_not_fit_leaves_no_file_behind() {
 }
 
 #[test]
-fn set_label_is_still_not_implemented() {
+fn set_label_rewrites_the_label_and_leaves_the_volume_clean() {
     let img = image_path("label");
-    ok(tool("mkfs.ext4").args(["-q", "--text", "--size", "32M", &img]));
+    ok(tool("mkfs.ext4").args(["-q", "--text", "--size", "32M", "--label", "BEFORE", &img]));
+    let set = stdout(&ok(tool("fs.ext4").args([&img, "set", "label", "AFTER"])));
+    assert_eq!(json_field(&set, "label"), "AFTER");
+    let label = stdout(&ok(tool("fs.ext4").args([&img, "get", "label", "--text"])));
+    assert_eq!(label, "AFTER\n");
+    let out = tool("fsck.ext4").arg(&img).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+    let dirty = stdout(&ok(tool("fs.ext4").args([&img, "get", "dirty", "--text"])));
+    assert_eq!(dirty, "false\n");
+
+    ok(tool("fs.ext4").args([&img, "set", "label", ""]));
+    let label = stdout(&ok(tool("fs.ext4").args([&img, "get", "label"])));
+    assert_eq!(
+        label.trim(),
+        "{\n  \"label\": null\n}",
+        "an empty value clears the label"
+    );
+
+    let before = std::fs::read(&img).unwrap();
     let out = tool("fs.ext4")
-        .args([&img, "set", "label", "X"])
+        .args([&img, "set", "label", "seventeen-bytes!!"])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(3));
-    assert!(stderr(&out).contains("not implemented"), "{}", stderr(&out));
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    assert!(out.stdout.is_empty());
+    assert!(stderr(&out).contains("16 bytes"), "{}", stderr(&out));
+    assert!(
+        std::fs::read(&img).unwrap() == before,
+        "a refused label changed the image"
+    );
 }

@@ -81,7 +81,7 @@ fn ino_of(fs: &Filesystem, path: &str) -> u32 {
 }
 
 #[wasm_bindgen_test]
-fn a_formatted_volume_mounts_with_an_empty_root() {
+fn a_formatted_volume_mounts_with_only_lost_found_in_the_root() {
     let dev = formatted();
     let fs = mount(&dev);
     assert_eq!(fs.sb.volume_name, "wasm");
@@ -90,7 +90,8 @@ fn a_formatted_volume_mounts_with_an_empty_root() {
     assert!(fs.sb.is_clean(), "a fresh volume is marked clean");
     let (root, _) = fs.read_inode_verified(2).expect("root inode verifies");
     assert!(root.is_dir(), "the root is a directory");
-    assert_eq!(root.links_count, 2, "`.` and `..`");
+    assert_eq!(root.links_count, 3, "`.`, `..` and lost+found's `..`");
+    assert_eq!(ino_of(&fs, "/lost+found"), 11, "lost+found is inode 11");
     fs.finish().expect("unmount");
 }
 
