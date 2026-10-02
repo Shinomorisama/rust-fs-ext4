@@ -638,14 +638,22 @@ See `examples/capi_demo.rs` for the Rust-side equivalent.
 
 ```toml
 [dependencies]
-am-fs-ext4 = "0.5"
+am-fs-ext4 = "0.7"
 ```
 
 ```rust
+use std::sync::Arc;
+
+use fs_ext4::block_io::FileDevice;
 use fs_ext4::Filesystem;
 
-let fs = Filesystem::mount("/path/to/disk.img")?;
-let attrs = fs.stat("/hello.txt")?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let fs = Filesystem::mount(Arc::new(FileDevice::open("/path/to/disk.img")?))?;
+    let ino = fs.lookup_path_bytes(b"/hello.txt")?;
+    let attrs = fs.stat_ino(ino)?;
+    println!("size={} mode={:o}", attrs.size, attrs.mode);
+    Ok(())
+}
 ```
 
 ### Testing
