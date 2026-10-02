@@ -252,8 +252,10 @@ vars:
   # the tiers read the wrapper from core. It is v0.2.16 because the floor and
   # the semver check are core's too from that release, run through
   # scripts/core.sh, and it carries the `cli` plumbing and SHARE fix that
-  # v0.2.15 brought.
-  FS_CORE_REF: v0.2.16
+  # v0.2.15 brought. It is v0.2.17 because test:vm's guest installs its
+  # toolchain through `scripts/core.sh guest-rust-toolchain`, which that
+  # release added.
+  FS_CORE_REF: v0.2.17
   LINUX_HARNESS_URL: https://github.com/antimatter-studios/fs-linux-test-harness.git
   LINUX_HARNESS_REF: v0.2.0
 
