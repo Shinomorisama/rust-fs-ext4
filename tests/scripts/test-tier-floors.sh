@@ -6,10 +6,12 @@
 # predicate edited or a helper renamed shrinks a selection, `cargo test`
 # runs what is left and exits 0, and tier.sh reports `ok`. A floor of 1
 # catches only the collapse to exactly zero; a tier whose selection shrank
-# to one stray target sails through it. So this runs each floor that
-# chores.yml declares against a log in which the tier executed ONE test --
-# the shape of a selection that stopped matching all but one file -- and
-# requires the floor to refuse it.
+# to one stray target sails through it. So every floor chores.yml declares
+# must refuse a run that executed ONE test -- the shape of a selection that
+# stopped matching all but one file -- which is to say it must be at least 2.
+# The floor itself is rust-fs-core's (scripts/core.sh test-floor), tested
+# there; what is this repository's is the numbers, so they are what is
+# checked here.
 #
 # And every tier that tier.sh runs must have a floor at all, so a tier
 # added later cannot arrive without one. Two tiers are exceptions, named
@@ -28,16 +30,12 @@ UNFLOORED='scripts semver'
 fails=0
 fail() { echo "FAIL  $*" >&2; fails=$((fails + 1)); }
 
-sandbox="$(mktemp -d)"
-trap 'rm -rf "$sandbox"' EXIT
-mkdir -p "$sandbox/scripts" "$sandbox/tmp/logs"
-cp "$REPO/scripts/test-floor.sh" "$sandbox/scripts/test-floor.sh"
-
-# `scripts/test-floor.sh <tier> <floor>`, wherever chores.yml calls it.
-floors="$(grep -oE 'scripts/test-floor\.sh +[a-z0-9_-]+ +[0-9]+' "$CHORES" |
-    awk '{ print $2, $3 }')"
+# `scripts/core.sh test-floor [--refuse-ignored] <tier> <floor>`, wherever
+# chores.yml calls it.
+floors="$(grep -oE 'core\.sh test-floor +(--refuse-ignored +)?[a-z0-9_-]+ +[0-9]+' "$CHORES" |
+    awk '{ print $(NF-1), $NF }')"
 if [ -z "$floors" ]; then
-    fail "chores.yml calls scripts/test-floor.sh nowhere"
+    fail "chores.yml calls scripts/core.sh test-floor nowhere"
 fi
 
 # `scripts/tier.sh <label> <tier> <lines> <bytes>`; the label may be quoted.
@@ -50,21 +48,14 @@ fi
 for tier in $tiers; do
     case " $UNFLOORED " in *" $tier "*) continue ;; esac
     if ! printf '%s\n' "$floors" | grep -qE "^$tier "; then
-        fail "the $tier tier has no scripts/test-floor.sh call in chores.yml"
+        fail "the $tier tier has no scripts/core.sh test-floor call in chores.yml"
     fi
 done
 
 while read -r tier floor; do
     [ -n "$tier" ] || continue
-    log="$sandbox/tmp/logs/$tier.log"
-    printf '%s\n' \
-        "running 1 test" \
-        "test stray ... ok" \
-        "" \
-        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s" \
-        >"$log"
-    if bash "$sandbox/scripts/test-floor.sh" "$tier" "$floor" >/dev/null 2>&1; then
-        fail "the $tier tier went green having executed 1 test (floor $floor)"
+    if [ "$floor" -lt 2 ]; then
+        fail "the $tier tier's floor is $floor, so it goes green having executed 1 test"
     fi
 done <<<"$floors"
 

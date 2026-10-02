@@ -249,10 +249,11 @@ vars:
   # scripts/tier.sh reads scripts/output-budget.sh out of core. v0.2.11 is the
   # first release that packages it and v0.2.13 is the first that carries the
   # quiet-failure behaviour, so this pin cannot go back below v0.2.13 while
-  # the tiers read the wrapper from core. It is v0.2.15 because the tools'
-  # command-line plumbing is the `cli` feature, with the SHARE fix this
-  # repository's copy had gained.
-  FS_CORE_REF: v0.2.15
+  # the tiers read the wrapper from core. It is v0.2.16 because the floor and
+  # the semver check are core's too from that release, run through
+  # scripts/core.sh, and it carries the `cli` plumbing and SHARE fix that
+  # v0.2.15 brought.
+  FS_CORE_REF: v0.2.16
   LINUX_HARNESS_URL: https://github.com/antimatter-studios/fs-linux-test-harness.git
   LINUX_HARNESS_REF: v0.2.0
 
@@ -437,7 +438,7 @@ tasks:
     # which is what proves the split.
     cmds:
       - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1050 65000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
-      - 'scripts/test-floor.sh unit 440'
+      - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).
   #
@@ -480,7 +481,7 @@ tasks:
     # visible in the workflow rather than hidden in a green log.
     cmds:
       - 'scripts/tier.sh test:images images 1400 60000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh images)'
-      - 'scripts/test-floor.sh images 450'
+      - 'bash scripts/core.sh test-floor images 450'
 
   test:oracle:
     desc: 'The driver writes, e2fsprogs reads back — every tool call made inside the harness VM'
@@ -500,7 +501,7 @@ tasks:
     cmds:
       - scripts/tools.sh --check
       - 'scripts/tier.sh test:oracle oracle 3800 295000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh oracle) -- --show-output'
-      - 'scripts/test-floor.sh oracle 140'
+      - 'bash scripts/core.sh test-floor oracle 140'
 
   test:kernel:
     desc: 'The driver writes, THE KERNEL reads back: our images loop-mounted by Linux in the guest'
@@ -512,7 +513,7 @@ tasks:
     # that must fail.
     cmds:
       - 'scripts/tier.sh test:kernel kernel 460 36300 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
-      - 'scripts/test-floor.sh kernel 3'
+      - 'bash scripts/core.sh test-floor kernel 3'
 
   test:lwext4:
     desc: 'CROSS-VALIDATION: lwext4 — a third implementation, built in the guest — reads what we wrote, and we read what it wrote'
@@ -536,7 +537,7 @@ tasks:
     cmds:
       - scripts/tools.sh --check
       - 'scripts/tier.sh test:lwext4 lwext4 85 6800 -- scripts/test.sh --locked --release $(scripts/test-targets.sh lwext4) -- --show-output'
-      - 'scripts/test-floor.sh lwext4 7'
+      - 'bash scripts/core.sh test-floor lwext4 7'
 
   tools:wasm:
     desc: 'Install and verify what test:wasm needs: the wasm32 target, the wasm-bindgen test runner at Cargo.lock''s version, and node'
@@ -561,7 +562,7 @@ tasks:
     cmds:
       - scripts/wasm-tools.sh --check
       - 'CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner scripts/tier.sh test:wasm wasm 170 8000 -- cargo test --locked --target wasm32-unknown-unknown --test wasm'
-      - 'scripts/test-floor.sh wasm 4'
+      - 'bash scripts/core.sh test-floor wasm 4'
 
   test:vm:
     desc: 'The whole suite, compiled and run INSIDE the harness VM (how a Mac runs the Linux tests)'
@@ -607,7 +608,7 @@ tasks:
         # shellcheck disable=SC2086  # the words are the point
         scripts/tier.sh test:vm vm 3900 193000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
-        scripts/test-floor.sh vm 1060
+        bash scripts/core.sh test-floor vm 1060
 
   test:
     desc: 'Everything, exactly as CI runs it — natively on Linux, inside the VM anywhere else'
@@ -648,7 +649,7 @@ tasks:
       - task: test:kernel
       - task: test:lwext4
       - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 183000 -- scripts/test.sh --locked --release'
-      - 'scripts/test-floor.sh suite 1060'
+      - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
       # tested as installed. A separate invocation because test:cli reads
@@ -680,7 +681,7 @@ tasks:
     # and completions; the floor is about 95% of that.
     cmds:
       - 'scripts/tier.sh test:cli cli 40 1460 -- scripts/test-cli.sh'
-      - 'scripts/test-floor.sh cli 150'
+      - 'bash scripts/core.sh test-floor cli 150'
 
   test:scripts:
     desc: The shell tests (tests/scripts/*.sh), every one by glob
@@ -771,7 +772,7 @@ tasks:
     # 4,000 leaves room for a warning block without masking a flood. A
     # failing run prints every broken item and is not held to it.
     cmds:
-      - 'scripts/tier.sh check:semver semver 40 4000 -- scripts/semver-check.sh'
+      - 'scripts/tier.sh check:semver semver 40 4000 -- bash scripts/core.sh semver-check'
 
   lint:
     desc: Formatting and clippy, exactly as CI runs them
@@ -791,6 +792,9 @@ tasks:
     # lines to it.
     cmds:
       - scripts/agents-core-check.sh
+      # The family scripts are rust-fs-core's alone: fails on a committed copy,
+      # a scripts/core.sh that differs from core's, or a call to a local copy.
+      - bash scripts/core.sh family-check
       - scripts/ci-gate.sh
       - scripts/check-provenance.sh
       - cargo fmt --all --check
