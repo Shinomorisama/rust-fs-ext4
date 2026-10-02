@@ -1,58 +1,75 @@
 #!/usr/bin/env bash
-# The release tarball has the layout an installer copies as-is --
-# bin/mkfs.ext4, share/rust-fs-ext4/CAVEATS and the licences, nothing else --
-# and the tool in it runs and identifies itself.
+# The release tarball is an install prefix -- bin/rust-fs-ext4, each dotted
+# name a relative symlink to it, the man pages, the completions, the CAVEATS
+# and the licence, nothing else -- and every name in it runs and identifies
+# itself.
 #
-# Cargo refuses a dot in a target name, so the formatter builds as
-# `mkfs_ext4`. scripts/package-cli.sh renames it to `mkfs.ext4` before
-# packaging; the underscore is a build-system constraint and must not reach
-# a public artifact.
-#
-# This runs the real packaging script against stand-in binaries in a
-# sandbox: one that behaves, and one for each way a build can be wrong
-# (missing, --help failing, reporting a version other than the tag's). The
-# release workflow runs the same script against the real binary on every
-# platform it publishes, so the checks here are the checks a release makes.
+# This runs the real packaging script against stand-ins for the built
+# multi-call binary in a sandbox: one that behaves, and one for each way a
+# build can be wrong (missing, forgetting a name, --help failing, reporting
+# a version other than the tag's, writing no man page). The `cli` CI job and
+# the release workflow run the same script against the real binary, so the
+# checks here are the checks a release makes.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PACKAGE="$ROOT/scripts/package-cli.sh"
+REPO_NAME=rust-fs-ext4
 pass=0
 fail=0
 
 ok()  { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); printf 'FAIL %s\n' "$*"; }
 
-sandbox="$(mktemp -d)"
+mkdir -p "$ROOT/tmp"
+sandbox="$(mktemp -d "$ROOT/tmp/package-cli.XXXXXX")"
 trap 'rm -rf "$sandbox"' EXIT
 
 crate="$(sed -n 's/^name = "\(.*\)"$/\1/p' "$ROOT/Cargo.toml" | head -n 1)"
 [ "$crate" = "am-fs-ext4" ] && ok || bad "crate name read from Cargo.toml: '$crate'"
 
-# A stand-in for the built formatter. $1 is the version it reports, $2 the
-# exit status of --help.
+# A stand-in for the built binary, in $sandbox/<dir>/rust-fs-ext4.
+#   VERSION  what --version reports          (default 9.9.9)
+#   HELP     the exit status of --help       (default 0)
+#   NAMES    what `generate names` prints    (default the three dotted names)
+#   NO_MAN   a name to write no man page for
 stub() {
-    local path="$sandbox/$3"
-    mkdir -p "$(dirname "$path")"
-    cat > "$path" <<STUB
+    local dir="$sandbox/$1"
+    mkdir -p "$dir"
+    cat >"$dir/$REPO_NAME" <<STUB
 #!/usr/bin/env bash
+me="\$(basename "\$0")"
 case "\$1" in
-    --help)    echo "Usage: mkfs.ext4 [options] <device>"; exit $2 ;;
-    --version) echo "mkfs.ext4 ($crate) $1" ;;
-    *)         exit 2 ;;
+    --help) echo "Usage: \$me"; exit ${HELP:-0} ;;
+    --version) echo "\$me ($crate) ${VERSION:-9.9.9}"; exit 0 ;;
+    generate)
+        case "\$2" in
+            names) printf '%s\n' ${NAMES:-mkfs.ext4 fsck.ext4 fs.ext4} ;;
+            man)
+                mkdir -p "\$3/man/man1" "\$3/man/man8"
+                for n in mkfs.ext4:8 fsck.ext4:8 fs.ext4:1 $REPO_NAME:1; do
+                    [ "\${n%%:*}" = "${NO_MAN:-}" ] && continue
+                    echo '.TH X' > "\$3/man/man\${n##*:}/\${n%%:*}.\${n##*:}"
+                done ;;
+            completions)
+                mkdir -p "\$3/zsh/site-functions" "\$3/bash-completion/completions" "\$3/fish/vendor_completions.d"
+                for n in mkfs.ext4 fsck.ext4 fs.ext4 $REPO_NAME; do
+                    echo "#compdef \$n" > "\$3/zsh/site-functions/_\$n"
+                    echo "complete -F _\$n \$n" > "\$3/bash-completion/completions/\$n"
+                    echo "complete -c \$n" > "\$3/fish/vendor_completions.d/\$n.fish"
+                done ;;
+        esac ;;
+    *) exit 2 ;;
 esac
 STUB
-    chmod +x "$path"
-    printf '%s\n' "$path"
+    chmod +x "$dir/$REPO_NAME"
+    printf '%s\n' "$dir"
 }
 
-# Runs the packaging script in a fresh output directory. It prints the
-# tarball's name relative to that directory, so this prints the absolute path.
-#
-# STALE=<name> first leaves a file of that name in the output directory, as a
-# previous run would have. On failure it prints whatever the script printed,
-# so a refusal that names a tarball anyway is seen, and it records the output
-# directory in $sandbox/package-out for the leftover-tarball check.
+# Runs the packaging script in a fresh output directory and prints the
+# tarball's absolute path. STALE=<name> first leaves a file of that name
+# there, as a previous run would have. The output directory is recorded in
+# $sandbox/package-out for the leftover-tarball check.
 package() {
     local out="$sandbox/out-$RANDOM$RANDOM" name status
     mkdir -p "$out"
@@ -69,45 +86,51 @@ package() {
 
 [ -f "$PACKAGE" ] && ok || bad "scripts/package-cli.sh exists"
 
-# --- A good build: the tarball, its name, and exactly its contents. -------
-good="$(stub 9.9.9 0 good/mkfs_ext4)"
-if tarball="$(package 9.9.9 darwin-arm64 "$(dirname "$good")")"; then
+# --- A good build: the tarball, its name, and exactly its layout. ---------
+good="$(stub good)"
+if tarball="$(package 9.9.9 darwin-arm64 "$good")"; then
     ok
 else
     bad "a good build packages: $(cat "$sandbox/stderr")"
     tarball=""
 fi
-
 case "$(basename "$tarball")" in
     "$crate-9.9.9-darwin-arm64.tar.gz") ok ;;
     *) bad "tarball is named <crate>-<version>-<label>.tar.gz, got '$tarball'" ;;
 esac
 
-# The content checks below need the tarball. Without it they fail rather than
+# The content checks need the tarball. Without it they fail rather than
 # fall silent, since a check that does not run reads like one that passed.
 [ -f "$tarball" ] && ok || bad "the packaged tarball exists at '$tarball'"
 if [ -f "$tarball" ]; then
-    listing="$(tar -tzf "$tarball" | sort | tr '\n' ' ')"
-    # LC_ALL=C because the list below is written in byte order, LICENSE
-    # before bin/. A bare `sort` collates by the caller's locale, and
-    # en_GB/en_US put LICENSE after bin/, so the check failed on a correct
-    # tarball everywhere but a C-locale CI runner (#471).
     files="$(tar -tzf "$tarball" | sed 's|^\./||' | grep -v '/$' | LC_ALL=C sort | tr '\n' ' ')"
-    [ "$files" = "LICENSE bin/mkfs.ext4 share/rust-fs-ext4/CAVEATS " ] && ok \
-        || bad "tarball holds exactly bin/mkfs.ext4, the CAVEATS and the licence, got: $files"
-
-    case "$listing" in
-        *mkfs_ext4*) bad "the cargo target name reached the tarball: $listing" ;;
+    want="LICENSE bin/fs.ext4 bin/fsck.ext4 bin/mkfs.ext4 bin/rust-fs-ext4"
+    want="$want share/bash-completion/completions/fs.ext4 share/bash-completion/completions/fsck.ext4 share/bash-completion/completions/mkfs.ext4 share/bash-completion/completions/rust-fs-ext4"
+    want="$want share/fish/vendor_completions.d/fs.ext4.fish share/fish/vendor_completions.d/fsck.ext4.fish share/fish/vendor_completions.d/mkfs.ext4.fish share/fish/vendor_completions.d/rust-fs-ext4.fish"
+    want="$want share/man/man1/fs.ext4.1 share/man/man1/rust-fs-ext4.1 share/man/man8/fsck.ext4.8 share/man/man8/mkfs.ext4.8"
+    want="$want share/rust-fs-ext4/CAVEATS"
+    want="$want share/zsh/site-functions/_fs.ext4 share/zsh/site-functions/_fsck.ext4 share/zsh/site-functions/_mkfs.ext4 share/zsh/site-functions/_rust-fs-ext4 "
+    [ "$files" = "$want" ] && ok || bad "tarball holds exactly the install layout, got: $files"
+    case "$files" in
+        *mkfs_ext4*) bad "a cargo target name reached the tarball: $files" ;;
         *) ok ;;
     esac
     unpacked="$sandbox/unpacked"
     mkdir -p "$unpacked"
     tar -xzf "$tarball" -C "$unpacked"
-    [ -x "$unpacked/bin/mkfs.ext4" ] && ok || bad "bin/mkfs.ext4 is executable in the tarball"
-    cmp -s "$unpacked/share/rust-fs-ext4/CAVEATS" "$ROOT/packaging/CAVEATS" && ok \
-        || bad "share/rust-fs-ext4/CAVEATS is packaging/CAVEATS"
+    for name in mkfs.ext4 fsck.ext4 fs.ext4; do
+        [ -L "$unpacked/bin/$name" ] && [ "$(readlink "$unpacked/bin/$name")" = "$REPO_NAME" ] && ok \
+            || bad "bin/$name is a relative symlink to $REPO_NAME"
+    done
+    [ -f "$unpacked/bin/$REPO_NAME" ] && [ ! -L "$unpacked/bin/$REPO_NAME" ] && ok \
+        || bad "bin/$REPO_NAME is the real file"
+    cmp -s "$unpacked/bin/$REPO_NAME" "$good/$REPO_NAME" && ok || bad "bin/$REPO_NAME is the built binary"
+    cmp -s "$unpacked/share/$REPO_NAME/CAVEATS" "$ROOT/packaging/CAVEATS" && ok \
+        || bad "share/$REPO_NAME/CAVEATS is packaging/CAVEATS"
+    [ "$(wc -l <"$ROOT/packaging/CAVEATS" | tr -d ' ')" -le 4 ] && ok || bad "packaging/CAVEATS is at most four lines"
+    grep -q 'e2fsprogs' "$ROOT/packaging/CAVEATS" && ok \
+        || bad "packaging/CAVEATS says where e2fsprogs' mkfs.ext4 stays"
     cmp -s "$unpacked/LICENSE" "$ROOT/LICENSE" && ok || bad "LICENSE is the repository's"
-    cmp -s "$unpacked/bin/mkfs.ext4" "$good" && ok || bad "bin/mkfs.ext4 is the built binary, renamed"
 fi
 
 # --- Each way a build can be wrong is refused, with no tarball left. ------
@@ -126,18 +149,21 @@ refused() {
 }
 
 refused "a missing binary" 9.9.9 darwin-arm64 "$sandbox/nowhere"
-refused "a binary whose --help fails" 9.9.9 darwin-arm64 "$(dirname "$(stub 9.9.9 1 helpfails/mkfs_ext4)")"
-refused "a binary reporting a version other than the tag's" 9.9.9 darwin-arm64 "$(dirname "$(stub 1.0.0 0 wrongver/mkfs_ext4)")"
-refused "a missing label" 9.9.9 "" "$(dirname "$good")"
-refused "a missing version" "" darwin-arm64 "$(dirname "$good")"
+refused "a binary that forgets a name" 9.9.9 darwin-arm64 "$(NAMES="mkfs.ext4 fs.ext4" stub forgets)"
+refused "a binary whose --help fails" 9.9.9 darwin-arm64 "$(HELP=1 stub helpfails)"
+refused "a binary reporting a version other than the tag's" 9.9.9 darwin-arm64 "$(VERSION=1.0.0 stub wrongver)"
+refused "a binary that writes no man page for fsck.ext4" 9.9.9 darwin-arm64 "$(NO_MAN=fsck.ext4 stub noman)"
+refused "a missing label" 9.9.9 "" "$good"
+refused "a missing version" "" darwin-arm64 "$good"
 STALE="$crate-9.9.9-darwin-arm64.tar.gz" refused "a failure beside a previous run's tarball" 9.9.9 darwin-arm64 "$sandbox/nowhere"
 
-# --- The release workflow packages through this script. ------------------
+# --- The release workflow packages the multi-call binary through it. ------
 release="$ROOT/.github/workflows/release.yml"
 grep -q 'scripts/package-cli.sh' "$release" && ok \
     || bad "release.yml packages through scripts/package-cli.sh"
-grep -q 'cargo build --release --locked --bin mkfs_ext4' "$release" && ok \
-    || bad "release.yml builds the mkfs_ext4 target"
+grep -q 'cargo build --release --locked --features cli --bin rust-fs-ext4' "$release" && ok \
+    || bad "release.yml builds the rust-fs-ext4 multi-call binary, with the cli feature"
+grep -qE '^[^#]*cargo build[^#]*--bin mkfs_ext4' "$release" && bad "release.yml still builds the mkfs_ext4 target for the tarball" || ok
 grep -qE 'uses: actions/attest-build-provenance@[0-9a-f]{40}' "$release" && ok \
     || bad "release.yml attests the tarballs' build provenance, with the action pinned to a commit"
 grep -q 'attestations: write' "$release" && ok \
