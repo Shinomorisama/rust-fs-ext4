@@ -498,6 +498,21 @@ jobs:
       - name: chore test:cli
         id: tier
         run: chore test:cli
+      # THE RELEASE TARBALL, built here so a release is not the first time
+      # it is put together: scripts/package-cli.sh stages the install prefix
+      # from the binary cli:install built, then refuses it unless it holds
+      # exactly that layout, every dotted name is a relative symlink to
+      # bin/rust-fs-ext4, every name has its man page and completions,
+      # CAVEATS is at most four lines, and every name answers --version as
+      # this crate at Cargo.toml's version.
+      - name: The release tarball has the install layout
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          mkdir -p tmp/package
+          cd tmp/package
+          tarball="$(../../scripts/package-cli.sh "$version" linux-x86_64 "${CARGO_TARGET_DIR:-$GITHUB_WORKSPACE/target}/release")"
+          tar -tzvf "$tarball"
       - name: Keep the tier logs
         # Not before the tier ran: there is no log then, and this step's red
         # would hide the real one (#306).

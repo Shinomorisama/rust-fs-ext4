@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The release tarball ships every tool (#475).** Through 0.7.0 it held
+  only `bin/mkfs.ext4`, built from the standalone `mkfs_ext4` target, so
+  `fsck.ext4`, `fs.ext4`, the `rust-fs-ext4` entry point, the man pages
+  and the completions were never published. The release now builds the
+  multi-call binary (`--features cli --bin rust-fs-ext4`) and
+  `scripts/package-cli.sh` lays it out as the family's install prefix:
+  `bin/rust-fs-ext4`, `mkfs.ext4`, `fsck.ext4` and `fs.ext4` relative
+  symlinks to it, section 8 pages for `mkfs.ext4` and `fsck.ext4` and
+  section 1 for the rest, zsh/bash/fish completions, CAVEATS and LICENSE.
+  The `cli` CI job builds and checks the same tarball on every pull
+  request.
+
 ## [0.7.0] — 2026-09-30
 
 ### Breaking

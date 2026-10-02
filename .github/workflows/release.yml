@@ -73,21 +73,20 @@ jobs:
   # Build the CLI as a downloadable binary, so it can be installed with a
   # package manager rather than `cargo install`.
   #
-  # THE BINARY IS RENAMED HERE, and that is the point of this job. Cargo
-  # refuses a dot in a target name ("invalid character '.' in crate
-  # name"), so the target is `mkfs_ext4` and the published artifact is
-  # `mkfs.ext4` — the name the format's convention actually uses, and the
-  # one `mkfs -t ext4` resolves to. The underscore is a build-system
-  # constraint and has no business appearing in a public artifact, so the
-  # rename happens before packaging (scripts/package-cli.sh) rather than in
-  # a package manager's formula, where a direct downloader would never see
-  # it.
+  # THE DOTTED NAMES ARE MADE HERE. Cargo refuses a dot in a target name
+  # ("invalid character '.' in crate name"), so the one binary builds as
+  # the repository's name, `rust-fs-ext4`, and dispatches on the name it
+  # was started under. scripts/package-cli.sh links `mkfs.ext4`,
+  # `fsck.ext4` and `fs.ext4` to it as relative symlinks -- the names the
+  # format's convention uses, and the ones `mkfs -t ext4` and fsck(8)
+  # resolve to -- so no build-system name appears in a public artifact,
+  # and an installer never has to rename anything.
   #
   # Native builds only, one runner per platform: cross-compiling Rust
   # needs either a cross toolchain or an emulator, and neither is worth
   # it for two targets that GitHub already provides natively.
   package-cli:
-    name: package mkfs.ext4 (${{ matrix.label }})
+    name: package the tools (${{ matrix.label }})
     needs: [test]
     # Read-only. A leg uploads its tarball as a workflow artifact; the
     # `release` job publishes them together once every leg has passed.
@@ -121,20 +120,21 @@ jobs:
           toolchain: 1.95.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - name: build mkfs_ext4
+      - name: build the multi-call binary
         shell: bash
-        run: cargo build --release --locked --bin mkfs_ext4
+        run: cargo build --release --locked --features cli --bin rust-fs-ext4
 
       # scripts/package-cli.sh stages the tarball as an install prefix --
-      # bin/mkfs.ext4, share/rust-fs-ext4/CAVEATS and LICENSE -- so an
-      # installer copies it whole and never names a tool, and then checks
-      # it: exactly those files, a tool that answers --help, and a
-      # --version naming this crate and this tag's version. A tarball whose
-      # tool will not run is worse than no tarball; the failure would
-      # otherwise surface as a user's bug report rather than a red build.
-      # Formatting a real image and checking it with fsck.ext4 is what the
-      # test job's tests/mkfs_bin_fsck_oracle.rs covers.
-      - name: package and check mkfs.ext4
+      # bin/rust-fs-ext4, each dotted name a relative symlink to it, the man
+      # pages and completions the binary writes, share/rust-fs-ext4/CAVEATS
+      # and LICENSE -- so an installer copies it whole and never names a
+      # tool, and then checks it: exactly that layout, every name answering
+      # --help, and a --version naming this crate and this tag's version.
+      # A tarball whose tools will not run is worse than no tarball; the
+      # failure would otherwise surface as a user's bug report rather than
+      # a red build. Formatting a real image with mkfs.ext4 and checking it
+      # with e2fsck is what the test job's tests/cli_mkfs_oracle.rs covers.
+      - name: package and check the tarball
         id: pack
         shell: bash
         run: |
@@ -161,7 +161,7 @@ jobs:
       - name: keep the tarball for the release job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: mkfs-ext4-${{ matrix.label }}
+          name: cli-${{ matrix.label }}
           path: ${{ steps.pack.outputs.tarball }}
           if-no-files-found: error
           retention-days: 7
@@ -183,7 +183,7 @@ jobs:
       - name: collect every leg's tarball
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: mkfs-ext4-*
+          pattern: cli-*
           path: dist
           merge-multiple: true
 
