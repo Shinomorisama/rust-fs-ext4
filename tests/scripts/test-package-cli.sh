@@ -88,7 +88,11 @@ esac
 [ -f "$tarball" ] && ok || bad "the packaged tarball exists at '$tarball'"
 if [ -f "$tarball" ]; then
     listing="$(tar -tzf "$tarball" | sort | tr '\n' ' ')"
-    files="$(tar -tzf "$tarball" | sed 's|^\./||' | grep -v '/$' | sort | tr '\n' ' ')"
+    # LC_ALL=C because the list below is written in byte order, LICENSE
+    # before bin/. A bare `sort` collates by the caller's locale, and
+    # en_GB/en_US put LICENSE after bin/, so the check failed on a correct
+    # tarball everywhere but a C-locale CI runner (#471).
+    files="$(tar -tzf "$tarball" | sed 's|^\./||' | grep -v '/$' | LC_ALL=C sort | tr '\n' ' ')"
     [ "$files" = "LICENSE bin/mkfs.ext4 share/rust-fs-ext4/CAVEATS " ] && ok \
         || bad "tarball holds exactly bin/mkfs.ext4, the CAVEATS and the licence, got: $files"
 
