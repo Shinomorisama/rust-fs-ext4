@@ -97,8 +97,8 @@ fixed on `main`; the casefold hash premise is #438.
 | Versions | Where | What they contain | Status |
 |---|---|---|---|
 | 0.1.0 to 0.3.1 | Git tags `v0.1.0`–`v0.3.1` and a draft GitHub release of `v0.1.0`, under the package name `fs-ext4`, which was never published to crates.io | The previous `src/hash.rs`, whose half-MD4 transform followed the Linux kernel's implementation. | Git tags cannot be yanked. They remain in the repository and carry this code. |
-| 0.3.2, 0.3.3, 0.4.0, 0.4.1 | crates.io (`am-fs-ext4`) and their git tags | The same `src/hash.rs`. | To be yanked from crates.io once 0.6.0 is published. |
-| 0.5.0, 0.5.1 | crates.io (`am-fs-ext4`) and their git tags | The same `src/hash.rs`, and one line of kernel C quoted in two doc comments in `src/inode.rs`. | To be yanked from crates.io once 0.6.0 is published. |
+| 0.3.2, 0.3.3, 0.4.0, 0.4.1 | crates.io (`rust-fs-ext4`) and their git tags | The same `src/hash.rs`. | To be yanked from crates.io once 0.6.0 is published. |
+| 0.5.0, 0.5.1 | crates.io (`rust-fs-ext4`) and their git tags | The same `src/hash.rs`, and one line of kernel C quoted in two doc comments in `src/inode.rs`. | To be yanked from crates.io once 0.6.0 is published. |
 | 0.6.0 and later | crates.io | None of the above. | Use these. |
 
 Every version before 0.6.0 carries hash code derived from the Linux kernel.

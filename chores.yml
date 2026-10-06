@@ -257,7 +257,7 @@ vars:
   # release, run as `scripts/core.sh ci-gate`. It is v0.2.23 because the
   # release tarball is core's from that release: release.yml calls its
   # release-cli workflow, which runs `scripts/core.sh package-cli` (#481).
-  FS_CORE_REF: v0.2.23
+  FS_CORE_REF: v0.3.0
   LINUX_HARNESS_URL: https://github.com/antimatter-studios/fs-linux-test-harness.git
   # v0.3.0 is the release with `vm.sh session`, which the test runner runs
   # cargo through so a run gives the VM and the machine-wide slot back
@@ -382,7 +382,7 @@ tasks:
           #
           # An earlier cut of this task wrote a `paths` override into
           # .cargo/config.toml holding an ABSOLUTE path to the sibling, so the
-          # manifest could name am-fs-core by version alone. It failed in the
+          # manifest could name rust-fs-core by version alone. It failed in the
           # one place this repository cannot afford to fail: `chore test:vm`
           # mounts this working tree into the guest at /repo, the override went
           # with it, and the host path it names does not exist inside the VM.
@@ -736,7 +736,7 @@ tasks:
       - 'include/*.h'
       # fs_core.h is a source of ours because we ship it (see the cp below).
       # THIS PATH AND THE cp MUST AGREE, and nothing checks that they do —
-      # it is the same path Cargo.toml resolves am-fs-core from.
+      # it is the same path Cargo.toml resolves rust-fs-core from.
       - '../rust-fs-core/include/fs_core.h'
       # The build reads the lock and every line of core it links, so each is a
       # source: a lock-only bump, or a sibling re-pinned under an unchanged

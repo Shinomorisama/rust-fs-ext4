@@ -284,7 +284,7 @@ Install the hooks once per clone with github-guard's installer:
 requires that context and nothing else:
 
 ```sh
-gh api repos/christhomas/rust-fs-ext4/branches/main/protection/required_status_checks
+gh api repos/antimatter-studios/rust-fs-ext4/branches/main/protection/required_status_checks
 # {"strict":true,"contexts":["ci-ok"], ...}
 ```
 

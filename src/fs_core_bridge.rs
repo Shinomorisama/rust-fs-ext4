@@ -18,7 +18,7 @@
 //! or any of its implementors. Risk-bounded: removing `pub mod
 //! fs_core_bridge;` from `lib.rs` reverts the entire change.
 //!
-//! [qcow]: https://crates.io/crates/am-img-qcow2
+//! [qcow]: https://crates.io/crates/rust-img-qcow2
 
 use crate::block_io::{BlockDevice, CallbackDevice, FileDevice};
 use crate::error::Error;

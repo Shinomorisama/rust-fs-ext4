@@ -3,32 +3,6 @@
 version = 4
 
 [[package]]
-name = "am-fs-core"
-version = "0.2.23"
-dependencies = [
- "clap",
- "clap_complete",
- "clap_mangen",
-]
-
-[[package]]
-name = "am-fs-ext4"
-version = "0.7.2"
-dependencies = [
- "am-fs-core",
- "bitflags",
- "caseless",
- "clap",
- "crc32c",
- "fs-ext4-test-support",
- "hex",
- "js-sys",
- "saphyr",
- "unicode-normalization",
- "wasm-bindgen-test",
-]
-
-[[package]]
 name = "anstyle"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -374,6 +348,32 @@ name = "roff"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
+
+[[package]]
+name = "rust-fs-core"
+version = "0.3.0"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "clap_mangen",
+]
+
+[[package]]
+name = "rust-fs-ext4"
+version = "0.8.0"
+dependencies = [
+ "bitflags",
+ "caseless",
+ "clap",
+ "crc32c",
+ "fs-ext4-test-support",
+ "hex",
+ "js-sys",
+ "rust-fs-core",
+ "saphyr",
+ "unicode-normalization",
+ "wasm-bindgen-test",
+]
 
 [[package]]
 name = "rustc_version"
