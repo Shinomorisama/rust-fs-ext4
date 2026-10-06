@@ -48,7 +48,7 @@ zero rather than mislabelling the one being written.
 
 ### F5, F6, F8, F9, F2 — **fixed earlier**
 
-[#46](https://github.com/christhomas/rust-fs-ext4/pull/46). The three CLI bugs
+[#46](https://github.com/antimatter-studios/rust-fs-ext4/pull/46). The three CLI bugs
 (`-c` eating the device path, `-b` validated after opening the device, `-q`
 order-dependent), `-F` now read, and the multi-group formatter put in front of
 `e2fsck` in CI.

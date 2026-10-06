@@ -11,7 +11,7 @@ edition = "2021"
 rust-version = "1.87"
 license = "MIT"
 description = "Pure-Rust ext4 filesystem driver. Exposes a C ABI (fs_ext4_*) suitable for FFI from C/C++/Go/etc."
-repository = "https://github.com/christhomas/rust-fs-ext4"
+repository = "https://github.com/antimatter-studios/rust-fs-ext4"
 
 # The fuzz crate is its own package, on its own toolchain, and is not
 # part of this one. Without this, `cargo package` and `cargo publish`

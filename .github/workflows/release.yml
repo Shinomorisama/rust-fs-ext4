@@ -88,7 +88,7 @@ jobs:
   #
   # The attestation is signed by the called workflow, so a download is
   # checked with `gh attestation verify <tarball> --repo
-  # christhomas/rust-fs-ext4 --signer-workflow
+  # antimatter-studios/rust-fs-ext4 --signer-workflow
   # antimatter-studios/rust-fs-core/.github/workflows/release-cli.yml`.
   cli:
     needs: [test, publish]
