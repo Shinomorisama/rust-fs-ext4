@@ -1,5 +1,19 @@
 # am-fs-ext4 — pure-Rust ext2/3/4 driver
 
+> **Renamed to [`rust-fs-ext4`](https://crates.io/crates/rust-fs-ext4).**
+> `am-fs-ext4` 0.7.2 is the last version published under this name. New versions
+> are published only as `rust-fs-ext4`, starting at 0.8.0. To move, change one line
+> in `Cargo.toml`:
+>
+> ```toml
+> # before
+> am-fs-ext4 = "0.7"
+> # after
+> rust-fs-ext4 = "0.8"
+> ```
+>
+> The import is unchanged: `use fs_ext4::...` keeps working.
+
 Pure-Rust read/write driver for the ext2, ext3, and ext4 on-disk
 formats. Mounts disk images and block devices, journals writes
 through JBD2, replays the journal on dirty mounts, and exposes a

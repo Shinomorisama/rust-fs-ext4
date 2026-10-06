@@ -1,6 +1,6 @@
 [package]
 name = "am-fs-ext4"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 # The oldest toolchain the library and the binaries build on, so an older
 # one gets cargo's "requires rustc" message rather than a wall of E0658.
@@ -10,7 +10,7 @@ edition = "2021"
 # never reach a consumer. `chore check:msrv` builds at exactly this version.
 rust-version = "1.87"
 license = "MIT"
-description = "Pure-Rust ext4 filesystem driver. Exposes a C ABI (fs_ext4_*) suitable for FFI from C/C++/Go/etc."
+description = "Renamed to rust-fs-ext4: this crate receives no further versions. Depend on rust-fs-ext4 instead; the import is unchanged (use fs_ext4)."
 repository = "https://github.com/christhomas/rust-fs-ext4"
 
 # The fuzz crate is its own package, on its own toolchain, and is not
