@@ -3,22 +3,6 @@
 version = 4
 
 [[package]]
-name = "am-fs-core"
-version = "0.2.23"
-
-[[package]]
-name = "am-fs-ext4"
-version = "0.7.1"
-dependencies = [
- "am-fs-core",
- "bitflags",
- "caseless",
- "crc32c",
- "js-sys",
- "unicode-normalization",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -82,9 +66,9 @@ checksum = "ef25905e51abafe4dcea6c15fec58c57b601cdbd0ee53d22ea1d3016c587d39b"
 name = "fs-ext4-fuzz"
 version = "0.0.0"
 dependencies = [
- "am-fs-core",
- "am-fs-ext4",
  "libfuzzer-sys",
+ "rust-fs-core",
+ "rust-fs-ext4",
 ]
 
 [[package]]
@@ -194,6 +178,22 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "rust-fs-core"
+version = "0.3.0"
+
+[[package]]
+name = "rust-fs-ext4"
+version = "0.8.0"
+dependencies = [
+ "bitflags",
+ "caseless",
+ "crc32c",
+ "js-sys",
+ "rust-fs-core",
+ "unicode-normalization",
+]
 
 [[package]]
 name = "rustc_version"
