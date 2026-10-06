@@ -14,7 +14,7 @@
 //!
 //! Each is measured on a mount with no clean cache (`mount_with_cache(.., 0)`)
 //! and on one with the default [`fs_ext4::fs::DEFAULT_CACHE_BLOCKS`], through
-//! `am-fs-core`'s `CountingDevice` below the cache, as the sibling drivers
+//! `rust-fs-core`'s `CountingDevice` below the cache, as the sibling drivers
 //! measure. The tree is built here with `mkfs.ext4 -d` to a fixed recipe, so
 //! the figures in `docs/read-path-cost.md` can be reproduced. Fails when
 //! the harness VM the e2fsprogs tools run in is unreachable.

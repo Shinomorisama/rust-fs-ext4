@@ -12,7 +12,7 @@ It needs `mkfs.ext4` and `e2fsck`, and builds its own tree to a fixed recipe:
 - one directory of 3000 names, indexed by `e2fsck -fyD`;
 - a 128 MiB image at 4 KiB blocks.
 
-The counter is `am-fs-core`'s `CountingDevice`, below the buffer cache, so it counts what reached the device, not what the driver asked for. It matches the sibling drivers' `read_path_cost`. Every figure is calls to `read_at` and the bytes they asked for. Wall time is printed but isn't the point.
+The counter is `rust-fs-core`'s `CountingDevice`, below the buffer cache, so it counts what reached the device, not what the driver asked for. It matches the sibling drivers' `read_path_cost`. Every figure is calls to `read_at` and the bytes they asked for. Wall time is printed but isn't the point.
 
 ## Figures
 

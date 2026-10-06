@@ -1,7 +1,7 @@
 //! The README's "Using from Rust" section is checked against the crate.
 //!
 //! It drifted twice over and nothing noticed: the dependency line asked for
-//! `am-fs-ext4 = "0.5"` with the crate at 0.7, and the example called
+//! `rust-fs-ext4 = "0.5"` with the crate at 0.7, and the example called
 //! `Filesystem::mount` with a path and a `stat` method, neither of which
 //! exists. The README is text, so nothing compiled it (#469).
 //!
@@ -62,8 +62,8 @@ fn the_readme_asks_for_the_version_cargo_toml_declares() {
     };
     let toml = fenced(&read("README.md"), "toml");
     assert!(
-        toml.contains(&format!("am-fs-ext4 = \"{want}\"")),
-        "README.md's ```toml block should ask for am-fs-ext4 = \"{want}\" (Cargo.toml is \
+        toml.contains(&format!("rust-fs-ext4 = \"{want}\"")),
+        "README.md's ```toml block should ask for rust-fs-ext4 = \"{want}\" (Cargo.toml is \
          {version}), and says:\n{toml}"
     );
 }

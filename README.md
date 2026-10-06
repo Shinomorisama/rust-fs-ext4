@@ -1,18 +1,4 @@
-# am-fs-ext4 — pure-Rust ext2/3/4 driver
-
-> **Renamed to [`rust-fs-ext4`](https://crates.io/crates/rust-fs-ext4).**
-> `am-fs-ext4` 0.7.2 is the last version published under this name. New versions
-> are published only as `rust-fs-ext4`, starting at 0.8.0. To move, change one line
-> in `Cargo.toml`:
->
-> ```toml
-> # before
-> am-fs-ext4 = "0.7"
-> # after
-> rust-fs-ext4 = "0.8"
-> ```
->
-> The import is unchanged: `use fs_ext4::...` keeps working.
+# rust-fs-ext4 — pure-Rust ext2/3/4 driver
 
 Pure-Rust read/write driver for the ext2, ext3, and ext4 on-disk
 formats. Mounts disk images and block devices, journals writes
@@ -21,7 +7,7 @@ stable C ABI (`fs_ext4_*`) so any FFI host (Swift/C/C++/Go/…) can
 link `libfs_ext4.a` and `#include "fs_ext4.h"`. MIT-licensed. Zero
 kernel calls; zero non-MIT/BSD/Apache dependencies. Runtime crates
 are `crc32c`, `bitflags`, `unicode-normalization` and `caseless`
-(casefold), plus the sister `am-fs-core` block-device crate.
+(casefold), plus the sister `rust-fs-core` block-device crate.
 
 Designed for FFI: the C ABI is stable and the static library has no
 host-specific assumptions, so the same `libfs_ext4.a` works equally
@@ -130,7 +116,7 @@ One multi-call binary, `rust-fs-ext4`, behind the `cli` feature so the
 library gains no dependency from it:
 
 ```sh
-cargo install am-fs-ext4 --features cli   # or: chore cli:install from a checkout
+cargo install rust-fs-ext4 --features cli   # or: chore cli:install from a checkout
 ```
 
 It dispatches on the name it is run as, so an install links each tool to
@@ -173,7 +159,7 @@ rust-fs-ext4 doctor                        # is every tool on PATH ours?
 - **Not yet:** `resize` answers `not implemented`, and no resize is planned.
   `fsck.ext4` checks this crate's audit, a subset of e2fsck's; a directory
   it cannot read is a finding it cannot repair (#445).
-- **`--version`** on every name prints `<tool> (am-fs-ext4) <version>`.
+- **`--version`** on every name prints `<tool> (rust-fs-ext4) <version>`.
   `rust-fs-ext4 doctor` resolves each name on PATH, checks it answers that
   way, and says what wins and the fix when it does not.
 - `chore test:cli` tests the tools as installed (`doctor` first), and CI
@@ -463,7 +449,7 @@ See [CHANGELOG.md](CHANGELOG.md#070--2026-09-30) for the full notes.
 
 - **Breaking:** `CachingDevice` is no longer part of this crate's public
   API. It was removed while deleting what a dead-code `allow` was hiding;
-  the type lives in `am-fs-core`, where the other drivers already got it.
+  the type lives in `rust-fs-core`, where the other drivers already got it.
   The functionality moved rather than disappearing, but
   `fs_ext4::block_io::CachingDevice` no longer resolves — which for a
   `0.x` crate is a minor bump, since cargo treats the minor as the
@@ -485,7 +471,7 @@ See [CHANGELOG.md](CHANGELOG.md#070--2026-09-30) for the full notes.
   filesystem is refused, read-only being unaffected.
 - **The C attribute struct's timestamps widen to `int64_t`, moving every
   field after them.** Consumers must recompile, not relink.
-- Dependencies move to `am-fs-core` 0.2.4.
+- Dependencies move to `rust-fs-core` 0.2.4.
 
 ### 2026-08-29 — 0.4.1 — the multi-group formatter in front of e2fsck
 
@@ -632,7 +618,7 @@ cargo build --release --target x86_64-pc-windows-gnu
 
 Platform-specific packaging (macOS `lipo` for a universal static
 archive, an Xcode `.xcframework`, deb/rpm/Homebrew formulae)
-belongs in the consuming project. `am-fs-ext4` itself stays portable
+belongs in the consuming project. `rust-fs-ext4` itself stays portable
 cargo — no platform-specific build scripts.
 
 ### Using from C
@@ -662,7 +648,7 @@ See `examples/capi_demo.rs` for the Rust-side equivalent.
 
 ```toml
 [dependencies]
-am-fs-ext4 = "0.7"
+rust-fs-ext4 = "0.7"
 ```
 
 ```rust

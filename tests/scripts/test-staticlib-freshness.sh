@@ -93,8 +93,8 @@ grep -qa "$probe" "$ext4/dist/lib$LIB.a" ||
 # 3. The core requirement bumped, the lock not: the build must refuse.
 cp "$ext4/Cargo.lock" "$sandbox/Cargo.lock.before"
 sed -i.bak -E 's/^version = "[^"]+"/version = "0.2.999"/' "$sandbox/rust-fs-core/Cargo.toml"
-sed -i.bak -E 's/(am-fs-core = \{ path = "\.\.\/rust-fs-core", version = )"[^"]+"/\1"0.2.999"/' "$ext4/Cargo.toml"
-grep -q 'version = "0.2.999"' "$ext4/Cargo.toml" || fail "could not bump the am-fs-core requirement in the sandbox Cargo.toml"
+sed -i.bak -E 's/(rust-fs-core = \{ path = "\.\.\/rust-fs-core", version = )"[^"]+"/\1"0.2.999"/' "$ext4/Cargo.toml"
+grep -q 'version = "0.2.999"' "$ext4/Cargo.toml" || fail "could not bump the rust-fs-core requirement in the sandbox Cargo.toml"
 if staticlib "core requirement bumped, lock stale"; then
     fail "the core requirement moved without Cargo.lock and chore staticlib still built: the build is not --locked"
 fi
