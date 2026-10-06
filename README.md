@@ -648,7 +648,7 @@ See `examples/capi_demo.rs` for the Rust-side equivalent.
 
 ```toml
 [dependencies]
-rust-fs-ext4 = "0.7"
+rust-fs-ext4 = "0.8"
 ```
 
 ```rust
