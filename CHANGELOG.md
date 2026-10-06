@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-10-06
+
+### Renamed
+
+- **The last version published as `am-fs-ext4`.** The crate is renamed to
+  `rust-fs-ext4`, the repository's name; every later version is published under
+  that name only, starting at 0.8.0. The description and the README say where
+  the crate went. The import is unchanged: `use fs_ext4::...` keeps working.
+
+
 ## [0.7.1] — 2026-10-03
 
 The first release whose tarballs carry every tool. 0.7.0 shipped only
