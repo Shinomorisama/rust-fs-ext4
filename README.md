@@ -378,6 +378,19 @@ ticked. Numbering follows the plan doc.
 
 Highlights from the last 50 commits, grouped by date.
 
+### 2026-10-06 — 0.8.0 — published as rust-fs-ext4
+
+- The crate is published as `rust-fs-ext4`, the repository's name, and the
+  repository moved to the antimatter-studios organisation. A dependent
+  changes one line, `am-fs-ext4 = "0.7"` to `rust-fs-ext4 = "0.8"`; the
+  import (`fs_ext4`) and the C symbols are unchanged.
+- It depends on `rust-fs-core` 0.3.0, the same library under its new name.
+
+### 2026-10-06 — 0.7.2 — the last version as am-fs-ext4
+
+- The final release under the old name: 0.7.1's code with a description and
+  README that name `rust-fs-ext4` as its successor.
+
 ### 2026-10-03 — 0.7.1 — the tools are released
 
 - The release tarball ships every tool: `bin/rust-fs-ext4` with
