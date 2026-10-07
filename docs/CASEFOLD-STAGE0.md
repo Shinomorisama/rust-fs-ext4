@@ -23,8 +23,12 @@ binary and integration tests in release mode, including the slow ignored fuzz
 test. Documentation snippets are outside this stable-toolchain metric. The
 script retains the passing test names, tool versions, source revision,
 Cargo.lock hash and JSON/text coverage reports. It fails on missing tests,
-failed tests or ignored executable tests. Full coverage numbers remain pending
-until its artifact has been inspected.
+failed tests or ignored executable tests. The completed
+[coverage run 37657670773](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/37657670773)
+passed 1,526 executable tests with none ignored. Its inspected artifact reports
+22,767 of 24,745 source lines (92.01%) and 41,930 of 45,359 regions (92.44%)
+covered. Branch coverage was not measured. Release and debug line denominators
+differ; compare future results using the same profile and tool versions.
 
 ## Initial fixture matrix
 

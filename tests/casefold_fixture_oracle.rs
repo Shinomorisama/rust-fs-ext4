@@ -123,6 +123,40 @@ fn generate(block_size: u32, strict: bool) {
     )
     .unwrap();
     println!("[casefold fixture] {label}: Linux namespace, encoding, layout, e2fsck and unchanged write refusal verified");
+    measure_behavior(&image, &label, &saved);
+}
+
+fn measure_behavior(image: &str, label: &str, saved: &std::path::Path) {
+    // Keep the original fixtures and their manifests intact. Only Linux writes
+    // this separate experiment image; the production driver's gate stays shut.
+    let experiment = temp_path!("{label}-behavior.img");
+    fs::copy(image, &experiment).unwrap();
+    let script = |phase| {
+        format!(
+            "python3 - {phase} <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
+            include_str!("casefold_behavior_guest.py")
+        )
+    };
+    let measured = guest_kernel_write(&experiment, &script("measure"));
+    assert!(
+        measured.status.success(),
+        "kernel behavior measurement: {}",
+        String::from_utf8_lossy(&measured.stderr)
+    );
+    let verified = guest_kernel_write(&experiment, &script("verify"));
+    fs::copy(&experiment, saved.join(format!("{label}-behavior.img"))).unwrap();
+    fs::write(
+        saved.join(format!("{label}-behavior.json")),
+        &verified.stdout,
+    )
+    .unwrap();
+    assert!(
+        verified.status.success(),
+        "kernel behavior readback: {}",
+        String::from_utf8_lossy(&verified.stderr)
+    );
+    assert_e2fsck_clean(&experiment, &format!("{label}-behavior"));
+    println!("[casefold behavior] {label}: filename observations and namespace identity survived remount and e2fsck");
 }
 
 #[test]
