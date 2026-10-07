@@ -208,6 +208,24 @@ def measure(root):
     return observations
 
 
+def cold_aliases(root, observations):
+    results = {}
+    for shape in ["ordinary", "fold_small", "fold_indexed", "special"]:
+        probes = observations[shape] if shape == "special" else observations[shape]["pairs"]
+        results[shape] = []
+        for probe in probes:
+            parent = root + b"/" + bytes.fromhex(probe["parent_hex"])
+            first = parent + b"/" + bytes.fromhex(probe["stored_hex"])
+            second = parent + b"/" + bytes.fromhex(probe["alias_hex"])
+            # Query the alternate spelling before stat/open of the stored name.
+            # Directory enumeration plus open would otherwise prime dentries.
+            alias = outcome(lambda: os.stat(second))
+            stored = outcome(lambda: os.stat(first))
+            results[shape].append({"label": probe["label"], "lookup_alias": alias,
+                                   "lookup_stored": stored, "same_inode": identity(first, second)})
+    return results
+
+
 def verify_aliases(root, observations):
     for shape in ["ordinary", "fold_small", "fold_indexed", "special"]:
         probes = observations[shape] if shape == "special" else observations[shape]["pairs"]
@@ -232,6 +250,7 @@ def main():
     else:
         with open(evidence) as stream:
             report = json.load(stream)
+        report["cold_lookups"] = cold_aliases(root, report["observations"])
         assert inventory(root) == report["inventory"], "namespace changed across remount"
         verify_aliases(root, report["observations"])
         print(json.dumps(report, sort_keys=True))
