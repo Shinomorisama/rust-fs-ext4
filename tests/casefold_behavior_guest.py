@@ -3,7 +3,6 @@
 No host Unicode normalization or folding is used to predict Linux's answers.
 Each image is unmounted between measurement and verification.
 """
-import errno
 import hashlib
 import json
 import os
@@ -34,8 +33,10 @@ def identity(first, second):
     try:
         return os.stat(first).st_ino == os.stat(second).st_ino
     except OSError as error:
-        assert error.errno in [errno.ENOENT, errno.EINVAL, errno.ENAMETOOLONG], error
-        return None
+        # The oracle may reject a name with an error outside the usual missing
+        # or invalid-name classes. Preserve that answer instead of predicting it.
+        assert error.errno is not None
+        return {"errno": error.errno}
 
 
 def pairs():
@@ -84,6 +85,7 @@ def pair_probe(parent, label, stored, alias, prefix=True):
         "alias_hex": (head + alias).hex(), "create_stored": first_result,
         "lookup_alias_before": lookup_result, "same_inode_before": same_before,
         "create_alias": alias_result,
+        "lookup_stored_after": outcome(lambda: os.stat(first)),
         "lookup_alias_after": outcome(lambda: os.stat(second)),
         "same_inode_after": identity(first, second),
         "names_hex": [name[len(head):].hex() for name in sorted(os.listdir(parent))
@@ -213,6 +215,7 @@ def verify_aliases(root, observations):
             parent = root + b"/" + bytes.fromhex(probe["parent_hex"])
             first = parent + b"/" + bytes.fromhex(probe["stored_hex"])
             second = parent + b"/" + bytes.fromhex(probe["alias_hex"])
+            assert outcome(lambda: os.stat(first)) == probe["lookup_stored_after"], probe
             assert outcome(lambda: os.stat(second)) == probe["lookup_alias_after"], probe
             assert identity(first, second) == probe["same_inode_after"], probe
 

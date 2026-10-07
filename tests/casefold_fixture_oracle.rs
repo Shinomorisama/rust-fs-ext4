@@ -138,6 +138,13 @@ fn measure_behavior(image: &str, label: &str, saved: &std::path::Path) {
         )
     };
     let measured = guest_kernel_write(&experiment, &script("measure"));
+    // Preserve the actual Linux-written image even if a new probe fails.
+    fs::copy(&experiment, saved.join(format!("{label}-behavior.img"))).unwrap();
+    fs::write(
+        saved.join(format!("{label}-behavior-measure.stderr")),
+        &measured.stderr,
+    )
+    .unwrap();
     assert!(
         measured.status.success(),
         "kernel behavior measurement: {}",
