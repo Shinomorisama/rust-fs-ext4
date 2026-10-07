@@ -74,7 +74,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, casefold-rw]
     tags: ['v*']
   # NO BRANCH FILTER ON PULL REQUESTS (#132). With `branches: [main]` a
   # pull request based on anything else ran no CI at all — and still
