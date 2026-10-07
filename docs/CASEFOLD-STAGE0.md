@@ -75,11 +75,16 @@ but must reproduce the asserted metadata and namespace behavior. The feature
 masks are compat `0x24`, incompat `0x200c2`, and ro-compat `0x40b`; the default
 hash version is 1 with the signed-hash superblock flag set.
 
-This matrix does not yet cover invalid UTF-8, post-version Unicode characters,
-all namespace operations, collision continuation, crashes, encrypted
-directories or other feature combinations. Those require the subsequent
-black-box experiments and interoperability stages. A clean fixture and a
-passing refusal test are not proof of casefold read/write support.
+The additional [filename behavior experiments](CASEFOLD-BEHAVIOR.md) cover
+selected malformed byte sequences, post-version characters, normalization,
+name lengths, rename, unlink and directory policy. Their exact Linux answers
+are pinned separately from the driver's future support policy.
+
+This matrix does not yet cover all namespace operations, the full malformed
+input space, collision continuation, crashes, encrypted directories or other
+feature combinations. Those require subsequent experiments and interoperability
+stages. A clean fixture and a passing refusal test are not proof of casefold
+read/write support.
 
 The public format reference is the
 [ext4 superblock specification](https://docs.kernel.org/filesystems/ext4/super.html).

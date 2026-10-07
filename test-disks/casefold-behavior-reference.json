@@ -1,0 +1,3803 @@
+{
+  "profiles": {
+    "opaque": {
+      "cold_lookups": {
+        "fold_indexed": [
+          {
+            "label": "ascii",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sharp_s",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sigma",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotted_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotless_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "canonical",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "combining_order",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "hangul",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "supplementary",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "ligature",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "width",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "soft_hyphen",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "joiner",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "variation_selector",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "post_12_1",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "unassigned",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "noncharacter",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "private_use",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "invalid_lead",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "invalid_continuation",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "overlong",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "surrogate",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "truncated",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          }
+        ],
+        "fold_small": [
+          {
+            "label": "ascii",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sharp_s",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sigma",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotted_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotless_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "canonical",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "combining_order",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "hangul",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "supplementary",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "ligature",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "width",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "soft_hyphen",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "joiner",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "variation_selector",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "post_12_1",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "unassigned",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "noncharacter",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "private_use",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "invalid_lead",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "invalid_continuation",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "overlong",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "surrogate",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "truncated",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          }
+        ],
+        "ordinary": [
+          {
+            "label": "ascii",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "sharp_s",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "sigma",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "dotted_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "dotless_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "canonical",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "combining_order",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "hangul",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "supplementary",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "ligature",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "width",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "soft_hyphen",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "joiner",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "variation_selector",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "post_12_1",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "unassigned",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "noncharacter",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "private_use",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "invalid_lead",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "invalid_continuation",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "overlong",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "surrogate",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "truncated",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          }
+        ],
+        "special": [
+          {
+            "label": "all_ignorable",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dot_ignorable",
+            "lookup_alias": 0,
+            "lookup_stored": 117,
+            "same_inode": {
+              "errno": 117
+            }
+          },
+          {
+            "label": "dotdot_ignorable",
+            "lookup_alias": 0,
+            "lookup_stored": 40,
+            "same_inode": {
+              "errno": 40
+            }
+          },
+          {
+            "label": "length_255",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "length_256",
+            "lookup_alias": 36,
+            "lookup_stored": 36,
+            "same_inode": {
+              "errno": 36
+            }
+          },
+          {
+            "label": "folded_expansion",
+            "lookup_alias": 36,
+            "lookup_stored": 0,
+            "same_inode": true
+          }
+        ]
+      },
+      "observations": {
+        "fold_indexed": {
+          "namespace": {
+            "canonical_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "436166c3a9"
+              ]
+            },
+            "case_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "526561644d65"
+              ]
+            },
+            "file_has_casefold_flag": false,
+            "mkdir_inherits_casefold": true,
+            "rename_distinct_hardlinks": {
+              "both_names_remain": true,
+              "errno": 0,
+              "nlink": 2,
+              "same_inode": true
+            },
+            "unlink_alias": {
+              "errno": 0,
+              "stored_name_remains": false
+            }
+          },
+          "pairs": [
+            {
+              "alias_hex": "70726f62655f61736369695f524541444d45",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ascii",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "526561644d65"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f61736369695f526561644d65"
+            },
+            {
+              "alias_hex": "70726f62655f73686172705f735f53545241535345",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sharp_s",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "53747261c39f65"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f73686172705f735f53747261c39f65"
+            },
+            {
+              "alias_hex": "70726f62655f7369676d615fcf82",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sigma",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "cea3"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f7369676d615fcea3"
+            },
+            {
+              "alias_hex": "70726f62655f646f747465645f695f69cc87",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "dotted_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "c4b0"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f646f747465645f695fc4b0"
+            },
+            {
+              "alias_hex": "70726f62655f646f746c6573735f695f49",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotless_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "49",
+                "c4b1"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f746c6573735f695fc4b1"
+            },
+            {
+              "alias_hex": "70726f62655f63616e6f6e6963616c5f43414645cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "canonical",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "436166c3a9",
+                "72656e616d655f436166c3a9"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f63616e6f6e6963616c5f436166c3a9"
+            },
+            {
+              "alias_hex": "70726f62655f636f6d62696e696e675f6f726465725f61cca3cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "combining_order",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cc81cca3"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f636f6d62696e696e675f6f726465725f41cc81cca3"
+            },
+            {
+              "alias_hex": "70726f62655f68616e67756c5fe18480e185a1",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "hangul",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "eab080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f68616e67756c5feab080"
+            },
+            {
+              "alias_hex": "70726f62655f737570706c656d656e746172795ff09090a8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "supplementary",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "f0909080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f737570706c656d656e746172795ff0909080"
+            },
+            {
+              "alias_hex": "70726f62655f6c696761747572655f6669",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ligature",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "efac81"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6c696761747572655fefac81"
+            },
+            {
+              "alias_hex": "70726f62655f77696474685f61",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "width",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "61",
+                "efbca1"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f77696474685fefbca1"
+            },
+            {
+              "alias_hex": "70726f62655f736f66745f68797068656e5f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "soft_hyphen",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c2ad42"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f736f66745f68797068656e5f41c2ad42"
+            },
+            {
+              "alias_hex": "70726f62655f6a6f696e65725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "joiner",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e2808d42"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6a6f696e65725f41e2808d42"
+            },
+            {
+              "alias_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "variation_selector",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb88f42"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f41efb88f42"
+            },
+            {
+              "alias_hex": "70726f62655f706f73745f31325f315f61f09faba0",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "post_12_1",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41f09faba0"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f706f73745f31325f315f41f09faba0"
+            },
+            {
+              "alias_hex": "70726f62655f756e61737369676e65645f61cdb8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "unassigned",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cdb8"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f756e61737369676e65645f41cdb8"
+            },
+            {
+              "alias_hex": "70726f62655f6e6f6e6368617261637465725f61efb790",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "noncharacter",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb790"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6e6f6e6368617261637465725f41efb790"
+            },
+            {
+              "alias_hex": "70726f62655f707269766174655f7573655f61ee8080",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "private_use",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ee8080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f707269766174655f7573655f41ee8080"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f6c6561645f61ff",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "invalid_lead",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ff",
+                "61ff"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f6c6561645f41ff"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f6180",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "invalid_continuation",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "4180"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f4180"
+            },
+            {
+              "alias_hex": "70726f62655f6f7665726c6f6e675f61c080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "overlong",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c080",
+                "61c080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6f7665726c6f6e675f41c080"
+            },
+            {
+              "alias_hex": "70726f62655f737572726f676174655f61eda080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "surrogate",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41eda080",
+                "61eda080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f737572726f676174655f41eda080"
+            },
+            {
+              "alias_hex": "70726f62655f7472756e63617465645f61e282",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "truncated",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e282",
+                "61e282"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f7472756e63617465645f41e282"
+            }
+          ]
+        },
+        "fold_small": {
+          "namespace": {
+            "canonical_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "436166c3a9"
+              ]
+            },
+            "case_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "526561644d65"
+              ]
+            },
+            "file_has_casefold_flag": false,
+            "mkdir_inherits_casefold": true,
+            "rename_distinct_hardlinks": {
+              "both_names_remain": true,
+              "errno": 0,
+              "nlink": 2,
+              "same_inode": true
+            },
+            "unlink_alias": {
+              "errno": 0,
+              "stored_name_remains": false
+            }
+          },
+          "pairs": [
+            {
+              "alias_hex": "70726f62655f61736369695f524541444d45",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ascii",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "526561644d65"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6173636969",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f61736369695f526561644d65"
+            },
+            {
+              "alias_hex": "70726f62655f73686172705f735f53545241535345",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sharp_s",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "53747261c39f65"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f73686172705f73",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f73686172705f735f53747261c39f65"
+            },
+            {
+              "alias_hex": "70726f62655f7369676d615fcf82",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sigma",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "cea3"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f7369676d61",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f7369676d615fcea3"
+            },
+            {
+              "alias_hex": "70726f62655f646f747465645f695f69cc87",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "dotted_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "c4b0"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f646f747465645f69",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f646f747465645f695fc4b0"
+            },
+            {
+              "alias_hex": "70726f62655f646f746c6573735f695f49",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotless_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "49",
+                "c4b1"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f646f746c6573735f69",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f746c6573735f695fc4b1"
+            },
+            {
+              "alias_hex": "70726f62655f63616e6f6e6963616c5f43414645cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "canonical",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "436166c3a9"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f63616e6f6e6963616c",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f63616e6f6e6963616c5f436166c3a9"
+            },
+            {
+              "alias_hex": "70726f62655f636f6d62696e696e675f6f726465725f61cca3cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "combining_order",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cc81cca3"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f636f6d62696e696e675f6f72646572",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f636f6d62696e696e675f6f726465725f41cc81cca3"
+            },
+            {
+              "alias_hex": "70726f62655f68616e67756c5fe18480e185a1",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "hangul",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "eab080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f68616e67756c",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f68616e67756c5feab080"
+            },
+            {
+              "alias_hex": "70726f62655f737570706c656d656e746172795ff09090a8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "supplementary",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "f0909080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f737570706c656d656e74617279",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f737570706c656d656e746172795ff0909080"
+            },
+            {
+              "alias_hex": "70726f62655f6c696761747572655f6669",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ligature",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "efac81"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6c69676174757265",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6c696761747572655fefac81"
+            },
+            {
+              "alias_hex": "70726f62655f77696474685f61",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "width",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "61",
+                "efbca1"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f7769647468",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f77696474685fefbca1"
+            },
+            {
+              "alias_hex": "70726f62655f736f66745f68797068656e5f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "soft_hyphen",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c2ad42"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f736f66745f68797068656e",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f736f66745f68797068656e5f41c2ad42"
+            },
+            {
+              "alias_hex": "70726f62655f6a6f696e65725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "joiner",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e2808d42"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6a6f696e6572",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6a6f696e65725f41e2808d42"
+            },
+            {
+              "alias_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "variation_selector",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb88f42"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f766172696174696f6e5f73656c6563746f72",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f41efb88f42"
+            },
+            {
+              "alias_hex": "70726f62655f706f73745f31325f315f61f09faba0",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "post_12_1",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41f09faba0"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f706f73745f31325f31",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f706f73745f31325f315f41f09faba0"
+            },
+            {
+              "alias_hex": "70726f62655f756e61737369676e65645f61cdb8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "unassigned",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cdb8"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f756e61737369676e6564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f756e61737369676e65645f41cdb8"
+            },
+            {
+              "alias_hex": "70726f62655f6e6f6e6368617261637465725f61efb790",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "noncharacter",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb790"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6e6f6e636861726163746572",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6e6f6e6368617261637465725f41efb790"
+            },
+            {
+              "alias_hex": "70726f62655f707269766174655f7573655f61ee8080",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "private_use",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ee8080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f707269766174655f757365",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f707269766174655f7573655f41ee8080"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f6c6561645f61ff",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "invalid_lead",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ff",
+                "61ff"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f696e76616c69645f6c656164",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f6c6561645f41ff"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f6180",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "invalid_continuation",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "4180"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f696e76616c69645f636f6e74696e756174696f6e",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f4180"
+            },
+            {
+              "alias_hex": "70726f62655f6f7665726c6f6e675f61c080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "overlong",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c080",
+                "61c080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6f7665726c6f6e67",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6f7665726c6f6e675f41c080"
+            },
+            {
+              "alias_hex": "70726f62655f737572726f676174655f61eda080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "surrogate",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41eda080",
+                "61eda080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f737572726f67617465",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f737572726f676174655f41eda080"
+            },
+            {
+              "alias_hex": "70726f62655f7472756e63617465645f61e282",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "truncated",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e282",
+                "61e282"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f7472756e6361746564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f7472756e63617465645f41e282"
+            }
+          ]
+        },
+        "moved_directory_flags": {
+          "folded_into_ordinary": true,
+          "ordinary_into_folded": false
+        },
+        "ordinary": {
+          "namespace": {
+            "canonical_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "43414645cc81"
+              ]
+            },
+            "case_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "524541444d45"
+              ]
+            },
+            "file_has_casefold_flag": false,
+            "mkdir_inherits_casefold": false,
+            "rename_distinct_hardlinks": {
+              "both_names_remain": true,
+              "errno": 0,
+              "nlink": 2,
+              "same_inode": true
+            },
+            "unlink_alias": {
+              "errno": 2,
+              "stored_name_remains": true
+            }
+          },
+          "pairs": [
+            {
+              "alias_hex": "70726f62655f61736369695f524541444d45",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "ascii",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "524541444d45",
+                "526561644d65"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f61736369695f526561644d65"
+            },
+            {
+              "alias_hex": "70726f62655f73686172705f735f53545241535345",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "sharp_s",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "53545241535345",
+                "53747261c39f65"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f73686172705f735f53747261c39f65"
+            },
+            {
+              "alias_hex": "70726f62655f7369676d615fcf82",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "sigma",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "cea3",
+                "cf82"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f7369676d615fcea3"
+            },
+            {
+              "alias_hex": "70726f62655f646f747465645f695f69cc87",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotted_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "69cc87",
+                "c4b0"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f747465645f695fc4b0"
+            },
+            {
+              "alias_hex": "70726f62655f646f746c6573735f695f49",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotless_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "49",
+                "c4b1"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f746c6573735f695fc4b1"
+            },
+            {
+              "alias_hex": "70726f62655f63616e6f6e6963616c5f43414645cc81",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "canonical",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "43414645cc81",
+                "436166c3a9",
+                "72656e616d655f43414645cc81"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f63616e6f6e6963616c5f436166c3a9"
+            },
+            {
+              "alias_hex": "70726f62655f636f6d62696e696e675f6f726465725f61cca3cc81",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "combining_order",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cc81cca3",
+                "61cca3cc81"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f636f6d62696e696e675f6f726465725f41cc81cca3"
+            },
+            {
+              "alias_hex": "70726f62655f68616e67756c5fe18480e185a1",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "hangul",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "e18480e185a1",
+                "eab080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f68616e67756c5feab080"
+            },
+            {
+              "alias_hex": "70726f62655f737570706c656d656e746172795ff09090a8",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "supplementary",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "f0909080",
+                "f09090a8"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f737570706c656d656e746172795ff0909080"
+            },
+            {
+              "alias_hex": "70726f62655f6c696761747572655f6669",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "ligature",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "6669",
+                "efac81"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6c696761747572655fefac81"
+            },
+            {
+              "alias_hex": "70726f62655f77696474685f61",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "width",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "61",
+                "efbca1"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f77696474685fefbca1"
+            },
+            {
+              "alias_hex": "70726f62655f736f66745f68797068656e5f6162",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "soft_hyphen",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c2ad42",
+                "6162"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f736f66745f68797068656e5f41c2ad42"
+            },
+            {
+              "alias_hex": "70726f62655f6a6f696e65725f6162",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "joiner",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e2808d42",
+                "6162"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6a6f696e65725f41e2808d42"
+            },
+            {
+              "alias_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f6162",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "variation_selector",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb88f42",
+                "6162"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f41efb88f42"
+            },
+            {
+              "alias_hex": "70726f62655f706f73745f31325f315f61f09faba0",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "post_12_1",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41f09faba0",
+                "61f09faba0"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f706f73745f31325f315f41f09faba0"
+            },
+            {
+              "alias_hex": "70726f62655f756e61737369676e65645f61cdb8",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "unassigned",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cdb8",
+                "61cdb8"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f756e61737369676e65645f41cdb8"
+            },
+            {
+              "alias_hex": "70726f62655f6e6f6e6368617261637465725f61efb790",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "noncharacter",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb790",
+                "61efb790"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6e6f6e6368617261637465725f41efb790"
+            },
+            {
+              "alias_hex": "70726f62655f707269766174655f7573655f61ee8080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "private_use",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ee8080",
+                "61ee8080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f707269766174655f7573655f41ee8080"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f6c6561645f61ff",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "invalid_lead",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ff",
+                "61ff"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f6c6561645f41ff"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f6180",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "invalid_continuation",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "4180",
+                "6180"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f4180"
+            },
+            {
+              "alias_hex": "70726f62655f6f7665726c6f6e675f61c080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "overlong",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c080",
+                "61c080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6f7665726c6f6e675f41c080"
+            },
+            {
+              "alias_hex": "70726f62655f737572726f676174655f61eda080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "surrogate",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41eda080",
+                "61eda080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f737572726f676174655f41eda080"
+            },
+            {
+              "alias_hex": "70726f62655f7472756e63617465645f61e282",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "truncated",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e282",
+                "61e282"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f7472756e63617465645f41e282"
+            }
+          ]
+        },
+        "special": [
+          {
+            "alias_hex": "efb88f",
+            "create_alias": 17,
+            "create_stored": 0,
+            "label": "all_ignorable",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 0,
+            "names_hex": [
+              "c2ad"
+            ],
+            "parent_hex": "7370656369616c2f616c6c5f69676e6f7261626c65",
+            "same_inode_after": true,
+            "same_inode_before": true,
+            "stored_hex": "c2ad"
+          },
+          {
+            "alias_hex": "2e",
+            "create_alias": 17,
+            "create_stored": 117,
+            "label": "dot_ignorable",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 117,
+            "names_hex": [],
+            "parent_hex": "7370656369616c2f646f745f69676e6f7261626c65",
+            "same_inode_after": {
+              "errno": 117
+            },
+            "same_inode_before": {
+              "errno": 117
+            },
+            "stored_hex": "c2ad2e"
+          },
+          {
+            "alias_hex": "2e2e",
+            "create_alias": 17,
+            "create_stored": 40,
+            "label": "dotdot_ignorable",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 40,
+            "names_hex": [],
+            "parent_hex": "7370656369616c2f646f74646f745f69676e6f7261626c65",
+            "same_inode_after": {
+              "errno": 40
+            },
+            "same_inode_before": {
+              "errno": 40
+            },
+            "stored_hex": "c2ad2e2e"
+          },
+          {
+            "alias_hex": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+            "create_alias": 17,
+            "create_stored": 0,
+            "label": "length_255",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 0,
+            "names_hex": [
+              "414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+            ],
+            "parent_hex": "7370656369616c2f6c656e6774685f323535",
+            "same_inode_after": true,
+            "same_inode_before": true,
+            "stored_hex": "414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+          },
+          {
+            "alias_hex": "61616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+            "create_alias": 36,
+            "create_stored": 36,
+            "label": "length_256",
+            "lookup_alias_after": 36,
+            "lookup_alias_before": 36,
+            "lookup_stored_after": 36,
+            "names_hex": [],
+            "parent_hex": "7370656369616c2f6c656e6774685f323536",
+            "same_inode_after": {
+              "errno": 36
+            },
+            "same_inode_before": {
+              "errno": 36
+            },
+            "stored_hex": "41414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+          },
+          {
+            "alias_hex": "ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81",
+            "create_alias": 17,
+            "create_stored": 0,
+            "label": "folded_expansion",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 36,
+            "lookup_stored_after": 0,
+            "names_hex": [
+              "ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90"
+            ],
+            "parent_hex": "7370656369616c2f666f6c6465645f657870616e73696f6e",
+            "same_inode_after": true,
+            "same_inode_before": true,
+            "stored_hex": "ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90"
+          }
+        ]
+      }
+    },
+    "strict": {
+      "cold_lookups": {
+        "fold_indexed": [
+          {
+            "label": "ascii",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sharp_s",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sigma",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotted_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotless_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "canonical",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "combining_order",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "hangul",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "supplementary",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "ligature",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "width",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "soft_hyphen",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "joiner",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "variation_selector",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "post_12_1",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "unassigned",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "noncharacter",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "private_use",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "invalid_lead",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          },
+          {
+            "label": "invalid_continuation",
+            "lookup_alias": 2,
+            "lookup_stored": 2,
+            "same_inode": {
+              "errno": 2
+            }
+          },
+          {
+            "label": "overlong",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          },
+          {
+            "label": "surrogate",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          },
+          {
+            "label": "truncated",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          }
+        ],
+        "fold_small": [
+          {
+            "label": "ascii",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sharp_s",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "sigma",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotted_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dotless_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "canonical",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "combining_order",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "hangul",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "supplementary",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "ligature",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "width",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "soft_hyphen",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "joiner",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "variation_selector",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "post_12_1",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "unassigned",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "noncharacter",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "private_use",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "invalid_lead",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          },
+          {
+            "label": "invalid_continuation",
+            "lookup_alias": 2,
+            "lookup_stored": 2,
+            "same_inode": {
+              "errno": 2
+            }
+          },
+          {
+            "label": "overlong",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          },
+          {
+            "label": "surrogate",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          },
+          {
+            "label": "truncated",
+            "lookup_alias": 22,
+            "lookup_stored": 22,
+            "same_inode": {
+              "errno": 22
+            }
+          }
+        ],
+        "ordinary": [
+          {
+            "label": "ascii",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "sharp_s",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "sigma",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "dotted_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "dotless_i",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "canonical",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "combining_order",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "hangul",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "supplementary",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "ligature",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "width",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "soft_hyphen",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "joiner",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "variation_selector",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "post_12_1",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "unassigned",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "noncharacter",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "private_use",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "invalid_lead",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "invalid_continuation",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "overlong",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "surrogate",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          },
+          {
+            "label": "truncated",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": false
+          }
+        ],
+        "special": [
+          {
+            "label": "all_ignorable",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "dot_ignorable",
+            "lookup_alias": 0,
+            "lookup_stored": 117,
+            "same_inode": {
+              "errno": 117
+            }
+          },
+          {
+            "label": "dotdot_ignorable",
+            "lookup_alias": 0,
+            "lookup_stored": 40,
+            "same_inode": {
+              "errno": 40
+            }
+          },
+          {
+            "label": "length_255",
+            "lookup_alias": 0,
+            "lookup_stored": 0,
+            "same_inode": true
+          },
+          {
+            "label": "length_256",
+            "lookup_alias": 36,
+            "lookup_stored": 36,
+            "same_inode": {
+              "errno": 36
+            }
+          },
+          {
+            "label": "folded_expansion",
+            "lookup_alias": 36,
+            "lookup_stored": 0,
+            "same_inode": true
+          }
+        ]
+      },
+      "observations": {
+        "fold_indexed": {
+          "namespace": {
+            "canonical_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "436166c3a9"
+              ]
+            },
+            "case_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "526561644d65"
+              ]
+            },
+            "file_has_casefold_flag": false,
+            "mkdir_inherits_casefold": true,
+            "rename_distinct_hardlinks": {
+              "both_names_remain": true,
+              "errno": 0,
+              "nlink": 2,
+              "same_inode": true
+            },
+            "unlink_alias": {
+              "errno": 0,
+              "stored_name_remains": false
+            }
+          },
+          "pairs": [
+            {
+              "alias_hex": "70726f62655f61736369695f524541444d45",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ascii",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "526561644d65"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f61736369695f526561644d65"
+            },
+            {
+              "alias_hex": "70726f62655f73686172705f735f53545241535345",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sharp_s",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "53747261c39f65"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f73686172705f735f53747261c39f65"
+            },
+            {
+              "alias_hex": "70726f62655f7369676d615fcf82",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sigma",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "cea3"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f7369676d615fcea3"
+            },
+            {
+              "alias_hex": "70726f62655f646f747465645f695f69cc87",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "dotted_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "c4b0"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f646f747465645f695fc4b0"
+            },
+            {
+              "alias_hex": "70726f62655f646f746c6573735f695f49",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotless_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "49",
+                "c4b1"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f746c6573735f695fc4b1"
+            },
+            {
+              "alias_hex": "70726f62655f63616e6f6e6963616c5f43414645cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "canonical",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "436166c3a9",
+                "72656e616d655f436166c3a9"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f63616e6f6e6963616c5f436166c3a9"
+            },
+            {
+              "alias_hex": "70726f62655f636f6d62696e696e675f6f726465725f61cca3cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "combining_order",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cc81cca3"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f636f6d62696e696e675f6f726465725f41cc81cca3"
+            },
+            {
+              "alias_hex": "70726f62655f68616e67756c5fe18480e185a1",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "hangul",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "eab080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f68616e67756c5feab080"
+            },
+            {
+              "alias_hex": "70726f62655f737570706c656d656e746172795ff09090a8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "supplementary",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "f0909080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f737570706c656d656e746172795ff0909080"
+            },
+            {
+              "alias_hex": "70726f62655f6c696761747572655f6669",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ligature",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "efac81"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6c696761747572655fefac81"
+            },
+            {
+              "alias_hex": "70726f62655f77696474685f61",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "width",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "61",
+                "efbca1"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f77696474685fefbca1"
+            },
+            {
+              "alias_hex": "70726f62655f736f66745f68797068656e5f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "soft_hyphen",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c2ad42"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f736f66745f68797068656e5f41c2ad42"
+            },
+            {
+              "alias_hex": "70726f62655f6a6f696e65725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "joiner",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e2808d42"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6a6f696e65725f41e2808d42"
+            },
+            {
+              "alias_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "variation_selector",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb88f42"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f41efb88f42"
+            },
+            {
+              "alias_hex": "70726f62655f706f73745f31325f315f61f09faba0",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "post_12_1",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41f09faba0"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f706f73745f31325f315f41f09faba0"
+            },
+            {
+              "alias_hex": "70726f62655f756e61737369676e65645f61cdb8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "unassigned",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cdb8"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f756e61737369676e65645f41cdb8"
+            },
+            {
+              "alias_hex": "70726f62655f6e6f6e6368617261637465725f61efb790",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "noncharacter",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb790"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6e6f6e6368617261637465725f41efb790"
+            },
+            {
+              "alias_hex": "70726f62655f707269766174655f7573655f61ee8080",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "private_use",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ee8080"
+              ],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f707269766174655f7573655f41ee8080"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f6c6561645f61ff",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "invalid_lead",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f696e76616c69645f6c6561645f41ff"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f6180",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "invalid_continuation",
+              "lookup_alias_after": 2,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 2,
+              "names_hex": [],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": {
+                "errno": 2
+              },
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f4180"
+            },
+            {
+              "alias_hex": "70726f62655f6f7665726c6f6e675f61c080",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "overlong",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f6f7665726c6f6e675f41c080"
+            },
+            {
+              "alias_hex": "70726f62655f737572726f676174655f61eda080",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "surrogate",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f737572726f676174655f41eda080"
+            },
+            {
+              "alias_hex": "70726f62655f7472756e63617465645f61e282",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "truncated",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f696e6465786564",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f7472756e63617465645f41e282"
+            }
+          ]
+        },
+        "fold_small": {
+          "namespace": {
+            "canonical_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "436166c3a9"
+              ]
+            },
+            "case_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "526561644d65"
+              ]
+            },
+            "file_has_casefold_flag": false,
+            "mkdir_inherits_casefold": true,
+            "rename_distinct_hardlinks": {
+              "both_names_remain": true,
+              "errno": 0,
+              "nlink": 2,
+              "same_inode": true
+            },
+            "unlink_alias": {
+              "errno": 0,
+              "stored_name_remains": false
+            }
+          },
+          "pairs": [
+            {
+              "alias_hex": "70726f62655f61736369695f524541444d45",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ascii",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "526561644d65"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6173636969",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f61736369695f526561644d65"
+            },
+            {
+              "alias_hex": "70726f62655f73686172705f735f53545241535345",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sharp_s",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "53747261c39f65"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f73686172705f73",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f73686172705f735f53747261c39f65"
+            },
+            {
+              "alias_hex": "70726f62655f7369676d615fcf82",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "sigma",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "cea3"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f7369676d61",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f7369676d615fcea3"
+            },
+            {
+              "alias_hex": "70726f62655f646f747465645f695f69cc87",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "dotted_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "c4b0"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f646f747465645f69",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f646f747465645f695fc4b0"
+            },
+            {
+              "alias_hex": "70726f62655f646f746c6573735f695f49",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotless_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "49",
+                "c4b1"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f646f746c6573735f69",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f746c6573735f695fc4b1"
+            },
+            {
+              "alias_hex": "70726f62655f63616e6f6e6963616c5f43414645cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "canonical",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "436166c3a9"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f63616e6f6e6963616c",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f63616e6f6e6963616c5f436166c3a9"
+            },
+            {
+              "alias_hex": "70726f62655f636f6d62696e696e675f6f726465725f61cca3cc81",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "combining_order",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cc81cca3"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f636f6d62696e696e675f6f72646572",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f636f6d62696e696e675f6f726465725f41cc81cca3"
+            },
+            {
+              "alias_hex": "70726f62655f68616e67756c5fe18480e185a1",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "hangul",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "eab080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f68616e67756c",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f68616e67756c5feab080"
+            },
+            {
+              "alias_hex": "70726f62655f737570706c656d656e746172795ff09090a8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "supplementary",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "f0909080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f737570706c656d656e74617279",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f737570706c656d656e746172795ff0909080"
+            },
+            {
+              "alias_hex": "70726f62655f6c696761747572655f6669",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "ligature",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "efac81"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6c69676174757265",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6c696761747572655fefac81"
+            },
+            {
+              "alias_hex": "70726f62655f77696474685f61",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "width",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "61",
+                "efbca1"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f7769647468",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f77696474685fefbca1"
+            },
+            {
+              "alias_hex": "70726f62655f736f66745f68797068656e5f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "soft_hyphen",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c2ad42"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f736f66745f68797068656e",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f736f66745f68797068656e5f41c2ad42"
+            },
+            {
+              "alias_hex": "70726f62655f6a6f696e65725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "joiner",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e2808d42"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6a6f696e6572",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6a6f696e65725f41e2808d42"
+            },
+            {
+              "alias_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f6162",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "variation_selector",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb88f42"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f766172696174696f6e5f73656c6563746f72",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f41efb88f42"
+            },
+            {
+              "alias_hex": "70726f62655f706f73745f31325f315f61f09faba0",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "post_12_1",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41f09faba0"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f706f73745f31325f31",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f706f73745f31325f315f41f09faba0"
+            },
+            {
+              "alias_hex": "70726f62655f756e61737369676e65645f61cdb8",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "unassigned",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cdb8"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f756e61737369676e6564",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f756e61737369676e65645f41cdb8"
+            },
+            {
+              "alias_hex": "70726f62655f6e6f6e6368617261637465725f61efb790",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "noncharacter",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb790"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6e6f6e636861726163746572",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f6e6f6e6368617261637465725f41efb790"
+            },
+            {
+              "alias_hex": "70726f62655f707269766174655f7573655f61ee8080",
+              "create_alias": 17,
+              "create_stored": 0,
+              "label": "private_use",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 0,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ee8080"
+              ],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f707269766174655f757365",
+              "same_inode_after": true,
+              "same_inode_before": true,
+              "stored_hex": "70726f62655f707269766174655f7573655f41ee8080"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f6c6561645f61ff",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "invalid_lead",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f696e76616c69645f6c656164",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f696e76616c69645f6c6561645f41ff"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f6180",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "invalid_continuation",
+              "lookup_alias_after": 2,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 2,
+              "names_hex": [],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f696e76616c69645f636f6e74696e756174696f6e",
+              "same_inode_after": {
+                "errno": 2
+              },
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f4180"
+            },
+            {
+              "alias_hex": "70726f62655f6f7665726c6f6e675f61c080",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "overlong",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f6f7665726c6f6e67",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f6f7665726c6f6e675f41c080"
+            },
+            {
+              "alias_hex": "70726f62655f737572726f676174655f61eda080",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "surrogate",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f737572726f67617465",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f737572726f676174655f41eda080"
+            },
+            {
+              "alias_hex": "70726f62655f7472756e63617465645f61e282",
+              "create_alias": 22,
+              "create_stored": 22,
+              "label": "truncated",
+              "lookup_alias_after": 22,
+              "lookup_alias_before": 22,
+              "lookup_stored_after": 22,
+              "names_hex": [],
+              "parent_hex": "666f6c645f736d616c6c2f70726f62655f706169725f7472756e6361746564",
+              "same_inode_after": {
+                "errno": 22
+              },
+              "same_inode_before": {
+                "errno": 22
+              },
+              "stored_hex": "70726f62655f7472756e63617465645f41e282"
+            }
+          ]
+        },
+        "moved_directory_flags": {
+          "folded_into_ordinary": true,
+          "ordinary_into_folded": false
+        },
+        "ordinary": {
+          "namespace": {
+            "canonical_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "43414645cc81"
+              ]
+            },
+            "case_rename": {
+              "destination_is_original_inode": true,
+              "errno": 0,
+              "names_hex": [
+                "524541444d45"
+              ]
+            },
+            "file_has_casefold_flag": false,
+            "mkdir_inherits_casefold": false,
+            "rename_distinct_hardlinks": {
+              "both_names_remain": true,
+              "errno": 0,
+              "nlink": 2,
+              "same_inode": true
+            },
+            "unlink_alias": {
+              "errno": 2,
+              "stored_name_remains": true
+            }
+          },
+          "pairs": [
+            {
+              "alias_hex": "70726f62655f61736369695f524541444d45",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "ascii",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "524541444d45",
+                "526561644d65"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f61736369695f526561644d65"
+            },
+            {
+              "alias_hex": "70726f62655f73686172705f735f53545241535345",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "sharp_s",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "53545241535345",
+                "53747261c39f65"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f73686172705f735f53747261c39f65"
+            },
+            {
+              "alias_hex": "70726f62655f7369676d615fcf82",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "sigma",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "cea3",
+                "cf82"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f7369676d615fcea3"
+            },
+            {
+              "alias_hex": "70726f62655f646f747465645f695f69cc87",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotted_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "69cc87",
+                "c4b0"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f747465645f695fc4b0"
+            },
+            {
+              "alias_hex": "70726f62655f646f746c6573735f695f49",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "dotless_i",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "49",
+                "c4b1"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f646f746c6573735f695fc4b1"
+            },
+            {
+              "alias_hex": "70726f62655f63616e6f6e6963616c5f43414645cc81",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "canonical",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "43414645cc81",
+                "436166c3a9",
+                "72656e616d655f43414645cc81"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f63616e6f6e6963616c5f436166c3a9"
+            },
+            {
+              "alias_hex": "70726f62655f636f6d62696e696e675f6f726465725f61cca3cc81",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "combining_order",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cc81cca3",
+                "61cca3cc81"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f636f6d62696e696e675f6f726465725f41cc81cca3"
+            },
+            {
+              "alias_hex": "70726f62655f68616e67756c5fe18480e185a1",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "hangul",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "e18480e185a1",
+                "eab080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f68616e67756c5feab080"
+            },
+            {
+              "alias_hex": "70726f62655f737570706c656d656e746172795ff09090a8",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "supplementary",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "f0909080",
+                "f09090a8"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f737570706c656d656e746172795ff0909080"
+            },
+            {
+              "alias_hex": "70726f62655f6c696761747572655f6669",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "ligature",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "6669",
+                "efac81"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6c696761747572655fefac81"
+            },
+            {
+              "alias_hex": "70726f62655f77696474685f61",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "width",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "61",
+                "efbca1"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f77696474685fefbca1"
+            },
+            {
+              "alias_hex": "70726f62655f736f66745f68797068656e5f6162",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "soft_hyphen",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c2ad42",
+                "6162"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f736f66745f68797068656e5f41c2ad42"
+            },
+            {
+              "alias_hex": "70726f62655f6a6f696e65725f6162",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "joiner",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e2808d42",
+                "6162"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6a6f696e65725f41e2808d42"
+            },
+            {
+              "alias_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f6162",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "variation_selector",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb88f42",
+                "6162"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f766172696174696f6e5f73656c6563746f725f41efb88f42"
+            },
+            {
+              "alias_hex": "70726f62655f706f73745f31325f315f61f09faba0",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "post_12_1",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41f09faba0",
+                "61f09faba0"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f706f73745f31325f315f41f09faba0"
+            },
+            {
+              "alias_hex": "70726f62655f756e61737369676e65645f61cdb8",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "unassigned",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41cdb8",
+                "61cdb8"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f756e61737369676e65645f41cdb8"
+            },
+            {
+              "alias_hex": "70726f62655f6e6f6e6368617261637465725f61efb790",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "noncharacter",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41efb790",
+                "61efb790"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6e6f6e6368617261637465725f41efb790"
+            },
+            {
+              "alias_hex": "70726f62655f707269766174655f7573655f61ee8080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "private_use",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ee8080",
+                "61ee8080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f707269766174655f7573655f41ee8080"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f6c6561645f61ff",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "invalid_lead",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41ff",
+                "61ff"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f6c6561645f41ff"
+            },
+            {
+              "alias_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f6180",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "invalid_continuation",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "4180",
+                "6180"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f696e76616c69645f636f6e74696e756174696f6e5f4180"
+            },
+            {
+              "alias_hex": "70726f62655f6f7665726c6f6e675f61c080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "overlong",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41c080",
+                "61c080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f6f7665726c6f6e675f41c080"
+            },
+            {
+              "alias_hex": "70726f62655f737572726f676174655f61eda080",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "surrogate",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41eda080",
+                "61eda080"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f737572726f676174655f41eda080"
+            },
+            {
+              "alias_hex": "70726f62655f7472756e63617465645f61e282",
+              "create_alias": 0,
+              "create_stored": 0,
+              "label": "truncated",
+              "lookup_alias_after": 0,
+              "lookup_alias_before": 2,
+              "lookup_stored_after": 0,
+              "names_hex": [
+                "41e282",
+                "61e282"
+              ],
+              "parent_hex": "6f7264696e617279",
+              "same_inode_after": false,
+              "same_inode_before": {
+                "errno": 2
+              },
+              "stored_hex": "70726f62655f7472756e63617465645f41e282"
+            }
+          ]
+        },
+        "special": [
+          {
+            "alias_hex": "efb88f",
+            "create_alias": 17,
+            "create_stored": 0,
+            "label": "all_ignorable",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 0,
+            "names_hex": [
+              "c2ad"
+            ],
+            "parent_hex": "7370656369616c2f616c6c5f69676e6f7261626c65",
+            "same_inode_after": true,
+            "same_inode_before": true,
+            "stored_hex": "c2ad"
+          },
+          {
+            "alias_hex": "2e",
+            "create_alias": 17,
+            "create_stored": 117,
+            "label": "dot_ignorable",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 117,
+            "names_hex": [],
+            "parent_hex": "7370656369616c2f646f745f69676e6f7261626c65",
+            "same_inode_after": {
+              "errno": 117
+            },
+            "same_inode_before": {
+              "errno": 117
+            },
+            "stored_hex": "c2ad2e"
+          },
+          {
+            "alias_hex": "2e2e",
+            "create_alias": 17,
+            "create_stored": 40,
+            "label": "dotdot_ignorable",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 40,
+            "names_hex": [],
+            "parent_hex": "7370656369616c2f646f74646f745f69676e6f7261626c65",
+            "same_inode_after": {
+              "errno": 40
+            },
+            "same_inode_before": {
+              "errno": 40
+            },
+            "stored_hex": "c2ad2e2e"
+          },
+          {
+            "alias_hex": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+            "create_alias": 17,
+            "create_stored": 0,
+            "label": "length_255",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 0,
+            "lookup_stored_after": 0,
+            "names_hex": [
+              "414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+            ],
+            "parent_hex": "7370656369616c2f6c656e6774685f323535",
+            "same_inode_after": true,
+            "same_inode_before": true,
+            "stored_hex": "414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+          },
+          {
+            "alias_hex": "61616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+            "create_alias": 36,
+            "create_stored": 36,
+            "label": "length_256",
+            "lookup_alias_after": 36,
+            "lookup_alias_before": 36,
+            "lookup_stored_after": 36,
+            "names_hex": [],
+            "parent_hex": "7370656369616c2f6c656e6774685f323536",
+            "same_inode_after": {
+              "errno": 36
+            },
+            "same_inode_before": {
+              "errno": 36
+            },
+            "stored_hex": "41414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+          },
+          {
+            "alias_hex": "ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81ceb9cc88cc81",
+            "create_alias": 17,
+            "create_stored": 0,
+            "label": "folded_expansion",
+            "lookup_alias_after": 0,
+            "lookup_alias_before": 36,
+            "lookup_stored_after": 0,
+            "names_hex": [
+              "ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90"
+            ],
+            "parent_hex": "7370656369616c2f666f6c6465645f657870616e73696f6e",
+            "same_inode_after": true,
+            "same_inode_before": true,
+            "stored_hex": "ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90ce90"
+          }
+        ]
+      }
+    }
+  },
+  "schema": 1,
+  "source": {
+    "commit": "365cd9227a29b597bf7a4d6df22448ae07af7215",
+    "note": "Measured filesystem API outcomes, including exceptions; not a production support policy.",
+    "oracle_profile": {
+      "kernel_machine": "x86_64",
+      "kernel_release": "6.1.0-53-amd64",
+      "mke2fs_version": "mke2fs 1.47.0 (5-Feb-2023)\n\tUsing EXT2FS Library version 1.47.0",
+      "packages": "e2fsprogs=1.47.0-2+b2\nlibext2fs2:amd64=1.47.0-2+b2\nlinux-image-6.1.0-53-amd64=6.1.187-1",
+      "python_version": "Python 3.11.2"
+    },
+    "run": "https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/37698167738"
+  }
+}

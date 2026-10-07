@@ -240,7 +240,8 @@ def verify_aliases(root, observations):
 
 def main():
     assert os.environ.get("FLTH_GUEST") == "1", "requires the harness guest"
-    assert len(sys.argv) == 2 and sys.argv[1] in ["measure", "verify"]
+    assert len(sys.argv) == 3 and sys.argv[1] in ["measure", "verify"]
+    assert sys.argv[2] in ["opaque", "strict"]
     root = os.fsencode(os.environ["MNT"])
     evidence = root + b"/behavior-evidence.json"
     if sys.argv[1] == "measure":
@@ -253,7 +254,20 @@ def main():
         report["cold_lookups"] = cold_aliases(root, report["observations"])
         assert inventory(root) == report["inventory"], "namespace changed across remount"
         verify_aliases(root, report["observations"])
+        # Save the full report even on a reference mismatch; keep failure text
+        # bounded instead of dumping two large JSON objects into the tier log.
         print(json.dumps(report, sort_keys=True))
+        with open("/repo/test-disks/casefold-behavior-reference.json") as stream:
+            reference = json.load(stream)
+        with open("/repo/test-disks/casefold-oracle-profile.json") as stream:
+            profile = json.load(stream)
+        assert reference["schema"] == 1
+        assert reference["source"]["oracle_profile"] == profile
+        assert sum(len(probes) for probes in report["cold_lookups"].values()) == 75
+        for section in ["observations", "cold_lookups"]:
+            assert report[section] == reference["profiles"][sys.argv[2]][section], (
+                section + " differs from casefold-behavior-reference.json; inspect the saved report"
+            )
 
 
 if __name__ == "__main__":

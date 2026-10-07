@@ -123,17 +123,18 @@ fn generate(block_size: u32, strict: bool) {
     )
     .unwrap();
     println!("[casefold fixture] {label}: Linux namespace, encoding, layout, e2fsck and unchanged write refusal verified");
-    measure_behavior(&image, &label, &saved);
+    measure_behavior(&image, &label, strict, &saved);
 }
 
-fn measure_behavior(image: &str, label: &str, saved: &std::path::Path) {
+fn measure_behavior(image: &str, label: &str, strict: bool, saved: &std::path::Path) {
     // Keep the original fixtures and their manifests intact. Only Linux writes
     // this separate experiment image; the production driver's gate stays shut.
     let experiment = temp_path!("{label}-behavior.img");
     fs::copy(image, &experiment).unwrap();
+    let mode = if strict { "strict" } else { "opaque" };
     let script = |phase| {
         format!(
-            "python3 - {phase} <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
+            "python3 - {phase} {mode} <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
             include_str!("casefold_behavior_guest.py")
         )
     };
@@ -163,7 +164,13 @@ fn measure_behavior(image: &str, label: &str, saved: &std::path::Path) {
         String::from_utf8_lossy(&verified.stderr)
     );
     assert_e2fsck_clean(&experiment, &format!("{label}-behavior"));
-    println!("[casefold behavior] {label}: filename observations and namespace identity survived remount and e2fsck");
+    let digest = fs_ext4_test_support::sha256_hex(&fs::read(&experiment).unwrap());
+    fs::write(
+        saved.join(format!("{label}-behavior.sha256")),
+        format!("{digest}  {label}-behavior.img\n"),
+    )
+    .unwrap();
+    println!("[casefold behavior] {label}: 75 filename probes and namespace observations match the pinned reference; remount and e2fsck passed");
 }
 
 #[test]
