@@ -1,0 +1,51 @@
+name: casefold Stage 0 evidence
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-stage0.yml
+      - tests/casefold_fixture_oracle.rs
+      - tests/casefold_fixture_guest.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+  CARGO_TERM_COLOR: never
+  CARGO_BUILD_JOBS: "4"
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Generate and verify Linux casefold fixtures
+        run: |
+          scripts/tier.sh casefold:fixtures casefold-fixtures 1050 65000 -- scripts/test.sh --locked --release --test casefold_fixture_oracle -- --show-output
+          bash scripts/core.sh test-floor casefold-fixtures 1
+      - name: Keep completed fixtures and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casefold-fixtures
+          path: |
+            tmp/casefold-stage0/
+            tmp/logs/casefold-fixtures.log
+          if-no-files-found: error
+          retention-days: 30
+

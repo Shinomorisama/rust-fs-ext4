@@ -1,0 +1,66 @@
+name: casefold baseline coverage
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-coverage.yml
+      - scripts/casefold-coverage.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+  CARGO_TERM_COLOR: never
+  CARGO_BUILD_JOBS: "4"
+
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    defaults:
+      run:
+        working-directory: rust-fs-ext4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: stage0-tools
+      - name: Check out the unchanged baseline for coverage
+        uses: actions/checkout@v4
+        with:
+          ref: 3b9bc5d19dcfe05a00289dd8b1cebbf11e49b742
+          path: rust-fs-ext4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: llvm-tools-preview
+      - run: cargo install --locked cargo-llvm-cov --version 0.9.1
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Reuse the verified baseline's Linux fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures
+          run-id: 37593892509
+          github-token: ${{ github.token }}
+          path: rust-fs-ext4/test-disks
+      - name: Measure baseline coverage
+        run: bash ../stage0-tools/scripts/casefold-coverage.sh
+      - name: Keep coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casefold-baseline-coverage
+          path: |
+            rust-fs-ext4/tmp/casefold-coverage/
+            rust-fs-ext4/tmp/logs/casefold-coverage.log
+          if-no-files-found: error
+          retention-days: 30
