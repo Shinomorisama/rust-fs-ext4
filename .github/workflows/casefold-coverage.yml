@@ -45,13 +45,8 @@ jobs:
           components: llvm-tools-preview
       - run: cargo install --locked cargo-llvm-cov --version 0.9.1
       - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
-      - name: Reuse the verified baseline's Linux fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures
-          run-id: 37593892509
-          github-token: ${{ github.token }}
-          path: rust-fs-ext4/test-disks
+      - name: Build fixtures from the pinned baseline recipe
+        run: chore fixtures
       - name: Measure baseline coverage
         run: bash ../stage0-tools/scripts/casefold-coverage.sh
       - name: Keep coverage evidence

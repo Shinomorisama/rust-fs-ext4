@@ -16,6 +16,11 @@ mkdir -p tmp/casefold-coverage target
     sha256sum Cargo.lock
 } > tmp/casefold-coverage/versions.txt
 
+../fs-linux-test-harness/scripts/vm.sh session \
+    ../fs-linux-test-harness/scripts/vm.sh run \
+    'set -eu; uname -srvm; dpkg-query -W e2fsprogs libext2fs2' \
+    > tmp/casefold-coverage/guest-versions.txt
+
 # A fresh target prevents profiles from another run contaminating this baseline.
 export CARGO_TARGET_DIR
 CARGO_TARGET_DIR="$(mktemp -d "$PWD/target/casefold-coverage.XXXXXX")"

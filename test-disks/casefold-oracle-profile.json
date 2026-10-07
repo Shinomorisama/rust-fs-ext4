@@ -1,0 +1,7 @@
+{
+  "kernel_machine": "x86_64",
+  "kernel_release": "6.1.0-53-amd64",
+  "mke2fs_version": "mke2fs 1.47.0 (5-Feb-2023)\n\tUsing EXT2FS Library version 1.47.0",
+  "packages": "e2fsprogs=1.47.0-2+b2\nlibext2fs2:amd64=1.47.0-2+b2\nlinux-image-6.1.0-53-amd64=6.1.187-1",
+  "python_version": "Python 3.11.2"
+}

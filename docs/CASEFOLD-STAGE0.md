@@ -17,8 +17,8 @@ executed 712 tests. It covered 20,143 of 24,750 reported source lines (81.39%)
 and 37,138 of 45,390 regions (81.82%). This is not the full Linux-suite metric.
 
 The separate `casefold baseline coverage` workflow checks out `3b9bc5d`
-explicitly, verifies both sibling SHAs and uses that run's Linux-created
-fixtures. `scripts/casefold-coverage.sh` instruments all executable library,
+explicitly, verifies both sibling SHAs and builds fixtures from that baseline's
+recipe in the guest. It does not depend on an expiring CI artifact. `scripts/casefold-coverage.sh` instruments all executable library,
 binary and integration tests in release mode, including the slow ignored fuzz
 test. Documentation snippets are outside this stable-toolchain metric. The
 script retains the passing test names, tool versions, source revision,
@@ -55,12 +55,21 @@ structurally reproducible fixtures, not byte-identical images.
 
 ## Oracle identity and remaining gates
 
-All filesystem tools and mounts run inside the harness guest. The guest report
-records its exact kernel release and package version, architecture, e2fsprogs
-and libext2fs package versions, and Python version. The initial reference
-requires e2fsprogs 1.47.0. The first successful reports must be inspected and
-their complete oracle identity frozen before treating this as a qualified
-reference profile; recording a version alone does not pin future apt packages.
+All filesystem tools and mounts run inside the harness guest. All four profiles
+passed in [run 37655559368](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/37655559368).
+The measured reference identity is frozen in
+`test-disks/casefold-oracle-profile.json`: x86_64 Linux 6.1.0-53-amd64, kernel
+package 6.1.187-1, e2fsprogs/libext2fs 1.47.0-2+b2, and Python 3.11.2. The
+guest refuses a different profile; other guest architectures or package updates
+require a separately qualified profile rather than silently changing this
+reference. This is a test-oracle restriction, not a driver architecture limit.
+
+`test-disks/casefold-reference-manifest.json` records the captured image hashes,
+feature masks, encoding flags and hash settings. Each image contains 1,006
+recorded file entries. Fresh generation need not reproduce the image hash,
+but must reproduce the asserted metadata and namespace behavior. The feature
+masks are compat `0x24`, incompat `0x200c2`, and ro-compat `0x40b`; the default
+hash version is 1 with the signed-hash superblock flag set.
 
 This matrix does not yet cover invalid UTF-8, post-version Unicode characters,
 all namespace operations, collision continuation, crashes, encrypted

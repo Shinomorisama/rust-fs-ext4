@@ -7,6 +7,7 @@ on:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
       - tests/casefold_fixture_guest.py
+      - test-disks/casefold-oracle-profile.json
   workflow_dispatch:
 
 permissions:
@@ -48,4 +49,3 @@ jobs:
             tmp/logs/casefold-fixtures.log
           if-no-files-found: error
           retention-days: 30
-

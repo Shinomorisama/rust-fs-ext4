@@ -31,15 +31,25 @@ fn generate(block_size: u32, strict: bool) {
         "mke2fs: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let script = format!(
-        "python3 - <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
-        include_str!("casefold_fixture_guest.py")
-    );
-    let populated = guest_kernel_write(&image, &script);
+    let script = |phase| {
+        format!(
+            "python3 - {phase} <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
+            include_str!("casefold_fixture_guest.py")
+        )
+    };
+    let populated = guest_kernel_write(&image, &script("populate"));
     assert!(
         populated.status.success(),
         "kernel fixture: {}",
         String::from_utf8_lossy(&populated.stderr)
+    );
+    // A separate mount prevents population's dentry cache from hiding an
+    // incorrect on-disk index when the kernel resolves the variant spellings.
+    let verified = guest_kernel_write(&image, &script("verify"));
+    assert!(
+        verified.status.success(),
+        "kernel fixture readback: {}",
+        String::from_utf8_lossy(&verified.stderr)
     );
     assert_e2fsck_clean(&image, &label);
 
@@ -55,7 +65,18 @@ fn generate(block_size: u32, strict: bool) {
         u16::from(strict)
     );
     let incompat = u32::from_le_bytes(sb[0x60..0x64].try_into().unwrap());
-    assert_ne!(incompat & 0x20000, 0);
+    assert_eq!(u32::from_le_bytes(sb[0x5c..0x60].try_into().unwrap()), 0x24);
+    assert_eq!(incompat, 0x200c2);
+    assert_eq!(
+        u32::from_le_bytes(sb[0x64..0x68].try_into().unwrap()),
+        0x40b
+    );
+    assert_eq!(sb[0xfc], 1, "the measured default hash version");
+    assert_eq!(u32::from_le_bytes(sb[0x160..0x164].try_into().unwrap()), 1);
+    assert_eq!(
+        hex::encode(&sb[0xec..0xfc]),
+        "a1b2c3d4e5f67890abcdef1234567890"
+    );
     assert_eq!(
         1024_u32 << u32::from_le_bytes(sb[24..28].try_into().unwrap()),
         block_size
@@ -94,7 +115,7 @@ fn generate(block_size: u32, strict: bool) {
     let saved = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tmp/casefold-stage0");
     fs::create_dir_all(&saved).unwrap();
     fs::copy(&image, saved.join(format!("{label}.img"))).unwrap();
-    fs::write(saved.join(format!("{label}.json")), &populated.stdout).unwrap();
+    fs::write(saved.join(format!("{label}.json")), &verified.stdout).unwrap();
     fs::write(saved.join(format!("{label}.superblock.bin")), sb).unwrap();
     fs::write(
         saved.join(format!("{label}.sha256")),
