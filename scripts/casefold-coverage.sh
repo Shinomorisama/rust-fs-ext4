@@ -43,6 +43,8 @@ names = sorted(re.findall(r'^test .+ \.\.\. ok$', log, re.M))
 assert len(names) == sum(int(c[0]) for c in counts)
 Path('tmp/casefold-coverage/passing-tests.txt').write_text('\n'.join(names) + '\n')
 PY
-cargo llvm-cov report --release --json --summary-only \
+# Retain function and region records as well as totals: a summary cannot
+# identify a coverage regression or explain a profile-mismatch warning.
+cargo llvm-cov report --release --json \
     --output-path tmp/casefold-coverage/coverage.json
 cargo llvm-cov report --release > tmp/casefold-coverage/coverage.txt
