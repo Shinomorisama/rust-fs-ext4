@@ -17,10 +17,10 @@
 //! ```text
 //!   1. A read-only device: return, replaying nothing here. Mount replays
 //!      into the buffer cache instead ([`replay_into_cache`], #72).
-//!   2. Parse the JBD2 superblock via jbd2::read_superblock; clean: clear a
-//!      leftover needs_recovery and return.
+//!   2. Parse the JBD2 superblock via jbd2::read_superblock.
 //!   3. Refuse a volume with a write-breaking INCOMPAT bit.
-//!   4. plan = journal::walk(&fs, &jsb)?; journal_apply::apply(&fs, &plan)?
+//!   4. If clean, clear a leftover needs_recovery and return; otherwise
+//!      plan = journal::walk(&fs, &jsb)?; journal_apply::apply(&fs, &plan)?
 //!   5. Mark the journal clean, then clear needs_recovery.
 //!   6. The mount continues, read-write.
 //! ```
@@ -292,6 +292,13 @@ pub fn replay_if_dirty(fs: &Filesystem) -> Result<usize> {
     let Some(jsb) = jbd2::read_superblock(fs)? else {
         return Ok(0); // no journal inode → nothing to replay
     };
+    // Even an empty journal can require a superblock write to clear the
+    // recovery marker. Refuse before either kind of write, including when
+    // a device became writable after a read-only lazy mount.
+    let write_breaking = crate::features::write_breaking_incompat(fs.sb.feature_incompat);
+    if write_breaking != 0 {
+        return Err(crate::Error::UnsupportedIncompat(write_breaking));
+    }
     if jsb.is_clean() {
         // A crash between the clean journal and the cleared flag leaves
         // the flag behind with nothing to recover.
@@ -300,13 +307,6 @@ pub fn replay_if_dirty(fs: &Filesystem) -> Result<usize> {
             fs.dev.flush()?;
         }
         return Ok(0);
-    }
-    // Replay writes to the volume, so it refuses what every other write
-    // refuses. The mount checks these bits too, but a lazy mount checked
-    // while it was read-only and calls this once it is writable (#117).
-    let write_breaking = crate::features::write_breaking_incompat(fs.sb.feature_incompat);
-    if write_breaking != 0 {
-        return Err(crate::Error::UnsupportedIncompat(write_breaking));
     }
     let plan = crate::journal::walk(fs, &jsb)?;
     let applied = apply(fs, &plan)?;

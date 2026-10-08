@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Recovery refuses write-breaking features before clearing a leftover recovery
+  marker, including when a clean journal's device becomes writable after a
+  read-only lazy mount. CASEFOLD, MMP and ENCRYPT volumes remain untouched.
+
 ### Added
 
 - Fallible Rust metadata accessors for the casefold encoding and per-directory
