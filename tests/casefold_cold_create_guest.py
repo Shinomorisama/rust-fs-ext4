@@ -69,9 +69,26 @@ def seed(root):
     return {"probes": probes}
 
 
+def signature(report):
+    assert len(report["probes"]) == 30
+    assert report["after_create"] == report["first_lookup_first"], "identity/content changed after remount"
+    assert report["after_create"] == report["second_lookup_first"], "lookup order changed identity/content"
+    # Keep exact cross-mount identity checks above, but omit absolute inode
+    # allocation when comparing independently generated images.
+    result = json.loads(json.dumps({"probes": report["probes"], "entries": report["after_create"]}))
+    for entry in result["entries"]:
+        first, second = entry["first"], entry["second"]
+        entry["same_inode"] = (first["inode"] == second["inode"]
+                               if "inode" in first and "inode" in second else None)
+        first.pop("inode", None)
+        second.pop("inode", None)
+    return result
+
+
 def main():
     assert os.environ.get("FLTH_GUEST") == "1", "requires the harness guest"
-    assert len(sys.argv) == 2 and sys.argv[1] in ["seed", "create", "first", "second"]
+    assert len(sys.argv) == 3 and sys.argv[1] in ["seed", "create", "first", "second"]
+    assert sys.argv[2] in ["opaque", "strict"]
     root = os.fsencode(os.environ["MNT"])
     evidence = root + b"/cold-create-evidence.json"
     phase = sys.argv[1]
@@ -92,6 +109,15 @@ def main():
         json.dump(report, stream, sort_keys=True)
     if phase == "second":
         print(json.dumps(report, sort_keys=True))
+        with open("/repo/test-disks/casefold-cold-create-reference.json") as stream:
+            reference = json.load(stream)
+        with open("/repo/test-disks/casefold-oracle-profile.json") as stream:
+            profile = json.load(stream)
+        assert reference["schema"] == 1
+        assert reference["source"]["oracle_profile"] == profile
+        assert signature(report) == reference["profiles"][sys.argv[2]], (
+            "cold-create results changed; inspect the saved report"
+        )
 
 
 if __name__ == "__main__":

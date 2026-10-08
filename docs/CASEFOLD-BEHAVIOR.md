@@ -94,6 +94,38 @@ The future driver must validate raw component lengths consistently and must
 not truncate comparison keys to 255 bytes or depend on cached acceptance of
 an overlong path component.
 
+## Cold creation and competing entries
+
+[Run 37733726483](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/37733726483),
+at `230e81907e3079579ba23cfaea40133bc53545a9`, extends the investigation with
+`tests/casefold_cold_create_guest.py`. Five pairs are tested in both creation
+orders in ordinary, small casefold and indexed casefold directories: 30 probes
+per profile, 120 in total. All four images passed e2fsck.
+
+Each probe seeds one name, unmounts, then attempts exclusive creation of the
+competing spelling without querying the stored name first. Two further mounts
+read the first spelling first and the second spelling first, respectively.
+Different payload markers distinguish the original file from a competing file.
+Names, contents, exact inode identities and link counts agree across all three
+readback phases in this matrix. No lookup-order ambiguity was observed.
+
+The reference is `test-disks/casefold-cold-create-reference.json`. It omits
+absolute inode allocation between independently generated images but retains
+same-inode relationships. Within each image, exact inode identities must also
+survive remounting and changed lookup order. Both block sizes give identical
+recorded outcomes after this normalization.
+
+Non-strict casefold treats the tested ASCII-case variants containing an isolated
+`80` byte as the same name, even when that byte precedes the varying letter.
+This is not simply removal of the byte: the tested `41 80` name and its `41`
+counterpart coexist as distinct files. The `41 ff`/`61 ff` pair remains distinct
+too. Strict casefold rejects malformed creates, while ordinary directories
+accept both members of every control pair.
+
+These results narrow uncertainty for these particular byte patterns; they do
+not establish a general malformed-UTF-8 algorithm or qualify driver writes.
+More byte patterns and actual destructive operations still need tests.
+
 ## Implementation consequences and remaining work
 
 The next implementation stage can parse and validate the filesystem encoding

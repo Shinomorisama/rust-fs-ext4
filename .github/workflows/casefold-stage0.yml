@@ -11,6 +11,7 @@ on:
       - tests/casefold_cold_create_guest.py
       - test-disks/casefold-oracle-profile.json
       - test-disks/casefold-behavior-reference.json
+      - test-disks/casefold-cold-create-reference.json
   workflow_dispatch:
 
 permissions:
