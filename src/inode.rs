@@ -102,6 +102,8 @@ bitflags::bitflags! {
         const HUGE_FILE    = 0x0004_0000;
         /// Inline data — file contents live inside i_block + xattrs.
         const INLINE_DATA  = 0x1000_0000;
+        /// Directory names use the volume's casefold encoding.
+        const CASEFOLD     = 0x4000_0000;
         /// Alias for EXTENTS (matches kernel naming `EXT4_EXTENTS_FL`).
         const EXTENT       = 0x0008_0000;
         /// Inode has extra (nanosecond) timestamp fields.
@@ -493,6 +495,36 @@ impl Inode {
     /// Decode i_flags into a typed bitflags value (silently drops unknown bits).
     pub fn flag_set(&self) -> InodeFlags {
         InodeFlags::from_bits_truncate(self.flags)
+    }
+
+    /// Inspect this directory's naming metadata, without performing name folding.
+    ///
+    /// `None` means byte-sensitive names; `Some` identifies a recognized
+    /// casefold encoding. Recognition does not promise lookup or write support.
+    /// Encrypted directories are unsupported, and a CASEFOLD flag on a
+    /// non-directory or without the volume feature is corrupt metadata.
+    /// The volume's encoding is validated even for an ordinary directory when
+    /// the volume declares CASEFOLD. Other mount restrictions remain separate.
+    pub fn directory_casefold_encoding(
+        &self,
+        sb: &crate::superblock::Superblock,
+    ) -> Result<Option<crate::superblock::CasefoldEncoding>> {
+        let folded = self.flag_set().contains(InodeFlags::CASEFOLD);
+        if !self.is_dir() {
+            return Err(if folded {
+                Error::Corrupt("casefold flag on a non-directory inode")
+            } else {
+                Error::NotADirectory
+            });
+        }
+        if folded && sb.feature_incompat & crate::features::Incompat::CASEFOLD.bits() == 0 {
+            return Err(Error::Corrupt("casefold inode without the volume feature"));
+        }
+        if self.flag_set().contains(InodeFlags::ENCRYPT) {
+            return Err(Error::Unsupported("encrypted directory name policy"));
+        }
+        let encoding = sb.casefold_encoding()?;
+        Ok(if folded { encoding } else { None })
     }
 }
 

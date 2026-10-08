@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Fallible Rust metadata accessors for the casefold encoding and per-directory
+  casefold settings, plus the named inode CASEFOLD flag. These inspect metadata;
+  casefold writes remain refused and filename lookup behavior is unchanged.
+
 ## [0.7.2] — 2026-10-06
 
 ### Renamed

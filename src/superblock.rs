@@ -18,6 +18,17 @@ pub const EXT4_MAGIC: u16 = 0xEF53;
 pub const EXT4_VALID_FS: u16 = 0x0001;
 pub const EXT4_ERROR_FS: u16 = 0x0002;
 
+/// A recognized on-disk casefold encoding, not a claim of lookup or write support.
+///
+/// Encoding ID 1 and strict flag bit 0 are checked against Linux-created images
+/// in `tests/casefold_fixture_oracle.rs`. No other encoding or flag is inferred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CasefoldEncoding {
+    /// UTF-8 with the filesystem's Unicode 12.1 rules.
+    Utf8_12_1 { strict: bool },
+}
+
 /// Parsed in-memory representation of the ext4 superblock.
 /// Field names follow `struct ext4_super_block` in the kernel.org format
 /// documentation (s_ prefix dropped).
@@ -589,6 +600,53 @@ impl Superblock {
         self.raw
             .get(0x160..0x164)
             .is_some_and(|f| u32::from_le_bytes(f.try_into().unwrap()) & 0x2 != 0)
+    }
+
+    /// Raw `s_encoding` (little-endian u16 at 0x27c).
+    ///
+    /// Meaningful only with the CASEFOLD feature. This accessor does not
+    /// validate the encoding ID; use [`Self::casefold_encoding`] for that.
+    pub fn encoding_id(&self) -> Result<u16> {
+        let bytes = self
+            .raw
+            .get(0x27c..0x27e)
+            .ok_or(Error::Corrupt("superblock: missing encoding ID"))?;
+        Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    /// Raw `s_encoding_flags` (little-endian u16 at 0x27e).
+    ///
+    /// Unknown bits are preserved here and refused by [`Self::casefold_encoding`].
+    pub fn encoding_flags(&self) -> Result<u16> {
+        let bytes = self
+            .raw
+            .get(0x27e..0x280)
+            .ok_or(Error::Corrupt("superblock: missing encoding flags"))?;
+        Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    /// Inspect the volume's casefold encoding without changing mount policy.
+    ///
+    /// `None` means CASEFOLD is absent, so the unused encoding fields are
+    /// ignored. Unknown IDs or flag bits return `Unsupported`; a short raw
+    /// buffer returns `Corrupt`. The public raw buffer can be replaced by a
+    /// caller, so these checks are needed even though `parse` requires 1024 bytes.
+    /// This does not validate other filesystem features or authorize writes.
+    pub fn casefold_encoding(&self) -> Result<Option<CasefoldEncoding>> {
+        if self.feature_incompat & crate::features::Incompat::CASEFOLD.bits() == 0 {
+            return Ok(None);
+        }
+        let id = self.encoding_id()?;
+        let flags = self.encoding_flags()?;
+        if id != 1 {
+            return Err(Error::Unsupported("casefold encoding ID"));
+        }
+        if flags & !1 != 0 {
+            return Err(Error::Unsupported("casefold encoding flags"));
+        }
+        Ok(Some(CasefoldEncoding::Utf8_12_1 {
+            strict: flags & 1 != 0,
+        }))
     }
 
     /// Block size in bytes: 1024 << log_block_size.

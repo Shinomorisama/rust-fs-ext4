@@ -2,7 +2,10 @@
 //! Published format: https://docs.kernel.org/filesystems/ext4/super.html
 //! All oracle tools and mounts go through the existing harness helpers.
 
-use fs_ext4::{block_io::FileDevice, error::Error, fs::Filesystem, inode::InodeFlags};
+use fs_ext4::{
+    block_io::FileDevice, error::Error, fs::Filesystem, inode::InodeFlags,
+    superblock::CasefoldEncoding,
+};
 use fs_ext4_test_support::{assert_e2fsck_clean, guest_kernel_write, oracle, temp_path};
 use std::{fs, os::unix::fs::FileExt, sync::Arc};
 
@@ -83,6 +86,10 @@ fn generate(block_size: u32, strict: bool) {
     );
     {
         let mounted = Filesystem::mount(Arc::new(FileDevice::open(&image).unwrap())).unwrap();
+        let encoding = Some(CasefoldEncoding::Utf8_12_1 { strict });
+        assert_eq!(mounted.sb.encoding_id().unwrap(), 1);
+        assert_eq!(mounted.sb.encoding_flags().unwrap(), u16::from(strict));
+        assert_eq!(mounted.sb.casefold_encoding().unwrap(), encoding);
         for (path, folded, indexed) in [
             ("/ordinary", false, false),
             ("/fold_small", true, false),
@@ -93,6 +100,12 @@ fn generate(block_size: u32, strict: bool) {
                 fs_ext4::path::lookup(mounted.dev.as_ref(), &mounted.sb, &mut read, path).unwrap();
             let (inode, _) = mounted.read_inode_verified(ino).unwrap();
             assert_eq!(inode.flags & 0x4000_0000 != 0, folded, "{path}");
+            assert_eq!(inode.flag_set().contains(InodeFlags::CASEFOLD), folded);
+            assert_eq!(
+                inode.directory_casefold_encoding(&mounted.sb).unwrap(),
+                if folded { encoding } else { None },
+                "{path}"
+            );
             assert_eq!(
                 inode.flags & InodeFlags::INDEX.bits() != 0,
                 indexed,

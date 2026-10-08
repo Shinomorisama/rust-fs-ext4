@@ -122,10 +122,10 @@ pub const SUPPORTED_INCOMPAT: u32 = Incompat::FILETYPE.bits()
 ///   becomes invisible on Linux while still holding its inode and its
 ///   directory slot, and `e2fsck` reports the htree as inconsistent.
 ///
-/// `casefold.rs` implements the hash and has no callers; neither
-/// `s_encoding` nor `EXT4_CASEFOLD_FL` is read anywhere, so the driver
-/// cannot currently tell that a directory is casefolded at all. Wiring
-/// that up is what would let this bit move out of here.
+/// Metadata inspection recognizes the encoding and directory flag, but
+/// lookup and mutation do not apply that policy. The generic folding
+/// helper is not qualified for complete filesystem semantics. This bit
+/// stays here until versioned lookup and mutation are independently proven.
 ///
 /// - `ENCRYPT` is read per inode, and a write would have to be refused per
 ///   inode too: a name created in an encrypted directory, or data written
