@@ -1,4 +1,4 @@
-name: casefold baseline coverage
+name: casefold coverage
 
 on:
   push:
@@ -7,6 +7,11 @@ on:
       - .github/workflows/casefold-coverage.yml
       - scripts/casefold-coverage.sh
   workflow_dispatch:
+    inputs:
+      revision:
+        description: Full commit SHA to measure (empty means the selected branch HEAD)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -28,10 +33,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: stage0-tools
-      - name: Check out the unchanged baseline for coverage
+      - name: Check out the selected commit for coverage
         uses: actions/checkout@v4
         with:
-          ref: 3b9bc5d19dcfe05a00289dd8b1cebbf11e49b742
+          ref: ${{ inputs.revision || github.sha }}
           path: rust-fs-ext4
       - run: scripts/ci-install-chore.sh
       - run: chore siblings
@@ -45,15 +50,17 @@ jobs:
           components: llvm-tools-preview
       - run: cargo install --locked cargo-llvm-cov --version 0.9.1
       - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
-      - name: Build fixtures from the pinned baseline recipe
+      - name: Build fixtures from the selected checkout
         run: chore fixtures
-      - name: Measure baseline coverage
+      - name: Measure coverage at the exact selected commit
+        env:
+          CASEFOLD_COVERAGE_REVISION: ${{ inputs.revision || github.sha }}
         run: bash ../stage0-tools/scripts/casefold-coverage.sh
       - name: Keep coverage evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: casefold-baseline-coverage
+          name: casefold-coverage
           path: |
             rust-fs-ext4/tmp/casefold-coverage/
             rust-fs-ext4/tmp/logs/casefold-coverage.log

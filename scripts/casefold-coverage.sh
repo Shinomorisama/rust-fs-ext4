@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Run from the pinned baseline checkout on a KVM-capable Linux runner.
+# Run from an exact selected checkout on a KVM-capable Linux runner.
 set -euo pipefail
-test "$(git rev-parse HEAD)" = 3b9bc5d19dcfe05a00289dd8b1cebbf11e49b742
+# Keep the original baseline reproducible for direct invocations. CI explicitly
+# selects its own commit so production changes receive a fresh measurement.
+test "$(git rev-parse HEAD)" = "${CASEFOLD_COVERAGE_REVISION:-3b9bc5d19dcfe05a00289dd8b1cebbf11e49b742}"
 test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
 test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
 test "$(cargo llvm-cov --version)" = 'cargo-llvm-cov 0.9.1'
