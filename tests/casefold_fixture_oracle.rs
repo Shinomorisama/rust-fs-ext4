@@ -124,6 +124,34 @@ fn generate(block_size: u32, strict: bool) {
     .unwrap();
     println!("[casefold fixture] {label}: Linux namespace, encoding, layout, e2fsck and unchanged write refusal verified");
     measure_behavior(&image, &label, strict, &saved);
+    measure_cold_create(&image, &label, &saved);
+}
+
+fn measure_cold_create(image: &str, label: &str, saved: &std::path::Path) {
+    let experiment = temp_path!("{label}-cold-create.img");
+    fs::copy(image, &experiment).unwrap();
+    for phase in ["seed", "create", "first", "second"] {
+        let script = format!(
+            "python3 - {phase} <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
+            include_str!("casefold_cold_create_guest.py")
+        );
+        let result = guest_kernel_write(&experiment, &script);
+        fs::copy(&experiment, saved.join(format!("{label}-cold-create.img"))).unwrap();
+        assert!(
+            result.status.success(),
+            "cold create {phase}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        if phase == "second" {
+            fs::write(
+                saved.join(format!("{label}-cold-create.json")),
+                result.stdout,
+            )
+            .unwrap();
+        }
+    }
+    assert_e2fsck_clean(&experiment, &format!("{label}-cold-create"));
+    println!("[casefold cold create] {label}: both creation orders and fresh-mount lookup orders measured; e2fsck passed");
 }
 
 fn measure_behavior(image: &str, label: &str, strict: bool, saved: &std::path::Path) {

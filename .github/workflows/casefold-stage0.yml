@@ -8,6 +8,7 @@ on:
       - tests/casefold_fixture_oracle.rs
       - tests/casefold_fixture_guest.py
       - tests/casefold_behavior_guest.py
+      - tests/casefold_cold_create_guest.py
       - test-disks/casefold-oracle-profile.json
       - test-disks/casefold-behavior-reference.json
   workflow_dispatch:
