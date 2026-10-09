@@ -1,4 +1,10 @@
-//! Case-folded directory lookup (E12, Phase 5).
+//! Casefold name handling.
+//!
+//! Read-only directory lookup uses the frozen Unicode 12.1 implementation
+//! through `LookupName`, with explicit refusal of unqualified byte names.
+//! The public infallible helpers below are legacy APIs retained for compatibility;
+//! their newer Unicode dependencies and invalid-byte fallback are not used by
+//! directory lookup. Casefold filesystem writes remain refused.
 //!
 //! A volume with `INCOMPAT_CASEFOLD` records its encoding in `s_encoding`,
 //! and a directory with `EXT4_CASEFOLD_FL` compares names case-insensitively.
@@ -17,10 +23,9 @@
 //! needs the encryption key (format documentation, "Hash Tree Directories"
 //! and `ext4_extended_dir_entry_2`); nothing here recomputes it.
 //!
-//! ### Folding
+//! ### Legacy public folding helpers
 //!
-//! A name is compared in a normalised, case-folded form, using the Unicode
-//! version the volume declares. We compute that form with:
+//! The legacy infallible helpers compute a normalized, case-folded form with:
 //!
 //! 1. Decode UTF-8 → codepoints (invalid sequences fall back to ASCII fold).
 //! 2. NFD-decompose with the `unicode-normalization` crate.
@@ -29,20 +34,17 @@
 //!    used — it is simple lowercase, not full case fold (e.g. ß → "ss").
 //! 4. Re-encode as UTF-8. The result is what the hash is computed over.
 //!
-//! This matches the kernel for the overwhelming majority of real filenames.
-//! The kernel uses frozen tables for a specific Unicode version
-//! (`s_encoding_flags`), so there can be differences for codepoints added
-//! after that version; those are edge cases in practice.
+//! These helpers are not version-pinned filesystem comparisons. Their output
+//! must not decide whether a casefold directory name is absent; directory
+//! lookup uses the frozen implementation and the explicit policy above.
 
 use unicode_normalization::UnicodeNormalization;
 
 use crate::hash::{name_hash, HashVersion, NameHash};
 
-// The frozen replacement is deliberately test-only until comparison semantics
-// and filesystem policy have independent qualification. Existing callers still
-// use the legacy helpers below; this does not enable casefold writes.
-#[cfg(test)]
+mod lookup;
 mod unicode_12_1;
+pub(crate) use lookup::LookupName;
 
 /// Produce the NFD + case-folded form of `name`, which the htree hash of a
 /// casefolded directory is computed over.

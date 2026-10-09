@@ -1,6 +1,6 @@
 //! Path-to-inode resolution.
 //!
-//! Walk a slash-separated path — bytes, never decoded — from the root directory (inode 2) down to
+//! Walk a slash-separated byte path from the root directory (inode 2) down to
 //! a target inode number. Used by every public-facing C API function that
 //! accepts a path (stat, dir_open, read_file, readlink).
 //!
@@ -30,7 +30,8 @@ pub const EXT4_ROOT_INODE: u32 = 2;
 ///
 /// `path` is expected in the form `/a/b/c` (leading slash accepted, trailing
 /// slash accepted, empty path returns the root). Non-UTF-8 bytes in directory
-/// entries are compared literally.
+/// entries are compared literally in ordinary directories. Casefold directories
+/// use their frozen encoding and refuse unqualified malformed names.
 ///
 /// Returns:
 /// - `Ok(inode)` — inode number for the resolved path
@@ -90,10 +91,10 @@ where
 }
 
 /// [`lookup_with_csum`] of a path given as bytes, which is what a path is:
-/// the components are compared byte for byte against the directory entry
-/// names, which have no encoding. A path that is not UTF-8 names exactly
-/// the file whose name bytes it holds, and a path naming nothing is
-/// `NotFound` — never the root by accident (#418).
+/// ordinary directories compare components byte for byte, including non-UTF-8.
+/// Casefold directories compare valid UTF-8 using the volume's frozen Unicode
+/// encoding; malformed bytes and normalized dot aliases are refused. A missing
+/// supported name is `NotFound` — never the root by accident (#418).
 ///
 /// The `&str` functions above are this with `str::as_bytes`, so a caller
 /// passing UTF-8 sees no difference.
@@ -136,8 +137,11 @@ pub(crate) fn find_entry(
     // Validate the actual parent at every path component, including direct
     // path API calls that did not pass through Filesystem::mount. Unsupported
     // encoding or inconsistent inode flags must not become a false absence.
-    // This establishes policy validity; comparison remains byte-sensitive here.
-    let _ = dir_inode.directory_casefold_encoding(sb)?;
+    let encoding = dir_inode.directory_casefold_encoding(sb)?;
+    if encoding.is_some() && dir_inode.has_inline_data() {
+        return Err(Error::Unsupported("inline casefold directory lookup"));
+    }
+    let lookup_name = crate::casefold::LookupName::new(name, encoding)?;
     // Both extent-backed and legacy direct/indirect-backed directories are
     // supported here — `find_entry_linear` and `find_entry_htree` use
     // `indirect::map_logical_any` for flavor-aware logical→physical mapping.
@@ -150,9 +154,15 @@ pub(crate) fn find_entry(
 
     // HTree fast path: indexed directories (EXT4_INDEX_FL = 0x1000).
     if (dir_inode.flags & InodeFlags::INDEX.bits()) != 0 {
-        if let Some(found) =
-            find_entry_htree(dev, sb, dir_ino, dir_inode, name, has_filetype, csum)?
-        {
+        if let Some(found) = find_entry_htree(
+            dev,
+            sb,
+            dir_ino,
+            dir_inode,
+            &lookup_name,
+            has_filetype,
+            csum,
+        )? {
             return Ok(found);
         }
         // htree said "not in expected leaf" — fall through to a full linear
@@ -164,7 +174,7 @@ pub(crate) fn find_entry(
         sb,
         dir_ino,
         dir_inode,
-        name,
+        &lookup_name,
         has_filetype,
         block_size,
         csum,
@@ -172,13 +182,14 @@ pub(crate) fn find_entry(
 }
 
 /// Linear scan of every directory data block.
+/// For casefold indexes, only scan leaves actually listed in the root.
 #[allow(clippy::too_many_arguments)]
 fn find_entry_linear(
     dev: &dyn BlockDevice,
     _sb: &Superblock,
     dir_ino: u32,
     dir_inode: &Inode,
-    name: &[u8],
+    name: &crate::casefold::LookupName<'_>,
     has_filetype: bool,
     block_size: u32,
     csum: &crate::checksum::Checksummer,
@@ -186,9 +197,31 @@ fn find_entry_linear(
     let dir_size = dir_inode.size;
     let total_blocks = dir_size.div_ceil(block_size as u64);
     let gen = dir_inode.generation;
+    let mut found = None;
 
     let mut block = vec![0u8; block_size as usize];
-    for logical in 0..total_blocks {
+    let indexed_leaves = if name.is_folded() && dir_inode.flag_set().contains(InodeFlags::INDEX) {
+        let root =
+            indirect::map_logical_any(&dir_inode.block, dir_inode.flags, dev, block_size, 0)?
+                .ok_or(Error::CorruptDirEntry("casefold index root is sparse"))?;
+        dev.read_at(root * block_size as u64, &mut block)?;
+        Some(casefold_root_leaves(
+            &block,
+            dir_ino,
+            dir_inode,
+            csum,
+            total_blocks,
+        )?)
+    } else {
+        None
+    };
+    let scan_count = indexed_leaves
+        .as_ref()
+        .map_or(total_blocks, |leaves| leaves.len() as u64);
+    for index in 0..scan_count {
+        let logical = indexed_leaves
+            .as_ref()
+            .map_or(index, |leaves| u64::from(leaves[index as usize]));
         let phys = match indirect::map_logical_any(
             &dir_inode.block,
             dir_inode.flags,
@@ -207,12 +240,19 @@ fn find_entry_linear(
         match dir::parse_block_verified(&block, has_filetype, dir_ino, gen, csum) {
             Ok(entries) => {
                 for entry in entries {
-                    if entry.name == name {
-                        return Ok(entry.inode);
+                    if name.matches(&entry.name)? {
+                        if !name.is_folded() {
+                            return Ok(entry.inode);
+                        }
+                        name.record_match(&mut found, entry.inode)?;
                     }
                 }
             }
-            Err(_) if logical == 0 && (dir_inode.flags & InodeFlags::INDEX.bits()) != 0 => {
+            Err(_)
+                if !name.is_folded()
+                    && logical == 0
+                    && (dir_inode.flags & InodeFlags::INDEX.bits()) != 0 =>
+            {
                 // dx_root in an indexed dir — only "." and ".." matter here,
                 // and find_entry_htree already handled the indexed path.
                 continue;
@@ -221,7 +261,46 @@ fn find_entry_linear(
         }
     }
 
-    Err(Error::NotFound)
+    found.ok_or(Error::NotFound)
+}
+
+/// Qualify the currently supported casefold index shape and its checksum.
+/// Deeper indexes need their own leaf enumeration/collision qualification.
+fn casefold_root_leaves(
+    block: &[u8],
+    ino: u32,
+    inode: &Inode,
+    csum: &crate::checksum::Checksummer,
+    total_blocks: u64,
+) -> Result<Vec<u32>> {
+    let info = htree::parse_root_info(block)?;
+    if info.indirect_levels != 0 || info.unused_flags != 0 {
+        return Err(Error::Unsupported("casefold index depth or flags"));
+    }
+    if info.info_length != 8 {
+        return Err(Error::Corrupt("casefold index info_length is not 8"));
+    }
+    if csum.enabled && csum.verify_dx_tail(ino, inode.generation, block, 32) != Some(true) {
+        return Err(Error::BadChecksum {
+            what: "htree index block",
+        });
+    }
+    let (_, entries) = htree::parse_root_entries(block)?;
+    if entries.windows(2).any(|pair| pair[0].hash > pair[1].hash) {
+        return Err(Error::CorruptDirEntry(
+            "casefold index hashes are not ordered",
+        ));
+    }
+    let mut leaves = std::collections::HashSet::new();
+    for entry in &entries {
+        if entry.block == 0 || u64::from(entry.block) >= total_blocks || !leaves.insert(entry.block)
+        {
+            return Err(Error::CorruptDirEntry(
+                "invalid or repeated casefold index leaf",
+            ));
+        }
+    }
+    Ok(entries.iter().map(|entry| entry.block).collect())
 }
 
 /// HTree-indexed lookup. Returns:
@@ -233,7 +312,7 @@ fn find_entry_htree(
     sb: &Superblock,
     dir_ino: u32,
     dir_inode: &Inode,
-    name: &[u8],
+    name: &crate::casefold::LookupName<'_>,
     has_filetype: bool,
     csum: &crate::checksum::Checksummer,
 ) -> Result<Option<u32>> {
@@ -249,6 +328,15 @@ fn find_entry_htree(
         };
     let mut root_block = vec![0u8; block_size as usize];
     dev.read_at(phys0 * block_size as u64, &mut root_block)?;
+    if name.is_folded() {
+        casefold_root_leaves(
+            &root_block,
+            dir_ino,
+            dir_inode,
+            csum,
+            dir_inode.size.div_ceil(block_size as u64),
+        )?;
+    }
 
     // Walk the htree. lookup_leaf needs a closure for reading further dx
     // blocks (intermediate nodes); we map logical→physical via whichever
@@ -268,7 +356,7 @@ fn find_entry_htree(
     };
 
     let leaf_logical = match htree::lookup_leaf_with(
-        name,
+        name.hash_bytes(),
         &root_block,
         &sb.hash_seed,
         sb.unsigned_hash(),
@@ -300,16 +388,20 @@ fn find_entry_htree(
         });
     }
 
+    let mut found = None;
     for entry in dir::DirBlockIter::new(&leaf, has_filetype) {
         let entry: DirEntry = entry?;
-        if entry.name == name {
-            return Ok(Some(entry.inode));
+        if name.matches(&entry.name)? {
+            if !name.is_folded() {
+                return Ok(Some(entry.inode));
+            }
+            name.record_match(&mut found, entry.inode)?;
         }
     }
 
     // Name not in the htree-selected leaf. Could be hash collision spilling
     // to neighbouring leaf — caller will fall back to linear scan.
-    Ok(None)
+    Ok(found)
 }
 
 /// Look `name` up in an inline-data directory: `.`, `..` from bytes 0..4 of

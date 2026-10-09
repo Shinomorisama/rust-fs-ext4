@@ -112,6 +112,49 @@ fn generate(block_size: u32, strict: bool) {
                 "{path}"
             );
         }
+        // Linux already verified these aliases after a fresh mount. Read the
+        // same inode and payload through the library's real lookup path.
+        for directory in ["fold_small", "fold_indexed"] {
+            let parent = mounted
+                .lookup_path_bytes(format!("/{directory}").as_bytes())
+                .unwrap();
+            for (stored, alias, expected) in [
+                ("ReadMe", "README", b"casefold ASCII payload\n".as_slice()),
+                (
+                    "Café",
+                    "CAFE\u{0301}",
+                    b"casefold composed Unicode payload\n".as_slice(),
+                ),
+            ] {
+                let ino = mounted
+                    .lookup_path_bytes(format!("/{directory}/{stored}").as_bytes())
+                    .unwrap();
+                let found = mounted
+                    .lookup_path_bytes(format!("/{directory}/{alias}").as_bytes())
+                    .unwrap();
+                assert_eq!(found, ino);
+                assert_eq!(mounted.lookup_at(parent, alias.as_bytes()).unwrap(), ino);
+                let mut bytes = vec![0; expected.len() + 1];
+                let count = mounted.read_ino(found, 0, &mut bytes).unwrap();
+                assert_eq!(&bytes[..count], expected);
+            }
+            assert!(matches!(
+                mounted.lookup_at(parent, b"missing-name"),
+                Err(Error::NotFound)
+            ));
+        }
+        assert_eq!(
+            mounted
+                .lookup_path_bytes(b"/fold_indexed/FILE_0999_CASEFOLD_PAYLOAD.TXT")
+                .unwrap(),
+            mounted
+                .lookup_path_bytes(b"/fold_indexed/File_0999_casefold_payload.txt")
+                .unwrap()
+        );
+        assert_ne!(
+            mounted.lookup_path_bytes(b"/ordinary/ReadMe").unwrap(),
+            mounted.lookup_path_bytes(b"/ordinary/README").unwrap()
+        );
     }
     let before = fs_ext4_test_support::sha256_hex(&fs::read(&image).unwrap());
     match Filesystem::mount(Arc::new(FileDevice::open_rw(&image).unwrap())) {

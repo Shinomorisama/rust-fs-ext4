@@ -1797,9 +1797,9 @@ impl Filesystem {
 
     /// Resolve `path` to an inode number, verifying directory blocks.
     ///
-    /// A path is bytes, compared byte for byte against the entry names,
-    /// which have no encoding: one that is not UTF-8 names exactly the
-    /// file whose name it holds, and one naming nothing is
+    /// Ordinary directories compare path components byte for byte. Casefold
+    /// directories use frozen Unicode 12.1 comparisons and refuse unsupported
+    /// malformed names and normalized dot aliases. A missing supported name is
     /// [`Error::NotFound`]. Every path-addressed `apply_*` resolves through
     /// here; each `&str` form is its byte form with `str::as_bytes` (#418).
     pub fn lookup_path_bytes(&self, path: &[u8]) -> Result<u32> {
@@ -1877,8 +1877,9 @@ impl Filesystem {
     }
 
     /// The inode number `name` has in directory `dir` — one step of a path
-    /// walk. `name` is bytes, compared exactly, so a name that is not UTF-8
-    /// is found. `.` and `..` are ordinary entries here.
+    /// walk. Ordinary directories compare bytes exactly, including non-UTF-8;
+    /// casefold directories use their validated encoding. Literal `.` and `..`
+    /// are exact entries, never aliases produced by normalization.
     pub fn lookup_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<u32> {
         check_entry_name(name)?;
         let dir = dir.into();

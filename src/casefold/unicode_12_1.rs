@@ -1,13 +1,14 @@
-//! Isolated Unicode 12.1 experiment; not compiled into the production driver.
+//! Frozen Unicode 12.1 transformations for read-only casefold lookup.
 //!
 //! NFD and canonical caseless matching follow Unicode 12, sections 3.11–3.13:
 //! https://www.unicode.org/versions/Unicode12.0.0/ch03.pdf
-//! The candidate filesystem key additionally removes default ignorables.
-//! Only the captured Linux probes currently qualify that combination; wider
-//! kernel/e2fsprogs differential testing is required before integration.
-//! Inputs are valid UTF-8. Raw-byte validity, component lengths, normalized
-//! dot names, directory policy and malformed-name behavior belong to later work.
+//! The comparison key additionally removes default ignorables. Inputs here
+//! are valid UTF-8; `LookupName` enforces component limits and refuses malformed
+//! bytes and normalized dot aliases. This does not qualify filesystem writes.
 
+// The generated file also retains version/age metadata for conformance tests.
+// Age is not a validity filter: unassigned and newer scalars remain accepted.
+#[allow(dead_code)]
 mod data {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -97,10 +98,10 @@ fn is_default_ignorable(c: char) -> bool {
         .is_some_and(|&(first, _)| first <= cp)
 }
 
-fn candidate_key(name: &str) -> Vec<u8> {
+pub(super) fn candidate_key(name: &str) -> Vec<u8> {
     // Removing a class-zero ignorable can join combining runs. Remove first,
     // then normalize, so a former barrier cannot leave them out of order.
-    // This composition is a candidate, not a qualified filesystem API.
+    // Component validity and directory policy are enforced by the caller.
     let retained: String = name.chars().filter(|&c| !is_default_ignorable(c)).collect();
     canonical_key(&retained).into_bytes()
 }

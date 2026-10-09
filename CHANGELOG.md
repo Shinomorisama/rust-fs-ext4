@@ -11,6 +11,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Read-only casefold lookup uses frozen Unicode 12.1 comparisons and folded
+  HTree hashing in linear directories and indexes with leaves directly under
+  the root. Stored spelling and ordinary
+  directory byte comparisons are preserved. Malformed UTF-8, normalized dot
+  aliases, deeper indexes and inline casefold directories are refused; writes
+  remain blocked.
+
 ### Fixed
 
 - Directory lookup validates casefold encoding and inode flags at each path

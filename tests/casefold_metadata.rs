@@ -205,7 +205,8 @@ fn recognizing_the_casefold_inode_bit_does_not_make_it_user_modifiable() {
 }
 
 struct DirectoryBlock {
-    name: Vec<u8>,
+    names: Vec<Vec<u8>>,
+    index_depth: Option<u8>,
     reads: std::sync::atomic::AtomicUsize,
 }
 
@@ -215,10 +216,22 @@ impl fs_ext4::block_io::BlockDevice for DirectoryBlock {
         self.reads
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         buf.fill(0);
-        buf[..4].copy_from_slice(&42_u32.to_le_bytes());
-        buf[4..6].copy_from_slice(&1024_u16.to_le_bytes());
-        buf[6..8].copy_from_slice(&(self.name.len() as u16).to_le_bytes());
-        buf[8..8 + self.name.len()].copy_from_slice(&self.name);
+        let mut offset = 0;
+        for (index, name) in self.names.iter().enumerate() {
+            let length = if index + 1 == self.names.len() {
+                buf.len() - offset
+            } else {
+                (8 + name.len()).next_multiple_of(4)
+            };
+            buf[offset..offset + 4].copy_from_slice(&(42 + index as u32).to_le_bytes());
+            buf[offset + 4..offset + 6].copy_from_slice(&(length as u16).to_le_bytes());
+            buf[offset + 6..offset + 8].copy_from_slice(&(name.len() as u16).to_le_bytes());
+            buf[offset + 8..offset + 8 + name.len()].copy_from_slice(name);
+            offset += length;
+        }
+        if let Some(depth) = self.index_depth {
+            buf[24..32].copy_from_slice(&[0, 0, 0, 0, 1, 8, depth, 0]);
+        }
         Ok(())
     }
 
@@ -236,7 +249,8 @@ fn lookup_directory(flags: u32) -> Inode {
 
 fn lookup_device(name: &[u8]) -> DirectoryBlock {
     DirectoryBlock {
-        name: name.to_vec(),
+        names: vec![name.to_vec()],
+        index_depth: None,
         reads: std::sync::atomic::AtomicUsize::new(0),
     }
 }
@@ -301,4 +315,114 @@ fn lookup_keeps_ordinary_byte_names_and_recognized_encoding_reads() {
         fs_ext4::path::lookup_bytes_with_csum(&device, &sb, &mut read, b"/a\xff", &csum),
         Err(Error::NotFound)
     ));
+}
+
+#[test]
+fn folded_lookup_uses_frozen_unicode_and_ordinary_lookup_keeps_raw_names() {
+    for (stored, alias) in [
+        ("ReadMe".to_owned(), "README".to_owned()),
+        ("Café".to_owned(), "CAFE\u{0301}".to_owned()),
+        ("Straße".to_owned(), "STRASSE".to_owned()),
+        ("A\u{00ad}B".to_owned(), "ab".to_owned()),
+        ("\u{00ad}".to_owned(), "\u{fe0f}".to_owned()),
+        ("ΐ".repeat(80), "\u{1fd3}".repeat(80)),
+    ] {
+        for strict in [0, 1] {
+            let sb = superblock(true, 1, strict);
+            for folded in [false, true] {
+                let device = lookup_device(stored.as_bytes());
+                let mut read = |_| {
+                    Ok(lookup_directory(if folded {
+                        InodeFlags::CASEFOLD.bits()
+                    } else {
+                        0
+                    }))
+                };
+                let result = fs_ext4::path::lookup(&device, &sb, &mut read, &alias);
+                if folded {
+                    assert_eq!(result.unwrap(), 42, "{stored:?} / {alias:?}");
+                } else {
+                    assert!(matches!(result, Err(Error::NotFound)), "{result:?}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn folded_lookup_refuses_unqualified_names_instead_of_claiming_absence() {
+    for strict in [0, 1] {
+        let sb = superblock(true, 1, strict);
+        let csum = fs_ext4::checksum::Checksummer::from_superblock(&sb);
+        for name in [
+            b"A\xff".as_slice(),
+            "\u{00ad}.".as_bytes(),
+            "\u{00ad}..".as_bytes(),
+        ] {
+            let device = lookup_device(b"other");
+            let mut read = |_| Ok(lookup_directory(InodeFlags::CASEFOLD.bits()));
+            let result =
+                fs_ext4::path::lookup_bytes_with_csum(&device, &sb, &mut read, name, &csum);
+            assert!(matches!(result, Err(Error::Unsupported(_))), "{result:?}");
+            assert_eq!(device.reads.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+        let device = lookup_device(b"A\xff");
+        let mut read = |_| Ok(lookup_directory(InodeFlags::CASEFOLD.bits()));
+        assert!(matches!(
+            fs_ext4::path::lookup(&device, &sb, &mut read, "absent"),
+            Err(Error::Unsupported(_))
+        ));
+        let device = lookup_device(b".");
+        assert_eq!(
+            fs_ext4::path::lookup(&device, &sb, &mut read, ".").unwrap(),
+            42
+        );
+        assert!(matches!(
+            fs_ext4::path::lookup(&device, &sb, &mut read, &"A".repeat(256)),
+            Err(Error::NameTooLong)
+        ));
+    }
+}
+
+#[test]
+fn folded_lookup_refuses_duplicate_equivalent_directory_entries() {
+    let mut device = lookup_device(b"ReadMe");
+    device.names.push(b"README".to_vec());
+    let mut read = |_| Ok(lookup_directory(InodeFlags::CASEFOLD.bits()));
+    assert!(matches!(
+        fs_ext4::path::lookup(&device, &superblock(true, 1, 0), &mut read, "readme"),
+        Err(Error::CorruptDirEntry(_))
+    ));
+}
+
+#[test]
+fn folded_inline_lookup_remains_unsupported() {
+    let device = lookup_device(b"unused");
+    let mut read = |_| {
+        Ok(lookup_directory(
+            InodeFlags::CASEFOLD.bits() | InodeFlags::INLINE_DATA.bits(),
+        ))
+    };
+    assert!(matches!(
+        fs_ext4::path::lookup(&device, &superblock(true, 1, 0), &mut read, "name"),
+        Err(Error::Unsupported(_))
+    ));
+    assert_eq!(device.reads.load(std::sync::atomic::Ordering::Relaxed), 0);
+}
+
+#[test]
+fn folded_lookup_refuses_deeper_indexes_before_using_them() {
+    for depth in [1, 2, 255] {
+        let mut device = lookup_device(b"ReadMe");
+        device.index_depth = Some(depth);
+        let mut read = |_| {
+            Ok(lookup_directory(
+                InodeFlags::CASEFOLD.bits() | InodeFlags::INDEX.bits(),
+            ))
+        };
+        assert!(matches!(
+            fs_ext4::path::lookup(&device, &superblock(true, 1, 0), &mut read, "README"),
+            Err(Error::Unsupported(_))
+        ));
+    }
 }
