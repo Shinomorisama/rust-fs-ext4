@@ -819,8 +819,15 @@ tasks:
       - cargo clippy --locked --workspace --all-targets --features cli -- -D warnings
 
   check:casefold-unicode:
-    desc: Verify the frozen Unicode 12.1 inputs and license without network access
-    cmds: ['python3 scripts/check-casefold-unicode.py']
+    desc: Verify frozen Unicode inputs, generated tables and conformance offline
+    cmds:
+      - python3 scripts/check-casefold-unicode.py
+      - python3 scripts/generate-casefold-unicode.py --check
+      - 'scripts/tier.sh check:casefold-unicode unicode-tables 20 2000 -- python3 scripts/test-casefold-unicode.py'
+
+  generate:casefold-unicode:
+    desc: Reproduce Unicode 12.1 Rust tables from verified local inputs
+    cmds: ['python3 scripts/generate-casefold-unicode.py']
 
   check:msrv:
     desc: Build the library and binaries on the toolchain Cargo.toml's rust-version names

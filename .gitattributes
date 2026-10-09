@@ -4,3 +4,4 @@ tests/lwext4/*.patch -whitespace
 
 # Frozen Unicode inputs retain their published bytes on every platform.
 data/unicode/12.1.0/*.txt -text
+data/unicode/12.1.0/tables.rs text eol=lf
