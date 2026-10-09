@@ -38,6 +38,12 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::hash::{name_hash, HashVersion, NameHash};
 
+// The frozen replacement is deliberately test-only until comparison semantics
+// and filesystem policy have independent qualification. Existing callers still
+// use the legacy helpers below; this does not enable casefold writes.
+#[cfg(test)]
+mod unicode_12_1;
+
 /// Produce the NFD + case-folded form of `name`, which the htree hash of a
 /// casefolded directory is computed over.
 ///
