@@ -133,6 +133,11 @@ pub(crate) fn find_entry(
     csum: &crate::checksum::Checksummer,
 ) -> Result<u32> {
     crate::file_io::refuse_encrypted_names(dir_inode)?;
+    // Validate the actual parent at every path component, including direct
+    // path API calls that did not pass through Filesystem::mount. Unsupported
+    // encoding or inconsistent inode flags must not become a false absence.
+    // This establishes policy validity; comparison remains byte-sensitive here.
+    let _ = dir_inode.directory_casefold_encoding(sb)?;
     // Both extent-backed and legacy direct/indirect-backed directories are
     // supported here — `find_entry_linear` and `find_entry_htree` use
     // `indirect::map_logical_any` for flavor-aware logical→physical mapping.

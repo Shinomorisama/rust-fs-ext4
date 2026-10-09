@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- Directory lookup validates casefold encoding and inode flags at each path
+  component before reading entries, including calls made without mounting.
 - Mounts and metadata reloads refuse unrecognized casefold encodings and flags,
   including a newer superblock recovered into the read-only cache. Ordinary
   volumes ignore unused encoding fields; casefold writes remain refused.

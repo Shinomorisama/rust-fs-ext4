@@ -1,4 +1,4 @@
-//! Metadata recognition only. Linux-written counterparts are checked in
+//! Metadata recognition and lookup validation. Linux-written counterparts are checked in
 //! `casefold_fixture_oracle`; these tests cover malformed and unsupported data.
 
 use fs_ext4::{
@@ -202,4 +202,103 @@ fn recognizing_the_casefold_inode_bit_does_not_make_it_user_modifiable() {
     assert!(dir.flag_set().contains(InodeFlags::CASEFOLD));
     assert_eq!(dir.flag_set().bits(), 0x4000_0000);
     assert_eq!(USER_MODIFIABLE_FLAGS & dir.flag_set().bits(), 0);
+}
+
+struct DirectoryBlock {
+    name: Vec<u8>,
+    reads: std::sync::atomic::AtomicUsize,
+}
+
+impl fs_ext4::block_io::BlockDevice for DirectoryBlock {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> fs_ext4::Result<()> {
+        assert_eq!((offset, buf.len()), (1024, 1024));
+        self.reads
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        buf.fill(0);
+        buf[..4].copy_from_slice(&42_u32.to_le_bytes());
+        buf[4..6].copy_from_slice(&1024_u16.to_le_bytes());
+        buf[6..8].copy_from_slice(&(self.name.len() as u16).to_le_bytes());
+        buf[8..8 + self.name.len()].copy_from_slice(&self.name);
+        Ok(())
+    }
+
+    fn size_bytes(&self) -> u64 {
+        2048
+    }
+}
+
+fn lookup_directory(flags: u32) -> Inode {
+    let mut dir = inode(S_IFDIR, flags);
+    dir.size = 1024;
+    dir.block[..4].copy_from_slice(&1_u32.to_le_bytes());
+    dir
+}
+
+fn lookup_device(name: &[u8]) -> DirectoryBlock {
+    DirectoryBlock {
+        name: name.to_vec(),
+        reads: std::sync::atomic::AtomicUsize::new(0),
+    }
+}
+
+#[test]
+fn lookup_refuses_unknown_casefold_encoding_before_reading_entries() {
+    for (id, flags) in [(0, 0), (2, 0), (1, 2)] {
+        for inode_flags in [0, InodeFlags::CASEFOLD.bits()] {
+            let device = lookup_device(b"ReadMe");
+            let mut read = |_| Ok(lookup_directory(inode_flags));
+            let result =
+                fs_ext4::path::lookup(&device, &superblock(true, id, flags), &mut read, "/ReadMe");
+            assert!(matches!(result, Err(Error::Unsupported(_))), "{result:?}");
+            assert_eq!(device.reads.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+    }
+}
+
+#[test]
+fn lookup_refuses_inconsistent_casefold_flags_in_each_path_component() {
+    for path in ["/ReadMe", "/ReadMe/ReadMe"] {
+        let device = lookup_device(b"ReadMe");
+        let mut read = |ino| {
+            let folded = path == "/ReadMe" || ino == 42;
+            Ok(lookup_directory(if folded {
+                InodeFlags::CASEFOLD.bits()
+            } else {
+                0
+            }))
+        };
+        let result = fs_ext4::path::lookup(&device, &superblock(false, 1, 0), &mut read, path);
+        assert!(matches!(result, Err(Error::Corrupt(_))), "{result:?}");
+        assert_eq!(
+            device.reads.load(std::sync::atomic::Ordering::Relaxed),
+            usize::from(path == "/ReadMe/ReadMe")
+        );
+    }
+}
+
+#[test]
+fn lookup_keeps_ordinary_byte_names_and_recognized_encoding_reads() {
+    for strict in [0, 1] {
+        for inode_flags in [0, InodeFlags::CASEFOLD.bits()] {
+            let device = lookup_device(b"ReadMe");
+            let mut read = |_| Ok(lookup_directory(inode_flags));
+            assert_eq!(
+                fs_ext4::path::lookup(&device, &superblock(true, 1, strict), &mut read, "/ReadMe")
+                    .unwrap(),
+                42
+            );
+        }
+    }
+    let device = lookup_device(b"A\xff");
+    let sb = superblock(false, u16::MAX, u16::MAX);
+    let mut read = |_| Ok(lookup_directory(0));
+    let csum = fs_ext4::checksum::Checksummer::from_superblock(&sb);
+    assert_eq!(
+        fs_ext4::path::lookup_bytes_with_csum(&device, &sb, &mut read, b"/A\xff", &csum).unwrap(),
+        42
+    );
+    assert!(matches!(
+        fs_ext4::path::lookup_bytes_with_csum(&device, &sb, &mut read, b"/a\xff", &csum),
+        Err(Error::NotFound)
+    ));
 }
