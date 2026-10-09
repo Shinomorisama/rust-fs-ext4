@@ -812,10 +812,15 @@ tasks:
       - bash scripts/core.sh family-check
       - bash scripts/core.sh ci-gate
       - scripts/check-provenance.sh
+      - task: check:casefold-unicode
       - cargo fmt --all --check
       # `--features cli`: the command-line tools' target requires it, and
       # clippy silently leaves out a target whose features are off.
       - cargo clippy --locked --workspace --all-targets --features cli -- -D warnings
+
+  check:casefold-unicode:
+    desc: Verify the frozen Unicode 12.1 inputs and license without network access
+    cmds: ['python3 scripts/check-casefold-unicode.py']
 
   check:msrv:
     desc: Build the library and binaries on the toolchain Cargo.toml's rust-version names

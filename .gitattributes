@@ -1,3 +1,6 @@
 # A patch carries its context lines with a leading space and upstream's own
 # whitespace verbatim; trimming either stops it applying.
 tests/lwext4/*.patch -whitespace
+
+# Frozen Unicode inputs retain their published bytes on every platform.
+data/unicode/12.1.0/*.txt -text
