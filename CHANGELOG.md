@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- Mounts and metadata reloads refuse unrecognized casefold encodings and flags,
+  including a newer superblock recovered into the read-only cache. Ordinary
+  volumes ignore unused encoding fields; casefold writes remain refused.
 - Recovery refuses write-breaking features before clearing a leftover recovery
   marker, including when a clean journal's device becomes writable after a
   read-only lazy mount. CASEFOLD, MMP and ENCRYPT volumes remain untouched.

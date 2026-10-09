@@ -766,6 +766,7 @@ impl Filesystem {
                 what: "replayed superblock",
             });
         }
+        let _ = sb.casefold_encoding()?;
         let groups = bgd::read_all(self.dev.as_ref(), &sb, &csum)?;
         self.flavor = features::FsFlavor::detect(sb.feature_compat, sb.feature_incompat);
         self.sb = sb;
@@ -927,6 +928,9 @@ impl Filesystem {
         if fs.dev.is_writable() && write_breaking != 0 {
             return Err(crate::error::Error::UnsupportedIncompat(write_breaking));
         }
+        // Read-only admission also requires a recognized encoding. Keep
+        // the write refusal above and validate before any journal replay.
+        let _ = fs.sb.casefold_encoding()?;
 
         let replayed = if !fs.dev.is_writable() {
             crate::journal_apply::replay_into_cache(&fs)?
@@ -1000,6 +1004,7 @@ impl Filesystem {
         if csum.enabled && !csum.verify_superblock(&sb.raw) {
             return Err(Error::BadChecksum { what: "superblock" });
         }
+        let _ = sb.casefold_encoding()?;
         self.groups = bgd::read_all(self.dev.as_ref(), &sb, &csum)?;
         sb.check_fits_device(self.dev.size_bytes())?;
         // The cached override was built from the descriptors just replaced.
@@ -9615,13 +9620,18 @@ mod tests {
     }
 
     /// Set an INCOMPAT bit on a formatted volume, fixing the superblock
-    /// checksum so the result still mounts.
+    /// checksum so the result still mounts. CASEFOLD also needs a known
+    /// encoding; these fixtures use UTF-8 12.1 without strict mode.
     fn set_incompat_bit(dev: &std::sync::Arc<MemDev>, bit: u32) {
         let mut sb = vec![0u8; 1024];
         dev.read_at(crate::superblock::SUPERBLOCK_OFFSET, &mut sb)
             .expect("read sb");
         let cur = u32::from_le_bytes(sb[0x60..0x64].try_into().unwrap());
         sb[0x60..0x64].copy_from_slice(&(cur | bit).to_le_bytes());
+        if bit & crate::features::Incompat::CASEFOLD.bits() != 0 {
+            sb[0x27c..0x27e].copy_from_slice(&1_u16.to_le_bytes());
+            sb[0x27e..0x280].copy_from_slice(&0_u16.to_le_bytes());
+        }
         let csum = crate::checksum::linux_crc32c(!0, &sb[..0x3FC]);
         sb[0x3FC..0x400].copy_from_slice(&csum.to_le_bytes());
         dev.write_at(crate::superblock::SUPERBLOCK_OFFSET, &sb)
@@ -10050,6 +10060,155 @@ mod tests {
             resolve(&fs, "/before.txt").expect("the directory is still readable"),
             resolve(&fs, "/before.txt").expect("stable"),
         );
+    }
+
+    /// Change only the encoding fields and repair the checksum. Callers
+    /// choose separately whether the volume declares the CASEFOLD feature.
+    fn set_encoding_fields(dev: &std::sync::Arc<MemDev>, id: u16, flags: u16) {
+        let mut sb = Superblock::read(dev.as_ref()).unwrap().raw;
+        sb[0x27c..0x27e].copy_from_slice(&id.to_le_bytes());
+        sb[0x27e..0x280].copy_from_slice(&flags.to_le_bytes());
+        let checksum = crate::checksum::linux_crc32c(!0, &sb[..0x3fc]);
+        sb[0x3fc..0x400].copy_from_slice(&checksum.to_le_bytes());
+        dev.write_at(crate::superblock::SUPERBLOCK_OFFSET, &sb)
+            .unwrap();
+    }
+
+    #[test]
+    fn casefold_mount_refuses_unknown_encoding_settings() {
+        for (id, flags) in [(0, 0), (2, 0), (1, 2), (1, 0x8001)] {
+            for lazy in [false, true] {
+                let dev = formatted();
+                set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+                set_encoding_fields(&dev, id, flags);
+                let before = dev.bytes.lock().unwrap().clone();
+                let ro = std::sync::Arc::new(RoDev(dev.clone()));
+                let result = if lazy {
+                    Filesystem::mount_lazy(ro)
+                } else {
+                    Filesystem::mount(ro)
+                };
+                assert!(
+                    matches!(result, Err(Error::Unsupported(_))),
+                    "id={id}, flags={flags:#x}, lazy={lazy}: unrecognized encoding admitted"
+                );
+                assert!(*dev.bytes.lock().unwrap() == before);
+            }
+        }
+    }
+
+    #[test]
+    fn casefold_metadata_reload_refuses_unknown_settings_without_replacing_state() {
+        for reload in [Filesystem::refresh_metadata, Filesystem::reload_geometry] {
+            for (id, flags) in [(0, 0), (2, 0), (1, 2), (1, 0x8001)] {
+                let dev = formatted();
+                set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+                let mut fs =
+                    Filesystem::mount_lazy(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+                let previous = fs.sb.raw.clone();
+                set_encoding_fields(&dev, id, flags);
+                let before = dev.bytes.lock().unwrap().clone();
+                fs.dev.invalidate_cache().unwrap();
+                assert!(matches!(reload(&mut fs), Err(Error::Unsupported(_))));
+                assert_eq!(
+                    fs.sb.raw, previous,
+                    "invalid metadata replaced the mounted view"
+                );
+                assert!(*dev.bytes.lock().unwrap() == before);
+            }
+        }
+    }
+
+    #[test]
+    fn casefold_metadata_reload_observes_the_current_strictness() {
+        for reload in [Filesystem::refresh_metadata, Filesystem::reload_geometry] {
+            let dev = formatted();
+            set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+            let mut fs = Filesystem::mount_lazy(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+            for strict in [true, false] {
+                set_encoding_fields(&dev, 1, u16::from(strict));
+                let before = dev.bytes.lock().unwrap().clone();
+                fs.dev.invalidate_cache().unwrap();
+                reload(&mut fs).unwrap();
+                assert_eq!(
+                    fs.sb.casefold_encoding().unwrap(),
+                    Some(crate::superblock::CasefoldEncoding::Utf8_12_1 { strict })
+                );
+                assert!(*dev.bytes.lock().unwrap() == before);
+            }
+        }
+    }
+
+    #[test]
+    fn casefold_read_only_replay_validates_the_recovered_encoding() {
+        for (id, flags) in [(1, 0), (1, 1), (0, 0), (1, 2)] {
+            for lazy in [false, true] {
+                let (dev, _) = ext3_with_a_dirty_journal();
+                // Replace the existing one-block transaction with a newer
+                // superblock. Leave the on-disk superblock at encoding 1/0.
+                {
+                    let fs = Filesystem::mount_lazy(dev.clone()).unwrap();
+                    let jsb = crate::jbd2::read_superblock(&fs).unwrap().unwrap();
+                    assert!(!jsb.is_clean());
+                    let journal = crate::inode::Inode::parse(
+                        &fs.read_inode_raw(fs.sb.journal_inode).unwrap(),
+                    )
+                    .unwrap();
+                    set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+                    set_encoding_fields(&dev, id, flags);
+                    let mut block = vec![0; BS as usize];
+                    dev.read_at(0, &mut block).unwrap();
+                    set_encoding_fields(&dev, 1, 0);
+                    let mut tx = crate::transaction::Transaction::begin(
+                        jsb.sequence,
+                        BS,
+                        jsb.uses_64bit(),
+                        jsb.feature_incompat & crate::jbd2::JbdIncompat::CSUM_V3.bits() != 0,
+                    );
+                    tx.add_write(0, block).unwrap();
+                    let blocks = tx.commit().unwrap();
+                    assert_eq!(blocks.len(), 3);
+                    for (i, bytes) in blocks.iter().enumerate() {
+                        let physical =
+                            crate::jbd2::journal_block_to_physical(&fs, &journal, i as u64 + 1)
+                                .unwrap()
+                                .unwrap();
+                        dev.write_at(physical * u64::from(BS), bytes).unwrap();
+                    }
+                }
+                let before = dev.bytes.lock().unwrap().clone();
+                let ro = std::sync::Arc::new(RoDev(dev.clone()));
+                let result = if lazy {
+                    Filesystem::mount_lazy(ro)
+                } else {
+                    Filesystem::mount(ro)
+                };
+                if id == 1 && flags <= 1 {
+                    let fs = result.expect("recognized recovered encoding");
+                    assert_eq!(fs.sb.encoding_flags().unwrap(), flags);
+                    assert!(fs.cache_pinned_blocks() > 0, "the journal was not replayed");
+                } else {
+                    assert!(matches!(result, Err(Error::Unsupported(_))));
+                }
+                assert!(
+                    *dev.bytes.lock().unwrap() == before,
+                    "read-only replay wrote the image"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unused_encoding_fields_do_not_prevent_an_ordinary_mount() {
+        let dev = formatted();
+        set_encoding_fields(&dev, u16::MAX, u16::MAX);
+        let fs = Filesystem::mount(dev.clone()).unwrap();
+        assert_eq!(fs.sb.casefold_encoding().unwrap(), None);
+        fs.apply_create("/ordinary", 0o644).unwrap();
+        drop(fs);
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev))).unwrap();
+        assert_eq!(fs.sb.casefold_encoding().unwrap(), None);
+        resolve(&fs, "/ordinary").unwrap();
     }
 
     /// A device that turns writable after the mount, as the FSKit write FD
