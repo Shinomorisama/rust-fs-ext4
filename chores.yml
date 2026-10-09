@@ -736,6 +736,8 @@ tasks:
     sources:
       - Cargo.toml
       - 'src/**/*.rs'
+      # include! compiles these frozen filename rules into the library.
+      - 'data/unicode/12.1.0/tables.rs'
       - 'include/*.h'
       # fs_core.h is a source of ours because we ship it (see the cp below).
       # THIS PATH AND THE cp MUST AGREE, and nothing checks that they do —
