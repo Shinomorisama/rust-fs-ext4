@@ -208,4 +208,8 @@ class UnicodeTables(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    result = unittest.main(exit=False).result
+    if not result.wasSuccessful() or result.skipped or result.expectedFailures or not result.testsRun:
+        sys.exit(1)
+    # Use the existing test-floor protocol, reporting actual unittest results.
+    print(f"test result: ok. {result.testsRun} passed; 0 failed; 0 ignored;")
