@@ -68,6 +68,10 @@ def main():
     # Check aliases after growth and without the population mount's dentries.
     for directory in [b"fold_small", b"fold_indexed"]:
         parent = root + b"/" + directory
+        assert os.stat(parent + b"/.").st_ino == os.stat(parent).st_ino
+        assert os.stat(parent + b"/..").st_ino == os.stat(root).st_ino
+        for path in [parent + b"/./README", parent + b"/../" + directory + b"/README"]:
+            assert os.stat(path).st_ino == os.stat(parent + b"/ReadMe").st_ino
         assert os.stat(parent + b"/ReadMe").st_ino == os.stat(parent + b"/README").st_ino
         assert os.stat(parent + b"/Caf\xc3\xa9").st_ino == os.stat(parent + b"/CAFE\xcc\x81").st_ino
     parent = root + b"/fold_indexed/"

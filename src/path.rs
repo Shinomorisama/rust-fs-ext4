@@ -143,6 +143,12 @@ pub(crate) fn find_entry(
         return Err(Error::Unsupported("inline casefold directory lookup"));
     }
     let lookup_name = crate::casefold::LookupName::new(name, encoding)?;
+    if encoding.is_some()
+        && dir_inode.flag_set().contains(InodeFlags::INDEX)
+        && (name == b"." || name == b"..")
+    {
+        return find_casefold_index_dot(dev, sb, dir_ino, dir_inode, name, csum);
+    }
     // Both extent-backed and legacy direct/indirect-backed directories are
     // supported here — `find_entry_linear` and `find_entry_htree` use
     // `indirect::map_logical_any` for flavor-aware logical→physical mapping.
@@ -183,6 +189,68 @@ pub(crate) fn find_entry(
         block_size,
         csum,
     )
+}
+
+/// Dot records live in the index root, outside the hashed leaves. Verify the
+/// root's dx checksum: any old directory-tail marker inside its padding is not
+/// a leaf checksum. Only literal dots reach this function.
+fn find_casefold_index_dot(
+    dev: &dyn BlockDevice,
+    sb: &Superblock,
+    ino: u32,
+    inode: &Inode,
+    name: &[u8],
+    csum: &crate::checksum::Checksummer,
+) -> Result<u32> {
+    let block_size = sb.block_size();
+    if inode.size < u64::from(block_size) {
+        return Err(Error::CorruptDirEntry("truncated casefold index root"));
+    }
+    let physical = indirect::map_logical_any(&inode.block, inode.flags, dev, block_size, 0)?
+        .ok_or(Error::CorruptDirEntry("casefold index root is sparse"))?;
+    let mut root = vec![0; block_size as usize];
+    dev.read_at(physical * u64::from(block_size), &mut root)?;
+    casefold_root_info(&root)?;
+    if csum.enabled && csum.verify_dx_tail(ino, inode.generation, &root, 32) != Some(true) {
+        return Err(Error::BadChecksum {
+            what: "htree index block",
+        });
+    }
+    // The documented root has a 12-byte self record, then a parent record
+    // extending to the end of the block and enclosing the index metadata.
+    if u16::from_le_bytes([root[4], root[5]]) != 12
+        || u32::from(u16::from_le_bytes([root[16], root[17]])) != block_size - 12
+    {
+        return Err(Error::CorruptDirEntry(
+            "invalid casefold dot record lengths",
+        ));
+    }
+    let has_filetype = sb.feature_incompat & crate::features::Incompat::FILETYPE.bits() != 0;
+    let entries = dir::parse_block(&root, has_filetype)?;
+    if entries.len() != 2
+        || entries[0].name != b"."
+        || entries[1].name != b".."
+        || entries[0].inode != ino
+        || entries[1].inode > sb.inodes_count
+        || (has_filetype
+            && entries
+                .iter()
+                .any(|e| e.file_type != dir::DirEntryType::Directory))
+    {
+        return Err(Error::CorruptDirEntry("invalid casefold dot entries"));
+    }
+    Ok(entries[usize::from(name == b"..")].inode)
+}
+
+fn casefold_root_info(block: &[u8]) -> Result<htree::DxRootInfo> {
+    let info = htree::parse_root_info(block)?;
+    if info.indirect_levels > 1 || info.unused_flags != 0 {
+        return Err(Error::Unsupported("casefold index depth or flags"));
+    }
+    if info.info_length != 8 {
+        return Err(Error::Corrupt("casefold index info_length is not 8"));
+    }
+    Ok(info)
 }
 
 /// Linear scan of every directory data block.
@@ -305,13 +373,7 @@ fn casefold_index_leaves<F>(
 where
     F: FnMut(u32) -> Result<Vec<u8>>,
 {
-    let info = htree::parse_root_info(block)?;
-    if info.indirect_levels > 1 || info.unused_flags != 0 {
-        return Err(Error::Unsupported("casefold index depth or flags"));
-    }
-    if info.info_length != 8 {
-        return Err(Error::Corrupt("casefold index info_length is not 8"));
-    }
+    let info = casefold_root_info(block)?;
     let mut seen = std::collections::HashSet::from([0]);
     let mut validate = |bytes: &[u8], root: bool| -> Result<Vec<u32>> {
         let offset = if root { 32 } else { 8 };

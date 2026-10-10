@@ -606,3 +606,89 @@ fn folded_deep_lookup_requires_leaf_checksum_tails() {
         Err(Error::BadChecksum { .. })
     ));
 }
+
+fn dot_index() -> (IndexedBlocks, Inode, fs_ext4::checksum::Checksummer) {
+    let (mut device, inode, csum) = deep_index();
+    let root = &mut device.0[0];
+    root[..4].copy_from_slice(&2_u32.to_le_bytes());
+    root[4..6].copy_from_slice(&12_u16.to_le_bytes());
+    root[6] = 1;
+    root[8] = b'.';
+    root[12..16].copy_from_slice(&42_u32.to_le_bytes());
+    root[16..18].copy_from_slice(&1012_u16.to_le_bytes());
+    root[18] = 2;
+    root[20..22].copy_from_slice(b"..");
+    assert!(csum.patch_dx_tail(2, 0, root, 32));
+    (device, inode, csum)
+}
+
+#[test]
+fn folded_index_dot_entries_navigate_without_hashing() {
+    for depth in [0, 1] {
+        for checksums in [false, true] {
+            let (mut device, inode, mut csum) = dot_index();
+            device.0[0][30] = depth;
+            // Linux-created index roots can retain a recognizable old leaf
+            // tail in padding. Only the current index checksum applies.
+            device.0[0][1016..1018].copy_from_slice(&12_u16.to_le_bytes());
+            device.0[0][1019] = 0xde;
+            assert!(csum.patch_dx_tail(2, 0, &mut device.0[0], 32));
+            csum.enabled = checksums;
+            assert_eq!(deep_lookup(&device, &inode, &csum, ".").unwrap(), 2);
+            assert_eq!(deep_lookup(&device, &inode, &csum, "..").unwrap(), 42);
+        }
+    }
+}
+
+#[test]
+fn folded_index_navigation_checks_the_index_checksum() {
+    for name in [".", ".."] {
+        let (mut device, inode, csum) = dot_index();
+        device.0[0][12] ^= 1;
+        assert!(matches!(
+            deep_lookup(&device, &inode, &csum, name),
+            Err(Error::BadChecksum { .. })
+        ));
+    }
+}
+
+#[test]
+fn folded_index_navigation_refuses_malformed_dot_records() {
+    for (offset, bytes) in [
+        (0, vec![3, 0, 0, 0]), // wrong self inode
+        (4, vec![16, 0]),      // misplaced parent entry
+        (8, vec![b'x']),
+        (12, vec![0, 0, 0, 0]),                // missing parent
+        (12, u32::MAX.to_le_bytes().to_vec()), // impossible parent
+        (16, vec![12, 0]),                     // parent no longer covers the root
+        (20, vec![b'x']),
+    ] {
+        let (mut device, inode, csum) = dot_index();
+        device.0[0][offset..offset + bytes.len()].copy_from_slice(&bytes);
+        assert!(csum.patch_dx_tail(2, 0, &mut device.0[0], 32));
+        assert!(
+            matches!(
+                deep_lookup(&device, &inode, &csum, ".."),
+                Err(Error::CorruptDirEntry(_))
+            ),
+            "offset {offset}"
+        );
+    }
+}
+
+#[test]
+fn folded_index_navigation_keeps_unsupported_depth_and_alias_refusals() {
+    let (mut device, inode, csum) = dot_index();
+    for name in ["\u{00ad}.", "\u{00ad}.."] {
+        assert!(matches!(
+            deep_lookup(&device, &inode, &csum, name),
+            Err(Error::Unsupported(_))
+        ));
+    }
+    device.0[0][30] = 2;
+    assert!(csum.patch_dx_tail(2, 0, &mut device.0[0], 32));
+    assert!(matches!(
+        deep_lookup(&device, &inode, &csum, "."),
+        Err(Error::Unsupported(_))
+    ));
+}

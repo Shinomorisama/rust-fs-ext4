@@ -118,6 +118,7 @@ fn generate(block_size: u32, strict: bool) {
             let parent = mounted
                 .lookup_path_bytes(format!("/{directory}").as_bytes())
                 .unwrap();
+            verify_dot_navigation(&mounted, parent, directory);
             for (stored, alias, expected) in [
                 ("ReadMe", "README", b"casefold ASCII payload\n".as_slice()),
                 (
@@ -299,6 +300,7 @@ fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::pat
     let before = fs_ext4_test_support::sha256_hex(&fs::read(&experiment).unwrap());
     let mounted = Filesystem::mount(Arc::new(FileDevice::open(&experiment).unwrap())).unwrap();
     let parent = mounted.lookup_path_bytes(b"/fold_deep").unwrap();
+    verify_dot_navigation(&mounted, parent, "fold_deep");
     let (inode, _) = mounted.read_inode_verified(parent).unwrap();
     assert!(inode
         .flag_set()
@@ -361,4 +363,19 @@ fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::pat
     )
     .unwrap();
     println!("[casefold deep index] {label}: Linux aliases, inode identity, content, e2fsck and unchanged write refusal verified");
+}
+
+fn verify_dot_navigation(mounted: &Filesystem, parent: u32, directory: &str) {
+    assert_eq!(mounted.lookup_at(parent, b".").unwrap(), parent);
+    assert_eq!(mounted.lookup_at(parent, b"..").unwrap(), 2);
+    let expected = mounted.lookup_at(parent, b"ReadMe").unwrap();
+    for path in [
+        format!("/{directory}/./README"),
+        format!("/{directory}/../{directory}/README"),
+    ] {
+        assert_eq!(
+            mounted.lookup_path_bytes(path.as_bytes()).unwrap(),
+            expected
+        );
+    }
 }

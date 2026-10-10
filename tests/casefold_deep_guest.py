@@ -25,6 +25,10 @@ if phase == "populate":
 else:
     # The harness remounted between phases, discarding population's dentries.
     assert len(list(parent.iterdir())) == count + 2
+    assert os.stat(str(parent) + "/.").st_ino == parent.stat().st_ino
+    assert os.stat(str(parent) + "/..").st_ino == parent.parent.stat().st_ino
+    for path in [str(parent) + "/./README", str(parent) + "/../fold_deep/README"]:
+        assert os.stat(path).st_ino == (parent / "ReadMe").stat().st_ino
     probes = [("ReadMe", "README"), ("Café", "CAFE\u0301")]
     probes += [(name(n), name(n).upper()) for n in [0, 1, count // 3, count // 2, count - 2, count - 1]]
     for stored, alias in probes:
