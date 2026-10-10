@@ -2589,9 +2589,22 @@ impl Filesystem {
         buf: &mut BlockBuffer,
         ino: u32,
         name: &[u8],
+        expected_inode: Option<u32>,
     ) -> Result<()> {
         let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
         let (inode, raw, mut dir) = self.buffered_inline_dir(buf, ino)?;
+        if let Some(expected) = expected_inode {
+            let current = dir
+                .entries(has_ft)?
+                .into_iter()
+                .find(|entry| entry.name == name)
+                .ok_or(Error::NotFound)?;
+            if current.inode != expected {
+                return Err(Error::CorruptDirEntry(
+                    "directory entry changed after lookup",
+                ));
+            }
+        }
         if !dir.remove(name, has_ft)? {
             return Err(Error::NotFound);
         }
@@ -3675,14 +3688,49 @@ impl Filesystem {
         parent_inode: &Inode,
         name: &[u8],
     ) -> Result<()> {
+        self.buffer_remove_dir_entry_expected(buf, parent_ino, parent_inode, name, None)
+    }
+
+    /// Remove the stored spelling only if the transaction still contains its
+    /// expected inode. Callers discard the entire buffer on any error.
+    fn buffer_remove_matched_dir_entry(
+        &self,
+        buf: &mut BlockBuffer,
+        parent_ino: u32,
+        parent_inode: &Inode,
+        entry: &crate::dir::DirEntry,
+    ) -> Result<()> {
+        self.buffer_remove_dir_entry_expected(
+            buf,
+            parent_ino,
+            parent_inode,
+            &entry.name,
+            Some(entry.inode),
+        )
+    }
+
+    fn buffer_remove_dir_entry_expected(
+        &self,
+        buf: &mut BlockBuffer,
+        parent_ino: u32,
+        parent_inode: &Inode,
+        name: &[u8],
+        expected_inode: Option<u32>,
+    ) -> Result<()> {
         // An inline directory, as this transaction has it: still inline, or
         // converted to a block by an add earlier in it (#428).
         if parent_inode.has_inline_data() {
             let (now, _) = self.buffered_inode_verified(buf, parent_ino)?;
             if now.has_inline_data() {
-                return self.buffer_remove_inline_dir_entry(buf, parent_ino, name);
+                return self.buffer_remove_inline_dir_entry(buf, parent_ino, name, expected_inode);
             }
-            return self.buffer_remove_dir_entry(buf, parent_ino, &now, name);
+            return self.buffer_remove_dir_entry_expected(
+                buf,
+                parent_ino,
+                &now,
+                name,
+                expected_inode,
+            );
         }
         let bs = self.sb.block_size();
         let has_ft = self.sb.feature_incompat & features::Incompat::FILETYPE.bits() != 0;
@@ -3697,6 +3745,26 @@ impl Filesystem {
             // (#233).
             if Self::is_htree_index_block(parent_inode, logical, block) {
                 continue;
+            }
+            self.refuse_unverified_dir_block(parent_ino, parent_inode, logical, block)?;
+            if let Some(expected) = expected_inode {
+                let mut found = None;
+                for entry in crate::dir::DirBlockIter::new(block, has_ft) {
+                    let entry = entry?;
+                    if entry.name == name {
+                        found = Some(entry.inode);
+                        break;
+                    }
+                }
+                match found {
+                    Some(current) if current != expected => {
+                        return Err(Error::CorruptDirEntry(
+                            "directory entry changed after lookup",
+                        ))
+                    }
+                    None => continue,
+                    _ => {}
+                }
             }
             let reserved_tail = if self.csum.enabled && crate::dir::has_csum_tail(block) {
                 12
@@ -4806,7 +4874,8 @@ impl Filesystem {
         let parent_ino_num = dir.ino;
         let (parent_inode, _parent_raw) = self.live_dir(dir)?;
 
-        let target_ino = self.find_entry_in_dir(parent_ino_num, &parent_inode, name)?;
+        let target = self.find_dir_entry(parent_ino_num, &parent_inode, name)?;
+        let target_ino = target.inode;
         let (target_inode, mut target_raw) = self.live_inode(target_ino.into())?;
         if target_inode.is_dir() {
             // POSIX: unlink(2) on a directory must fail with EISDIR; the
@@ -4820,7 +4889,7 @@ impl Filesystem {
         // Remove the dir entry from the parent: a block directory's first
         // block holding it, or an inline directory's inode (#428).
         let bs = self.sb.block_size();
-        self.buffer_remove_dir_entry(&mut buf, parent_ino_num, &parent_inode, name)?;
+        self.buffer_remove_matched_dir_entry(&mut buf, parent_ino_num, &parent_inode, &target)?;
 
         // Decrement link count. Non-zero after → just persist the new count.
         let new_links = target_inode.links_count.saturating_sub(1);
@@ -6386,8 +6455,20 @@ impl Filesystem {
     /// block)`, so a scan that has only the `Inode` cannot verify what it is
     /// reading. Every caller already had the number in scope.
     fn find_entry_in_dir(&self, dir_ino: u32, dir_inode: &Inode, name: &[u8]) -> Result<u32> {
-        if dir_inode.has_inline_data() {
-            return crate::path::find_entry(
+        self.find_dir_entry(dir_ino, dir_inode, name)
+            .map(|entry| entry.inode)
+    }
+
+    /// Retain the matched spelling for removal planning. Ordinary block scans
+    /// keep their write-path checksum checks; casefold uses the shared policy.
+    fn find_dir_entry(
+        &self,
+        dir_ino: u32,
+        dir_inode: &Inode,
+        name: &[u8],
+    ) -> Result<crate::dir::DirEntry> {
+        if dir_inode.has_inline_data() || dir_inode.flags & EXT4_CASEFOLD_FL != 0 {
+            return crate::path::resolve_entry(
                 self.dev.as_ref(),
                 &self.sb,
                 dir_ino,
@@ -6408,7 +6489,7 @@ impl Filesystem {
             for entry in crate::dir::DirBlockIter::new(&block, has_ft) {
                 let e = entry?;
                 if e.name == name {
-                    return Ok(e.inode);
+                    return Ok(e);
                 }
             }
         }
@@ -7986,7 +8067,8 @@ impl Filesystem {
         let dir = dir.into();
         let parent_ino = dir.ino;
         let (parent_inode, _) = self.live_dir(dir)?;
-        let target_ino = self.find_entry_in_dir(parent_ino, &parent_inode, name)?;
+        let target = self.find_dir_entry(parent_ino, &parent_inode, name)?;
+        let target_ino = target.inode;
         let (target_inode, target_raw) = self.live_inode(target_ino.into())?;
         if !target_inode.is_dir() {
             return Err(Error::NotADirectory);
@@ -8064,7 +8146,7 @@ impl Filesystem {
 
         // Remove the entry from the parent directory, a block one or an
         // inline one (#428).
-        match self.buffer_remove_dir_entry(&mut buf, parent_ino, &parent_inode, name) {
+        match self.buffer_remove_matched_dir_entry(&mut buf, parent_ino, &parent_inode, &target) {
             Err(Error::NotFound) => {
                 return Err(Error::Corrupt(
                     "apply_rmdir: entry disappeared mid-operation",
@@ -8324,6 +8406,116 @@ mod tests {
 
     fn mount(dev: &std::sync::Arc<MemDev>) -> Filesystem {
         Filesystem::mount(dev.clone()).expect("mount")
+    }
+
+    #[test]
+    fn buffered_removal_rechecks_the_current_directory_checksum() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        fs.apply_create("/ReadMe", 0o644).unwrap();
+        let (parent, _) = fs.read_inode_verified(2).unwrap();
+        let physical = fs.map_inode_logical(&parent, 0).unwrap().unwrap();
+        let mut buf = BlockBuffer::new(BS);
+        let block = buf.get_mut(&fs, physical).unwrap();
+        let last = block.len() - 1;
+        block[last] ^= 1;
+        let before = buf.dirty.clone();
+        let disk = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.buffer_remove_dir_entry(&mut buf, 2, &parent, b"ReadMe"),
+            Err(Error::BadChecksum { .. })
+        ));
+        assert_eq!(
+            buf.dirty, before,
+            "a refused removal changed the transaction"
+        );
+        assert_eq!(*dev.bytes.lock().unwrap(), disk);
+    }
+
+    #[test]
+    fn matched_removal_refuses_a_retargeted_entry_in_the_transaction() {
+        for inline in [false, true] {
+            let dev = formatted();
+            let fs = mount(&dev);
+            let parent_ino = fs.apply_mkdir("/d", 0o755).unwrap();
+            let original = fs.apply_create("/d/ReadMe", 0o644).unwrap();
+            let other = fs.apply_create("/Other", 0o644).unwrap();
+            if inline {
+                make_inline_dir(&fs, parent_ino, 2, Some((original, b"ReadMe", 1)));
+            }
+            let (parent, _) = fs.read_inode_verified(parent_ino).unwrap();
+            let entry = fs.find_dir_entry(parent_ino, &parent, b"ReadMe").unwrap();
+            let disk = dev.bytes.lock().unwrap().clone();
+            let mut buf = BlockBuffer::new(BS);
+            fs.buffer_remove_dir_entry(&mut buf, parent_ino, &parent, b"ReadMe")
+                .unwrap();
+            fs.buffer_add_dir_entry_inplace(
+                &mut buf,
+                parent_ino,
+                &parent,
+                b"ReadMe",
+                other,
+                crate::dir::DirEntryType::RegFile,
+            )
+            .unwrap();
+            let staged = buf.dirty.clone();
+            assert!(matches!(
+                fs.buffer_remove_matched_dir_entry(&mut buf, parent_ino, &parent, &entry),
+                Err(Error::CorruptDirEntry(_))
+            ));
+            assert_eq!(
+                buf.dirty, staged,
+                "the refused removal edited the transaction"
+            );
+            assert_eq!(*dev.bytes.lock().unwrap(), disk, "staging wrote to disk");
+        }
+    }
+
+    #[test]
+    fn matched_removal_preserves_other_hard_links_and_removes_empty_directories() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let ino = fs.apply_create("/ReadMe", 0o644).unwrap();
+        fs.apply_link("/ReadMe", "/OtherName").unwrap();
+        fs.apply_unlink_at(2, b"ReadMe").unwrap();
+        assert!(matches!(fs.lookup_at(2, b"ReadMe"), Err(Error::NotFound)));
+        assert_eq!(fs.lookup_at(2, b"OtherName").unwrap(), ino);
+        assert_eq!(fs.read_inode_verified(ino).unwrap().0.links_count, 1);
+        fs.apply_mkdir("/Empty", 0o755).unwrap();
+        fs.apply_rmdir_at(2, b"Empty").unwrap();
+        assert!(matches!(fs.lookup_at(2, b"Empty"), Err(Error::NotFound)));
+    }
+
+    #[test]
+    fn mutation_lookup_retains_casefold_spelling_without_enabling_writes() {
+        let dev = formatted();
+        let parent_ino;
+        let target;
+        {
+            let fs = mount(&dev);
+            parent_ino = fs.apply_mkdir("/d", 0o755).unwrap();
+            target = fs.apply_create("/d/ReadMe", 0o644).unwrap();
+            let (parent, mut raw) = fs.read_inode_verified(parent_ino).unwrap();
+            raw[0x20..0x24].copy_from_slice(&(parent.flags | EXT4_CASEFOLD_FL).to_le_bytes());
+            fs.finalize_inode_raw(parent_ino, parent.generation, &mut raw)
+                .unwrap();
+            fs.write_inode_raw(parent_ino, &raw).unwrap();
+        }
+        set_incompat_bit(&dev, features::Incompat::CASEFOLD.bits());
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        let before = dev.bytes.lock().unwrap().clone();
+        let (parent, _) = fs.read_inode_verified(parent_ino).unwrap();
+        let found = fs.find_dir_entry(parent_ino, &parent, b"README").unwrap();
+        assert_eq!(found.name, b"ReadMe");
+        assert_eq!(found.inode, target);
+        assert!(fs.entry_exists(parent_ino, &parent, b"README").unwrap());
+        assert!(!fs.entry_exists(parent_ino, &parent, b"missing").unwrap());
+        assert!(matches!(
+            fs.entry_exists(parent_ino, &parent, b"A\xff"),
+            Err(Error::Unsupported(_))
+        ));
+        assert!(fs.apply_unlink_at(parent_ino, b"README").is_err());
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
     }
 
     /// `/f` holding `len` bytes of 0xAA; returns its inode number.
