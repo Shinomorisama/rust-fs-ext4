@@ -6558,11 +6558,27 @@ impl Filesystem {
     /// the parent), `i_size = block_size` (one data block), EXTENTS flag
     /// with a single leaf extent mapping logical 0 → `data_phys_block`,
     /// timestamps = now.
-    fn build_directory_inode(&self, ino: u32, mode: u16, data_phys_block: u64) -> Result<Vec<u8>> {
+    fn build_directory_inode(
+        &self,
+        ino: u32,
+        mode: u16,
+        data_phys_block: u64,
+        parent: &Inode,
+    ) -> Result<Vec<u8>> {
         use crate::inode::{
-            OFF_BLOCKS_HI, OFF_BLOCKS_LO, OFF_LINKS_COUNT, OFF_MODE, OFF_SIZE_HI, OFF_SIZE_LO,
+            OFF_BLOCKS_HI, OFF_BLOCKS_LO, OFF_FLAGS, OFF_LINKS_COUNT, OFF_MODE, OFF_SIZE_HI,
+            OFF_SIZE_LO,
         };
+        // Linux mkdir inherits casefold only from a casefold parent, not
+        // from the volume feature alone (tests/casefold_behavior_guest.py).
+        // Validate that policy before building the child; never copy the
+        // parent's INDEX or storage-layout flags into a fresh directory.
+        let folded = parent.directory_casefold_encoding(&self.sb)?.is_some();
         let mut raw = vec![0u8; self.sb.inode_size as usize];
+        if folded {
+            raw[OFF_FLAGS..OFF_FLAGS + 4]
+                .copy_from_slice(&crate::inode::InodeFlags::CASEFOLD.bits().to_le_bytes());
+        }
 
         let mode_bits = crate::inode::S_IFDIR | (mode & 0x0FFF);
         raw[OFF_MODE..OFF_MODE + 2].copy_from_slice(&mode_bits.to_le_bytes());
@@ -6767,7 +6783,7 @@ impl Filesystem {
             bplan.sb.free_inodes_delta,
         )?;
 
-        let raw = self.build_directory_inode(new_ino, mode, data_block)?;
+        let raw = self.build_directory_inode(new_ino, mode, data_block, &parent_inode)?;
         let gen = u32::from_le_bytes(raw[0x64..0x68].try_into().unwrap());
         self.buffer_write_inode(&mut buf, new_ino, &raw)?;
 
@@ -8611,6 +8627,90 @@ mod tests {
     }
 
     #[test]
+    fn directory_inode_creation_inherits_only_the_parents_casefold_policy() {
+        use crate::inode::InodeFlags;
+        let dev = formatted();
+        let mut fs = mount(&dev);
+        let (mut parent, _) = fs.read_inode_verified(2).unwrap();
+        let before = dev.bytes.lock().unwrap().clone();
+        fs.sb.feature_incompat |= features::Incompat::CASEFOLD.bits();
+        fs.sb.raw[0x27c..0x27e].copy_from_slice(&1u16.to_le_bytes());
+        for strict in [0u16, 1] {
+            fs.sb.raw[0x27e..0x280].copy_from_slice(&strict.to_le_bytes());
+            for folded in [false, true] {
+                parent.flags = InodeFlags::EXTENTS.bits() | InodeFlags::INDEX.bits();
+                if folded {
+                    parent.flags |= InodeFlags::CASEFOLD.bits();
+                }
+                // Observed in tests/casefold_behavior_guest.py: mkdir
+                // inherits casefold, while a regular file does not.
+                let raw = fs.build_directory_inode(100, 0o750, 500, &parent).unwrap();
+                let child = Inode::parse(&raw).unwrap();
+                let expected = InodeFlags::EXTENTS.bits()
+                    | if folded {
+                        InodeFlags::CASEFOLD.bits()
+                    } else {
+                        0
+                    };
+                assert_eq!(child.flags, expected, "strict={strict}, folded={folded}");
+                assert_eq!(child.mode, crate::inode::S_IFDIR | 0o750);
+                assert_eq!(child.links_count, 2);
+                assert_eq!(child.size, BS as u64);
+                assert!(fs.csum.verify_inode(100, child.generation, &raw));
+                let raw = fs.build_directory_inode(101, 0o755, 501, &child).unwrap();
+                assert_eq!(Inode::parse(&raw).unwrap().flags, expected);
+                let regular = fs.build_regular_file_inode(102, 0o644).unwrap();
+                assert_eq!(Inode::parse(&regular).unwrap().flags & EXT4_CASEFOLD_FL, 0);
+                let symlink = fs.build_fast_symlink_inode(103, b"target").unwrap();
+                assert_eq!(Inode::parse(&symlink).unwrap().flags & EXT4_CASEFOLD_FL, 0);
+            }
+        }
+        assert_eq!(
+            *dev.bytes.lock().unwrap(),
+            before,
+            "building inode bytes wrote to disk"
+        );
+    }
+
+    #[test]
+    fn directory_inode_creation_refuses_an_unqualified_parent_policy() {
+        let dev = formatted();
+        let mut fs = mount(&dev);
+        let (mut parent, _) = fs.read_inode_verified(2).unwrap();
+        let before = dev.bytes.lock().unwrap().clone();
+        parent.flags |= EXT4_CASEFOLD_FL;
+        assert!(matches!(
+            fs.build_directory_inode(100, 0o755, 500, &parent),
+            Err(Error::Corrupt(_))
+        ));
+        fs.sb.feature_incompat |= features::Incompat::CASEFOLD.bits();
+        fs.sb.raw[0x27c..0x27e].copy_from_slice(&2u16.to_le_bytes());
+        assert!(matches!(
+            fs.build_directory_inode(100, 0o755, 500, &parent),
+            Err(Error::Unsupported(_))
+        ));
+        fs.sb.raw[0x27c..0x27e].copy_from_slice(&1u16.to_le_bytes());
+        fs.sb.raw[0x27e..0x280].copy_from_slice(&2u16.to_le_bytes());
+        assert!(matches!(
+            fs.build_directory_inode(100, 0o755, 500, &parent),
+            Err(Error::Unsupported(_))
+        ));
+        fs.sb.raw[0x27e..0x280].copy_from_slice(&0u16.to_le_bytes());
+        parent.flags |= EXT4_ENCRYPT_FL;
+        assert!(matches!(
+            fs.build_directory_inode(100, 0o755, 500, &parent),
+            Err(Error::Unsupported(_))
+        ));
+        parent.flags = 0;
+        parent.mode = crate::inode::S_IFREG | 0o644;
+        assert!(matches!(
+            fs.build_directory_inode(100, 0o755, 500, &parent),
+            Err(Error::NotADirectory)
+        ));
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
+    }
+
+    #[test]
     fn mutation_lookup_retains_casefold_spelling_without_enabling_writes() {
         let dev = formatted();
         let parent_ino;
@@ -8619,6 +8719,8 @@ mod tests {
             let fs = mount(&dev);
             parent_ino = fs.apply_mkdir("/d", 0o755).unwrap();
             target = fs.apply_create("/d/ReadMe", 0o644).unwrap();
+            fs.apply_create("/d/Café", 0o644).unwrap();
+            fs.apply_create("/d/Straße", 0o644).unwrap();
             let (parent, mut raw) = fs.read_inode_verified(parent_ino).unwrap();
             raw[0x20..0x24].copy_from_slice(&(parent.flags | EXT4_CASEFOLD_FL).to_le_bytes());
             fs.finalize_inode_raw(parent_ino, parent.generation, &mut raw)
@@ -8638,6 +8740,31 @@ mod tests {
             fs.entry_exists(parent_ino, &parent, b"A\xff"),
             Err(Error::Unsupported(_))
         ));
+        // The common create/mknod/symlink planner must reject aliases
+        // before staging any allocation, not just byte-identical names.
+        for alias in [b"README".as_slice(), "CAFE\u{301}".as_bytes(), b"STRASSE"] {
+            assert!(matches!(
+                fs.plan_new_inode_in_dir(parent_ino.into(), alias),
+                Err(Error::AlreadyExists)
+            ));
+        }
+        for unsupported in [b"A\xff".as_slice(), "\u{ad}.".as_bytes()] {
+            assert!(matches!(
+                fs.plan_new_inode_in_dir(parent_ino.into(), unsupported),
+                Err(Error::Unsupported(_))
+            ));
+        }
+        let fresh = fs
+            .plan_new_inode_in_dir(parent_ino.into(), b"fresh")
+            .unwrap();
+        assert!(!fresh.buf.dirty.is_empty(), "a fresh name can be planned");
+        drop(fresh); // A plan alone does not write to the device.
+        assert!(fs.apply_create_at(parent_ino, b"fresh", 0o644).is_err());
+        assert!(fs.apply_mkdir_at(parent_ino, b"fresh", 0o755).is_err());
+        assert!(fs.apply_link_at(target, parent_ino, b"fresh").is_err());
+        assert!(fs
+            .apply_symlink_at(parent_ino, b"fresh", b"ReadMe")
+            .is_err());
         assert!(fs.apply_unlink_at(parent_ino, b"README").is_err());
         assert!(fs
             .apply_rename_at(parent_ino, b"README", parent_ino, b"new", false)
