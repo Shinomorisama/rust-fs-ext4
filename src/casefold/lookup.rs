@@ -65,8 +65,12 @@ impl<'a> LookupName<'a> {
         Ok(folded_key(stored)? == *key)
     }
 
-    pub(crate) fn record_match(&self, found: &mut Option<u32>, ino: u32) -> Result<()> {
-        if found.replace(ino).is_some() {
+    pub(crate) fn record_match(
+        &self,
+        found: &mut Option<crate::dir::DirEntry>,
+        entry: crate::dir::DirEntry,
+    ) -> Result<()> {
+        if found.replace(entry).is_some() {
             return Err(Error::CorruptDirEntry(
                 "duplicate equivalent directory names",
             ));

@@ -135,6 +135,10 @@ fn generate(block_size: u32, strict: bool) {
                     .unwrap();
                 assert_eq!(found, ino);
                 assert_eq!(mounted.lookup_at(parent, alias.as_bytes()).unwrap(), ino);
+                let entry = mounted.lookup_entry_at(parent, alias.as_bytes()).unwrap();
+                assert_eq!(entry.inode, ino);
+                assert_eq!(entry.name, stored.as_bytes());
+                assert_eq!(entry.file_type, fs_ext4::dir::DirEntryType::RegFile);
                 let mut bytes = vec![0; expected.len() + 1];
                 let count = mounted.read_ino(found, 0, &mut bytes).unwrap();
                 assert_eq!(&bytes[..count], expected);
@@ -336,6 +340,10 @@ fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::pat
         let alias = hex::decode(fields[2]).unwrap();
         let expected = hex::decode(fields[3]).unwrap();
         assert_eq!(mounted.lookup_at(parent, &stored).unwrap(), expected_ino);
+        let resolved = mounted.lookup_entry_at(parent, &alias).unwrap();
+        assert_eq!(resolved.inode, expected_ino);
+        assert_eq!(resolved.name, stored);
+        assert_eq!(resolved.file_type, fs_ext4::dir::DirEntryType::RegFile);
         let mut path = b"/fold_deep/".to_vec();
         path.extend_from_slice(&alias);
         let found = mounted.lookup_path_bytes(&path).unwrap();
@@ -368,6 +376,11 @@ fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::pat
 fn verify_dot_navigation(mounted: &Filesystem, parent: u32, directory: &str) {
     assert_eq!(mounted.lookup_at(parent, b".").unwrap(), parent);
     assert_eq!(mounted.lookup_at(parent, b"..").unwrap(), 2);
+    for name in [b".".as_slice(), b".."] {
+        let entry = mounted.lookup_entry_at(parent, name).unwrap();
+        assert_eq!(entry.name, name);
+        assert_eq!(entry.file_type, fs_ext4::dir::DirEntryType::Directory);
+    }
     let expected = mounted.lookup_at(parent, b"ReadMe").unwrap();
     for path in [
         format!("/{directory}/./README"),

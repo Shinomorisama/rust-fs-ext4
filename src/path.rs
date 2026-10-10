@@ -134,6 +134,19 @@ pub(crate) fn find_entry(
     name: &[u8],
     csum: &crate::checksum::Checksummer,
 ) -> Result<u32> {
+    resolve_entry(dev, sb, dir_ino, dir_inode, name, csum).map(|entry| entry.inode)
+}
+
+/// Resolve an entry while retaining its stored bytes and file type. This is a
+/// read snapshot, not a verified mutation location or permission to write.
+pub(crate) fn resolve_entry(
+    dev: &dyn BlockDevice,
+    sb: &Superblock,
+    dir_ino: u32,
+    dir_inode: &Inode,
+    name: &[u8],
+    csum: &crate::checksum::Checksummer,
+) -> Result<DirEntry> {
     crate::file_io::refuse_encrypted_names(dir_inode)?;
     // Validate the actual parent at every path component, including direct
     // path API calls that did not pass through Filesystem::mount. Unsupported
@@ -201,7 +214,7 @@ fn find_casefold_index_dot(
     inode: &Inode,
     name: &[u8],
     csum: &crate::checksum::Checksummer,
-) -> Result<u32> {
+) -> Result<DirEntry> {
     let block_size = sb.block_size();
     if inode.size < u64::from(block_size) {
         return Err(Error::CorruptDirEntry("truncated casefold index root"));
@@ -239,7 +252,7 @@ fn find_casefold_index_dot(
     {
         return Err(Error::CorruptDirEntry("invalid casefold dot entries"));
     }
-    Ok(entries[usize::from(name == b"..")].inode)
+    Ok(entries[usize::from(name == b"..")].clone())
 }
 
 fn casefold_root_info(block: &[u8]) -> Result<htree::DxRootInfo> {
@@ -265,7 +278,7 @@ fn find_entry_linear(
     has_filetype: bool,
     block_size: u32,
     csum: &crate::checksum::Checksummer,
-) -> Result<u32> {
+) -> Result<DirEntry> {
     let dir_size = dir_inode.size;
     let total_blocks = dir_size.div_ceil(block_size as u64);
     let gen = dir_inode.generation;
@@ -336,9 +349,9 @@ fn find_entry_linear(
                 for entry in entries {
                     if name.matches(&entry.name)? {
                         if !name.is_folded() {
-                            return Ok(entry.inode);
+                            return Ok(entry);
                         }
-                        name.record_match(&mut found, entry.inode)?;
+                        name.record_match(&mut found, entry)?;
                     }
                 }
             }
@@ -428,7 +441,7 @@ where
 }
 
 /// HTree-indexed lookup. Returns:
-///   Ok(Some(ino)) — found
+///   Ok(Some(entry)) — found
 ///   Ok(None)      — htree said not in any leaf (caller may fall back)
 ///   Err(..)       — corruption or I/O error
 fn find_entry_htree(
@@ -439,7 +452,7 @@ fn find_entry_htree(
     name: &crate::casefold::LookupName<'_>,
     has_filetype: bool,
     csum: &crate::checksum::Checksummer,
-) -> Result<Option<u32>> {
+) -> Result<Option<DirEntry>> {
     let block_size = sb.block_size();
 
     // Read logical block 0 of the directory: the dx_root. Flavor-aware
@@ -508,9 +521,9 @@ fn find_entry_htree(
         let entry: DirEntry = entry?;
         if name.matches(&entry.name)? {
             if !name.is_folded() {
-                return Ok(Some(entry.inode));
+                return Ok(Some(entry));
             }
-            name.record_match(&mut found, entry.inode)?;
+            name.record_match(&mut found, entry)?;
         }
     }
 
@@ -530,11 +543,11 @@ fn find_inline(
     dir_inode: &Inode,
     name: &[u8],
     csum: &crate::checksum::Checksummer,
-) -> Result<u32> {
+) -> Result<DirEntry> {
     let has_filetype = sb.feature_incompat & crate::features::Incompat::FILETYPE.bits() != 0;
     let in_block = inline_data::dir_entries(dir_ino, dir_inode, &[], has_filetype)?;
-    if let Some(entry) = in_block.iter().find(|e| e.name == name) {
-        return Ok(entry.inode);
+    if let Some(entry) = in_block.into_iter().find(|e| e.name == name) {
+        return Ok(entry);
     }
     if dir_inode.size as usize <= inline_data::INLINE_BLOCK_SIZE {
         return Err(Error::NotFound);
@@ -545,7 +558,7 @@ fn find_inline(
     for entry in dir::DirBlockIter::new(&continuation, has_filetype) {
         let entry = entry?;
         if entry.name == name {
-            return Ok(entry.inode);
+            return Ok(entry);
         }
     }
     Err(Error::NotFound)
@@ -637,6 +650,138 @@ mod tests {
     fn split_path_keeps_bytes_that_are_not_utf8() {
         let parts: Vec<&[u8]> = split_path(b"/d\xff/caf\xe9.txt").collect();
         assert_eq!(parts, vec![&b"d\xff"[..], b"caf\xe9.txt"]);
+    }
+
+    struct EntryBlock(Vec<u8>);
+
+    impl BlockDevice for EntryBlock {
+        fn read_at(&self, offset: u64, out: &mut [u8]) -> Result<()> {
+            assert_eq!(offset, 1024);
+            out.copy_from_slice(&self.0);
+            Ok(())
+        }
+        fn size_bytes(&self) -> u64 {
+            2048
+        }
+    }
+
+    fn entry_fixture(names: &[&[u8]], folded: bool) -> (EntryBlock, Superblock, Inode) {
+        let mut raw = vec![0; 1024];
+        for (offset, value) in [
+            (0, 2048_u32),
+            (4, 8192),
+            (20, 1),
+            (32, 8192),
+            (40, 2048),
+            (76, 1),
+            (96, 0x20002),
+        ] {
+            raw[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        raw[56..58].copy_from_slice(&0xef53_u16.to_le_bytes());
+        raw[88..90].copy_from_slice(&256_u16.to_le_bytes());
+        raw[0x27c..0x27e].copy_from_slice(&1_u16.to_le_bytes());
+        let sb = Superblock::parse(raw).unwrap();
+        let mut raw = [0; 128];
+        raw[..2].copy_from_slice(&crate::inode::S_IFDIR.to_le_bytes());
+        let mut inode = Inode::parse(&raw).unwrap();
+        inode.size = 1024;
+        inode.flags = if folded {
+            InodeFlags::CASEFOLD.bits()
+        } else {
+            0
+        };
+        inode.block[..4].copy_from_slice(&1_u32.to_le_bytes());
+        let mut block = vec![0; 1024];
+        let mut offset = 0;
+        for (index, name) in names.iter().enumerate() {
+            let len = if index + 1 == names.len() {
+                1024 - offset
+            } else {
+                (8 + name.len()).next_multiple_of(4)
+            };
+            // Every entry deliberately shares an inode (hard links).
+            block[offset..offset + 4].copy_from_slice(&42_u32.to_le_bytes());
+            block[offset + 4..offset + 6].copy_from_slice(&(len as u16).to_le_bytes());
+            block[offset + 6] = name.len() as u8;
+            block[offset + 7] = 1;
+            block[offset + 8..offset + 8 + name.len()].copy_from_slice(name);
+            offset += len;
+        }
+        (EntryBlock(block), sb, inode)
+    }
+
+    fn resolved(names: &[&[u8]], query: &[u8], folded: bool) -> Result<DirEntry> {
+        let (dev, sb, inode) = entry_fixture(names, folded);
+        resolve_entry(
+            &dev,
+            &sb,
+            2,
+            &inode,
+            query,
+            &crate::checksum::Checksummer::from_superblock(&sb),
+        )
+    }
+
+    #[test]
+    fn resolved_alias_retains_stored_spelling_and_type() {
+        for (stored, alias) in [
+            ("ReadMe", "README"),
+            ("Café", "CAFE\u{0301}"),
+            ("Straße", "STRASSE"),
+        ] {
+            let entry = resolved(&[stored.as_bytes()], alias.as_bytes(), true).unwrap();
+            assert_eq!(entry.inode, 42);
+            assert_eq!(entry.name, stored.as_bytes());
+            assert_eq!(entry.file_type, dir::DirEntryType::RegFile);
+        }
+    }
+
+    #[test]
+    fn resolved_hard_links_remain_distinct_but_equivalent_names_are_ambiguous() {
+        let names = [b"ReadMe".as_slice(), b"Other"];
+        let first = resolved(&names, b"README", true).unwrap();
+        let second = resolved(&names, b"OTHER", true).unwrap();
+        assert_eq!(first.inode, second.inode);
+        assert_ne!(first.name, second.name);
+        assert_eq!(second.name, b"Other");
+        assert!(matches!(
+            resolved(&[b"ReadMe", b"README"], b"readme", true),
+            Err(Error::CorruptDirEntry(_))
+        ));
+    }
+
+    #[test]
+    fn ordinary_resolved_entry_preserves_non_utf8_bytes() {
+        let entry = resolved(&[b"A\xff"], b"A\xff", false).unwrap();
+        assert_eq!(entry.name, b"A\xff");
+        assert!(matches!(
+            resolved(&[b"A\xff"], b"a\xff", false),
+            Err(Error::NotFound)
+        ));
+        assert!(matches!(
+            resolved(&[b"A\xff"], b"A\xff", true),
+            Err(Error::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn ordinary_inline_resolution_retains_entry_and_dot_names() {
+        let (dev, sb, mut inode) = entry_fixture(&[], false);
+        inode.flags = InodeFlags::INLINE_DATA.bits();
+        inode.size = 60;
+        inode.block.fill(0);
+        inode.block[..4].copy_from_slice(&2_u32.to_le_bytes());
+        inode.block[4..8].copy_from_slice(&42_u32.to_le_bytes());
+        inode.block[8..10].copy_from_slice(&56_u16.to_le_bytes());
+        inode.block[10..12].copy_from_slice(&[6, 1]);
+        inode.block[12..18].copy_from_slice(b"ReadMe");
+        let csum = crate::checksum::Checksummer::from_superblock(&sb);
+        for (name, ino) in [(b"ReadMe".as_slice(), 42), (b".", 2), (b"..", 2)] {
+            let entry = resolve_entry(&dev, &sb, 2, &inode, name, &csum).unwrap();
+            assert_eq!(entry.name, name);
+            assert_eq!(entry.inode, ino);
+        }
     }
 
     /// Tests that read a fixture from `test-disks/` (`chore fixtures`).

@@ -1881,10 +1881,25 @@ impl Filesystem {
     /// casefold directories use their validated encoding. Literal `.` and `..`
     /// are exact entries, never aliases produced by normalization.
     pub fn lookup_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<u32> {
+        self.lookup_entry_at(dir, name).map(|entry| entry.inode)
+    }
+
+    /// Resolve one name and retain the matched entry's original name bytes,
+    /// inode number and recorded file type. A casefold alias never replaces the
+    /// returned spelling; distinct hard links keep their distinct names.
+    ///
+    /// This is a read snapshot scoped to `dir`. It is not a transaction handle:
+    /// callers must revalidate the entry before mutation, and a successful read
+    /// does not certify the directory index as safe for writes.
+    pub fn lookup_entry_at(
+        &self,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+    ) -> Result<crate::dir::DirEntry> {
         check_entry_name(name)?;
         let dir = dir.into();
         let (dir_inode, _) = self.live_dir(dir)?;
-        crate::path::find_entry(
+        crate::path::resolve_entry(
             self.dev.as_ref(),
             &self.sb,
             dir.ino,
