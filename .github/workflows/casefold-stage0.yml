@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
+      - tests/casefold_deep_guest.py
       - tests/casefold_fixture_guest.py
       - tests/casefold_behavior_guest.py
       - tests/casefold_cold_create_guest.py

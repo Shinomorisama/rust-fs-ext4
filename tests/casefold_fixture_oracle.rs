@@ -179,6 +179,7 @@ fn generate(block_size: u32, strict: bool) {
     )
     .unwrap();
     println!("[casefold fixture] {label}: Linux namespace, encoding, layout, e2fsck and unchanged write refusal verified");
+    verify_deep_index(&image, &label, block_size, &saved);
     measure_behavior(&image, &label, strict, &saved);
     measure_cold_create(&image, &label, strict, &saved);
 }
@@ -271,4 +272,93 @@ fn linux_casefold_profiles_are_clean_and_remain_write_protected() {
             generate(block_size, strict);
         }
     }
+}
+
+// Grow a separate copy so the original behavior-reference fixtures stay fixed.
+fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::path::Path) {
+    let experiment = temp_path!("{label}-deep.img");
+    fs::copy(image, &experiment).unwrap();
+    let count = if block_size == 1024 { 1000 } else { 12000 };
+    for phase in ["populate", "verify"] {
+        let script = format!(
+            "python3 - {phase} {count} <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
+            include_str!("casefold_deep_guest.py")
+        );
+        let out = guest_kernel_write(&experiment, &script);
+        fs::copy(&experiment, saved.join(format!("{label}-deep.img"))).unwrap();
+        assert!(
+            out.status.success(),
+            "deep index {phase}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        if phase == "verify" {
+            fs::write(saved.join(format!("{label}-deep.tsv")), &out.stdout).unwrap();
+        }
+    }
+    assert_e2fsck_clean(&experiment, &format!("{label}-deep"));
+    let before = fs_ext4_test_support::sha256_hex(&fs::read(&experiment).unwrap());
+    let mounted = Filesystem::mount(Arc::new(FileDevice::open(&experiment).unwrap())).unwrap();
+    let parent = mounted.lookup_path_bytes(b"/fold_deep").unwrap();
+    let (inode, _) = mounted.read_inode_verified(parent).unwrap();
+    assert!(inode
+        .flag_set()
+        .contains(InodeFlags::INDEX | InodeFlags::CASEFOLD));
+    let physical = fs_ext4::indirect::map_logical_any(
+        &inode.block,
+        inode.flags,
+        mounted.dev.as_ref(),
+        block_size,
+        0,
+    )
+    .unwrap()
+    .unwrap();
+    let root = mounted.read_block(physical).unwrap();
+    assert_eq!(
+        fs_ext4::htree::parse_root_info(&root)
+            .unwrap()
+            .indirect_levels,
+        1,
+        "fixture must exercise an intermediate index level"
+    );
+    let reference = fs::read_to_string(saved.join(format!("{label}-deep.tsv"))).unwrap();
+    assert_eq!(
+        reference.lines().count(),
+        8,
+        "all Linux probes must execute"
+    );
+    for entry in reference.lines() {
+        let fields: Vec<_> = entry.split('\t').collect();
+        assert_eq!(fields.len(), 4);
+        let expected_ino: u32 = fields[0].parse().unwrap();
+        let stored = hex::decode(fields[1]).unwrap();
+        let alias = hex::decode(fields[2]).unwrap();
+        let expected = hex::decode(fields[3]).unwrap();
+        assert_eq!(mounted.lookup_at(parent, &stored).unwrap(), expected_ino);
+        let mut path = b"/fold_deep/".to_vec();
+        path.extend_from_slice(&alias);
+        let found = mounted.lookup_path_bytes(&path).unwrap();
+        assert_eq!(found, expected_ino);
+        let mut bytes = vec![0; expected.len() + 1];
+        let read = mounted.read_ino(found, 0, &mut bytes).unwrap();
+        assert_eq!(&bytes[..read], expected);
+    }
+    assert!(matches!(
+        mounted.lookup_at(parent, b"missing-name"),
+        Err(Error::NotFound)
+    ));
+    drop(mounted);
+    assert!(matches!(
+        Filesystem::mount(Arc::new(FileDevice::open_rw(&experiment).unwrap())),
+        Err(Error::UnsupportedIncompat(0x20000))
+    ));
+    assert_eq!(
+        before,
+        fs_ext4_test_support::sha256_hex(&fs::read(&experiment).unwrap())
+    );
+    fs::write(
+        saved.join(format!("{label}-deep.sha256")),
+        format!("{before}  {label}-deep.img\n"),
+    )
+    .unwrap();
+    println!("[casefold deep index] {label}: Linux aliases, inode identity, content, e2fsck and unchanged write refusal verified");
 }

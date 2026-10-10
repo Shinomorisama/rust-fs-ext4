@@ -12,7 +12,8 @@
 //! (`htree::lookup_leaf_with`), and a name the index does not lead to is
 //! then found by a linear scan, which is always valid because the index is
 //! an acceleration over ordinary directory blocks, not a replacement for
-//! them. Other directories are scanned linearly.
+//! them. Casefold lookups validate their index and scan all referenced leaves
+//! to detect equivalent names across blocks. Other directories are scanned linearly.
 
 use crate::block_io::BlockDevice;
 use crate::dir::{self, DirEntry};
@@ -123,8 +124,8 @@ where
 
 /// Read one directory's entries and return the inode number matching `name`.
 ///
-/// Routes through the htree fast path when the directory has the
-/// `EXT4_INDEX_FL` flag, falling back to a full linear scan otherwise.
+/// Ordinary indexed directories use the htree fast path with a linear fallback.
+/// Casefold directories scan their validated index leaves or their linear blocks.
 pub(crate) fn find_entry(
     dev: &dyn BlockDevice,
     sb: &Superblock,
@@ -152,8 +153,11 @@ pub(crate) fn find_entry(
     let has_filetype = sb.feature_incompat & crate::features::Incompat::FILETYPE.bits() != 0;
     let block_size = sb.block_size();
 
-    // HTree fast path: indexed directories (EXT4_INDEX_FL = 0x1000).
-    if (dir_inode.flags & InodeFlags::INDEX.bits()) != 0 {
+    // Casefold scans every referenced leaf after validating the index. This
+    // covers collision continuations and refuses equivalent entries in separate
+    // leaves. Hash-directed casefold acceleration can follow separate qualification.
+    // Ordinary indexed directories retain their existing fast path.
+    if !lookup_name.is_folded() && (dir_inode.flags & InodeFlags::INDEX.bits()) != 0 {
         if let Some(found) = find_entry_htree(
             dev,
             sb,
@@ -182,7 +186,7 @@ pub(crate) fn find_entry(
 }
 
 /// Linear scan of every directory data block.
-/// For casefold indexes, only scan leaves actually listed in the root.
+/// For casefold indexes, only scan leaves reachable through the validated index.
 #[allow(clippy::too_many_arguments)]
 fn find_entry_linear(
     dev: &dyn BlockDevice,
@@ -205,12 +209,25 @@ fn find_entry_linear(
             indirect::map_logical_any(&dir_inode.block, dir_inode.flags, dev, block_size, 0)?
                 .ok_or(Error::CorruptDirEntry("casefold index root is sparse"))?;
         dev.read_at(root * block_size as u64, &mut block)?;
-        Some(casefold_root_leaves(
+        Some(casefold_index_leaves(
             &block,
             dir_ino,
             dir_inode,
             csum,
             total_blocks,
+            |logical| {
+                let physical = indirect::map_logical_any(
+                    &dir_inode.block,
+                    dir_inode.flags,
+                    dev,
+                    block_size,
+                    u64::from(logical),
+                )?
+                .ok_or(Error::CorruptDirEntry("casefold index node is sparse"))?;
+                let mut node = vec![0; block_size as usize];
+                dev.read_at(physical * u64::from(block_size), &mut node)?;
+                Ok(node)
+            },
         )?)
     } else {
         None
@@ -230,9 +247,18 @@ fn find_entry_linear(
             logical,
         )? {
             Some(p) => p,
+            None if indexed_leaves.is_some() => {
+                return Err(Error::CorruptDirEntry("casefold index leaf is sparse"));
+            }
             None => continue,
         };
         dev.read_at(phys * block_size as u64, &mut block)?;
+
+        if indexed_leaves.is_some() && csum.enabled && !dir::has_csum_tail(&block) {
+            return Err(Error::BadChecksum {
+                what: "directory block",
+            });
+        }
 
         // The first block of an indexed dir is the dx_root and *cannot* be
         // parsed as linear entries (its contents after "." and ".." are
@@ -264,43 +290,79 @@ fn find_entry_linear(
     found.ok_or(Error::NotFound)
 }
 
-/// Qualify the currently supported casefold index shape and its checksum.
-/// Deeper indexes need their own leaf enumeration/collision qualification.
-fn casefold_root_leaves(
+/// Enumerate a root and at most one intermediate level, validating every
+/// index block before reading leaves. The visited set is shared across roles:
+/// a node cannot also be a leaf, and cycles/repeated pointers are corruption.
+/// Layout: https://docs.kernel.org/filesystems/ext4/directory.html#hash-tree-directories
+fn casefold_index_leaves<F>(
     block: &[u8],
     ino: u32,
     inode: &Inode,
     csum: &crate::checksum::Checksummer,
     total_blocks: u64,
-) -> Result<Vec<u32>> {
+    mut read_node: F,
+) -> Result<Vec<u32>>
+where
+    F: FnMut(u32) -> Result<Vec<u8>>,
+{
     let info = htree::parse_root_info(block)?;
-    if info.indirect_levels != 0 || info.unused_flags != 0 {
+    if info.indirect_levels > 1 || info.unused_flags != 0 {
         return Err(Error::Unsupported("casefold index depth or flags"));
     }
     if info.info_length != 8 {
         return Err(Error::Corrupt("casefold index info_length is not 8"));
     }
-    if csum.enabled && csum.verify_dx_tail(ino, inode.generation, block, 32) != Some(true) {
-        return Err(Error::BadChecksum {
-            what: "htree index block",
-        });
-    }
-    let (_, entries) = htree::parse_root_entries(block)?;
-    if entries.windows(2).any(|pair| pair[0].hash > pair[1].hash) {
-        return Err(Error::CorruptDirEntry(
-            "casefold index hashes are not ordered",
-        ));
-    }
-    let mut leaves = std::collections::HashSet::new();
-    for entry in &entries {
-        if entry.block == 0 || u64::from(entry.block) >= total_blocks || !leaves.insert(entry.block)
-        {
+    let mut seen = std::collections::HashSet::from([0]);
+    let mut validate = |bytes: &[u8], root: bool| -> Result<Vec<u32>> {
+        let offset = if root { 32 } else { 8 };
+        if csum.enabled && csum.verify_dx_tail(ino, inode.generation, bytes, offset) != Some(true) {
+            return Err(Error::BadChecksum {
+                what: "htree index block",
+            });
+        }
+        let (limit, entries) = if root {
+            htree::parse_root_entries(bytes)?
+        } else {
+            // Larger-block rec_len encodings require separate qualification.
+            if bytes.len() > u16::MAX as usize {
+                return Err(Error::Unsupported("large casefold index node"));
+            }
+            if bytes.len() < 8
+                || bytes[..4] != [0; 4]
+                || bytes[6..8] != [0; 2]
+                || usize::from(u16::from_le_bytes([bytes[4], bytes[5]])) != bytes.len()
+            {
+                return Err(Error::CorruptDirEntry("invalid casefold index node header"));
+            }
+            htree::parse_node_entries(bytes)?
+        };
+        let tail = if csum.enabled { 8 } else { 0 };
+        if usize::from(limit.limit) != (bytes.len() - offset - tail) / 8 {
+            return Err(Error::CorruptDirEntry("invalid casefold index capacity"));
+        }
+        if entries.windows(2).any(|pair| pair[0].hash > pair[1].hash) {
             return Err(Error::CorruptDirEntry(
-                "invalid or repeated casefold index leaf",
+                "casefold index hashes are not ordered",
             ));
         }
+        for entry in &entries {
+            if u64::from(entry.block) >= total_blocks || !seen.insert(entry.block) {
+                return Err(Error::CorruptDirEntry(
+                    "invalid or repeated casefold index block",
+                ));
+            }
+        }
+        Ok(entries.iter().map(|entry| entry.block).collect())
+    };
+    let children = validate(block, true)?;
+    if info.indirect_levels == 0 {
+        return Ok(children);
     }
-    Ok(entries.iter().map(|entry| entry.block).collect())
+    let mut leaves = Vec::new();
+    for child in children {
+        leaves.extend(validate(&read_node(child)?, false)?);
+    }
+    Ok(leaves)
 }
 
 /// HTree-indexed lookup. Returns:
@@ -328,15 +390,6 @@ fn find_entry_htree(
         };
     let mut root_block = vec![0u8; block_size as usize];
     dev.read_at(phys0 * block_size as u64, &mut root_block)?;
-    if name.is_folded() {
-        casefold_root_leaves(
-            &root_block,
-            dir_ino,
-            dir_inode,
-            csum,
-            dir_inode.size.div_ceil(block_size as u64),
-        )?;
-    }
 
     // Walk the htree. lookup_leaf needs a closure for reading further dx
     // blocks (intermediate nodes); we map logical→physical via whichever

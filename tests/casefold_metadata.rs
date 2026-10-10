@@ -412,7 +412,7 @@ fn folded_inline_lookup_remains_unsupported() {
 
 #[test]
 fn folded_lookup_refuses_deeper_indexes_before_using_them() {
-    for depth in [1, 2, 255] {
+    for depth in [2, 255] {
         let mut device = lookup_device(b"ReadMe");
         device.index_depth = Some(depth);
         let mut read = |_| {
@@ -425,4 +425,184 @@ fn folded_lookup_refuses_deeper_indexes_before_using_them() {
             Err(Error::Unsupported(_))
         ));
     }
+}
+
+// Small synthetic trees isolate damage checks. The large-directory oracle
+// separately qualifies the supported layout using Linux-created bytes.
+struct IndexedBlocks(Vec<Vec<u8>>);
+
+impl fs_ext4::block_io::BlockDevice for IndexedBlocks {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> fs_ext4::Result<()> {
+        assert_eq!(offset % 1024, 0);
+        assert_eq!(buf.len(), 1024);
+        buf.copy_from_slice(&self.0[offset as usize / 1024 - 1]);
+        Ok(())
+    }
+
+    fn size_bytes(&self) -> u64 {
+        (self.0.len() as u64 + 1) * 1024
+    }
+}
+
+fn deep_index() -> (IndexedBlocks, Inode, fs_ext4::checksum::Checksummer) {
+    let csum = fs_ext4::checksum::Checksummer {
+        seed: 123,
+        enabled: true,
+    };
+    let mut blocks = vec![vec![0; 1024]; 5];
+    blocks[0][24..32].copy_from_slice(&[0, 0, 0, 0, 1, 8, 1, 0]);
+    blocks[0][32..36].copy_from_slice(&[123, 0, 2, 0]);
+    blocks[0][36..40].copy_from_slice(&1_u32.to_le_bytes());
+    blocks[0][40..44].copy_from_slice(&0x8000_0000_u32.to_le_bytes());
+    blocks[0][44..48].copy_from_slice(&2_u32.to_le_bytes());
+    assert!(csum.patch_dx_tail(2, 0, &mut blocks[0], 32));
+    for node in [1, 2] {
+        blocks[node][4..6].copy_from_slice(&1024_u16.to_le_bytes());
+        blocks[node][8..12].copy_from_slice(&[126, 0, 1, 0]);
+        blocks[node][12..16].copy_from_slice(&(node as u32 + 2).to_le_bytes());
+        assert!(csum.patch_dx_tail(2, 0, &mut blocks[node], 8));
+    }
+    for (index, name) in [(3, "Café"), (4, "ReadMe")] {
+        let block = &mut blocks[index];
+        block[..4].copy_from_slice(&(40 + index as u32).to_le_bytes());
+        block[4..6].copy_from_slice(&1012_u16.to_le_bytes());
+        block[6] = name.len() as u8;
+        block[8..8 + name.len()].copy_from_slice(name.as_bytes());
+        block[1016..1018].copy_from_slice(&12_u16.to_le_bytes());
+        block[1019] = 0xde;
+        assert!(csum.patch_dir_entry_tail(2, 0, block));
+    }
+    let mut inode = lookup_directory(InodeFlags::CASEFOLD.bits() | InodeFlags::INDEX.bits());
+    inode.size = 5 * 1024;
+    for index in 0..5 {
+        inode.block[index * 4..index * 4 + 4].copy_from_slice(&(index as u32 + 1).to_le_bytes());
+    }
+    (IndexedBlocks(blocks), inode, csum)
+}
+
+fn deep_lookup(
+    device: &IndexedBlocks,
+    inode: &Inode,
+    csum: &fs_ext4::checksum::Checksummer,
+    name: &str,
+) -> fs_ext4::Result<u32> {
+    fs_ext4::path::lookup_bytes_with_csum(
+        device,
+        &superblock(true, 1, 0),
+        &mut |_| Ok(inode.clone()),
+        name.as_bytes(),
+        csum,
+    )
+}
+
+#[test]
+fn folded_lookup_reads_both_branches_of_a_deeper_index() {
+    let (device, inode, csum) = deep_index();
+    assert_eq!(
+        deep_lookup(&device, &inode, &csum, "CAFE\u{0301}").unwrap(),
+        43
+    );
+    assert_eq!(deep_lookup(&device, &inode, &csum, "README").unwrap(), 44);
+    assert!(matches!(
+        deep_lookup(&device, &inode, &csum, "missing"),
+        Err(Error::NotFound)
+    ));
+}
+
+#[test]
+fn folded_deep_lookup_verifies_root_node_and_leaf_checksums() {
+    for (index, byte) in [(0, 40), (1, 12), (2, 12), (3, 8), (4, 8)] {
+        let (mut device, inode, csum) = deep_index();
+        device.0[index][byte] ^= 1;
+        assert!(
+            matches!(
+                deep_lookup(&device, &inode, &csum, "missing"),
+                Err(Error::BadChecksum { .. })
+            ),
+            "block {index}"
+        );
+    }
+}
+
+#[test]
+fn folded_deep_lookup_refuses_cycles_repeated_and_out_of_range_blocks() {
+    for target in [0_u32, 1, 2, 3, 5, u32::MAX] {
+        let (mut device, inode, csum) = deep_index();
+        device.0[2][12..16].copy_from_slice(&target.to_le_bytes());
+        assert!(csum.patch_dx_tail(2, 0, &mut device.0[2], 8));
+        assert!(
+            matches!(
+                deep_lookup(&device, &inode, &csum, "missing"),
+                Err(Error::CorruptDirEntry(_))
+            ),
+            "target {target}"
+        );
+    }
+}
+
+#[test]
+fn folded_deep_lookup_refuses_sparse_nodes_and_leaves() {
+    for logical in 0..5 {
+        let (device, mut inode, csum) = deep_index();
+        inode.block[logical * 4..logical * 4 + 4].fill(0);
+        assert!(
+            matches!(
+                deep_lookup(&device, &inode, &csum, "missing"),
+                Err(Error::CorruptDirEntry(_))
+            ),
+            "block {logical}"
+        );
+    }
+}
+
+#[test]
+fn folded_deep_lookup_refuses_malformed_nodes_even_with_valid_checksums() {
+    for (offset, bytes) in [
+        (0, vec![1]),
+        (4, vec![12, 0]),
+        (6, vec![1]),
+        (10, vec![0, 0]),
+    ] {
+        let (mut device, inode, csum) = deep_index();
+        device.0[1][offset..offset + bytes.len()].copy_from_slice(&bytes);
+        assert!(csum.patch_dx_tail(2, 0, &mut device.0[1], 8));
+        assert!(deep_lookup(&device, &inode, &csum, "missing").is_err());
+    }
+}
+
+#[test]
+fn folded_deep_lookup_refuses_equivalent_names_in_different_leaves() {
+    let (mut device, inode, csum) = deep_index();
+    device.0[4] = device.0[3].clone();
+    device.0[4][..4].copy_from_slice(&44_u32.to_le_bytes());
+    assert!(csum.patch_dir_entry_tail(2, 0, &mut device.0[4]));
+    assert!(matches!(
+        deep_lookup(&device, &inode, &csum, "CAFE\u{0301}"),
+        Err(Error::CorruptDirEntry(_))
+    ));
+}
+
+#[test]
+fn folded_deep_lookup_handles_no_checksum_layout_and_ignores_unlisted_blocks() {
+    let (mut device, mut inode, mut csum) = deep_index();
+    csum.enabled = false;
+    device.0[0][32..34].copy_from_slice(&124_u16.to_le_bytes());
+    for node in [1, 2] {
+        device.0[node][8..10].copy_from_slice(&127_u16.to_le_bytes());
+    }
+    // An unreferenced stale copy must not become an ambiguous live entry.
+    device.0.push(device.0[4].clone());
+    inode.size += 1024;
+    inode.block[20..24].copy_from_slice(&6_u32.to_le_bytes());
+    assert_eq!(deep_lookup(&device, &inode, &csum, "README").unwrap(), 44);
+}
+
+#[test]
+fn folded_deep_lookup_requires_leaf_checksum_tails() {
+    let (mut device, inode, csum) = deep_index();
+    device.0[4][1019] = 0;
+    assert!(matches!(
+        deep_lookup(&device, &inode, &csum, "README"),
+        Err(Error::BadChecksum { .. })
+    ));
 }
