@@ -3681,6 +3681,7 @@ impl Filesystem {
     /// dir blocks, removes the named entry, recomputes the tail csum,
     /// stages the modified block in `buf`. Returns `Error::NotFound`
     /// when the name isn't present.
+    #[cfg(test)]
     pub(crate) fn buffer_remove_dir_entry(
         &self,
         buf: &mut BlockBuffer,
@@ -6996,7 +6997,11 @@ impl Filesystem {
         let (src_parent_inode, _) = self.live_dir(src_dir)?;
         let (dst_parent_inode, _) = self.live_dir(dst_dir)?;
 
-        let src_ino = self.find_entry_in_dir(src_parent_ino, &src_parent_inode, src_name)?;
+        // Keep the stored spelling and inode for both removals. A lookup
+        // key may differ from the stored name; additions still use the
+        // caller's requested destination spelling.
+        let source = self.find_dir_entry(src_parent_ino, &src_parent_inode, src_name)?;
+        let src_ino = source.inode;
         // rename(2) of an existing name onto itself succeeds and changes
         // nothing. Only after both names are validated and the source is
         // found: a NUL name is still refused and a missing one is still
@@ -7008,13 +7013,13 @@ impl Filesystem {
         // `.ok()` here for the same reason as `entry_exists` above: it turned
         // a refusal to read the block into "dst does not exist", and rename
         // then created it and re-stamped the block.
-        let existing_dst_ino =
-            match self.find_entry_in_dir(dst_parent_ino, &dst_parent_inode, dst_name) {
-                Ok(ino) => Some(ino),
+        let existing_destination =
+            match self.find_dir_entry(dst_parent_ino, &dst_parent_inode, dst_name) {
+                Ok(entry) => Some(entry),
                 Err(Error::NotFound) => None,
                 Err(e) => return Err(e),
             };
-        if existing_dst_ino.is_some() && !replace_if_exists {
+        if existing_destination.is_some() && !replace_if_exists {
             return Err(Error::AlreadyExists);
         }
 
@@ -7032,7 +7037,7 @@ impl Filesystem {
 
         // A directory arriving in a new parent adds a `..` link to it; one
         // that replaces a directory there leaves the count where it was.
-        if src_is_dir && existing_dst_ino.is_none() && src_parent_ino != dst_parent_ino {
+        if src_is_dir && existing_destination.is_none() && src_parent_ino != dst_parent_ino {
             self.check_link_room(&dst_parent_inode)?;
         }
 
@@ -7044,7 +7049,8 @@ impl Filesystem {
         // ===================================================================
         // Replace-overwrite branch — dst already exists and caller opted in.
         // ===================================================================
-        if let Some(dst_old_ino) = existing_dst_ino {
+        if let Some(destination) = existing_destination {
+            let dst_old_ino = destination.inode;
             // Hardlink case: src and dst already share an inode. POSIX
             // rename(2) requires this to be a no-op success — entry count
             // is unchanged, and removing src would unconditionally drop the
@@ -7130,7 +7136,12 @@ impl Filesystem {
 
             // 1. Pop the existing dst entry from dst_parent so the
             //    in-place add below has somewhere to land.
-            self.buffer_remove_dir_entry(&mut buf, dst_parent_ino, &dst_parent_inode, dst_name)?;
+            self.buffer_remove_matched_dir_entry(
+                &mut buf,
+                dst_parent_ino,
+                &dst_parent_inode,
+                &destination,
+            )?;
 
             // 2. Add the new dst entry pointing at src_ino. Try in-place
             //    first; if no block has room, mirror the dst_extends
@@ -7160,7 +7171,12 @@ impl Filesystem {
             // 3. Remove src entry from its parent, as step 2 left it: read
             //    through the buffer, for the same reason as below (#392).
             let (src_parent_now, _) = self.buffered_inode_verified(&buf, src_parent_ino)?;
-            self.buffer_remove_dir_entry(&mut buf, src_parent_ino, &src_parent_now, src_name)?;
+            self.buffer_remove_matched_dir_entry(
+                &mut buf,
+                src_parent_ino,
+                &src_parent_now,
+                &source,
+            )?;
 
             // 4. Cross-parent dir move: fix `..` + parent nlinks.
             //    For dir-replaces-dir the dst_parent gains the moved
@@ -7271,7 +7287,7 @@ impl Filesystem {
         // rename failed with NotFound (#392). When the add dropped the index
         // instead (#347), the stale inode still called it indexed.
         let (src_parent_now, _) = self.buffered_inode_verified(&buf, src_parent_ino)?;
-        self.buffer_remove_dir_entry(&mut buf, src_parent_ino, &src_parent_now, src_name)?;
+        self.buffer_remove_matched_dir_entry(&mut buf, src_parent_ino, &src_parent_now, &source)?;
 
         if src_is_dir && src_parent_ino != dst_parent_ino {
             self.buffer_update_dotdot(&mut buf, src_ino, &src_inode, dst_parent_ino)?;
@@ -8487,6 +8503,114 @@ mod tests {
     }
 
     #[test]
+    fn matched_rename_preserves_entries_across_parent_layouts() {
+        for inline in [false, true] {
+            for same_parent in [false, true] {
+                for replace in [false, true] {
+                    let dev = formatted();
+                    let fs = mount(&dev);
+                    let src_parent = fs.apply_mkdir("/src", 0o755).unwrap();
+                    let dst_parent = if same_parent {
+                        src_parent
+                    } else {
+                        fs.apply_mkdir("/dst", 0o755).unwrap()
+                    };
+                    let source = fs.apply_create("/src/ReadMe", 0o644).unwrap();
+                    fs.apply_pwrite("/src/ReadMe", 0, b"source payload")
+                        .unwrap();
+                    if inline {
+                        make_inline_dir(&fs, src_parent, 2, Some((source, b"ReadMe", 1)));
+                        if !same_parent {
+                            make_inline_dir(&fs, dst_parent, 2, None);
+                        }
+                    }
+                    // Replacement stays inline; a new long name forces
+                    // conversion before the source entry is removed.
+                    let requested = if replace {
+                        b"Destination".to_vec()
+                    } else {
+                        vec![b'D'; 200]
+                    };
+                    let old = if replace {
+                        let old = fs.apply_create_at(dst_parent, &requested, 0o644).unwrap();
+                        let old_path = if same_parent { "/src/" } else { "/dst/" }.to_owned()
+                            + std::str::from_utf8(&requested).unwrap();
+                        fs.apply_link(&old_path, "/keep-old").unwrap();
+                        Some(old)
+                    } else {
+                        None
+                    };
+                    assert_eq!(
+                        fs.read_inode_verified(dst_parent)
+                            .unwrap()
+                            .0
+                            .has_inline_data(),
+                        inline,
+                        "fixture must start in the requested layout"
+                    );
+                    fs.apply_rename_at(src_parent, b"ReadMe", dst_parent, &requested, replace)
+                        .unwrap();
+                    drop(fs);
+                    let fs = mount(&dev);
+                    assert!(matches!(
+                        fs.lookup_at(src_parent, b"ReadMe"),
+                        Err(Error::NotFound)
+                    ));
+                    assert_eq!(
+                        fs.read_inode_verified(dst_parent)
+                            .unwrap()
+                            .0
+                            .has_inline_data(),
+                        inline && replace,
+                        "only the long destination should require conversion"
+                    );
+                    let entry = fs.lookup_entry_at(dst_parent, &requested).unwrap();
+                    assert_eq!(entry.name, requested);
+                    assert_eq!(entry.inode, source);
+                    assert_eq!(entry.file_type, crate::dir::DirEntryType::RegFile);
+                    let inode = fs.read_inode_verified(source).unwrap().0;
+                    assert_eq!(inode.links_count, 1);
+                    assert_eq!(
+                        crate::file_io::read_all(&fs, &inode).unwrap(),
+                        b"source payload"
+                    );
+                    if let Some(old) = old {
+                        assert_eq!(fs.lookup_at(2, b"keep-old").unwrap(), old);
+                        assert_eq!(fs.read_inode_verified(old).unwrap().0.links_count, 1);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn matched_rename_keeps_ordinary_case_distinctions_and_hardlink_noops() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let source = fs.apply_create("/ReadMe", 0o644).unwrap();
+        let destination = fs.apply_create("/README", 0o644).unwrap();
+        let before = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.apply_rename_at(2, b"ReadMe", 2, b"README", false),
+            Err(Error::AlreadyExists)
+        ));
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
+        assert_eq!(fs.lookup_at(2, b"README").unwrap(), destination);
+        fs.apply_rename_at(2, b"ReadMe", 2, b"README", true)
+            .unwrap();
+        assert!(matches!(fs.lookup_at(2, b"ReadMe"), Err(Error::NotFound)));
+        assert_eq!(fs.lookup_at(2, b"README").unwrap(), source);
+        fs.apply_link("/README", "/ReadMe").unwrap();
+        let before = dev.bytes.lock().unwrap().clone();
+        fs.apply_rename_at(2, b"ReadMe", 2, b"README", true)
+            .unwrap();
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
+        assert_eq!(fs.lookup_at(2, b"ReadMe").unwrap(), source);
+        assert_eq!(fs.lookup_at(2, b"README").unwrap(), source);
+        assert_eq!(fs.read_inode_verified(source).unwrap().0.links_count, 2);
+    }
+
+    #[test]
     fn mutation_lookup_retains_casefold_spelling_without_enabling_writes() {
         let dev = formatted();
         let parent_ino;
@@ -8515,6 +8639,12 @@ mod tests {
             Err(Error::Unsupported(_))
         ));
         assert!(fs.apply_unlink_at(parent_ino, b"README").is_err());
+        assert!(fs
+            .apply_rename_at(parent_ino, b"README", parent_ino, b"new", false)
+            .is_err());
+        assert!(fs
+            .apply_rename_at(parent_ino, b"README", parent_ino, b"ReadMe", true)
+            .is_err());
         assert_eq!(*dev.bytes.lock().unwrap(), before);
     }
 
