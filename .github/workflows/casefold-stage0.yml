@@ -6,6 +6,12 @@ on:
     paths:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
+      - src/fs.rs
+      - src/path.rs
+      - src/htree.rs
+      - src/htree_mut.rs
+      - src/casefold/**
+      - src/casefold.rs
       - tests/casefold_deep_guest.py
       - tests/casefold_fixture_guest.py
       - tests/casefold_behavior_guest.py
@@ -40,6 +46,12 @@ jobs:
         with:
           toolchain: 1.95.0
       - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Verify driver-planned casefold insertion with Linux
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/casefold-index-insert
+        run: |
+          scripts/tier.sh casefold:index-insert casefold-index-insert 1050 65000 -- scripts/test.sh --locked --release --lib fs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-index-insert 1
       - name: Generate and verify Linux casefold fixtures
         run: |
           scripts/tier.sh casefold:fixtures casefold-fixtures 1050 65000 -- scripts/test.sh --locked --release --test casefold_fixture_oracle -- --show-output
@@ -52,5 +64,7 @@ jobs:
           path: |
             tmp/casefold-stage0/
             tmp/logs/casefold-fixtures.log
+            tmp/casefold-index-insert/
+            tmp/logs/casefold-index-insert.log
           if-no-files-found: error
           retention-days: 30
