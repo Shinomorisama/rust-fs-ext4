@@ -3931,12 +3931,46 @@ impl Filesystem {
         file_type: crate::dir::DirEntryType,
         has_ft: bool,
     ) -> Result<()> {
-        // OutOfBounds asks the caller to grow or drop the index. Casefold
-        // insertion has not been qualified, so it must not take that path.
-        if parent_inode.flags & EXT4_CASEFOLD_FL != 0 {
-            return Err(Error::Unsupported(
-                "casefold indexed insertion is not qualified",
-            ));
+        let (current, _) = self.buffered_inode_verified(buf, parent_ino)?;
+        if (parent_inode.flags | current.flags) & EXT4_CASEFOLD_FL != 0 {
+            // Use the current transaction, including removals staged by rename.
+            // Admission reads must not mark index/leaf blocks dirty on refusal.
+            let mut physical_seen = std::collections::HashSet::new();
+            let (logical, mut leaf) = crate::path::casefold_insert_leaf(
+                &self.sb,
+                parent_ino,
+                &current,
+                &self.csum,
+                name,
+                |logical| {
+                    let physical = self
+                        .map_inode_logical(&current, u64::from(logical))?
+                        .ok_or(Error::CorruptDirEntry("casefold index block is sparse"))?;
+                    if !physical_seen.insert(physical) {
+                        return Err(Error::CorruptDirEntry(
+                            "casefold index blocks alias physical storage",
+                        ));
+                    }
+                    self.buffered_block(buf, physical)
+                },
+            )?;
+            if target_ino == 0 || target_ino > self.sb.inodes_count {
+                return Err(Error::InvalidArgument("invalid directory entry inode"));
+            }
+            match crate::dir::add_entry_to_block(&mut leaf, target_ino, name, file_type, true, 12) {
+                // Never signal the ordinary growth/index-drop fallback.
+                Err(Error::OutOfBounds) => {
+                    return Err(Error::Unsupported("casefold indexed leaf growth"))
+                }
+                result => result?,
+            }
+            self.csum
+                .patch_dir_entry_tail(parent_ino, current.generation, &mut leaf);
+            let physical = self
+                .map_inode_logical(&current, u64::from(logical))?
+                .ok_or(Error::CorruptDirEntry("casefold insertion leaf is sparse"))?;
+            buf.put(physical, leaf);
+            return Ok(());
         }
         if parent_inode.flags & EXT4_ENCRYPT_FL != 0 {
             return Err(Error::OutOfBounds);
@@ -8669,6 +8703,155 @@ mod tests {
         assert_eq!(*dev.bytes.lock().unwrap(), before);
     }
 
+    // A planner fixture only: its extra leaf is staged, not allocated or
+    // committed. The independent needs_host test uses Linux-created images.
+    fn staged_casefold_index(fs: &Filesystem) -> (BlockBuffer, Inode, u64) {
+        let (parent, mut raw) = fs.read_inode_verified(2).unwrap();
+        let physical = fs.map_inode_logical(&parent, 0).unwrap().unwrap();
+        let mut root = fs.read_block(physical).unwrap();
+        root[16..18].copy_from_slice(&((BS - 12) as u16).to_le_bytes());
+        root[24..].fill(0);
+        root[28] = 1;
+        root[29] = 8;
+        root[32..34].copy_from_slice(&(((BS - 32 - 8) / 8) as u16).to_le_bytes());
+        root[34..36].copy_from_slice(&1u16.to_le_bytes());
+        root[36..40].copy_from_slice(&1u32.to_le_bytes());
+        assert!(fs.csum.patch_dx_tail(2, parent.generation, &mut root, 32));
+        // Extend the inode's single inline extent for this planning fixture.
+        assert_eq!(
+            crate::extent::ExtentHeader::parse(&parent.block)
+                .unwrap()
+                .entries,
+            1
+        );
+        raw[0x38..0x3a].copy_from_slice(&2u16.to_le_bytes());
+        raw[4..8].copy_from_slice(&(2 * BS).to_le_bytes());
+        raw[0x20..0x24].copy_from_slice(
+            &(parent.flags | crate::inode::InodeFlags::INDEX.bits() | EXT4_CASEFOLD_FL)
+                .to_le_bytes(),
+        );
+        let mut leaf = vec![0; BS as usize];
+        leaf[4..6].copy_from_slice(&((BS - 12) as u16).to_le_bytes());
+        assert!(fs
+            .csum
+            .patch_dir_entry_tail(2, parent.generation, &mut leaf));
+        let mut buf = BlockBuffer::new(BS);
+        buf.put(physical, root);
+        buf.put(physical + 1, leaf);
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        (buf, Inode::parse(&raw).unwrap(), physical + 1)
+    }
+
+    fn mount_casefold_planning_fixture() -> (std::sync::Arc<MemDev>, Filesystem) {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        (dev, fs)
+    }
+
+    #[test]
+    fn casefold_indexed_add_preserves_spelling_and_uses_staged_entries() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let before = buf.dirty.clone();
+        fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            "New_Café".as_bytes(),
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        )
+        .unwrap();
+        let entries = crate::dir::parse_block_verified(
+            &buf.dirty[&leaf],
+            true,
+            2,
+            parent.generation,
+            &fs.csum,
+        )
+        .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "New_Café".as_bytes());
+        assert_eq!(entries[0].inode, 100);
+        assert_eq!(entries[0].file_type, crate::dir::DirEntryType::RegFile);
+        for (block, bytes) in before {
+            if block != leaf {
+                assert_eq!(buf.dirty[&block], bytes);
+            }
+        }
+        let before = buf.dirty.clone();
+        assert!(matches!(
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                "NEW_CAFE\u{301}".as_bytes(),
+                101,
+                crate::dir::DirEntryType::RegFile,
+                true
+            ),
+            Err(Error::AlreadyExists)
+        ));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_indexed_full_leaf_refuses_without_staging_a_growth_request() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _) = staged_casefold_index(&fs);
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        for n in 0..100 {
+            let name = format!("{n:03}{}", "a".repeat(252));
+            let before = buf.dirty.clone();
+            match fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                name.as_bytes(),
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            ) {
+                Ok(()) => continue,
+                Err(Error::Unsupported("casefold indexed leaf growth")) => {
+                    assert_eq!(buf.dirty, before);
+                    assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+                    return;
+                }
+                other => panic!("unexpected insertion result: {other:?}"),
+            }
+        }
+        panic!("fixture never filled its leaf");
+    }
+
+    #[test]
+    fn casefold_indexed_add_does_not_restamp_a_corrupt_leaf() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        buf.dirty.get_mut(&leaf).unwrap()[20] ^= 1;
+        let before = buf.dirty.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"new",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true
+            ),
+            Err(Error::BadChecksum { .. })
+        ));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
     #[test]
     fn casefold_index_drop_refuses_the_current_buffered_policy() {
         let dev = formatted();
@@ -10566,11 +10749,9 @@ mod tests {
 
     /// A CASEFOLD volume must not be mounted writable.
     ///
-    /// The kernel files a directory entry into the htree leaf that the
-    /// hash of the case-folded name selects; this driver's write path
-    /// hashes the raw bytes. Reads survive on the linear-scan fallback. A write does
-    /// not: the entry lands in the wrong leaf, stays findable here and
-    /// stops being findable on Linux.
+    /// Preparing selected insertion/removal primitives does not qualify
+    /// complete namespace operations, index growth, or crash recovery.
+    /// Preserve the volume gate until those paths are proven interoperable.
     #[test]
     fn a_casefold_volume_is_not_mounted_writable() {
         let dev = formatted();
@@ -12041,6 +12222,152 @@ mod tests {
     /// Tests that run an oracle tool (they run in the harness VM): mkfs.ext4, e2fsck.
     mod needs_host {
         use super::*;
+
+        /// Only the private insertion planner is exercised: no public casefold
+        /// write gate is lifted. Linux creates the directory, then cold-mounts
+        /// its emitted leaf and independently resolves the new hard link.
+        #[test]
+        fn casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean() {
+            use fs_ext4_test_support::{assert_e2fsck_clean, guest_kernel_write, oracle};
+            use std::os::unix::fs::FileExt;
+            for bs in [1024, 4096] {
+                for strict in [false, true] {
+                    let image = fs_ext4_test_support::temp_dir()
+                        .join(format!("casefold-insert-{bs}-{strict}.img"));
+                    std::fs::File::create(&image)
+                        .unwrap()
+                        .set_len(64 * 1024 * 1024)
+                        .unwrap();
+                    let extended = format!(
+                        "encoding=utf8-12.1,hash_seed=a1b2c3d4-e5f6-7890-abcd-ef1234567890,lazy_itable_init=0,lazy_journal_init=0{}",
+                        if strict { ",encoding_flags=strict" } else { "" }
+                    );
+                    let made = oracle("mke2fs").args([
+                        "-q", "-F", "-t", "ext4", "-b", &bs.to_string(), "-I", "256", "-m", "0", "-O",
+                        "none,has_journal,extent,64bit,dir_index,filetype,sparse_super,large_file,huge_file,metadata_csum,casefold",
+                        "-E", &extended,
+                    ]).arg(&image).output();
+                    assert!(
+                        made.status.success(),
+                        "{}",
+                        String::from_utf8_lossy(&made.stderr)
+                    );
+                    let image = image.to_str().unwrap();
+                    let populate = format!(
+                        "python3 - populate <<'CASEFOLD_PY'\n{}\nCASEFOLD_PY\n",
+                        include_str!("../tests/casefold_fixture_guest.py")
+                    );
+                    let populated = guest_kernel_write(image, &populate);
+                    assert!(
+                        populated.status.success(),
+                        "{}",
+                        String::from_utf8_lossy(&populated.stderr)
+                    );
+                    assert_e2fsck_clean(image, "Linux insertion fixture");
+                    let bytes = std::fs::read(image).unwrap();
+                    let dev = MemDev::new(bytes.len() as u64);
+                    *dev.bytes.lock().unwrap() = bytes;
+                    let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+                    assert!(fs
+                        .apply_link("/fold_indexed/ReadMe", "/fold_indexed/blocked")
+                        .is_err());
+                    let parent_ino = resolve(&fs, "/fold_indexed").unwrap();
+                    let (parent, _) = fs.read_inode_verified(parent_ino).unwrap();
+                    let target = fs.lookup_at(parent_ino, b"ReadMe").unwrap();
+                    let mut buf = BlockBuffer::new(bs);
+                    // A full selected leaf remains a safe refusal. Find an
+                    // existing leaf with room; growth is a separate checkpoint.
+                    let mut inserted = None;
+                    for n in 0..64 {
+                        let name = format!("Inserted_{n:03}_Café").into_bytes();
+                        match fs.buffer_add_dir_entry_indexed(
+                            &mut buf,
+                            parent_ino,
+                            &parent,
+                            &name,
+                            target,
+                            crate::dir::DirEntryType::RegFile,
+                            true,
+                        ) {
+                            Ok(()) => {
+                                inserted = Some((n, name));
+                                break;
+                            }
+                            Err(Error::Unsupported("casefold indexed leaf growth")) => {
+                                assert!(buf.dirty.is_empty())
+                            }
+                            other => panic!("insertion failed: {other:?}"),
+                        }
+                    }
+                    let (n, name) = inserted.expect("fixture has a leaf with room");
+                    assert_eq!(buf.dirty.len(), 1, "only the selected leaf is changed");
+                    let before = buf.dirty.clone();
+                    let alias = format!("INSERTED_{n:03}_CAFE\u{301}");
+                    assert!(matches!(
+                        fs.buffer_add_dir_entry_indexed(
+                            &mut buf,
+                            parent_ino,
+                            &parent,
+                            alias.as_bytes(),
+                            target,
+                            crate::dir::DirEntryType::RegFile,
+                            true
+                        ),
+                        Err(Error::AlreadyExists)
+                    ));
+                    assert_eq!(buf.dirty, before);
+                    // Complete this test hard link's accounting. Write staged
+                    // bytes directly to a scratch image, never through a new
+                    // public bypass or by enabling writable casefold mounts.
+                    let (target_inode, mut raw) = fs.read_inode_verified(target).unwrap();
+                    fs.patch_inode_nlink(target, &mut raw, &target_inode, 1)
+                        .unwrap();
+                    fs.buffer_write_inode(&mut buf, target, &raw).unwrap();
+                    let file = std::fs::OpenOptions::new().write(true).open(image).unwrap();
+                    for (block, bytes) in buf.dirty {
+                        file.write_all_at(&bytes, block * u64::from(bs)).unwrap();
+                    }
+                    file.sync_all().unwrap();
+                    drop(file);
+                    drop(fs);
+                    assert_e2fsck_clean(image, "driver-planned casefold insertion");
+                    let verify = format!(
+                        r#"python3 - <<'CASEFOLD_INSERT_PY'
+import os
+root = os.fsencode(os.environ['MNT']) + b'/fold_indexed/'
+name = bytes.fromhex('{name_hex}')
+alias = bytes.fromhex('{alias_hex}')
+assert name in os.listdir(root)
+assert os.stat(root + name).st_ino == {target}
+assert os.stat(root + alias).st_ino == {target}
+with open(root + alias, 'rb') as stream:
+    assert stream.read() == b'casefold ASCII payload\n'
+try:
+    fd = os.open(root + alias, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+except FileExistsError:
+    pass
+else:
+    os.close(fd)
+    raise AssertionError('Linux accepted an equivalent duplicate')
+for number in range(1000):
+    stored = f'File_{{number:04d}}_casefold_payload.txt'.encode()
+    with open(root + stored.upper(), 'rb') as stream:
+        assert stream.read() == stored + b'\n'
+CASEFOLD_INSERT_PY
+"#,
+                        name_hex = hex::encode(&name),
+                        alias_hex = hex::encode(alias.as_bytes())
+                    );
+                    let checked = guest_kernel_write(image, &verify);
+                    assert!(
+                        checked.status.success(),
+                        "{}",
+                        String::from_utf8_lossy(&checked.stderr)
+                    );
+                    assert_e2fsck_clean(image, "casefold insertion after cold Linux lookup");
+                }
+            }
+        }
 
         /// #384, judged by e2fsck: recovering an orphaned fast symlink that
         /// holds an xattr block frees the inode and the xattr block and

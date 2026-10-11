@@ -440,6 +440,144 @@ where
     Ok(leaves)
 }
 
+/// Admit an in-place write only when every existing entry is uniquely named
+/// and lies in the leaf its frozen comparison key selects. Reads may scan past
+/// a damaged route; writes must not bless it. Collision chains and intermediate
+/// levels need separate write qualification and are deliberately refused here.
+pub(crate) fn casefold_insert_leaf<F>(
+    sb: &Superblock,
+    ino: u32,
+    inode: &Inode,
+    csum: &crate::checksum::Checksummer,
+    name: &[u8],
+    mut read: F,
+) -> Result<(u32, Vec<u8>)>
+where
+    F: FnMut(u32) -> Result<Vec<u8>>,
+{
+    let encoding = inode.directory_casefold_encoding(sb)?;
+    if encoding.is_none()
+        || !inode.flag_set().contains(InodeFlags::INDEX)
+        || inode.has_inline_data()
+        || !csum.enabled
+        || sb.feature_incompat & crate::features::Incompat::FILETYPE.bits() == 0
+        || !matches!(sb.block_size(), 1024 | 4096)
+    {
+        return Err(Error::Unsupported("casefold indexed insertion profile"));
+    }
+    let query = crate::casefold::LookupName::new(name, encoding)?;
+    if name == b"." || name == b".." {
+        return Err(Error::InvalidArgument("cannot insert a dot entry"));
+    }
+    let bs = u64::from(sb.block_size());
+    if inode.size < 2 * bs || !inode.size.is_multiple_of(bs) {
+        return Err(Error::CorruptDirEntry("invalid casefold directory size"));
+    }
+    let root = read(0)?;
+    if root.len() != bs as usize {
+        return Err(Error::CorruptDirEntry("invalid casefold index block size"));
+    }
+    if root[4..6] != 12u16.to_le_bytes() || root[16..18] != ((bs - 12) as u16).to_le_bytes() {
+        return Err(Error::CorruptDirEntry("invalid casefold index dot layout"));
+    }
+    let info = casefold_root_info(&root)?;
+    if info.indirect_levels != 0 {
+        return Err(Error::Unsupported("casefold indexed insertion depth"));
+    }
+    let leaves = casefold_index_leaves(&root, ino, inode, csum, inode.size / bs, &mut read)?;
+    if leaves.len() as u64 + 1 != inode.size / bs {
+        return Err(Error::Unsupported(
+            "casefold insertion with unreferenced directory blocks",
+        ));
+    }
+    let dots = dir::parse_block(&root, true)?;
+    if dots.len() != 2
+        || dots[0].name != b"."
+        || dots[0].inode != ino
+        || dots[1].name != b".."
+        || dots[1].inode == 0
+        || dots[1].inode > sb.inodes_count
+        || dots
+            .iter()
+            .any(|e| e.file_type != dir::DirEntryType::Directory)
+    {
+        return Err(Error::CorruptDirEntry("invalid casefold dot entries"));
+    }
+    let (_, routes) = htree::parse_root_entries(&root)?;
+    if routes.iter().any(|e| e.hash & 1 != 0) || routes.windows(2).any(|p| p[0].hash == p[1].hash) {
+        return Err(Error::Unsupported("casefold index collision boundaries"));
+    }
+    let version = crate::hash::effective_version(info.hash_version, sb.unsigned_hash());
+    let selected =
+        htree::find_entry_for_hash(&routes, query.hash(version, &sb.hash_seed).major).block;
+    let mut keys = std::collections::HashSet::new();
+    let mut duplicate = false;
+    let mut selected_bytes = None;
+    for logical in leaves {
+        let bytes = read(logical)?;
+        if bytes.len() != bs as usize || !dir::has_csum_tail(&bytes) {
+            return Err(Error::BadChecksum {
+                what: "directory block",
+            });
+        }
+        if !csum.verify_dir_entry_tail(ino, inode.generation, &bytes) {
+            return Err(Error::BadChecksum {
+                what: "directory block",
+            });
+        }
+        // The checksum tail is a separate record, never padding inside a
+        // live entry. Walk the entire usable span, including tombstones,
+        // before the general reader (which may stop at an earlier tail).
+        let usable = bytes.len() - 12;
+        let mut offset = 0;
+        while offset < usable {
+            if usable - offset < 8 {
+                return Err(Error::CorruptDirEntry("short casefold leaf record"));
+            }
+            let rec_len = usize::from(u16::from_le_bytes([bytes[offset + 4], bytes[offset + 5]]));
+            if rec_len < 8
+                || !rec_len.is_multiple_of(4)
+                || rec_len > usable - offset
+                || 8 + usize::from(bytes[offset + 6]) > rec_len
+                || bytes[offset + 7] > 7
+            {
+                return Err(Error::CorruptDirEntry("invalid casefold leaf record"));
+            }
+            offset += rec_len;
+        }
+        for entry in dir::parse_block(&bytes, true)? {
+            if entry.inode > sb.inodes_count || entry.name == b"." || entry.name == b".." {
+                return Err(Error::CorruptDirEntry("invalid casefold leaf entry"));
+            }
+            let prepared = crate::casefold::LookupName::new(&entry.name, encoding)?;
+            if !keys.insert(prepared.hash_bytes().to_vec()) {
+                return Err(Error::CorruptDirEntry(
+                    "duplicate casefold directory entries",
+                ));
+            }
+            let routed =
+                htree::find_entry_for_hash(&routes, prepared.hash(version, &sb.hash_seed).major)
+                    .block;
+            if routed != logical {
+                return Err(Error::CorruptDirEntry(
+                    "casefold entry is in the wrong index leaf",
+                ));
+            }
+            duplicate |= prepared.hash_bytes() == query.hash_bytes();
+        }
+        if logical == selected {
+            selected_bytes = Some(bytes);
+        }
+    }
+    if duplicate {
+        return Err(Error::AlreadyExists);
+    }
+    Ok((
+        selected,
+        selected_bytes.ok_or(Error::CorruptDirEntry("casefold insertion leaf is missing"))?,
+    ))
+}
+
 /// HTree-indexed lookup. Returns:
 ///   Ok(Some(entry)) — found
 ///   Ok(None)      — htree said not in any leaf (caller may fall back)
@@ -709,6 +847,146 @@ mod tests {
             offset += len;
         }
         (EntryBlock(block), sb, inode)
+    }
+
+    // Synthetic admission fixtures prove refusal behavior; the needs_host
+    // insertion test in fs.rs independently judges emitted bytes on Linux.
+    fn insertion_fixture() -> (
+        Superblock,
+        Inode,
+        crate::checksum::Checksummer,
+        Vec<Vec<u8>>,
+    ) {
+        let (_, mut sb, mut inode) = entry_fixture(&[b"placeholder"], true);
+        sb.feature_ro_compat |= crate::features::RoCompat::METADATA_CSUM.bits();
+        inode.flags |= InodeFlags::INDEX.bits();
+        inode.size = 3 * 1024;
+        let csum = crate::checksum::Checksummer::from_superblock(&sb);
+        let mut root = vec![0; 1024];
+        for (off, name, len) in [(0, &b"."[..], 12u16), (12, &b".."[..], 1012)] {
+            root[off..off + 4].copy_from_slice(&2u32.to_le_bytes());
+            root[off + 4..off + 6].copy_from_slice(&len.to_le_bytes());
+            root[off + 6] = name.len() as u8;
+            root[off + 7] = 2;
+            root[off + 8..off + 8 + name.len()].copy_from_slice(name);
+        }
+        root[28] = 2;
+        root[29] = 8;
+        root[32..34].copy_from_slice(&123u16.to_le_bytes());
+        root[34..36].copy_from_slice(&2u16.to_le_bytes());
+        root[36..40].copy_from_slice(&1u32.to_le_bytes());
+        root[40..44].copy_from_slice(&0x80000000u32.to_le_bytes());
+        root[44..48].copy_from_slice(&2u32.to_le_bytes());
+        assert!(csum.patch_dx_tail(2, inode.generation, &mut root, 32));
+        let mut names: [Option<Vec<u8>>; 2] = [None, None];
+        for n in 0..100 {
+            let raw = format!("name{n}").into_bytes();
+            let hash = crate::hash::name_hash(&raw, crate::hash::HashVersion::Tea, &sb.hash_seed);
+            names[usize::from(hash.major >= 0x80000000)].get_or_insert(raw);
+        }
+        let mut blocks = vec![root];
+        for name in names {
+            let name = name.unwrap();
+            let (EntryBlock(mut leaf), _, _) = entry_fixture(&[&name], true);
+            leaf[4..6].copy_from_slice(&1012u16.to_le_bytes());
+            assert!(csum.patch_dir_entry_tail(2, inode.generation, &mut leaf));
+            blocks.push(leaf);
+        }
+        (sb, inode, csum, blocks)
+    }
+
+    #[test]
+    fn casefold_insert_admission_routes_the_prepared_name_and_rejects_aliases() {
+        let (sb, inode, csum, blocks) = insertion_fixture();
+        let admit = |query: &[u8]| {
+            casefold_insert_leaf(&sb, 2, &inode, &csum, query, |n| {
+                Ok(blocks[n as usize].clone())
+            })
+        };
+        let (leaf, bytes) = admit("New_CAFÉ".as_bytes()).unwrap();
+        let alias = admit("new_cafe\u{301}".as_bytes()).unwrap();
+        assert_eq!(leaf, alias.0);
+        assert_eq!(bytes, blocks[leaf as usize]);
+        let existing = dir::parse_block(&blocks[1], true).unwrap()[0].name.clone();
+        assert!(matches!(
+            admit(&existing.to_ascii_uppercase()),
+            Err(Error::AlreadyExists)
+        ));
+    }
+
+    #[test]
+    fn casefold_insert_admission_rejects_checksum_valid_misrouting() {
+        let (sb, inode, csum, mut blocks) = insertion_fixture();
+        blocks.swap(1, 2); // Checksums remain valid: both leaves belong to inode 2.
+        assert!(matches!(
+            casefold_insert_leaf(&sb, 2, &inode, &csum, b"new", |n| Ok(
+                blocks[n as usize].clone()
+            )),
+            Err(Error::CorruptDirEntry(
+                "casefold entry is in the wrong index leaf"
+            ))
+        ));
+    }
+
+    #[test]
+    fn casefold_insert_admission_rejects_equivalent_existing_entries() {
+        let (sb, inode, csum, mut blocks) = insertion_fixture();
+        blocks[2] = blocks[1].clone();
+        assert!(matches!(
+            casefold_insert_leaf(&sb, 2, &inode, &csum, b"new", |n| Ok(
+                blocks[n as usize].clone()
+            )),
+            Err(Error::CorruptDirEntry(
+                "duplicate casefold directory entries"
+            ))
+        ));
+    }
+
+    #[test]
+    fn casefold_insert_admission_checks_unselected_leaves_before_writing() {
+        let (sb, inode, csum, mut blocks) = insertion_fixture();
+        let selected = casefold_insert_leaf(&sb, 2, &inode, &csum, b"new", |n| {
+            Ok(blocks[n as usize].clone())
+        })
+        .unwrap()
+        .0;
+        let other = if selected == 1 { 2 } else { 1 };
+        blocks[other][8] ^= 1;
+        assert!(matches!(
+            casefold_insert_leaf(&sb, 2, &inode, &csum, b"new", |n| Ok(
+                blocks[n as usize].clone()
+            )),
+            Err(Error::BadChecksum { .. })
+        ));
+    }
+
+    #[test]
+    fn casefold_insert_admission_refuses_a_record_that_absorbs_the_checksum_tail() {
+        let (sb, inode, csum, mut blocks) = insertion_fixture();
+        blocks[1][4..6].copy_from_slice(&1024u16.to_le_bytes());
+        assert!(csum.patch_dir_entry_tail(2, inode.generation, &mut blocks[1]));
+        assert!(matches!(
+            casefold_insert_leaf(&sb, 2, &inode, &csum, b"new", |n| Ok(
+                blocks[n as usize].clone()
+            )),
+            Err(Error::CorruptDirEntry(_))
+        ));
+    }
+
+    #[test]
+    fn casefold_insert_admission_refuses_collision_markers_and_deeper_indexes() {
+        let (sb, inode, csum, blocks) = insertion_fixture();
+        for (offset, value) in [(40, 1), (30, 1)] {
+            let mut changed = blocks.clone();
+            changed[0][offset] |= value;
+            assert!(csum.patch_dx_tail(2, inode.generation, &mut changed[0], 32));
+            assert!(matches!(
+                casefold_insert_leaf(&sb, 2, &inode, &csum, b"new", |n| Ok(
+                    changed[n as usize].clone()
+                )),
+                Err(Error::Unsupported(_))
+            ));
+        }
     }
 
     fn resolved(names: &[&[u8]], query: &[u8], folded: bool) -> Result<DirEntry> {
