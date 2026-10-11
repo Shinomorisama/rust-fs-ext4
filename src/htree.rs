@@ -253,6 +253,29 @@ pub fn lookup_leaf_with<R>(
     root_block: &[u8],
     hash_seed: &[u32; 4],
     unsigned_hash: bool,
+    read_dx_block: R,
+) -> Result<Option<u32>>
+where
+    R: FnMut(u32) -> Result<Vec<u8>>,
+{
+    let prepared = crate::casefold::LookupName::new(name, None)?;
+    lookup_leaf_prepared(
+        &prepared,
+        root_block,
+        hash_seed,
+        unsigned_hash,
+        read_dx_block,
+    )
+}
+
+/// Route a name prepared with the directory's validated comparison policy.
+/// Public byte-level helpers retain their ordinary, raw-name semantics.
+/// Routing alone does not validate the referenced blocks or qualify writes.
+pub(crate) fn lookup_leaf_prepared<R>(
+    name: &crate::casefold::LookupName<'_>,
+    root_block: &[u8],
+    hash_seed: &[u32; 4],
+    unsigned_hash: bool,
     mut read_dx_block: R,
 ) -> Result<Option<u32>>
 where
@@ -260,7 +283,7 @@ where
 {
     let info = parse_root_info(root_block)?;
     let version = crate::hash::effective_version(info.hash_version, unsigned_hash);
-    let hash = name_hash(name, version, hash_seed);
+    let hash = name.hash(version, hash_seed);
 
     // Root: parse + pick the entry whose range covers this hash.
     let (_cl, entries) = parse_root_entries(root_block)?;
@@ -331,6 +354,27 @@ mod tests {
         buf[44..48].copy_from_slice(&2u32.to_le_bytes());
 
         buf
+    }
+
+    #[test]
+    fn prepared_casefold_routing_uses_the_frozen_key_and_effective_version() {
+        let root = synth_root_block(); // TEA, boundary at 0x80000000.
+        let seed = [0x6745_2301, 0xefcd_ab89, 0x6745_2301, 0xefcd_ab89];
+        // Recorded debugfs vectors: Café hashes to 0x65e6583e for TEA,
+        // and to 0xc1ea8e5e for unsigned TEA after frozen normalization.
+        for strict in [false, true] {
+            let encoding = Some(crate::superblock::CasefoldEncoding::Utf8_12_1 { strict });
+            for name in ["Café", "CAFE\u{301}"] {
+                let prepared = crate::casefold::LookupName::new(name.as_bytes(), encoding).unwrap();
+                for (unsigned, expected) in [(false, 1), (true, 2)] {
+                    let leaf = lookup_leaf_prepared(&prepared, &root, &seed, unsigned, |_| {
+                        panic!("a depth-zero root needs no interior block")
+                    })
+                    .unwrap();
+                    assert_eq!(leaf, Some(expected));
+                }
+            }
+        }
     }
 
     #[test]

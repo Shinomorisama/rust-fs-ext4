@@ -483,8 +483,8 @@ fn find_entry_htree(
         Ok(buf)
     };
 
-    let leaf_logical = match htree::lookup_leaf_with(
-        name.hash_bytes(),
+    let leaf_logical = match htree::lookup_leaf_prepared(
+        name,
         &root_block,
         &sb.hash_seed,
         sb.unsigned_hash(),

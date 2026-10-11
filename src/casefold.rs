@@ -17,8 +17,7 @@
 //! **folded** name rather than the raw bytes (#438). `debugfs dx_hash -c -e
 //! utf8` shows it: the casefolded hash of `HELLO` is the ordinary hash of
 //! `hello`, of `Straße` the ordinary hash of `strasse`, for every hash
-//! version 0-5; `tests/casefold_hash_differential.rs` checks that against
-//! debugfs. Hash version 6 (SipHash) is only for directories that are both
+//! version 0-5; the recorded debugfs vectors below check that result. Hash version 6 (SipHash) is only for directories that are both
 //! encrypted and casefolded, whose entries carry their hash because it
 //! needs the encryption key (format documentation, "Hash Tree Directories"
 //! and `ext4_extended_dir_entry_2`); nothing here recomputes it.
@@ -190,6 +189,71 @@ mod tests {
                 h.major,
                 h.minor
             );
+        }
+    }
+
+    #[test]
+    fn frozen_directory_hash_matches_recorded_debugfs_vectors() {
+        for strict in [false, true] {
+            let encoding = Some(crate::superblock::CasefoldEncoding::Utf8_12_1 { strict });
+            for &(version, name, major, minor) in DEBUGFS_CASEFOLD {
+                let prepared = LookupName::new(name.as_bytes(), encoding).unwrap();
+                let hash = prepared.hash(HashVersion::from_u8(version).unwrap(), &DEBUGFS_SEED);
+                assert_eq!(
+                    (hash.major, hash.minor),
+                    (major, minor),
+                    "v{version} {name:?}"
+                );
+                assert_eq!(hash.major & 1, 0);
+                assert_ne!(hash.major, 0xffff_fffe);
+            }
+        }
+    }
+
+    #[test]
+    fn frozen_directory_hash_preserves_the_version_and_refusal_policy() {
+        for strict in [false, true] {
+            let encoding = Some(crate::superblock::CasefoldEncoding::Utf8_12_1 { strict });
+            for version in 0..=5 {
+                let version = HashVersion::from_u8(version).unwrap();
+                for (stored, alias) in [
+                    ("Café", "CAFE\u{301}"),
+                    ("Straße", "STRASSE"),
+                    ("A\u{ad}B", "ab"),
+                ] {
+                    let stored = LookupName::new(stored.as_bytes(), encoding).unwrap();
+                    let alias = LookupName::new(alias.as_bytes(), encoding).unwrap();
+                    assert_eq!(
+                        stored.hash(version, &DEBUGFS_SEED),
+                        alias.hash(version, &DEBUGFS_SEED)
+                    );
+                }
+                // This pair acquired a fold after Unicode 12.1. Its two
+                // names must retain distinct frozen keys and raw hashes.
+                for name in ["\u{a7d0}", "\u{a7d1}"] {
+                    let prepared = LookupName::new(name.as_bytes(), encoding).unwrap();
+                    assert_eq!(
+                        prepared.hash(version, &DEBUGFS_SEED),
+                        name_hash(name.as_bytes(), version, &DEBUGFS_SEED)
+                    );
+                }
+                let raw = b"A\xff";
+                let ordinary = LookupName::new(raw, None).unwrap();
+                assert_eq!(
+                    ordinary.hash(version, &DEBUGFS_SEED),
+                    name_hash(raw, version, &DEBUGFS_SEED)
+                );
+            }
+            for raw in [
+                b"A\xff".as_slice(),
+                "\u{ad}.".as_bytes(),
+                "\u{ad}..".as_bytes(),
+            ] {
+                assert!(matches!(
+                    LookupName::new(raw, encoding),
+                    Err(crate::Error::Unsupported(_))
+                ));
+            }
         }
     }
 

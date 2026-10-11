@@ -3935,6 +3935,10 @@ impl Filesystem {
         if parent_inode.flags & (EXT4_CASEFOLD_FL | EXT4_ENCRYPT_FL) != 0 {
             return Err(Error::OutOfBounds);
         }
+        let prepared = crate::casefold::LookupName::new(
+            name,
+            parent_inode.directory_casefold_encoding(&self.sb)?,
+        )?;
         let mut read_logical = |logical: u64| -> Result<Vec<u8>> {
             let phys = self
                 .map_inode_logical(parent_inode, logical)?
@@ -3946,8 +3950,8 @@ impl Filesystem {
         // wrong leaf, which then reads as a name the index cannot find.
         let root = read_logical(0)?;
         self.check_dx_block(parent_ino, parent_inode, &root, true)?;
-        let leaf = crate::htree::lookup_leaf_with(
-            name,
+        let leaf = crate::htree::lookup_leaf_prepared(
+            &prepared,
             &root,
             &self.sb.hash_seed,
             self.sb.unsigned_hash(),
@@ -7549,7 +7553,9 @@ impl Filesystem {
             return Ok(false);
         }
         let version = crate::hash::effective_version(info.hash_version, self.sb.unsigned_hash());
-        let hash = crate::hash::name_hash(name, version, &self.sb.hash_seed).major;
+        let encoding = dir.directory_casefold_encoding(&self.sb)?;
+        let prepared = crate::casefold::LookupName::new(name, encoding)?;
+        let hash = prepared.hash(version, &self.sb.hash_seed).major;
 
         let (_, root_entries) = crate::htree::parse_root_entries(&root)?;
         let routed = crate::htree::find_entry_for_hash(&root_entries, hash).block;
@@ -7584,13 +7590,14 @@ impl Filesystem {
         } else {
             0
         };
-        let Ok(split) = crate::htree_mut::plan_leaf_split(
+        let Ok(split) = crate::htree_mut::plan_leaf_split_with_encoding(
             &leaf,
             version,
             &self.sb.hash_seed,
             has_ft,
             bs,
             reserved_tail,
+            encoding,
         ) else {
             return Ok(false);
         };

@@ -1,4 +1,4 @@
-//! Read-only name policy shared by linear and indexed directory lookup.
+//! Name preparation shared by directory lookup and hash planning.
 
 use crate::{superblock::CasefoldEncoding, Error, Result};
 
@@ -43,6 +43,16 @@ impl<'a> LookupName<'a> {
 
     pub(crate) fn hash_bytes(&self) -> &[u8] {
         self.folded.as_deref().unwrap_or(self.raw)
+    }
+
+    /// Hash exactly the representation used for comparison. The caller
+    /// supplies the effective directory version and filesystem seed.
+    pub(crate) fn hash(
+        &self,
+        version: crate::hash::HashVersion,
+        seed: &[u32; 4],
+    ) -> crate::hash::NameHash {
+        crate::hash::name_hash(self.hash_bytes(), version, seed)
     }
 
     pub(crate) fn is_folded(&self) -> bool {

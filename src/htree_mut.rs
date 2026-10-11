@@ -28,7 +28,9 @@
 //! - Leaf merge on delete.
 
 use crate::error::{Error, Result};
-use crate::hash::{name_hash, HashVersion, NameHash};
+#[cfg(test)]
+use crate::hash::name_hash;
+use crate::hash::{HashVersion, NameHash};
 use crate::htree::{DxCountLimit, DxEntry};
 
 /// Primitive change to the directory tree. The caller (E10 or a test) turns
@@ -75,6 +77,7 @@ fn read_leaf_entries(
     hash_version: HashVersion,
     hash_seed: &[u32; 4],
     reserved_tail: usize,
+    encoding: Option<crate::superblock::CasefoldEncoding>,
 ) -> Result<Vec<(NameHash, Vec<u8>)>> {
     let usable = leaf
         .len()
@@ -105,7 +108,8 @@ fn read_leaf_entries(
                 ));
             }
             let name = &leaf[off + 8..off + 8 + name_len];
-            let h = name_hash(name, hash_version, hash_seed);
+            let prepared = crate::casefold::LookupName::new(name, encoding)?;
+            let h = prepared.hash(hash_version, hash_seed);
             // Copy just the minimum needed: 8-byte header + name + pad to 4.
             let padded = 8 + ((name_len + 3) & !3);
             let mut entry_bytes = vec![0u8; padded];
@@ -165,12 +169,36 @@ pub fn plan_leaf_split(
     block_size: usize,
     reserved_tail: usize,
 ) -> Result<LeafSplit> {
+    plan_leaf_split_with_encoding(
+        leaf_bytes,
+        hash_version,
+        hash_seed,
+        has_file_type,
+        block_size,
+        reserved_tail,
+        None,
+    )
+}
+
+/// Rehash every existing name with the validated directory encoding while
+/// preserving the original records. This planner does not check uniqueness,
+/// index routing, checksums or write admission; those remain caller duties.
+pub(crate) fn plan_leaf_split_with_encoding(
+    leaf_bytes: &[u8],
+    hash_version: HashVersion,
+    hash_seed: &[u32; 4],
+    has_file_type: bool,
+    block_size: usize,
+    reserved_tail: usize,
+    encoding: Option<crate::superblock::CasefoldEncoding>,
+) -> Result<LeafSplit> {
     let mut entries = read_leaf_entries(
         leaf_bytes,
         has_file_type,
         hash_version,
         hash_seed,
         reserved_tail,
+        encoding,
     )?;
     if entries.len() < 2 {
         return Err(Error::Corrupt(
@@ -348,10 +376,24 @@ mod tests {
         assert_eq!(split.right_bytes.len(), 4096);
         // The split_out_hash sits at the boundary — every right-side entry
         // should rehash >= it, every left-side entry < it.
-        let left_entries =
-            read_leaf_entries(&split.left_bytes, true, HashVersion::HalfMd4, &[0; 4], 0).unwrap();
-        let right_entries =
-            read_leaf_entries(&split.right_bytes, true, HashVersion::HalfMd4, &[0; 4], 0).unwrap();
+        let left_entries = read_leaf_entries(
+            &split.left_bytes,
+            true,
+            HashVersion::HalfMd4,
+            &[0; 4],
+            0,
+            None,
+        )
+        .unwrap();
+        let right_entries = read_leaf_entries(
+            &split.right_bytes,
+            true,
+            HashVersion::HalfMd4,
+            &[0; 4],
+            0,
+            None,
+        )
+        .unwrap();
         for (h, _) in &left_entries {
             assert!(
                 h.major < split.split_out_hash,
@@ -401,6 +443,76 @@ mod tests {
             .unwrap();
         }
         buf
+    }
+
+    #[test]
+    fn frozen_split_routes_recorded_hashes_without_changing_stored_entries() {
+        let names = [
+            b"HELLO".as_slice(),
+            "Straße".as_bytes(),
+            "Café".as_bytes(),
+            "İstanbul".as_bytes(),
+        ];
+        let leaf = leaf_of(&names);
+        let seed = [0x6745_2301, 0xefcd_ab89, 0x6745_2301, 0xefcd_ab89];
+        // Independent debugfs major hashes for these four names, versions 0–5.
+        let hashes = [
+            [0x32252546, 0xad2ed8da, 0xb57af1a2, 0x7993d1e8],
+            [0xa26e4a80, 0xfd935386, 0xb4f033e6, 0xea3181a8],
+            [0x6f5bb1a8, 0xd6e5379a, 0x65e6583e, 0xea09454c],
+            [0x32252546, 0xad2ed8da, 0x710181a6, 0x32e89dbc],
+            [0xa26e4a80, 0xfd935386, 0xb5763ba0, 0x1c5d5e6e],
+            [0x6f5bb1a8, 0xd6e5379a, 0xc1ea8e5e, 0x6be30f56],
+        ];
+        for strict in [false, true] {
+            let encoding = Some(crate::superblock::CasefoldEncoding::Utf8_12_1 { strict });
+            for (version, expected_hashes) in hashes.iter().enumerate() {
+                let version = HashVersion::from_u8(version as u8).unwrap();
+                let split =
+                    plan_leaf_split_with_encoding(&leaf, version, &seed, true, 4096, 0, encoding)
+                        .unwrap();
+                let mut ordered = *expected_hashes;
+                ordered.sort();
+                assert_eq!(split.split_out_hash, ordered[2]);
+                let mut seen = Vec::new();
+                for (right, bytes) in [(false, &split.left_bytes), (true, &split.right_bytes)] {
+                    for entry in crate::dir::parse_block(bytes, true).unwrap() {
+                        let index = names.iter().position(|name| *name == entry.name).unwrap();
+                        assert_eq!(expected_hashes[index] >= split.split_out_hash, right);
+                        assert_eq!(entry.inode, 100 + index as u32);
+                        assert_eq!(entry.file_type, DirEntryType::RegFile);
+                        seen.push(index);
+                    }
+                }
+                seen.sort();
+                assert_eq!(seen, vec![0, 1, 2, 3]);
+            }
+        }
+    }
+
+    #[test]
+    fn frozen_split_refuses_unsupported_names_without_a_raw_fallback() {
+        for strict in [false, true] {
+            let encoding = Some(crate::superblock::CasefoldEncoding::Utf8_12_1 { strict });
+            for raw in [b"A\xff".as_slice(), "\u{ad}.".as_bytes()] {
+                let leaf = leaf_of(&[raw, b"ordinary"]);
+                assert!(matches!(
+                    plan_leaf_split_with_encoding(
+                        &leaf,
+                        HashVersion::HalfMd4,
+                        &[0; 4],
+                        true,
+                        4096,
+                        0,
+                        encoding
+                    ),
+                    Err(Error::Unsupported(_))
+                ));
+                assert!(
+                    plan_leaf_split(&leaf, HashVersion::HalfMd4, &[0; 4], true, 4096, 0).is_ok()
+                );
+            }
+        }
     }
 
     /// The cut never falls between two names with one hash: a lookup for

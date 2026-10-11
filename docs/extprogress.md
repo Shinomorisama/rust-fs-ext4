@@ -13,10 +13,11 @@ The goal is a working implementation. Documentation, unit tests, and independent
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
-- Latest implementation commit: `84706d5c9b8b03d03c9f3701ec8b378c2c4c9523`.
+- Latest implementation work: frozen-policy hashing for index routing and leaf-split planning, committed alongside this handoff update. Use `git log` to identify the current checkpoint.
+- Previous implementation commit: `84706d5c9b8b03d03c9f3701ec8b378c2c4c9523` (directory inheritance).
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Local validation: **776 unit tests pass; lint and CLI build pass**. All preceding baseline tests remain present and passing.
-- [Latest full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38042898383): **passed**, verified when preparing this note. The preceding rename checkpoint's CI also passed.
+- Local validation: **781 unit tests pass; lint and CLI build pass**. All preceding baseline tests remain present and passing.
+- [Last confirmed implementation CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38042898383): **passed** at the directory-inheritance checkpoint. The frozen-hashing checkpoint needs its own full CI result; inspect GitHub Actions for the selected commit before proceeding.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
 
@@ -31,13 +32,13 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | Still required. **Immediate next step: frozen-Unicode directory hashing**, a prerequisite shared with Stage 4. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation implemented:** new-name routing and existing-entry split planning share frozen name preparation. Actual casefold indexed writes, collision handling, and growth qualification are still required. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. Keep casefold repair and unsupported feature combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. Connect directory hashing to the same frozen, fallible Unicode name policy used by lookup. Do not use the legacy public folding helper as the filesystem write policy.
+1. Independently verify hash-directed routing on Linux-created casefold indexes, then implement supported indexed insertion behind the volume write gate. Frozen hash preparation is now connected; routing validation and safe growth/refusal behavior remain.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
@@ -106,22 +107,24 @@ Before editing, preserve the baseline unit log. Afterward confirm all baseline t
 ### Code map and completed behavior
 
 - `src/superblock.rs` and `src/inode.rs`: validated encoding metadata and `directory_casefold_encoding`. Known encoding is UTF-8/Unicode 12.1; known flags are strict or non-strict. The volume feature alone does not make an ordinary directory case-insensitive.
-- `src/casefold/unicode_12_1.rs` and `data/unicode/12.1.0/`: frozen Unicode engine and generated tables. `src/casefold/lookup.rs` contains `LookupName`, including fallible name preparation, comparison, duplicate detection, and `hash_bytes()`.
+- `src/casefold/unicode_12_1.rs` and `data/unicode/12.1.0/`: frozen Unicode engine and generated tables. `src/casefold/lookup.rs` contains `LookupName`, including fallible name preparation, comparison, duplicate detection, `hash_bytes()`, and the shared prepared-name `hash()` method.
 - `src/casefold.rs`: legacy public `fold_name` and `casefold_name_hash` remain for API compatibility. Their newer Unicode dependencies and malformed-byte fallback must not govern filesystem casefold writes. Preserve public API compatibility while introducing the correct internal path.
 - `src/path.rs`: casefold lookup validates supported directory/index structures, scans referenced leaves, and refuses duplicate equivalent entries. Literal `.` and `..` are handled separately. Unsupported depth, inline casefold directories, encryption, malformed casefold names, and normalized dot aliases remain refused. Supported indexed reads do not prove that insertion or split routing is safe.
 - `src/fs.rs`: `lookup_entry_at` returns stored name bytes, inode, and recorded type. `find_dir_entry` supplies mutation preflight. `buffer_remove_matched_dir_entry` checks the stored spelling and expected inode against the current buffered transaction. Unlink, rmdir, and rename use it. This is not a general concurrency or inode-generation guarantee.
 - Rename rereads its source parent through the transaction buffer after destination insertion/growth. Preserve that behavior: insertion can move the source entry or convert the parent layout. Existing same-inode hard-link/no-replace behavior must not be casually changed.
 - Creation's shared planner rejects equivalent existing names. `build_directory_inode` now receives the parent, validates its policy, and inherits CASEFOLD before computing the inode checksum. Ordinary children, regular files, and symlinks do not acquire CASEFOLD merely because the volume supports it. This preparation is implemented behind the write gate; end-to-end casefold mkdir is not yet enabled.
-- `src/htree.rs`, `src/htree_mut.rs`, and indexed insertion/growth in `src/fs.rs`: the remaining hashing/routing work. Existing entries must use the same policy as new entries during splits. Do not enable the existing casefold-refused or index-drop fallback paths just to make a test pass.
+- `src/htree.rs` now has internal `lookup_leaf_prepared`; `src/htree_mut.rs` has internal `plan_leaf_split_with_encoding`. Filesystem index routing and splitting call these prepared-policy paths. Public raw-name helper signatures and behavior remain compatible. The casefold write guards in `src/fs.rs` still block actual indexed insertion and splitting. Existing fallback and collision/growth handling are not yet qualified for casefold.
 - `src/features.rs` (`WRITE_BREAKING_INCOMPAT`) and mount/mutation checks in `src/fs.rs` keep casefold volumes write-protected. Preserve these protections during the next checkpoint.
 
-### Bounded next task: frozen-Unicode directory hashing
+### Completed hashing checkpoint and bounded next task
 
-Inspect the current hash call sites and connect a fallible, encoding-aware internal hash path to the established frozen name preparation. Preserve original entry bytes and ordinary-directory byte-sensitive behavior. Respect the effective hash version, signedness, filesystem seed, and existing reserved-hash rules. Equal comparison keys must hash equally, but equal hashes must never be treated as proof of equal names.
+The prepared-name hash uses the same frozen comparison representation as lookup. Ordinary byte-sensitive hashing, effective signedness, filesystem seed, original stored records, and public helper compatibility are preserved. Tests cover all 36 recorded debugfs hash vectors in both strictness modes, prepared-name routing, split boundaries and stored-entry preservation, newer Unicode characters, and unsupported-name refusals. The full unit tier increased from 776 to 781 tests with no baseline losses. These checks do not qualify a complete casefold write path.
 
-Use the existing Linux/e2fsprogs hash evidence and differential-test infrastructure to validate the new path; legacy helper tests alone do not demonstrate that the new path is exercised. Include Unicode aliases and refusal cases relevant to the frozen engine. Do not read prohibited implementation source to derive the algorithm.
+Next, verify the prepared hash-directed route on Linux-created casefold indexes, including aliases, effective hash versions, and the supported intermediate level. Extend the existing fixture/oracle infrastructure rather than relying on this driver's full-leaf scan to establish routing correctness.
 
-Stop after a useful, tested hashing checkpoint with write gates intact. Full index insertion/growth, transaction serialization, crash recovery, and Windows integration are later work. If review shows that safe integration requires a larger design decision, explain that decision before expanding the task; Astra review is appropriate there.
+Then prepare a bounded implementation of supported indexed insertion while retaining the volume-wide casefold write gate. Validate the routing blocks and target leaf before editing. Decide explicitly how a full leaf is refused until splitting/growth is qualified. Casefold must not reach the existing index-drop fallback when an insertion is unsupported or a planner raises a corruption/encoding error. Do not collapse such errors into absence or a generic growth retry.
+
+Pause after a useful tested checkpoint. Complete collision handling, growth, namespace serialization, recovery, and Windows integration later. Hash/index design decisions and eventual write activation deserve an additional review; do not lift a gate merely because the prepared hashing tests pass.
 
 ### Conditions still required before enabling writes
 
@@ -139,6 +142,6 @@ Committed documentation: `docs/CASEFOLD-BEHAVIOR.md`, `docs/CASEFOLD-STAGE0.md`,
 
 The original detailed plan is `/workspace/casefold-implementation-plan.md`, outside the repository. Its baseline findings and future-tense descriptions are historical; use this note and verified code/CI state for current progress. In particular, do not infer a safe malformed-name fallback from that old plan: later observations led to the current refusal policy. This note contains the continuation essentials even if that original file is unavailable.
 
-Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The current full CI passed, but no claim is made here that a separate coverage workflow ran at the latest commit.
+Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The earlier implementation CI passed; the frozen-hashing checkpoint requires its own full CI result. No claim is made here that a separate coverage workflow ran at the latest commit.
 
-This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. The implementation commit above identifies the code checkpoint; later documentation-only commits do not change that validation result. Update this handoff as implementation checkpoints are completed.
+This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. Verify the selected commit against its own CI; earlier successful runs are evidence for those earlier checkpoints. Update this handoff as implementation checkpoints are completed.
