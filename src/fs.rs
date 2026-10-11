@@ -3917,10 +3917,9 @@ impl Filesystem {
     /// array (#97). The entry goes where the index says a lookup will look,
     /// the leaf covering its hash, or nowhere.
     ///
-    /// `Error::OutOfBounds` when that leaf is full, or when the names here
-    /// are hashed some way this crate does not (casefolded or encrypted).
-    /// The extend path then drops the index, as the kernel does, rather than
-    /// append a block the index does not route to.
+    /// `Error::OutOfBounds` when that leaf is full or its names are encrypted.
+    /// Unqualified casefold insertion returns `Unsupported`, preventing a
+    /// growth retry from dropping an index or appending an unrouted block.
     #[allow(clippy::too_many_arguments)]
     fn buffer_add_dir_entry_indexed(
         &self,
@@ -3932,7 +3931,14 @@ impl Filesystem {
         file_type: crate::dir::DirEntryType,
         has_ft: bool,
     ) -> Result<()> {
-        if parent_inode.flags & (EXT4_CASEFOLD_FL | EXT4_ENCRYPT_FL) != 0 {
+        // OutOfBounds asks the caller to grow or drop the index. Casefold
+        // insertion has not been qualified, so it must not take that path.
+        if parent_inode.flags & EXT4_CASEFOLD_FL != 0 {
+            return Err(Error::Unsupported(
+                "casefold indexed insertion is not qualified",
+            ));
+        }
+        if parent_inode.flags & EXT4_ENCRYPT_FL != 0 {
             return Err(Error::OutOfBounds);
         }
         let prepared = crate::casefold::LookupName::new(
@@ -4040,6 +4046,14 @@ impl Filesystem {
         let (inode, mut raw) = self.buffered_inode_verified(buf, dir_ino)?;
         if inode.flags & crate::inode::InodeFlags::INDEX.bits() == 0 {
             return Ok(());
+        }
+        // Inspect the transaction's current flags before touching any
+        // index blocks. No caller may use this fallback for casefold until
+        // the transformation is independently qualified.
+        if inode.flags & EXT4_CASEFOLD_FL != 0 {
+            return Err(Error::Unsupported(
+                "casefold index dropping is not qualified",
+            ));
         }
         let bs = self.sb.block_size() as usize;
         let physical = |logical: u64| {
@@ -8631,6 +8645,67 @@ mod tests {
         assert_eq!(fs.lookup_at(2, b"ReadMe").unwrap(), source);
         assert_eq!(fs.lookup_at(2, b"README").unwrap(), source);
         assert_eq!(fs.read_inode_verified(source).unwrap().0.links_count, 2);
+    }
+
+    #[test]
+    fn casefold_indexed_add_is_not_a_growth_signal() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let (mut parent, _) = fs.read_inode_verified(2).unwrap();
+        parent.flags |= crate::inode::InodeFlags::INDEX.bits() | EXT4_CASEFOLD_FL;
+        let before = dev.bytes.lock().unwrap().clone();
+        let mut buf = BlockBuffer::new(BS);
+        let result = fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"ReadMe",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(matches!(result, Err(Error::Unsupported(_))));
+        assert!(buf.dirty.is_empty());
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
+    }
+
+    #[test]
+    fn casefold_index_drop_refuses_the_current_buffered_policy() {
+        let dev = formatted();
+        let fs = mount(&dev);
+        let (parent, mut raw) = fs.read_inode_verified(2).unwrap();
+        let physical = fs.map_inode_logical(&parent, 0).unwrap().unwrap();
+        let mut root = fs.read_block(physical).unwrap();
+        root[16..18].copy_from_slice(&((BS - 12) as u16).to_le_bytes());
+        root[24..].fill(0);
+        root[28] = 1;
+        root[29] = 8;
+        root[32..34].copy_from_slice(&(((BS - 32 - 8) / 8) as u16).to_le_bytes());
+        root[34..36].copy_from_slice(&1u16.to_le_bytes());
+        root[36..40].copy_from_slice(&1u32.to_le_bytes());
+        assert!(fs.csum.patch_dx_tail(2, parent.generation, &mut root, 32));
+        // An isolated planning fixture: only the inode and root needed
+        // to attempt index dropping are staged. No image is committed.
+        raw[0x20..0x24].copy_from_slice(
+            &(parent.flags | crate::inode::InodeFlags::INDEX.bits() | EXT4_CASEFOLD_FL)
+                .to_le_bytes(),
+        );
+        fs.finalize_inode_raw(2, parent.generation, &mut raw)
+            .unwrap();
+        let mut buf = BlockBuffer::new(BS);
+        fs.buffer_write_inode(&mut buf, 2, &raw).unwrap();
+        buf.put(physical, root);
+        let staged = buf.dirty.clone();
+        let before = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.buffer_drop_htree_index(&mut buf, 2),
+            Err(Error::Unsupported(_))
+        ));
+        assert_eq!(
+            buf.dirty, staged,
+            "refusal changed the staged index or inode"
+        );
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
     }
 
     #[test]

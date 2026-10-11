@@ -139,6 +139,9 @@ fn generate(block_size: u32, strict: bool) {
                 assert_eq!(entry.inode, ino);
                 assert_eq!(entry.name, stored.as_bytes());
                 assert_eq!(entry.file_type, fs_ext4::dir::DirEntryType::RegFile);
+                if directory == "fold_indexed" {
+                    verify_hash_route(&mounted, parent, stored.as_bytes(), alias.as_bytes(), ino);
+                }
                 let mut bytes = vec![0; expected.len() + 1];
                 let count = mounted.read_ino(found, 0, &mut bytes).unwrap();
                 assert_eq!(&bytes[..count], expected);
@@ -156,6 +159,13 @@ fn generate(block_size: u32, strict: bool) {
                 .lookup_path_bytes(b"/fold_indexed/File_0999_casefold_payload.txt")
                 .unwrap()
         );
+        let indexed = mounted.lookup_path_bytes(b"/fold_indexed").unwrap();
+        for number in [0, 499, 999] {
+            let stored = format!("File_{number:04}_casefold_payload.txt");
+            let alias = stored.to_ascii_uppercase();
+            let ino = mounted.lookup_at(indexed, stored.as_bytes()).unwrap();
+            verify_hash_route(&mounted, indexed, stored.as_bytes(), alias.as_bytes(), ino);
+        }
         assert_ne!(
             mounted.lookup_path_bytes(b"/ordinary/ReadMe").unwrap(),
             mounted.lookup_path_bytes(b"/ordinary/README").unwrap()
@@ -183,7 +193,7 @@ fn generate(block_size: u32, strict: bool) {
         format!("{before}  {label}.img\n"),
     )
     .unwrap();
-    println!("[casefold fixture] {label}: Linux namespace, encoding, layout, e2fsck and unchanged write refusal verified");
+    println!("[casefold fixture] {label}: Linux namespace, hash-selected leaves, encoding, layout, e2fsck and unchanged write refusal verified");
     verify_deep_index(&image, &label, block_size, &saved);
     measure_behavior(&image, &label, strict, &saved);
     measure_cold_create(&image, &label, strict, &saved);
@@ -344,6 +354,7 @@ fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::pat
         assert_eq!(resolved.inode, expected_ino);
         assert_eq!(resolved.name, stored);
         assert_eq!(resolved.file_type, fs_ext4::dir::DirEntryType::RegFile);
+        verify_hash_route(&mounted, parent, &stored, &alias, expected_ino);
         let mut path = b"/fold_deep/".to_vec();
         path.extend_from_slice(&alias);
         let found = mounted.lookup_path_bytes(&path).unwrap();
@@ -370,7 +381,99 @@ fn verify_deep_index(image: &str, label: &str, block_size: u32, saved: &std::pat
         format!("{before}  {label}-deep.img\n"),
     )
     .unwrap();
-    println!("[casefold deep index] {label}: Linux aliases, inode identity, content, e2fsck and unchanged write refusal verified");
+    println!("[casefold deep index] {label}: Linux aliases, hash-selected leaves, inode identity, content, e2fsck and unchanged write refusal verified");
+}
+
+// Independent keys for this fixture's explicitly chosen ASCII and Café
+// probes. Do not use the legacy folding helper to construct expectations.
+fn probe_comparison_key(name: &[u8]) -> Vec<u8> {
+    if name == "Café".as_bytes() || name == "CAFE\u{0301}".as_bytes() {
+        return "cafe\u{0301}".as_bytes().to_vec();
+    }
+    assert!(
+        name.is_ascii(),
+        "extend the reference for new Unicode probes"
+    );
+    name.to_ascii_lowercase()
+}
+
+// Inspect only the hash-selected leaf. The full-directory lookup fallback
+// cannot satisfy this assertion, even if it finds a misrouted entry elsewhere.
+fn verify_hash_route(
+    mounted: &Filesystem,
+    parent: u32,
+    stored: &[u8],
+    alias: &[u8],
+    expected_ino: u32,
+) {
+    let (inode, _) = mounted.read_inode_verified(parent).unwrap();
+    assert!(inode
+        .flag_set()
+        .contains(InodeFlags::INDEX | InodeFlags::CASEFOLD));
+    let key = probe_comparison_key(stored);
+    assert_eq!(key, probe_comparison_key(alias));
+    let bs = mounted.sb.block_size();
+    let read = |logical: u32| {
+        assert!(u64::from(logical) < inode.size.div_ceil(u64::from(bs)));
+        let physical = fs_ext4::indirect::map_logical_any(
+            &inode.block,
+            inode.flags,
+            mounted.dev.as_ref(),
+            bs,
+            u64::from(logical),
+        )
+        .unwrap()
+        .expect("hash route must not reference a sparse block");
+        mounted.read_block(physical).unwrap()
+    };
+    let root = read(0);
+    let info = fs_ext4::htree::parse_root_info(&root).unwrap();
+    assert!(info.indirect_levels <= 1);
+    assert_eq!(
+        mounted
+            .csum
+            .verify_dx_tail(parent, inode.generation, &root, 32),
+        Some(true)
+    );
+    // The public raw-key router delegates to the prepared-name router.
+    // Frozen key production is separately checked against Unicode and
+    // recorded debugfs vectors; this checks the actual Linux disk routing.
+    let leaf = fs_ext4::htree::lookup_leaf_with(
+        &key,
+        &root,
+        &mounted.sb.hash_seed,
+        mounted.sb.unsigned_hash(),
+        |logical| {
+            assert_ne!(logical, 0);
+            let node = read(logical);
+            assert_eq!(
+                mounted
+                    .csum
+                    .verify_dx_tail(parent, inode.generation, &node, 8),
+                Some(true)
+            );
+            Ok(node)
+        },
+    )
+    .unwrap()
+    .expect("the index must route the probe");
+    assert_ne!(leaf, 0);
+    let block = read(leaf);
+    assert!(fs_ext4::dir::has_csum_tail(&block));
+    let entries =
+        fs_ext4::dir::parse_block_verified(&block, true, parent, inode.generation, &mounted.csum)
+            .unwrap();
+    let found: Vec<_> = entries
+        .iter()
+        .filter(|entry| entry.name == stored)
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "stored name must appear exactly once in the selected leaf"
+    );
+    assert_eq!(found[0].inode, expected_ino);
+    assert_eq!(found[0].file_type, fs_ext4::dir::DirEntryType::RegFile);
 }
 
 fn verify_dot_navigation(mounted: &Filesystem, parent: u32, directory: &str) {
