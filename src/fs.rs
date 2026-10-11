@@ -3935,7 +3935,36 @@ impl Filesystem {
         if (parent_inode.flags | current.flags) & EXT4_CASEFOLD_FL != 0 {
             // Use the current transaction, including removals staged by rename.
             // Admission reads must not mark index/leaf blocks dirty on refusal.
+            let staged = StagedTreeNodes {
+                fs: self,
+                nodes: &buf.dirty,
+            };
+            let ctx = crate::extent::ExtentVerifyCtx {
+                ino: parent_ino,
+                generation: current.generation,
+                csum: &self.csum,
+            };
+            let map = |dev: &dyn BlockDevice, logical: u64| {
+                if current.has_extents() {
+                    crate::extent::map_logical_verified(
+                        &current.block,
+                        dev,
+                        self.sb.block_size(),
+                        logical,
+                        Some(&ctx),
+                    )
+                } else {
+                    crate::indirect::map_logical_any(
+                        &current.block,
+                        current.flags,
+                        dev,
+                        self.sb.block_size(),
+                        logical,
+                    )
+                }
+            };
             let mut physical_seen = std::collections::HashSet::new();
+            let mut physical_by_logical = HashMap::new();
             let (logical, mut leaf) = crate::path::casefold_insert_leaf(
                 &self.sb,
                 parent_ino,
@@ -3943,14 +3972,23 @@ impl Filesystem {
                 &self.csum,
                 name,
                 |logical| {
-                    let physical = self
-                        .map_inode_logical(&current, u64::from(logical))?
-                        .ok_or(Error::CorruptDirEntry("casefold index block is sparse"))?;
+                    // External map nodes can be staged too. Until changed
+                    // mappings are qualified, require both views to agree and
+                    // verify extent checksums in each view before routing.
+                    let physical = map(self.dev.as_ref(), u64::from(logical))?;
+                    if map(&staged, u64::from(logical))? != physical {
+                        return Err(Error::Unsupported(
+                            "casefold insertion after staged block-map change",
+                        ));
+                    }
+                    let physical =
+                        physical.ok_or(Error::CorruptDirEntry("casefold index block is sparse"))?;
                     if !physical_seen.insert(physical) {
                         return Err(Error::CorruptDirEntry(
                             "casefold index blocks alias physical storage",
                         ));
                     }
+                    physical_by_logical.insert(logical, physical);
                     self.buffered_block(buf, physical)
                 },
             )?;
@@ -3966,9 +4004,13 @@ impl Filesystem {
             }
             self.csum
                 .patch_dir_entry_tail(parent_ino, current.generation, &mut leaf);
-            let physical = self
-                .map_inode_logical(&current, u64::from(logical))?
-                .ok_or(Error::CorruptDirEntry("casefold insertion leaf is sparse"))?;
+            // Reuse the mapping admitted with these leaf bytes, rather than
+            // looking it up again through an unchecked device-only reader.
+            let physical = *physical_by_logical
+                .get(&logical)
+                .ok_or(Error::CorruptDirEntry(
+                    "casefold insertion leaf was not admitted",
+                ))?;
             buf.put(physical, leaf);
             return Ok(());
         }
@@ -8797,6 +8839,156 @@ mod tests {
             Err(Error::AlreadyExists)
         ));
         assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    // Move the synthetic planner fixture's inline extent into a checksummed
+    // external node. This sets up block-map reads, not a committed filesystem.
+    fn staged_casefold_external_map(
+        dev: &MemDev,
+        fs: &Filesystem,
+    ) -> (BlockBuffer, Inode, u64, u64) {
+        let (mut buf, parent, leaf) = staged_casefold_index(fs);
+        let node_block = leaf + 32;
+        let mut node = vec![0; BS as usize];
+        node[..24].copy_from_slice(&parent.block[..24]);
+        node[2..4].copy_from_slice(&2u16.to_le_bytes());
+        node[4..6].copy_from_slice(&(((BS - 16) / 12) as u16).to_le_bytes());
+        node[16..18].copy_from_slice(&1u16.to_le_bytes());
+        node[24..28].copy_from_slice(&1u32.to_le_bytes());
+        node[28..30].copy_from_slice(&1u16.to_le_bytes());
+        node[30..32].copy_from_slice(&((leaf >> 32) as u16).to_le_bytes());
+        node[32..36].copy_from_slice(&(leaf as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut node);
+        let start = (node_block * u64::from(BS)) as usize;
+        dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&node);
+        let (_, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        let root = &mut raw[0x28..0x64];
+        root.fill(0);
+        root[..12].copy_from_slice(&parent.block[..12]);
+        root[2..4].copy_from_slice(&1u16.to_le_bytes());
+        root[6..8].copy_from_slice(&1u16.to_le_bytes());
+        root[16..20].copy_from_slice(&(node_block as u32).to_le_bytes());
+        root[20..22].copy_from_slice(&((node_block >> 32) as u16).to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
+    }
+
+    #[test]
+    fn casefold_indexed_add_refuses_a_staged_external_remap() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf, node) = staged_casefold_external_map(&dev, &fs);
+        let mut changed = fs.read_block(node).unwrap();
+        changed[32..36].copy_from_slice(&((leaf + 1) as u32).to_le_bytes());
+        fs.csum
+            .patch_extent_tail(2, parent.generation, &mut changed);
+        buf.put(node, changed);
+        let before = buf.dirty.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"new",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true
+            ),
+            Err(Error::Unsupported(
+                "casefold insertion after staged block-map change"
+            ))
+        ));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_indexed_add_checks_external_extent_checksums() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _, node) = staged_casefold_external_map(&dev, &fs);
+        // Corrupt padding, leaving every route and directory checksum intact.
+        dev.bytes.lock().unwrap()[(node * u64::from(BS)) as usize + 100] ^= 1;
+        let before = buf.dirty.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"new",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true
+            ),
+            Err(Error::BadChecksum {
+                what: "extent block"
+            })
+        ));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_indexed_add_checks_staged_extent_checksums_even_without_a_remap() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _, node) = staged_casefold_external_map(&dev, &fs);
+        let mut changed = fs.read_block(node).unwrap();
+        changed[100] ^= 1;
+        buf.put(node, changed);
+        let before = buf.dirty.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"new",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true
+            ),
+            Err(Error::BadChecksum {
+                what: "extent block"
+            })
+        ));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_indexed_add_accepts_an_unchanged_staged_external_map() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf, node) = staged_casefold_external_map(&dev, &fs);
+        let node_bytes = fs.read_block(node).unwrap();
+        buf.put(node, node_bytes.clone());
+        let before = buf.dirty.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        )
+        .unwrap();
+        let entries = crate::dir::parse_block_verified(
+            &buf.dirty[&leaf],
+            true,
+            2,
+            parent.generation,
+            &fs.csum,
+        )
+        .unwrap();
+        assert_eq!(entries[0].name, b"New_Name");
+        for (block, bytes) in before {
+            if block != leaf {
+                assert_eq!(buf.dirty[&block], bytes);
+            }
+        }
         assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
     }
 
