@@ -21,6 +21,40 @@ The goal is a working implementation. Documentation, unit tests, and independent
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
 
+## Index admission review checkpoint — 2026-10-12
+
+The bounded Sol 6.1 review is complete at source commit
+`1596988860edf2de9f0da02d8e0472d4adfddc89`. Findings and evidence are recorded in
+[CASEFOLD-INDEX-REVIEW.md](CASEFOLD-INDEX-REVIEW.md).
+
+The exact insertion test's retained focused artifact was downloaded from run
+38134122031 and inspected: **1 passed, 0 failed, 0 ignored**, with four saved
+1 KiB/4 KiB strict/non-strict images, and the Linux/e2fsck assertions completed.
+The reviewed code/tests/focused workflow match that mapping-fix evidence commit.
+The log measures 133 lines / 7,953 bytes. This is healthy-image evidence for the
+private root-only primitive, not public writes, concurrency or crash recovery.
+
+Admission validates routes/checksums and stages only a copied selected leaf
+on success, but lacks an explicit physical filesystem-bound check. Its physical
+uniqueness set also does not establish metadata/map-node roles, and checksummed
+lookup does not establish complete map-shape validity. These are source review
+findings; no new malformed-image regression has been executed or fixed here.
+Public casefold writes remain blocked, so this does not claim an exposed write
+regression or invalidate the healthy-image test result.
+
+**Next bounded task using Sol 6.1:** reproduce out-of-filesystem staged-map
+acceptance with a failing regression, then add the minimal private admission
+bounds/refusal fix. Check root/leaf and external-node boundaries, a backing
+device larger than the filesystem, and unchanged buffer/device state on refusal.
+Preserve baseline tests and the focused independent Linux insertion evidence.
+Resolve the remaining role and map-shape qualification before deeper index
+insertion. Keep every volume write gate intact.
+
+This checkpoint changes review documentation only. No production code,
+dependency declaration, lockfile, sibling source, or write gate was changed.
+Pause after recording this review; do not start the implementation fix in the
+same open-ended session.
+
 ## Model preference and confirmed CI — 2026-10-12
 
 The user has chosen **Sol 6.1 for all implementation, testing, and review**.
@@ -36,12 +70,9 @@ The unit-budget repair commit `34e6a85a4911b294cb12321b26dcec725ec5c740` now has
 This confirms the fresh CI gate after the measured budget adjustment; no code
 or write-protection change accompanied that adjustment.
 
-**Next bounded task: use Sol 6.1 to review root-only index-write admission**,
-including current buffered inode/extent state, mapping/metadata role validation,
-existing-entry route checks, collision refusals, and unchanged-buffer behavior.
-Inspect the retained focused Linux insertion log/images if needed. Resolve any
-finding before extending admission to one intermediate level, and keep all
-casefold write gates blocked. Pause after that review checkpoint.
+The planned root-only admission review is now complete; see the review
+checkpoint above. Its findings must be reproduced and resolved before extending
+admission to one intermediate level or relaxing any casefold write gate.
 
 ## Unit output-budget repair — 2026-10-12
 
