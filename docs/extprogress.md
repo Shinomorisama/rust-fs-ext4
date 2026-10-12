@@ -17,9 +17,46 @@ The goal is a working implementation. Documentation, unit tests, and independent
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
 - Local validation: **796 unit tests pass; lint and CLI build pass**. All preceding baseline tests remain present and passing.
-- Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The new mapping-hardening checkpoint needs its own fresh focused and full CI results; these are pending at this pause point.
+- Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and this handoff commit (38134210737) failed; the latest unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
+
+## Discovery and access follow-up — 2026-10-12
+
+The repository-root `AGENTS.md` now points to this committed handoff and lists
+initial access checks. Keep `casefold-rw` selected when resuming; `main` has not
+been changed. Do not create a competing root-level progress file. Future chats
+should fetch the latest remote branch, read its committed instructions, and
+preserve newer or uncommitted work before making changes.
+
+GitHub source/API access and reported push permissions are verified. A real
+Actions artifact download also succeeded with the existing authentication.
+Retained evidence comes from **CI run 38134210737**, commit
+`25211664aaa3d77a3a07ecc32b1caa6f1b618a44`, artifact **tier-logs-unit**:
+
+- **796 passed, 0 failed, 0 ignored** in the unit log.
+- The log measures **1,052 lines and 64,504 bytes**.
+- The task allows **1,050 lines and 65,000 bytes**. The line budget explains
+  exit 65; the byte budget was not exceeded.
+- The focused mapping-fix run **38134122031** reports success for both the
+  driver-planned insertion step and the Linux fixture step. Its retained
+  insertion log/images should still be inspected when reviewing index admission.
+
+The environment draft preserves the `package_managers` network preset and adds
+`api.github.com`, `*.blob.core.windows.net`, `unicode.org`, `www.unicode.org`, and
+`docs.kernel.org`. The existing exact artifact hostname remains preserved.
+The wildcard accounts for Actions storage hosts changing between runs. Review
+and save the draft, then publish if required; saving alone does not apply these
+additional routes. The observed repository/API/artifact operations already work.
+No new secret or repository admin permission is needed for the current task.
+
+**Next bounded task: use Sol to repair the measured unit output budget**, retain
+all test/output evidence, validate the gate, and push a tested checkpoint. Then
+seek Astra review for the index-admission design before deeper index support.
+Casefold writes remain blocked. This follow-up changes documentation only and
+uses GitHub test evidence; it does not claim a new local casefold suite ran.
+The local sibling core is still onboarding's v0.3.6, whereas the recorded
+casefold baseline used v0.3.0; neither sibling source has been changed.
 
 ## Planned stages and our position
 
@@ -130,13 +167,13 @@ The safety review found that the previous insertion primitive consulted buffered
 
 The fix uses the existing checksummed extent mapper with inode/generation context in both views, compares each referenced logical block's mapping, and refuses disagreement. Legacy maps are also read through both views; their pointer blocks have no extent-tail checksum. It reuses the admitted selected-leaf physical address. The shared public mapper, ordinary-directory insertion, sibling crates, and all volume write gates remain unchanged. General serialization, metadata/data ownership and role validation, full mapping-shape qualification, and crash recovery remain subjects for the next index safety review and later stages.
 
-The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean` test **passed at the previous checkpoint `a7db076`**. It creates four Linux-populated profiles (1 KiB/4 KiB, strict/non-strict), invokes the actual private buffered insertion primitive, completes hard-link accounting, and writes the staged bytes directly to a scratch image. It then requires non-repairing e2fsck cleanliness and cold Linux lookup of the new Unicode spelling and canonical/case alias, inode/payload agreement, Linux rejection of an equivalent duplicate, and readability of all 1,000 original indexed files. This tests the emitted bytes, **not** the public namespace API, journal commit, or crash recovery. It runs in full CI's whole-suite tier and now also runs explicitly as the first test step in `.github/workflows/casefold-stage0.yml`. That focused step uses the exact test name, requires one executed test, and keeps its log plus four scratch images in the existing `casefold-fixtures` artifact. Relevant casefold/index source changes on this branch trigger the focused workflow automatically. The existing fixture/routing tests remain after it. That previous run passed both the one-test insertion floor and the later fixture/routing step. Fresh results for the mapping hardening are pending at this pause point. No host mount or host e2fsprogs invocation was used.
+The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean` test **passed at the previous checkpoint `a7db076`**. It creates four Linux-populated profiles (1 KiB/4 KiB, strict/non-strict), invokes the actual private buffered insertion primitive, completes hard-link accounting, and writes the staged bytes directly to a scratch image. It then requires non-repairing e2fsck cleanliness and cold Linux lookup of the new Unicode spelling and canonical/case alias, inode/payload agreement, Linux rejection of an equivalent duplicate, and readability of all 1,000 original indexed files. This tests the emitted bytes, **not** the public namespace API, journal commit, or crash recovery. It runs in full CI's whole-suite tier and now also runs explicitly as the first test step in `.github/workflows/casefold-stage0.yml`. That focused step uses the exact test name, requires one executed test, and keeps its log plus four scratch images in the existing `casefold-fixtures` artifact. Relevant casefold/index source changes on this branch trigger the focused workflow automatically. The existing fixture/routing tests remain after it. That previous run passed both the one-test insertion floor and the later fixture/routing step. The mapping-hardening focused workflow subsequently passed; the unit output-budget failure and measured artifact are recorded in the 2026-10-12 follow-up. No host mount or host e2fsprogs invocation was used.
 
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
 **Next bounded task (Astra review recommended):** inspect the latest focused Stage 0 workflow and full CI, explicitly checking that `casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean` executed and passed. Inspect its retained insertion log/images if needed; compilation and the older fixture step alone do not qualify insertion. Resolve any failure before extending support. Review the remaining root-only admission design with Astra, including buffered inode/extent state after this fix, mapping/metadata role validation, route validation, collision refusals, and the unchanged-buffer guarantee. Then extend in-place admission/insertion to one intermediate level while retaining whole-directory uniqueness, complete existing-entry routing checks, current buffered state, and unchanged-buffer refusal. Include independent Linux cold lookup and e2fsck for those writes. Keep collision chains, full-leaf splitting/growth, and index dropping refused until separately implemented and qualified. Seek additional Astra review for the index-write admission/design before progressing to broader index mutations or enabling writes.
 
-This continuation stops after a tested mapping-safety fix. Root-only insertion has independent Linux evidence at the previous commit, while this new hardening awaits fresh focused/full CI. No deeper-index admission has been enabled. Astra review is still recommended before the deeper-index implementation; do not interpret this targeted fix as completion of that broader review. The focused workflow retains its exact filter, one-test floor, saved images/logs, pinned siblings, and harness-only oracle/mount rules.
+This continuation stops after a tested mapping-safety fix. Root-only insertion has independent Linux evidence at the previous commit, while the hardening now has a successful focused workflow and a measured unit output-budget failure in full CI. No deeper-index admission has been enabled. Astra review is still recommended before the deeper-index implementation; do not interpret this targeted fix as completion of that broader review. The focused workflow retains its exact filter, one-test floor, saved images/logs, pinned siblings, and harness-only oracle/mount rules.
 
 Pause after that tested checkpoint. Complete namespace operations, serialization, crash recovery, write-gate activation, and Windows integration remain later work.
 
@@ -156,6 +193,6 @@ Committed documentation: `docs/CASEFOLD-BEHAVIOR.md`, `docs/CASEFOLD-STAGE0.md`,
 
 The original detailed plan is `/workspace/casefold-implementation-plan.md`, outside the repository. Its baseline findings and future-tense descriptions are historical; use this note and verified code/CI state for current progress. In particular, do not infer a safe malformed-name fallback from that old plan: later observations led to the current refusal policy. This note contains the continuation essentials even if that original file is unavailable.
 
-Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The current mapping fix needs its own exact-commit focused/full CI results. No claim is made here that a separate coverage workflow ran at the latest commit.
+Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The mapping fix now has a successful focused workflow; full CI is blocked by the measured unit output budget, as recorded in the follow-up above. No claim is made here that a separate coverage workflow ran at the latest commit.
 
 This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. Verify the selected commit against its own CI; earlier successful runs are evidence for those earlier checkpoints. Update this handoff as implementation checkpoints are completed.

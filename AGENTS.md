@@ -10,6 +10,81 @@ than duplicating them:
 - **docs/TEST-DISKS.md** → the `test-disks/*.img` fixtures and their `.meta.txt`.
 - **`chores.yml`** → every task named below, and what each one actually runs.
 
+## Casefold handoff and initial access checks
+
+For the ongoing casefold work, use **`casefold-rw`** in
+**`Shinomorisama/rust-fs-ext4`**. Before continuing, fetch its latest remote tip
+and read the committed [docs/extprogress.md](docs/extprogress.md) on that branch.
+If this file is being read on another branch, the
+[GitHub handoff](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/docs/extprogress.md)
+identifies the work to resume. It records completed stages, validation commands,
+restrictions, and the next bounded task. Preserve newer commits and uncommitted
+work; never reset to a historical checkpoint. Do not create a second progress
+file at the repository root. Keep tested checkpoint updates in the existing
+handoff and push authorized work to `origin/casefold-rw` so later chats can read
+it. Do not merge into or push to `main`.
+
+At the beginning of a session, check the access needed for the next task:
+
+For this cloud chat's casefold development and CI investigation, keep the
+environment's **`package_managers` network preset** enabled. That preset covers
+GitHub source/release hosts and the Rust/Cargo and Python package hosts listed
+below. Add these custom destinations when restricted egress is used:
+
+| Destination | Needed for |
+|---|---|
+| `api.github.com` | Repository access, exact-commit CI/job status, artifact requests, and authorized workflow operations |
+| `*.blob.core.windows.net` | GitHub Actions log/artifact storage; its numbered download host can change between runs |
+| `unicode.org`, `www.unicode.org` | Official Unicode data/specifications for casefold work |
+| `docs.kernel.org` | Published filesystem format documentation permitted by the clean-room rules |
+
+Allowlisting a hostname permits a network route; it does not grant GitHub
+permissions. Reuse the existing authenticated Git/`gh` bindings. The required
+repository permissions are **contents read** for source, **Actions read** for
+logs/artifacts, and **contents write** for authorized checkpoint pushes to
+`Shinomorisama/rust-fs-ext4`'s `casefold-rw` branch. Actions write is needed only
+if an authorized task must dispatch or rerun a workflow. No repository admin
+permission, main-branch push, or new secret is required for this checkpoint.
+Read access to `Shinomorisama/ext4-win-driver` and the pinned sibling sources
+supports inspection; this handoff does not authorize modifying those siblings.
+
+- **Source and GitHub API:** verify read-only Git access through the existing
+  HTTPS proxy, then API access using `gh api repos/Shinomorisama/rust-fs-ext4`
+  and `gh run list --repo Shinomorisama/rust-fs-ext4 --branch casefold-rw --limit 5`.
+  Check the reported pull/push permissions before an authorized checkpoint push;
+  a successful Git read alone does not establish API or push access.
+- **CI logs and artifacts:** inspect runs for the actual commit, and verify
+  that the required logs/artifacts can be downloaded, not just that a run page
+  opens. Restricted network policies need `github.com`, `api.github.com`, and
+  the download destination returned by GitHub. One observed Actions artifact
+  host is `productionresultssa15.blob.core.windows.net`; redirected hosts can
+  change. Report only the missing hostname, never a signed URL or token.
+- **Tool installation:** when setup is required, Rust uses `sh.rustup.rs` and
+  `static.rust-lang.org`; Cargo uses `crates.io`, `index.crates.io`, and
+  `static.crates.io`. The pinned chore release uses GitHub release downloads,
+  which may redirect to `release-assets.githubusercontent.com`. Source archives
+  may use `codeload.github.com` and reference files `raw.githubusercontent.com`.
+  Verify the actual destination needed and preserve TLS/checksum verification.
+- **Reference material:** casefold research may need official Unicode data at
+  `unicode.org` and the published format documentation at `docs.kernel.org`.
+  Follow the clean-room rules below; these are documentation/data sources, not
+  permission to read kernel or e2fsprogs implementation source.
+- **Machine and dependencies:** verify the pinned Rust/components, `chore`,
+  `gh`, sibling versions, and writable Cargo/build/harness directories before
+  running the handoff's commands. Saved tool paths are workspace-specific.
+  This cloud host lacks KVM; Linux/e2fsprogs/kernel validation uses the existing
+  GitHub CI harness. Windows integration needs its separately configured runner
+  and is a later stage. Preserve the handoff's restrictions on sibling changes.
+
+Inspect existing credential bindings by name/presence only. Reuse injected Git
+and API authentication before requesting credentials; a proxy-backed placeholder
+is not proof of an invalid token. Diagnose network denial separately from GitHub
+authorization. Add only missing network destinations through environment
+settings, then retry the affected read-only operation after the change applies.
+Do independent work while access is being repaired, and record unresolved checks
+as blocked rather than passed. These checks do not require admin permission or
+a test push.
+
 The section between the BEGIN/END markers below is **shared, byte-identical,
 with every repository in this family**. Do not edit it here: change the
 canonical copy and propagate it, or `scripts/agents-core-check.sh` will fail.
