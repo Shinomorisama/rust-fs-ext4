@@ -88,10 +88,22 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
-#     unit        765 /  46,832    1,050 /  65,000   ~37% / ~39%: tests get
+#     unit      1,052 /  64,504    1,400 /  85,000   ~33% / ~32%: tests get
 #                                                    added, and this is the
 #                                                    tier every one of them
-#                                                    starts in. 530 / 31,331
+#                                                    starts in. RE-MEASURED
+#                                                    on casefold-rw at 47e0d9a,
+#                                                    CI run 38315213313's
+#                                                    tier-logs-unit artifact:
+#                                                    796 passed, none failed
+#                                                    or ignored. Its 1,052
+#                                                    lines breached 1,050;
+#                                                    64,504 bytes also left
+#                                                    only 496 below 65,000.
+#                                                    Restores roughly 30%
+#                                                    headroom without changing
+#                                                    tests or their output.
+#                                                    Historical: 530 / 31,331
 #                                                    for #257; 642 / 38,550 on
 #                                                    main at 05d683c (#422);
 #                                                    RE-MEASURED on the stack
@@ -447,7 +459,7 @@ tasks:
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1050 65000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1400 85000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

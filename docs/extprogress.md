@@ -21,6 +21,46 @@ The goal is a working implementation. Documentation, unit tests, and independent
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
 
+## Unit output-budget repair — 2026-10-12
+
+`chores.yml` now budgets the unit tier at **1,400 lines and 85,000 bytes**.
+The latest available unit artifact was retrieved directly from **CI run
+38315213313**, commit `47e0d9a922fe75c7c190e447b6bcd38643e21d69`, artifact
+`tier-logs-unit`. It again measures **1,052 lines / 64,504 bytes**, with
+**796 passed, 0 failed, 0 ignored**. Its passed-test name multiset, retaining
+repeated names, matches the artifact from run 38134210737.
+
+The old line cap was exceeded by two; its byte cap had only 496 bytes of
+headroom. The new limits restore approximately **33% line / 32% byte headroom**,
+consistent with the measured headroom used by the surrounding tiers. Tests,
+selection, assertions, the executed-test floor of 440, and log output are unchanged.
+
+Validation exercised the repository's actual tier wrapper using the pinned core
+v0.3.0 helper source from its recorded commit, without changing the sibling
+checkout:
+
+- Replaying the captured CI log under the old 1,050/65,000 limits reproduced
+  exit **65**.
+- Replaying the complete latest CI log under the limits parsed from the revised
+  unit task passed. A byte comparison confirms the retained output is unchanged.
+- The existing floor reader counted **796** tests against floor **440**, with
+  ignored tests refused.
+- Existing output-budget and tier-floor shell guards passed through the tier
+  runner. They retain coverage that breached caps and empty test selections fail.
+- Provenance, the protected shared agent block, and whitespace checks passed.
+
+These are checks of the budget configuration using retained GitHub test results;
+no fresh local Rust suite was run, and the core/harness sibling checkouts were
+not changed. The pushed repair requires its own CI outcome. Check the remote
+branch tip and that exact commit's CI rather than treating the replay as a fresh
+full-suite pass. If CI is still running at the pause point, report it as pending.
+
+**Next bounded task:** check the repair commit's CI and investigate any failure.
+Once CI is green, seek Astra review of root-only index-write admission before
+extending insertion to one intermediate level. Keep all casefold write gates
+and unsupported-shape refusals intact. Do not broaden implementation at this
+budget-repair checkpoint.
+
 ## Discovery and access follow-up — 2026-10-12
 
 The repository-root `AGENTS.md` now points to this committed handoff and lists
@@ -36,7 +76,7 @@ Retained evidence comes from **CI run 38134210737**, commit
 
 - **796 passed, 0 failed, 0 ignored** in the unit log.
 - The log measures **1,052 lines and 64,504 bytes**.
-- The task allows **1,050 lines and 65,000 bytes**. The line budget explains
+- At that run the task allowed **1,050 lines and 65,000 bytes**. The line budget explains
   exit 65; the byte budget was not exceeded.
 - The focused mapping-fix run **38134122031** reports success for both the
   driver-planned insertion step and the Linux fixture step. Its retained
@@ -50,9 +90,8 @@ and save the draft, then publish if required; saving alone does not apply these
 additional routes. The observed repository/API/artifact operations already work.
 No new secret or repository admin permission is needed for the current task.
 
-**Next bounded task: use Sol to repair the measured unit output budget**, retain
-all test/output evidence, validate the gate, and push a tested checkpoint. Then
-seek Astra review for the index-admission design before deeper index support.
+The measured unit budget is now repaired as recorded above. Check its fresh CI
+outcome before seeking Astra review for index-admission design and deeper support.
 Casefold writes remain blocked. This follow-up changes documentation only and
 uses GitHub test evidence; it does not claim a new local casefold suite ran.
 The local sibling core is still onboarding's v0.3.6, whereas the recorded
