@@ -21,6 +21,28 @@ The goal is a working implementation. Documentation, unit tests, and independent
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
 
+## Model preference and confirmed CI — 2026-10-12
+
+The user has chosen **Sol 6.1 for all implementation, testing, and review**.
+This replaces the earlier recommendations to switch models. Keep the required
+focused reviews of hashing/index design, serialization, crash consistency, and
+write activation; perform them using Sol 6.1. Do not propose a model switch
+unless the user changes this preference. The root `AGENTS.md` records the same
+instruction for future chats.
+
+The unit-budget repair commit `34e6a85a4911b294cb12321b26dcec725ec5c740` now has
+**successful full CI**, verified directly through GitHub:
+[run 38317933016](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38317933016).
+This confirms the fresh CI gate after the measured budget adjustment; no code
+or write-protection change accompanied that adjustment.
+
+**Next bounded task: use Sol 6.1 to review root-only index-write admission**,
+including current buffered inode/extent state, mapping/metadata role validation,
+existing-entry route checks, collision refusals, and unchanged-buffer behavior.
+Inspect the retained focused Linux insertion log/images if needed. Resolve any
+finding before extending admission to one intermediate level, and keep all
+casefold write gates blocked. Pause after that review checkpoint.
+
 ## Unit output-budget repair — 2026-10-12
 
 `chores.yml` now budgets the unit tier at **1,400 lines and 85,000 bytes**.
@@ -56,7 +78,7 @@ branch tip and that exact commit's CI rather than treating the replay as a fresh
 full-suite pass. If CI is still running at the pause point, report it as pending.
 
 **Next bounded task:** check the repair commit's CI and investigate any failure.
-Once CI is green, seek Astra review of root-only index-write admission before
+Once CI is green, use Sol 6.1 to review root-only index-write admission before
 extending insertion to one intermediate level. Keep all casefold write gates
 and unsupported-shape refusals intact. Do not broaden implementation at this
 budget-repair checkpoint.
@@ -91,7 +113,7 @@ additional routes. The observed repository/API/artifact operations already work.
 No new secret or repository admin permission is needed for the current task.
 
 The measured unit budget is now repaired as recorded above. Check its fresh CI
-outcome before seeking Astra review for index-admission design and deeper support.
+outcome before reviewing index-admission design and deeper support using Sol 6.1.
 Casefold writes remain blocked. This follow-up changes documentation only and
 uses GitHub test evidence; it does not claim a new local casefold suite ran.
 The local sibling core is still onboarding's v0.3.6, whereas the recorded
@@ -129,7 +151,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 - Follow the repository's clean-room rules: published specifications, official Unicode data, and black-box Linux/e2fsprogs observations are allowed; kernel/e2fsprogs implementation source is not.
 - This workspace has no local KVM. Use the existing CI harness for Linux/e2fsprogs checks; do not run the oracle tools or mount test images on the host.
 - Check the actual branch, commit, working tree, and CI at the beginning of each session. Give brief plain-language notes in chat, complete one useful checkpoint, and pause before usage becomes excessive.
-- Sol 6.1 can handle routine implementation and testing. Seek an additional Astra review for hashing/index design, concurrency and crash consistency, and the decision to enable writes.
+- Use Sol 6.1 for all implementation, testing, and review. Perform focused reviews for hashing/index design, concurrency and crash consistency, and the decision to enable writes; do not recommend a model switch unless the user changes this preference.
 
 ## Instructions for a new chat
 
@@ -210,9 +232,9 @@ The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_
 
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
-**Next bounded task (Astra review recommended):** inspect the latest focused Stage 0 workflow and full CI, explicitly checking that `casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean` executed and passed. Inspect its retained insertion log/images if needed; compilation and the older fixture step alone do not qualify insertion. Resolve any failure before extending support. Review the remaining root-only admission design with Astra, including buffered inode/extent state after this fix, mapping/metadata role validation, route validation, collision refusals, and the unchanged-buffer guarantee. Then extend in-place admission/insertion to one intermediate level while retaining whole-directory uniqueness, complete existing-entry routing checks, current buffered state, and unchanged-buffer refusal. Include independent Linux cold lookup and e2fsck for those writes. Keep collision chains, full-leaf splitting/growth, and index dropping refused until separately implemented and qualified. Seek additional Astra review for the index-write admission/design before progressing to broader index mutations or enabling writes.
+**Next bounded task (Sol 6.1 review):** inspect the latest focused Stage 0 workflow and full CI, explicitly checking that `casefold_inplace_index_insert_is_readable_by_linux_and_e2fsck_clean` executed and passed. Inspect its retained insertion log/images if needed; compilation and the older fixture step alone do not qualify insertion. Resolve any failure before extending support. Review the remaining root-only admission design using Sol 6.1, including buffered inode/extent state after this fix, mapping/metadata role validation, route validation, collision refusals, and the unchanged-buffer guarantee. Then extend in-place admission/insertion to one intermediate level while retaining whole-directory uniqueness, complete existing-entry routing checks, current buffered state, and unchanged-buffer refusal. Include independent Linux cold lookup and e2fsck for those writes. Keep collision chains, full-leaf splitting/growth, and index dropping refused until separately implemented and qualified. Perform a focused Sol 6.1 review of the index-write admission/design before progressing to broader index mutations or enabling writes.
 
-This continuation stops after a tested mapping-safety fix. Root-only insertion has independent Linux evidence at the previous commit, while the hardening now has a successful focused workflow and a measured unit output-budget failure in full CI. No deeper-index admission has been enabled. Astra review is still recommended before the deeper-index implementation; do not interpret this targeted fix as completion of that broader review. The focused workflow retains its exact filter, one-test floor, saved images/logs, pinned siblings, and harness-only oracle/mount rules.
+This continuation stops after a tested mapping-safety fix. Root-only insertion has independent Linux evidence at the previous commit, while the hardening now has a successful focused workflow and a measured unit output-budget failure in full CI. No deeper-index admission has been enabled. A focused Sol 6.1 review is still required before the deeper-index implementation; do not interpret this targeted fix as completion of that broader review. The focused workflow retains its exact filter, one-test floor, saved images/logs, pinned siblings, and harness-only oracle/mount rules.
 
 Pause after that tested checkpoint. Complete namespace operations, serialization, crash recovery, write-gate activation, and Windows integration remain later work.
 

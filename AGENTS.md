@@ -24,6 +24,11 @@ file at the repository root. Keep tested checkpoint updates in the existing
 handoff and push authorized work to `origin/casefold-rw` so later chats can read
 it. Do not merge into or push to `main`.
 
+The user's model preference is **Sol 6.1 for all implementation, testing, and
+review**. Do not recommend a model switch unless the user changes that preference.
+Keep the handoff's focused design reviews and independent validation requirements;
+the model choice does not relax the write gates or evidence needed to enable them.
+
 At the beginning of a session, check the access needed for the next task:
 
 For this cloud chat's casefold development and CI investigation, keep the
