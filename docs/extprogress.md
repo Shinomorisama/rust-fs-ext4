@@ -13,13 +13,82 @@ The goal is a working implementation. Documentation, unit tests, and independent
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
-- Latest implementation work: root-only insertion now verifies external extent checksums in both disk and buffered views, refuses differing mappings, and reuses the physical leaf mapping it admitted, committed alongside this handoff update. Use `git log` to identify the current checkpoint.
+- Latest implementation work: private casefold index admission now bounds physical data and external map reads to the mounted filesystem, preserving the preceding checksummed disk/staged mapping checks and admitted-leaf reuse. See the physical boundary fix below and use `git log` to identify the current checkpoint.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Local validation: **796 unit tests pass; lint and CLI build pass**. All preceding baseline tests remain present and passing.
-- Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and this handoff commit (38134210737) failed; the latest unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
+- Local validation: **801 unit tests pass; lint and CLI build pass**. All 796 preceding baseline test occurrences remain present and passing.
+- Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
+
+## Physical admission boundary fix — 2026-10-12
+
+The review's physical-boundary finding is now reproduced and fixed in the
+private `buffer_add_dir_entry_indexed` casefold path. `CasefoldMapDevice` bounds
+external map reads in both disk and staged views to the mounted filesystem,
+including when the backing device is larger. Every mapped directory data block
+is checked before a staged byte vector can bypass device I/O. The existing
+checksum, mapping-agreement and selected-leaf reuse checks remain unchanged.
+
+Five new tests cover staged root/leaf addresses at and beyond `blocks_count`,
+far-out addresses, valid outside bytes on a larger backing device, external
+map nodes in both views, a staged-only out-of-range child returning the same
+data mappings as disk, and acceptance at the last in-bounds directory block.
+The four negative tests were reproduced red before the fix; all five now pass.
+Each refusal verifies unchanged dirty blocks, pending allocation flags and
+underlying device bytes. These are planner fixtures, not e2fsck-clean volumes.
+
+Local validation completed in this sequence:
+
+- Baseline unit tier: **796 passed, 0 failed, 0 ignored**.
+- Before fix: **4 new refusal tests failed**, while the positive boundary test
+  passed; the runner returned 101.
+- After fix: **all 5 focused tests passed**.
+- Full unit tier: **801 passed, 0 failed, 0 ignored**, with all 796 baseline
+  passing test occurrences retained (multiset comparison).
+- `chore lint` and `chore cli:install` passed, including frozen Unicode checks,
+  formatting, Clippy and the release CLI build.
+
+The preserved logs are under ignored `tmp/casefold-bounds-evidence` and
+`tmp/logs/casefold-bounds-{red,green}.log` in this instance. They are not assumed
+to sync between chats. Committed tests and fresh GitHub CI reproduce the result.
+
+### Testing this cloud instance without moving the sibling core
+
+The actual core checkout remains clean at onboarding v0.3.6. Tests used an
+immutable-source archive of the prescribed v0.3.0 commit through a temporary
+PRoot filesystem view. Cargo's locked metadata confirmed core 0.3.0, and the
+actual sibling source/HEAD and repository locks were left unchanged. PRoot and
+libtalloc were downloaded through signed Debian package indexes and extracted
+outside the repositories. The view's default LLVM linker crashed; the supported
+`-C linker-features=-lld` option selected the installed GNU linker. No compiler
+assertions, integrity checks or test requirements were disabled. PyYAML 6.0.3
+was installed in the workspace venv for core's existing CI-gate check.
+
+When this runtime setup is retained, the tested commands are:
+
+```sh
+cd /workspace/rust-fs-ext4
+/workspace/.cloud-setup/run-casefold.sh chore test:unit
+/workspace/.cloud-setup/run-casefold.sh chore lint
+/workspace/.cloud-setup/run-casefold.sh chore cli:install
+```
+
+The helper activates `/workspace/.cloud-setup/env.sh`, sets `FS_CORE_ROOT` to
+`/workspace/.cloud-setup/pinned-core-0.3.0`, uses `target/casefold-baseline`, and
+executes PRoot binding that archive at `/workspace/rust-fs-core` only for the
+child command. Those local helper files are not guaranteed in a fresh task.
+A correctly pinned ordinary workspace can use the standard handoff commands
+without this source view. Verify the actual dependency version before testing;
+do not silently update a lock or move a protected sibling as a workaround.
+
+**Next bounded task using Sol 6.1:** check fresh focused Linux insertion and
+full CI for this boundary-fix commit. Resolve any failures before extending
+support. Then reproduce the metadata/map-node role-validation gap from review
+finding 2 and implement a scoped admission contract; mapping-shape finding 3
+also remains open. Keep casefold write gates, collision/growth refusals and
+public API compatibility intact. Do not add intermediate-level insertion yet.
+Pause after this tested boundary checkpoint.
 
 ## Index admission review checkpoint — 2026-10-12
 
@@ -42,13 +111,9 @@ findings; no new malformed-image regression has been executed or fixed here.
 Public casefold writes remain blocked, so this does not claim an exposed write
 regression or invalidate the healthy-image test result.
 
-**Next bounded task using Sol 6.1:** reproduce out-of-filesystem staged-map
-acceptance with a failing regression, then add the minimal private admission
-bounds/refusal fix. Check root/leaf and external-node boundaries, a backing
-device larger than the filesystem, and unchanged buffer/device state on refusal.
-Preserve baseline tests and the focused independent Linux insertion evidence.
-Resolve the remaining role and map-shape qualification before deeper index
-insertion. Keep every volume write gate intact.
+The boundary regression/fix is now complete in the follow-up above. Check its
+fresh CI, then resolve the remaining role and map-shape qualification before
+deeper index insertion. Keep every volume write gate intact.
 
 This checkpoint changes review documentation only. No production code,
 dependency declaration, lockfile, sibling source, or write gate was changed.

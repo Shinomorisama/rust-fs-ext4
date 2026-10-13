@@ -375,6 +375,31 @@ impl crate::block_io::BlockDevice for StagedTreeNodes<'_> {
     }
 }
 
+/// The private casefold admission mapper must stay inside the filesystem,
+/// even when a larger backing device or a staged node could supply bytes.
+/// This bounds reads; allocation and metadata-role qualification are separate.
+struct CasefoldMapDevice<'a> {
+    inner: &'a dyn BlockDevice,
+    byte_limit: u64,
+    block_size: u64,
+}
+
+impl BlockDevice for CasefoldMapDevice<'_> {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
+        let end = offset
+            .checked_add(buf.len() as u64)
+            .ok_or(Error::InvalidBlock(offset / self.block_size))?;
+        if end > self.byte_limit {
+            return Err(Error::InvalidBlock(offset / self.block_size));
+        }
+        self.inner.read_at(offset, buf)
+    }
+
+    fn size_bytes(&self) -> u64 {
+        self.byte_limit
+    }
+}
+
 /// `EXT4_CASEFOLD_FL`: names in this directory hash casefolded.
 const EXT4_CASEFOLD_FL: u32 = 0x4000_0000;
 /// `EXT4_ENCRYPT_FL`: names in this directory are stored encrypted.
@@ -3935,9 +3960,21 @@ impl Filesystem {
         if (parent_inode.flags | current.flags) & EXT4_CASEFOLD_FL != 0 {
             // Use the current transaction, including removals staged by rename.
             // Admission reads must not mark index/leaf blocks dirty on refusal.
+            let block_size = u64::from(self.sb.block_size());
+            let byte_limit = self.byte_ceiling()?;
+            let disk = CasefoldMapDevice {
+                inner: self.dev.as_ref(),
+                byte_limit,
+                block_size,
+            };
             let staged = StagedTreeNodes {
                 fs: self,
                 nodes: &buf.dirty,
+            };
+            let staged_view = CasefoldMapDevice {
+                inner: &staged,
+                byte_limit,
+                block_size,
             };
             let ctx = crate::extent::ExtentVerifyCtx {
                 ino: parent_ino,
@@ -3975,14 +4012,19 @@ impl Filesystem {
                     // External map nodes can be staged too. Until changed
                     // mappings are qualified, require both views to agree and
                     // verify extent checksums in each view before routing.
-                    let physical = map(self.dev.as_ref(), u64::from(logical))?;
-                    if map(&staged, u64::from(logical))? != physical {
+                    let physical = map(&disk, u64::from(logical))?;
+                    if map(&staged_view, u64::from(logical))? != physical {
                         return Err(Error::Unsupported(
                             "casefold insertion after staged block-map change",
                         ));
                     }
                     let physical =
                         physical.ok_or(Error::CorruptDirEntry("casefold index block is sparse"))?;
+                    // A staged leaf avoids device I/O, so it needs an explicit
+                    // full-block check before its bytes can be admitted too.
+                    if physical >= byte_limit / block_size {
+                        return Err(Error::InvalidBlock(physical));
+                    }
                     if !physical_seen.insert(physical) {
                         return Err(Error::CorruptDirEntry(
                             "casefold index blocks alias physical storage",
@@ -8873,6 +8915,172 @@ mod tests {
         fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
             .unwrap();
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
+    }
+
+    fn padded_casefold_planning_fixture() -> (std::sync::Arc<MemDev>, Filesystem) {
+        let original = formatted();
+        let dev = MemDev::new(VOL + 16 * u64::from(BS));
+        dev.bytes.lock().unwrap()[..VOL as usize].copy_from_slice(&original.bytes.lock().unwrap());
+        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        assert!(fs.dev.size_bytes() > fs.sb.filesystem_bytes().unwrap());
+        (dev, fs)
+    }
+
+    fn relocate_staged_casefold_index(
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        old_leaf: u64,
+        root: u64,
+    ) -> Inode {
+        let root_bytes = buf.dirty.remove(&(old_leaf - 1)).unwrap();
+        let leaf_bytes = buf.dirty.remove(&old_leaf).unwrap();
+        buf.put(root, root_bytes);
+        buf.put(root + 1, leaf_bytes);
+        let (parent, mut raw) = fs.buffered_inode_verified(buf, 2).unwrap();
+        raw[0x3a..0x3c].copy_from_slice(&((root >> 32) as u16).to_le_bytes());
+        raw[0x3c..0x40].copy_from_slice(&(root as u32).to_le_bytes());
+        fs.buffer_write_dir_inode(buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        Inode::parse(&raw).unwrap()
+    }
+
+    fn assert_casefold_bounds_refusal(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        parent: &Inode,
+    ) {
+        let before = buf.dirty.clone();
+        let allocation_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let result = fs.buffer_add_dir_entry_indexed(
+            buf,
+            2,
+            parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(matches!(result, Err(Error::InvalidBlock(_))), "{result:?}");
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, allocation_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_bounds_refuses_outside_staged_root_and_leaf() {
+        // Valid staged bytes cannot make a physical address part of the FS.
+        for root_case in [0, 1, 2] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, _, leaf) = staged_casefold_index(&fs);
+            let root = match root_case {
+                0 => fs.sb.blocks_count - 1, // root inside, leaf at the end
+                1 => fs.sb.blocks_count + 1, // both outside
+                _ => (1u64 << 48) - 2,       // far outside, still encodable
+            };
+            let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+            assert_casefold_bounds_refusal(&dev, &fs, &mut buf, &parent);
+        }
+    }
+
+    #[test]
+    fn casefold_bounds_refuses_outside_directory_on_a_larger_device() {
+        let (dev, fs) = padded_casefold_planning_fixture();
+        let (mut buf, _, leaf) = staged_casefold_index(&fs);
+        let root = fs.sb.blocks_count;
+        let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+        // Put valid directory bytes on the larger device, not in the overlay.
+        for physical in [root, root + 1] {
+            let bytes = buf.dirty.remove(&physical).unwrap();
+            let start = (physical * u64::from(BS)) as usize;
+            dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&bytes);
+        }
+        assert_casefold_bounds_refusal(&dev, &fs, &mut buf, &parent);
+    }
+
+    #[test]
+    fn casefold_bounds_refuses_outside_external_map_on_a_larger_device() {
+        for staged in [false, true] {
+            let (dev, fs) = padded_casefold_planning_fixture();
+            let (mut buf, _, _, node) = staged_casefold_external_map(&dev, &fs);
+            let node_bytes = fs.read_block(node).unwrap();
+            let outside = fs.sb.blocks_count + 1;
+            let start = (outside * u64::from(BS)) as usize;
+            dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&node_bytes);
+            if staged {
+                buf.put(outside, node_bytes);
+            }
+            let (parent, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+            raw[0x38..0x3c].copy_from_slice(&(outside as u32).to_le_bytes());
+            raw[0x3c..0x3e].copy_from_slice(&((outside >> 32) as u16).to_le_bytes());
+            fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+                .unwrap();
+            let parent = Inode::parse(&raw).unwrap();
+            assert_casefold_bounds_refusal(&dev, &fs, &mut buf, &parent);
+        }
+    }
+
+    #[test]
+    fn casefold_bounds_refuses_outside_node_only_in_the_staged_view() {
+        let (dev, fs) = padded_casefold_planning_fixture();
+        let (mut buf, _, _, node) = staged_casefold_external_map(&dev, &fs);
+        let leaf_node = fs.read_block(node).unwrap();
+        let child = node + 1;
+        let outside = fs.sb.blocks_count + 1;
+        for physical in [child, outside] {
+            let start = (physical * u64::from(BS)) as usize;
+            dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&leaf_node);
+        }
+        let (parent, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        // Two map levels: disk uses an in-bounds child, the staged index uses
+        // an out-of-bounds child with identical checksummed mapping contents.
+        raw[0x2e..0x30].copy_from_slice(&2u16.to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        let mut index = vec![0; BS as usize];
+        index[..12].copy_from_slice(&leaf_node[..12]);
+        index[2..4].copy_from_slice(&1u16.to_le_bytes());
+        index[6..8].copy_from_slice(&1u16.to_le_bytes());
+        index[16..20].copy_from_slice(&(child as u32).to_le_bytes());
+        index[20..22].copy_from_slice(&((child >> 32) as u16).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        let start = (node * u64::from(BS)) as usize;
+        dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&index);
+        index[16..20].copy_from_slice(&(outside as u32).to_le_bytes());
+        index[20..22].copy_from_slice(&((outside >> 32) as u16).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        buf.put(node, index);
+        let parent = Inode::parse(&raw).unwrap();
+        assert_casefold_bounds_refusal(&dev, &fs, &mut buf, &parent);
+    }
+
+    #[test]
+    fn casefold_bounds_accepts_the_last_in_bounds_directory_block() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, _, leaf) = staged_casefold_index(&fs);
+        let root = fs.sb.blocks_count - 2;
+        let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+        let before = buf.dirty.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        )
+        .unwrap();
+        for (physical, bytes) in &before {
+            if *physical != root + 1 {
+                assert_eq!(&buf.dirty[physical], bytes);
+            }
+        }
+        assert_ne!(buf.dirty[&(root + 1)], before[&(root + 1)]);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
     }
 
     #[test]

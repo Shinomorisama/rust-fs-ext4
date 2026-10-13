@@ -5,16 +5,41 @@ Reviewed on 2026-10-12 using Sol 6.1, at commit
 
 ## Decision
 
-Keep public casefold writes blocked. Resolve physical-range admission first,
-then qualify block roles and mapping structure before extending the indexed
+Keep public casefold writes blocked. Physical-range admission is now addressed
+by the follow-up below; qualify block roles and mapping structure before extending the indexed
 insertion primitive to one intermediate level. The current healthy-image Linux
 evidence supports the existing root-only emitted bytes; it does not establish
 safe admission of arbitrary corrupted or staged block maps.
 
-This is a source review and inspection of retained CI evidence. No production
-code was changed and no new malformed-image regression was executed. The
-findings below distinguish observed missing checks from counterexamples that
-still need a failing test before a fix.
+The original review inspected source and retained CI evidence without changing
+production code or executing new malformed-image regressions. The follow-up
+below records the subsequent red-to-green boundary fix. Other inferred
+counterexamples still need a failing test before their fixes.
+
+## Boundary-fix follow-up — 2026-10-12
+
+Finding 1 is now reproduced and fixed for this private admission path.
+Four new negative tests were red with acceptance (`Ok(())`) before the fix:
+invalid staged directory addresses, valid directory bytes beyond the filesystem
+on a larger device, an out-of-range external map node, and an out-of-range node
+reachable only through a changed staged index while both views return identical
+data mappings. A fifth positive test keeps the last in-bounds directory block
+admissible. All five now pass.
+
+`CasefoldMapDevice` limits external map-node reads to `Filesystem::byte_ceiling`
+in both disk and staged views. Admission also checks every mapped directory
+block against the effective full-block limit before consulting staged data.
+The existing checked map, checksum and disk/staged agreement checks remain, and
+the admitted selected-leaf address is still reused. Refusal tests compare the
+entire dirty map, pending allocation flags and device bytes.
+
+The unit tier increased from **796 to 801**, with no lost passing test
+occurrences (compared as a multiset). Lint and release CLI installation passed.
+These runs used Rust/core pins from the handoff through the temporary source
+view described in `extprogress.md`; no sibling source or lock was changed.
+The new source still requires exact-commit focused Linux and full CI outcomes.
+Findings 2 and 3 remain open; this is not allocation/role validation, full map
+qualification, deeper index support or permission to enable casefold writes.
 
 ## Evidence examined
 
@@ -64,7 +89,8 @@ while valid checksummed root/leaf bytes are staged at those addresses. Test
 that insertion refuses without changing `dirty`, `uninit_cleared`, or device
 bytes. Cover `blocks_count` itself, beyond it, and a backing device larger than
 the filesystem. Also cover out-of-range external map-node reads in both views.
-This concrete counterexample is inferred from the source and remains unexecuted.
+This counterexample was initially inferred from the source; the follow-up
+records its reproduction and fix.
 
 **Correction to qualify:** constrain mapping reads and admitted data addresses
 to the filesystem's declared geometry before using staged bytes. Keep the
@@ -125,7 +151,8 @@ link accounting, timestamps and stale-entry replacement remain the caller's
 responsibility. Qualify complete namespace operations, operation-wide
 serialization and crash recovery before relaxing any volume write gate.
 
-The next bounded checkpoint should reproduce finding 1, apply a minimal private
-admission fix, retain all baseline tests, and verify focused Linux evidence.
-Keep findings 2 and 3 open until their stated tests and contracts are satisfied.
+Finding 1 is addressed by the boundary-fix follow-up above; check its fresh
+focused Linux and full CI outcomes. The next implementation checkpoint should
+reproduce and close the scoped metadata-role gap in finding 2. Keep finding 3
+open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.
