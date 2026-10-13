@@ -29,6 +29,31 @@ review**. Do not recommend a model switch unless the user changes that preferenc
 Keep the handoff's focused design reviews and independent validation requirements;
 the model choice does not relax the write gates or evidence needed to enable them.
 
+### Required project and progress reports
+
+When a new chat is given the repository, read the applicable `AGENTS.md` first.
+Follow its branch pointer, fetch the latest `origin/casefold-rw`, then read that
+branch's `AGENTS.md` and `docs/extprogress.md`, in that order. Preserve local work;
+do not reset to an old checkpoint. Verify the branch, commit and available CI
+evidence before choosing the next bounded task.
+
+Before implementation, post a self-contained report for a noncoder: explain the
+shared Windows/Linux/SteamOS microSD goal, what casefold means, and the current
+read/write restrictions. Include all eight stages (0–7) with each stage's purpose
+and current progress, identify the stage being worked on and the next bounded
+checkpoint, and explain the staged test/review/independent-validation approach.
+Use the handoff's reporting instructions for progress estimates and evidence.
+
+At the start and conclusion of every staged run, repost the complete stage list
+with current progress; do not replace it with only the active stage. The closing
+report must also explain what that checkpoint attempted, what changed, which
+checks passed/failed or remain pending/blocked/unrun, what remains in the active
+stage, and the next bounded task. A checkpoint is a limited piece of a stage,
+not completion of the whole stage. Keep these reports concise and understandable.
+Update the existing handoff at checkpoint completion so future chats resume from
+the latest evidence; do not create another progress file or infer readiness from
+an earlier commit's results.
+
 At the beginning of a session, check the access needed for the next task:
 
 For this cloud chat's casefold development and CI investigation, keep the

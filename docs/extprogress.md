@@ -10,6 +10,49 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 **Casefold writes are still deliberately blocked. This is not yet a Windows-ready release for the card.** No actual SteamOS hardware or Windows/card round trip has been qualified.
 
+## Required chat opening and staged progress reports
+
+When the user links the repository in a new chat, read the initial `AGENTS.md`,
+follow its pointer to the latest `casefold-rw`, read that branch's `AGENTS.md`,
+then read this handoff. Verify the current commit, local work and available CI
+evidence. Resume the latest bounded task rather than restarting completed work.
+
+Before implementation, explain the project to a noncoder: the aim is one ext4
+microSD card usable across Windows, Linux and eventually SteamOS; casefold makes
+different capitalizations refer to the same name while preserving saved spelling.
+State the present qualification limits and whether normal casefold writes remain
+blocked. Describe the approach: one bounded checkpoint at a time, reproduce a
+defect before fixing it, preserve passing baseline tests, perform focused reviews,
+validate independently with Linux/e2fsprogs in CI, and record the checkpoint
+before pausing. Scratch-image results do not qualify a real card or Windows use.
+
+At both the start and conclusion of **each staged run**, post a self-contained
+report containing:
+
+1. The complete Stage 0–7 table from **Planned stages and our position**, with
+   plain-language purposes and current progress for every stage. Repost the full
+   list even when only one stage changed; retain the original numbering.
+2. The active stage (or overlapping stages), its completed and remaining work,
+   and the bounded checkpoint being attempted or just completed.
+3. Progress on the active stage. Give a percentage only when it has an explicit
+   scope and evidence-based completion criteria; label estimates and explain
+   their basis. Otherwise say **not yet quantified**, give the concrete completed
+   and remaining pieces, and do not invent a percentage from test counts or the
+   number of stages. Checkpoint completion does not establish stage completion.
+4. At checkpoint conclusion, the work attempted, resulting changes, validation
+   outcomes and relevant commit/CI links. Distinguish fresh results from earlier
+   evidence and passed, failed, pending, blocked and unrun checks. Documentation
+   changes alone do not advance implementation or qualify writes.
+5. The next bounded task and any remaining prerequisites, with the write gates
+   and Windows/SteamOS qualification limits stated accurately.
+
+Keep the explanation concise, understandable and complete in chat, rather than
+requiring the user to open a log or remember an earlier report. At checkpoint
+completion update this existing handoff's current checkpoint, affected stage
+statuses, evidence and next task. Preserve historical evidence and restrictions;
+do not create a competing progress file. These reporting instructions add no
+permission to relax write gates, modify siblings or push to `main`.
+
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
