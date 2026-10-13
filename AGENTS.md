@@ -10,6 +10,11 @@ than duplicating them:
 - **docs/TEST-DISKS.md** → the `test-disks/*.img` fixtures and their `.meta.txt`.
 - **`chores.yml`** → every task named below, and what each one actually runs.
 
+Ongoing casefold work lives on `casefold-rw` in `Shinomorisama/rust-fs-ext4`.
+Fetch that branch and read its committed
+[docs/extprogress.md](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/docs/extprogress.md)
+before continuing.
+
 The section between the BEGIN/END markers below is **shared, byte-identical,
 with every repository in this family**. Do not edit it here: change the
 canonical copy and propagate it, or `scripts/agents-core-check.sh` will fail.
