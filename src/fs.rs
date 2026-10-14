@@ -4069,18 +4069,20 @@ impl Filesystem {
             // A later logical lookup may first read a map node whose block
             // was already admitted as directory data. Check the complete
             // read set before editing or staging even the selected leaf.
-            if map_blocks
+            let map_blocks = map_blocks
                 .lock()
-                .map_err(|_| Error::Corrupt("casefold block-map role lock poisoned"))?
-                .iter()
-                .any(|block| physical_seen.contains(block))
-            {
+                .map_err(|_| Error::Corrupt("casefold block-map role lock poisoned"))?;
+            if map_blocks.iter().any(|block| physical_seen.contains(block)) {
                 return Err(Error::CorruptDirEntry(
                     "casefold directory data aliases block-map storage",
                 ));
             }
             self.casefold_check_staged_superblock(buf)?;
             self.casefold_check_staged_descriptors(buf)?;
+            self.casefold_check_allocation(
+                buf,
+                physical_seen.iter().chain(map_blocks.iter()).copied(),
+            )?;
             if target_ino == 0 || target_ino > self.sb.inodes_count {
                 return Err(Error::InvalidArgument("invalid directory entry inode"));
             }
@@ -7682,6 +7684,118 @@ impl Filesystem {
         Ok(())
     }
 
+    /// Require current allocation bits for admitted directory and visited map
+    /// blocks. This is not proof of exclusive inode ownership. See the public
+    /// bitmap/group-descriptor/checksum specifications and CASEFOLD-INDEX-REVIEW.
+    fn casefold_check_allocation(
+        &self,
+        buf: &BlockBuffer,
+        blocks: impl IntoIterator<Item = u64>,
+    ) -> Result<()> {
+        if self.sb.feature_ro_compat & crate::features::RoCompat::BIGALLOC.bits() != 0 {
+            return Err(Error::Unsupported(
+                "casefold insertion with clustered allocation",
+            ));
+        }
+        if !self.csum.enabled {
+            return Err(Error::Unsupported(
+                "casefold allocation without metadata checksums",
+            ));
+        }
+        let bs = u64::from(self.sb.block_size());
+        let limit = self.byte_ceiling()? / bs;
+        let first = u64::from(self.sb.first_data_block);
+        let bpg = u64::from(self.sb.blocks_per_group);
+        let coverage = (self.sb.blocks_per_group as usize).div_ceil(8);
+        let mut bitmaps = HashMap::new();
+        for block in blocks {
+            if block < first || block >= limit {
+                return Err(Error::InvalidBlock(block));
+            }
+            let relative = block - first;
+            let group = usize::try_from(relative / bpg).map_err(|_| Error::InvalidBlock(block))?;
+            let bit = relative % bpg;
+            let mounted = self.groups.get(group).ok_or(Error::InvalidBlock(block))?;
+            if let std::collections::hash_map::Entry::Vacant(entry) = bitmaps.entry(group) {
+                let (descriptor_block, offset) = self.sb.descriptor_location(group as u64);
+                if descriptor_block >= limit {
+                    return Err(Error::InvalidBlock(descriptor_block));
+                }
+                let bytes = self.buffered_block(buf, descriptor_block)?;
+                if bytes.len() != bs as usize {
+                    return Err(Error::Corrupt(
+                        "casefold allocation descriptor block size mismatch",
+                    ));
+                }
+                let raw = bytes
+                    .get(offset..offset + usize::from(self.sb.desc_size))
+                    .ok_or(Error::Corrupt(
+                        "casefold allocation descriptor outside block",
+                    ))?;
+                let current = BlockGroupDescriptor::parse(raw, self.sb.desc_size)?;
+                if crate::checksum::group_desc_csum(&self.sb, &self.csum, group as u32, raw)
+                    != Some(current.checksum)
+                {
+                    return Err(Error::BadChecksum {
+                        what: "block group descriptor",
+                    });
+                }
+                if current.block_bitmap != mounted.block_bitmap
+                    || current.inode_bitmap != mounted.inode_bitmap
+                    || current.inode_table != mounted.inode_table
+                {
+                    return Err(Error::Unsupported(
+                        "casefold insertion after staged metadata relocation",
+                    ));
+                }
+                if buf
+                    .uninit_cleared
+                    .get(&group)
+                    .is_some_and(|flags| *flags != current.flags)
+                {
+                    return Err(Error::Corrupt(
+                        "casefold allocation flags disagree with descriptor",
+                    ));
+                }
+                if current.flags & !bgd::BgdFlags::all().bits() != 0 {
+                    return Err(Error::Unsupported(
+                        "casefold insertion with unknown allocation flags",
+                    ));
+                }
+                if current.flags().contains(bgd::BgdFlags::BLOCK_UNINIT) {
+                    return Err(Error::Unsupported(
+                        "casefold insertion with uninitialized block bitmap",
+                    ));
+                }
+                if current.block_bitmap >= limit {
+                    return Err(Error::InvalidBlock(current.block_bitmap));
+                }
+                let bitmap = self.buffered_block(buf, current.block_bitmap)?;
+                if bitmap.len() != bs as usize || coverage > bitmap.len() {
+                    return Err(Error::Corrupt("casefold allocation bitmap size mismatch"));
+                }
+                let crc = crate::checksum::linux_crc32c(self.csum.seed, &bitmap[..coverage]);
+                let mask = if self.sb.desc_size >= 64 {
+                    u32::MAX
+                } else {
+                    0xffff
+                };
+                if crc & mask != current.block_bitmap_csum {
+                    return Err(Error::BadChecksum {
+                        what: "block bitmap",
+                    });
+                }
+                entry.insert(bitmap);
+            }
+            if !crate::alloc::bit_is_set(&bitmaps[&group], bit as u32) {
+                return Err(Error::CorruptDirEntry(
+                    "casefold storage block is not allocated",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Fixed metadata locations from the validated mounted geometry. This is
     /// a refusal check, not proof of allocation or exclusive ownership. Staged
     /// layout changes are refused separately; journal/other ownership and full
@@ -8952,8 +9066,8 @@ mod tests {
         assert_eq!(*dev.bytes.lock().unwrap(), before);
     }
 
-    // A planner fixture only: its extra leaf is staged, not allocated or
-    // committed. The independent needs_host test uses Linux-created images.
+    // A planner fixture only: these bytes do not prove inode ownership or a
+    // committed image. The independent needs_host test uses Linux-created images.
     fn staged_casefold_index(fs: &Filesystem) -> (BlockBuffer, Inode, u64) {
         let (parent, mut raw) = fs.read_inode_verified(2).unwrap();
         let physical = fs.map_inode_logical(&parent, 0).unwrap().unwrap();
@@ -9082,6 +9196,471 @@ mod tests {
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
     }
 
+    // Allocation-review reproductions for the ordinary-block planner profile.
+    // These establish the bitmap state, not exclusive inode ownership.
+    fn casefold_review_block_allocated(fs: &Filesystem, buf: &BlockBuffer, block: u64) -> bool {
+        assert_eq!(
+            fs.sb.feature_ro_compat & crate::features::RoCompat::BIGALLOC.bits(),
+            0
+        );
+        assert!(fs.csum.enabled);
+        assert!(block >= u64::from(fs.sb.first_data_block) && block < fs.sb.blocks_count);
+        let relative = block - u64::from(fs.sb.first_data_block);
+        let group = (relative / u64::from(fs.sb.blocks_per_group)) as usize;
+        let bit = (relative % u64::from(fs.sb.blocks_per_group)) as u32;
+        let (descriptor_block, offset) = fs.sb.descriptor_location(group as u64);
+        let bytes = fs.buffered_block(buf, descriptor_block).unwrap();
+        let raw = &bytes[offset..offset + usize::from(fs.sb.desc_size)];
+        let descriptor = BlockGroupDescriptor::parse(raw, fs.sb.desc_size).unwrap();
+        assert_eq!(
+            crate::checksum::group_desc_csum(&fs.sb, &fs.csum, group as u32, raw),
+            Some(descriptor.checksum)
+        );
+        assert!(!descriptor.flags().contains(bgd::BgdFlags::BLOCK_UNINIT));
+        let bitmap = fs.buffered_block(buf, descriptor.block_bitmap).unwrap();
+        assert_eq!(bitmap.len(), BS as usize);
+        let coverage = (fs.sb.blocks_per_group as usize).div_ceil(8);
+        let crc = crate::checksum::linux_crc32c(fs.csum.seed, &bitmap[..coverage]);
+        let mask = if fs.sb.desc_size >= 64 {
+            u32::MAX
+        } else {
+            0xffff
+        };
+        assert_eq!(crc & mask, descriptor.block_bitmap_csum);
+        crate::alloc::bit_is_set(&bitmap, bit)
+    }
+
+    // Stage real bitmap/checksum/counter updates for planner storage. A used
+    // bit remains distinct from exclusive ownership of these synthetic blocks.
+    fn stage_casefold_planner_blocks(
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        blocks: impl IntoIterator<Item = u64>,
+    ) {
+        for block in blocks {
+            if !casefold_review_block_allocated(fs, buf, block) {
+                let group = ((block - u64::from(fs.sb.first_data_block))
+                    / u64::from(fs.sb.blocks_per_group)) as usize;
+                fs.buffer_mark_block_run_used(buf, block, 1).unwrap();
+                fs.buffer_patch_bgd_counters(buf, group, -1, 0, 0).unwrap();
+                fs.buffer_patch_sb_counters(buf, -1, 0).unwrap();
+            }
+            assert!(casefold_review_block_allocated(fs, buf, block));
+        }
+    }
+
+    fn staged_allocated_casefold_external_map(
+        dev: &MemDev,
+        fs: &Filesystem,
+    ) -> (BlockBuffer, Inode, u64, u64) {
+        let (mut buf, parent, leaf, node) = staged_casefold_external_map(dev, fs);
+        stage_casefold_planner_blocks(fs, &mut buf, [leaf - 1, leaf, node]);
+        (buf, parent, leaf, node)
+    }
+
+    fn assert_casefold_allocation_refusal(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        parent: &Inode,
+    ) {
+        let before = buf.dirty.clone();
+        let allocation_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let result = fs.buffer_add_dir_entry_indexed(
+            buf,
+            2,
+            parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(
+            matches!(result, Err(Error::CorruptDirEntry(_))),
+            "unallocated planner storage: {result:?}"
+        );
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, allocation_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_a_free_external_map_node() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _, node) = staged_casefold_external_map(&dev, &fs);
+        assert!(!casefold_review_block_allocated(&fs, &buf, node));
+        assert!(!buf.dirty.contains_key(&fs.groups[0].block_bitmap));
+        assert!(!buf.dirty.contains_key(&node));
+        assert!(fs
+            .csum
+            .verify_extent_tail(2, parent.generation, &fs.read_block(node).unwrap()));
+        assert_casefold_allocation_refusal(&dev, &fs, &mut buf, &parent);
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_free_directory_blocks() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, _, leaf) = staged_casefold_index(&fs);
+        let root = fs.sb.blocks_count - 2;
+        let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+        for block in [root, root + 1] {
+            assert!(!fs.casefold_block_is_fixed_metadata(block));
+            assert!(!casefold_review_block_allocated(&fs, &buf, block));
+        }
+        assert_casefold_allocation_refusal(&dev, &fs, &mut buf, &parent);
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_a_staged_free_directory_root() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        let root = leaf - 1;
+        assert!(casefold_review_block_allocated(&fs, &buf, root));
+        let relative = root - u64::from(fs.sb.first_data_block);
+        let group = (relative / u64::from(fs.sb.blocks_per_group)) as usize;
+        let bit = (relative % u64::from(fs.sb.blocks_per_group)) as usize;
+        let bitmap_block = fs.groups[group].block_bitmap;
+        buf.get_mut(&fs, bitmap_block).unwrap()[bit / 8] &= !(1 << (bit % 8));
+        fs.buffer_refresh_bitmap_csum(&mut buf, group, false)
+            .unwrap();
+        assert!(!casefold_review_block_allocated(&fs, &buf, root));
+        assert!(casefold_review_block_allocated(
+            &fs,
+            &BlockBuffer::new(BS),
+            root
+        ));
+        assert_casefold_allocation_refusal(&dev, &fs, &mut buf, &parent);
+    }
+
+    fn casefold_allocation_error(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        parent: &Inode,
+        name: &[u8],
+    ) -> Error {
+        let before = buf.dirty.clone();
+        let flags_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let error = fs
+            .buffer_add_dir_entry_indexed(
+                buf,
+                2,
+                parent,
+                name,
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            )
+            .unwrap_err();
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, flags_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        error
+    }
+
+    fn assert_casefold_allocation_success(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        parent: &Inode,
+        leaf: u64,
+    ) {
+        let before = buf.dirty.clone();
+        let flags_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        fs.buffer_add_dir_entry_indexed(
+            buf,
+            2,
+            parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        )
+        .unwrap();
+        let entries = crate::dir::parse_block_verified(
+            &buf.dirty[&leaf],
+            true,
+            2,
+            parent.generation,
+            &fs.csum,
+        )
+        .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, b"New_Name");
+        assert_eq!(entries[0].inode, 100);
+        assert_ne!(buf.dirty[&leaf], before[&leaf]);
+        assert_eq!(buf.dirty.len(), before.len());
+        for (block, bytes) in before {
+            if block != leaf {
+                assert_eq!(buf.dirty[&block], bytes);
+            }
+        }
+        assert_eq!(buf.uninit_cleared, flags_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    fn stage_casefold_allocation_flags(fs: &Filesystem, buf: &mut BlockBuffer, flags: u16) {
+        let (block, offset) = fs.sb.descriptor_location(0);
+        let bytes = buf.get_mut(fs, block).unwrap();
+        bytes[offset + 0x12..offset + 0x14].copy_from_slice(&flags.to_le_bytes());
+        fs.restamp_group_desc_csum(bytes, offset, 0);
+    }
+
+    #[test]
+    fn casefold_allocation_checks_disk_and_staged_bitmap_checksums() {
+        for staged in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let bitmap = fs.groups[0].block_bitmap;
+            if staged {
+                buf.get_mut(&fs, bitmap).unwrap()[0] ^= 0x80;
+            } else {
+                dev.bytes.lock().unwrap()[(bitmap * u64::from(BS)) as usize] ^= 0x80;
+                fs.dev.invalidate_cache().unwrap();
+            }
+            assert!(matches!(
+                casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+                Error::BadChecksum {
+                    what: "block bitmap"
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_a_truncated_or_oversized_staged_bitmap() {
+        for size in [BS as usize - 1, BS as usize + 1] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            buf.get_mut(&fs, fs.groups[0].block_bitmap)
+                .unwrap()
+                .resize(size, 0);
+            assert!(matches!(
+                casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+                Error::Corrupt("casefold allocation bitmap size mismatch")
+            ));
+        }
+    }
+
+    #[test]
+    fn casefold_allocation_checks_the_current_unstaged_descriptor_checksum() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _) = staged_casefold_index(&fs);
+        let (block, offset) = fs.sb.descriptor_location(0);
+        assert!(!buf.dirty.contains_key(&block));
+        dev.bytes.lock().unwrap()[(block * u64::from(BS)) as usize + offset + 0x1e] ^= 1;
+        fs.dev.invalidate_cache().unwrap();
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::BadChecksum {
+                what: "block group descriptor"
+            }
+        ));
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_current_uninitialized_and_unknown_flags() {
+        for staged in [false, true] {
+            for flag in [bgd::BgdFlags::BLOCK_UNINIT.bits(), 0x8000] {
+                let (dev, fs) = mount_casefold_planning_fixture();
+                let (mut buf, parent, _) = staged_casefold_index(&fs);
+                stage_casefold_allocation_flags(&fs, &mut buf, fs.groups[0].flags | flag);
+                if !staged {
+                    let (block, _) = fs.sb.descriptor_location(0);
+                    let bytes = buf.dirty.remove(&block).unwrap();
+                    let offset = (block * u64::from(BS)) as usize;
+                    dev.bytes.lock().unwrap()[offset..offset + BS as usize].copy_from_slice(&bytes);
+                    fs.dev.invalidate_cache().unwrap();
+                }
+                let expected = if flag == bgd::BgdFlags::BLOCK_UNINIT.bits() {
+                    "casefold insertion with uninitialized block bitmap"
+                } else {
+                    "casefold insertion with unknown allocation flags"
+                };
+                assert!(matches!(
+                    casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+                    Error::Unsupported(what) if what == expected
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_inconsistent_pending_flags() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _) = staged_casefold_index(&fs);
+        buf.uninit_cleared
+            .insert(0, fs.groups[0].flags ^ bgd::BgdFlags::BLOCK_UNINIT.bits());
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::Corrupt("casefold allocation flags disagree with descriptor")
+        ));
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_bigalloc_before_using_block_bits() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+        // A one-block cluster is valid geometry but is still an unqualified
+        // BIGALLOC profile. Set its geometry before mounting/checksumming.
+        {
+            let mut bytes = dev.bytes.lock().unwrap();
+            let raw = &mut bytes[1024..2048];
+            let log_block = raw[0x18..0x1c].to_vec();
+            let bpg = raw[0x20..0x24].to_vec();
+            raw[0x1c..0x20].copy_from_slice(&log_block);
+            raw[0x24..0x28].copy_from_slice(&bpg);
+        }
+        set_ro_compat_bit(&dev, crate::features::RoCompat::BIGALLOC.bits());
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        let (mut buf, parent, _) = staged_casefold_index(&fs);
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::Unsupported("casefold insertion with clustered allocation")
+        ));
+    }
+
+    #[test]
+    fn casefold_allocation_accepts_disk_and_newly_staged_allocations() {
+        for on_disk in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, leaf, node) = staged_allocated_casefold_external_map(&dev, &fs);
+            assert!(!casefold_review_block_allocated(
+                &fs,
+                &BlockBuffer::new(BS),
+                node
+            ));
+            if on_disk {
+                for block in [0, fs.sb.descriptor_location(0).0, fs.groups[0].block_bitmap] {
+                    let bytes = buf.dirty.remove(&block).unwrap();
+                    let offset = (block * u64::from(BS)) as usize;
+                    dev.bytes.lock().unwrap()[offset..offset + BS as usize].copy_from_slice(&bytes);
+                }
+                fs.dev.invalidate_cache().unwrap();
+                assert!(casefold_review_block_allocated(
+                    &fs,
+                    &BlockBuffer::new(BS),
+                    node
+                ));
+            }
+            assert!(casefold_review_block_allocated(&fs, &buf, node));
+            assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
+        }
+    }
+
+    #[test]
+    fn casefold_allocation_accepts_consistent_buffered_uninit_clearing() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf, node) = staged_casefold_external_map(&dev, &fs);
+        stage_casefold_allocation_flags(
+            &fs,
+            &mut buf,
+            fs.groups[0].flags | bgd::BgdFlags::BLOCK_UNINIT.bits(),
+        );
+        // Real buffered initialization supplies a defined bitmap and records
+        // the cleared flag on this transaction, not the mounted snapshot.
+        for block in [leaf - 1, leaf, node] {
+            fs.buffer_mark_block_run_used(&mut buf, block, 1).unwrap();
+            assert!(casefold_review_block_allocated(&fs, &buf, block));
+        }
+        assert_eq!(buf.uninit_cleared[&0], fs.groups[0].flags);
+        assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
+    }
+
+    #[test]
+    fn casefold_allocation_refuses_an_unselected_free_leaf() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, node, query, selected) =
+            staged_casefold_legacy_role_fixture(&dev, &fs, false, false, true);
+        let unselected = selected + 100;
+        stage_casefold_planner_blocks(
+            &fs,
+            &mut buf,
+            (selected - 1..selected + 11).chain([unselected, node]),
+        );
+        let bit = (unselected - u64::from(fs.sb.first_data_block)) as usize;
+        buf.get_mut(&fs, fs.groups[0].block_bitmap).unwrap()[bit / 8] &= !(1 << (bit % 8));
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        assert!(casefold_review_block_allocated(&fs, &buf, selected));
+        assert!(!casefold_review_block_allocated(&fs, &buf, unselected));
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, &query),
+            Error::CorruptDirEntry("casefold storage block is not allocated")
+        ));
+    }
+
+    #[test]
+    fn casefold_allocation_checks_a_free_node_only_in_the_staged_view() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, _, node) = staged_allocated_casefold_external_map(&dev, &fs);
+        let leaf_node = fs.read_block(node).unwrap();
+        let disk_child = node + 1;
+        let staged_child = node + 2;
+        let mut index = vec![0; BS as usize];
+        index[..12].copy_from_slice(&leaf_node[..12]);
+        index[2..4].copy_from_slice(&1u16.to_le_bytes());
+        index[6..8].copy_from_slice(&1u16.to_le_bytes());
+        index[16..20].copy_from_slice(&(disk_child as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        {
+            let mut bytes = dev.bytes.lock().unwrap();
+            let offset = (node * u64::from(BS)) as usize;
+            bytes[offset..offset + BS as usize].copy_from_slice(&index);
+            let offset = (disk_child * u64::from(BS)) as usize;
+            bytes[offset..offset + BS as usize].copy_from_slice(&leaf_node);
+        }
+        fs.dev.invalidate_cache().unwrap();
+        index[16..20].copy_from_slice(&(staged_child as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        buf.put(node, index);
+        buf.put(staged_child, leaf_node);
+        let (_, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        raw[0x2e..0x30].copy_from_slice(&2u16.to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        let parent = Inode::parse(&raw).unwrap();
+        stage_casefold_planner_blocks(&fs, &mut buf, [disk_child]);
+        assert!(!casefold_review_block_allocated(&fs, &buf, staged_child));
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::CorruptDirEntry("casefold storage block is not allocated")
+        ));
+    }
+
+    #[test]
+    fn casefold_allocation_accepts_32_byte_descriptor_bitmap_checksums() {
+        let dev = formatted();
+        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+        // One group, with all addresses fitting 32 bits. Rebuild its descriptor
+        // checksum for the documented 32-byte format before mounting it.
+        {
+            let mut bytes = dev.bytes.lock().unwrap();
+            let raw = &mut bytes[1024..2048];
+            let flags = u32::from_le_bytes(raw[0x60..0x64].try_into().unwrap());
+            raw[0x60..0x64]
+                .copy_from_slice(&(flags & !crate::features::Incompat::BIT64.bits()).to_le_bytes());
+            raw[0xfe..0x100].copy_from_slice(&32u16.to_le_bytes());
+            let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+            raw[0x3fc..0x400].copy_from_slice(&crc.to_le_bytes());
+            let sb = Superblock::parse(raw.to_vec()).unwrap();
+            assert_eq!(sb.block_group_count(), 1);
+            let csum = crate::checksum::Checksummer::from_superblock(&sb);
+            let (block, offset) = sb.descriptor_location(0);
+            let start = (block * u64::from(BS)) as usize + offset;
+            let descriptor = &mut bytes[start..start + 32];
+            let crc = crate::checksum::group_desc_csum(&sb, &csum, 0, descriptor).unwrap();
+            descriptor[0x1e..0x20].copy_from_slice(&crc.to_le_bytes());
+        }
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        assert_eq!(fs.sb.desc_size, 32);
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        assert!(casefold_review_block_allocated(&fs, &buf, leaf));
+        assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
+    }
+
     fn stage_casefold_superblock_byte(fs: &Filesystem, buf: &mut BlockBuffer, field: usize) {
         let bs = u64::from(fs.sb.block_size());
         let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
@@ -9208,11 +9787,13 @@ mod tests {
         for external_map in [false, true] {
             let (dev, fs) = mount_casefold_planning_fixture();
             let (mut buf, parent, leaf) = if external_map {
-                let (buf, parent, leaf, _) = staged_casefold_external_map(&dev, &fs);
+                let (buf, parent, leaf, _) = staged_allocated_casefold_external_map(&dev, &fs);
                 (buf, parent, leaf)
             } else {
                 staged_casefold_index(&fs)
             };
+            let sb_bytes = fs.buffered_block(&buf, 0).unwrap();
+            let free_before = Superblock::parse(sb_bytes[1024..2048].to_vec()).unwrap();
             fs.buffer_patch_sb_counters(&mut buf, -1, -1).unwrap();
             let bs = u64::from(BS);
             let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
@@ -9220,8 +9801,8 @@ mod tests {
             let raw = &bytes[offset..offset + crate::superblock::SUPERBLOCK_SIZE];
             let current = Superblock::parse(raw.to_vec()).unwrap();
             assert!(fs.csum.verify_superblock(raw));
-            assert_eq!(current.free_blocks_count, fs.sb.free_blocks_count - 1);
-            assert_eq!(current.free_inodes_count, fs.sb.free_inodes_count - 1);
+            assert_eq!(current.free_blocks_count, free_before.free_blocks_count - 1);
+            assert_eq!(current.free_inodes_count, free_before.free_inodes_count - 1);
             let before = buf.dirty.clone();
             let allocation_before = buf.uninit_cleared.clone();
             let disk_before = dev.bytes.lock().unwrap().clone();
@@ -9413,7 +9994,7 @@ mod tests {
         for external_map in [false, true] {
             let (dev, fs) = mount_casefold_planning_fixture();
             let (mut buf, parent, leaf) = if external_map {
-                let (buf, parent, leaf, _) = staged_casefold_external_map(&dev, &fs);
+                let (buf, parent, leaf, _) = staged_allocated_casefold_external_map(&dev, &fs);
                 (buf, parent, leaf)
             } else {
                 staged_casefold_index(&fs)
@@ -9604,7 +10185,8 @@ mod tests {
     fn casefold_map_metadata_accepts_a_node_immediately_after_the_inode_table() {
         for staged in [false, true] {
             let (dev, fs) = mount_casefold_planning_fixture();
-            let (mut buf, parent, leaf, old_node) = staged_casefold_external_map(&dev, &fs);
+            let (mut buf, parent, leaf, old_node) =
+                staged_allocated_casefold_external_map(&dev, &fs);
             let table_blocks = (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
                 .div_ceil(u64::from(BS));
             let new_node = fs.groups[0].inode_table + table_blocks;
@@ -9621,6 +10203,7 @@ mod tests {
             let parent = relocate_casefold_extent_node(
                 &dev, &fs, &mut buf, old_node, new_node, bytes, staged,
             );
+            stage_casefold_planner_blocks(&fs, &mut buf, [new_node, new_node + 2, new_node + 3]);
             let before = buf.dirty.clone();
             let allocation_before = buf.uninit_cleared.clone();
             let disk_before = dev.bytes.lock().unwrap().clone();
@@ -9792,6 +10375,11 @@ mod tests {
             let (dev, fs) = mount_casefold_planning_fixture();
             let (mut buf, parent, node, query, selected) =
                 staged_casefold_legacy_role_fixture(&dev, &fs, false, staged_node, true);
+            stage_casefold_planner_blocks(
+                &fs,
+                &mut buf,
+                (selected - 1..selected + 11).chain([selected + 100, node]),
+            );
             let before = buf.dirty.clone();
             let allocation_before = buf.uninit_cleared.clone();
             let disk_before = dev.bytes.lock().unwrap().clone();
@@ -9974,6 +10562,7 @@ mod tests {
             .div_ceil(u64::from(BS));
         let root = fs.groups[0].inode_table + table_blocks;
         let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+        stage_casefold_planner_blocks(&fs, &mut buf, [root, root + 1]);
         let before = buf.dirty.clone();
         let allocation_before = buf.uninit_cleared.clone();
         let disk_before = dev.bytes.lock().unwrap().clone();
@@ -10099,6 +10688,7 @@ mod tests {
         let (mut buf, _, leaf) = staged_casefold_index(&fs);
         let root = fs.sb.blocks_count - 2;
         let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+        stage_casefold_planner_blocks(&fs, &mut buf, [root, root + 1]);
         let before = buf.dirty.clone();
         let disk_before = dev.bytes.lock().unwrap().clone();
         fs.buffer_add_dir_entry_indexed(
@@ -10205,7 +10795,7 @@ mod tests {
     #[test]
     fn casefold_indexed_add_accepts_an_unchanged_staged_external_map() {
         let (dev, fs) = mount_casefold_planning_fixture();
-        let (mut buf, parent, leaf, node) = staged_casefold_external_map(&dev, &fs);
+        let (mut buf, parent, leaf, node) = staged_allocated_casefold_external_map(&dev, &fs);
         let node_bytes = fs.read_block(node).unwrap();
         buf.put(node, node_bytes.clone());
         let before = buf.dirty.clone();

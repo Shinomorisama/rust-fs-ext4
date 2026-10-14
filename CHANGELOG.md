@@ -22,6 +22,11 @@
 
 ### Fixed
 
+- Private casefold indexed insertion requires checksum-valid current allocation
+  bits for all admitted directory blocks and mapping blocks visited in either
+  view. Free storage, uninitialized/unknown allocation flags, malformed bitmaps
+  and unqualified bigalloc profiles refuse before insertion changes. Exclusive
+  ownership remains unqualified and public casefold writes remain blocked.
 - Private casefold indexed insertion verifies staged superblock checksums and
   admits only the existing free-counter edits. Layout, identity, policy and
   other superblock changes refuse before insertion bytes change; buffered/device

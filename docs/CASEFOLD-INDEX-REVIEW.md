@@ -69,7 +69,62 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Current-allocation refusal follow-up — 2026-10-14
+
+The three saved allocation regressions were applied to `065f9a8` and rerun:
+all three failed specifically on `Ok(())` after a fresh 825-test baseline.
+Their allocation-bit/checksum and refusal assertions are now active in
+`src/fs.rs`; do not reapply the historical patch. Both preceding full CI runs
+(`b7b0325` and `065f9a8`) passed. New-source independent results remain separate.
+
+After existing directory/map admission and staged superblock/descriptor checks,
+before editing or staging insertion bytes, `casefold_check_allocation` checks
+every admitted directory block and mapping block visited in either view. For
+each containing group it reads the current buffered/device descriptor, verifies
+its checksum and mounted pointer stability, reconciles pending initialization
+flags, refuses unknown flags or `BLOCK_UNINIT`, then verifies a full current
+bitmap and its checksum. Ordinary-block coverage and descriptor checksum width
+follow the contract below. Group bitmaps are retained only for this call to
+avoid repeated reads; mounted allocation snapshots do not replace current data.
+A free bit is a corruption refusal. `BIGALLOC` remains explicitly unsupported.
+No admission read dirties the buffer, and no ordinary-directory path changes.
+
+Positive planner fixtures now explicitly stage bitmap/checksum/counter updates
+for their external/legacy nodes, boundary directory blocks and unselected leaves.
+Their name/inode, checksum and unchanged-state assertions remain. The prior
+superblock counter test measures its one-count delta from current staged counters
+so it still checks the same behavior after fixture allocation. No test-only
+production bypass or ignored test is introduced. A separate control permits
+newly staged allocation while the disk bit is still free; requiring both bits
+would reject a valid transaction. Consistent buffered initialization clearing
+also has a positive control. These are planner controls, not qualified owner maps.
+
+Additional refusal controls cover current disk/staged bitmap checksums and
+descriptor checksums, bitmap size, current uninitialized/unknown flags,
+contradictory pending flags, bigalloc, an unselected free leaf, and a free map
+node reached only in the staged view while both views agree on directory data.
+Refusals compare the entire dirty map, initialization flags and device bytes;
+success controls verify the stored name/inode and mutation of only one leaf.
+The full local tier passes 839 tests with all 825 baseline occurrences retained
+and exactly 14 new allocation tests, including a 32-byte descriptor checksum
+control. All 55 fs casefold tests pass in that tier. Lint and the locked release
+CLI build/install pass. Exact-commit focused Linux/full CI remain pending;
+`extprogress.md` records measured logs and continuation instructions.
+
+This closes the reproduced missing-allocation cases within the private guard's
+scope. It does **not** prove exclusive inode/journal ownership, audit allocation
+counter totals or prevent external changes/concurrent operations. Finding 2
+remains open for owner roles; finding 3 remains open for complete map shape,
+unused/shadowed branches and depth transitions. Inspect this source's focused
+Linux and full CI before broadening support, then review/reproduce a bounded
+allocated-storage ownership alias, beginning with journal roles. Public writes,
+deeper insertion, collisions and splitting/growth remain blocked.
+
 ### Allocation/ownership review and reproduced gap — 2026-10-14
+
+Historical preparation: the current-allocation follow-up above incorporates
+the saved tests and supersedes this section's next task. Its patch targets the
+reviewed source only. Subsequent full CI passed at `b7b0325` and `065f9a8`.
 
 Reviewed the private planner at `b7b0325eeaa6d8e2f46f1e346c3ea680e875b3c3`.
 Its exact-commit focused Linux insertion test passed across the four existing
@@ -428,8 +483,8 @@ serialization and crash recovery before relaxing any volume write gate.
 Finding 1 is addressed by the boundary-fix follow-up above. Fixed metadata roles,
 visited mapping-node/data overlap and staged descriptor/superblock changes have
 scoped refusals recorded above; inspect the latest exact-commit CI before
-broadening support. The allocation review now reproduces missing-allocation
-acceptance. Next implement its bounded refusal and explicitly update planner
-fixtures under the contract above. Keep finding 3
+broadening support. The bounded allocation refusal and explicit planner fixture
+updates above now address the reproduced missing-allocation cases. Next review
+current journal/other ownership and reproduce an allocated-storage alias. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.
