@@ -69,9 +69,65 @@ permission to relax write gates, modify siblings or push to `main`.
 - The separately selected slow deep-walk fuzz test passed at source commit
   `643fd2a26d50e24b4d06d2b2872bfdd538cfbb22`: one executed, zero failed or
   ignored. It remains ignored in the ordinary suite; see the explicit run below.
+- Metadata-role counterexamples are now reproduced at source `1ee1fed`: three
+  added refusal tests fail because the private planner accepts metadata leaves.
+  The tested patch is committed separately; production admission is unchanged
+  while the required full CI remains pending. See the preparation checkpoint below.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
+
+## Metadata-role regression preparation — 2026-10-13
+
+At source `1ee1fedf90f1056cc9f14d5550ecea4cbf460030`, a fresh local baseline
+passed **802 unit tests**. Three new synthetic planner regressions were then
+compiled and executed through the real tier/test runner. All three failed with
+the private insertion helper returning `Ok(())` for a checksummed staged leaf
+mapped to primary superblock block **0**, block bitmap block **2**, or inode-table
+block **5**. The index root remains in its ordinary data block; a valid two-extent
+inode map supplies the leaf. These reproduce part of review finding 2; they are
+not Linux-clean images or evidence of an exposed public write path.
+
+The test patch is [CASEFOLD-METADATA-ROLE-RED.patch](CASEFOLD-METADATA-ROLE-RED.patch).
+It also specifies descriptor/inode-bitmap cases for the corrected implementation
+and requires unchanged dirty blocks, pending allocation flags and device bytes
+on refusal. The initial red runs stop at their failed refusal assertions, so
+those later unchanged-state assertions are **not yet green evidence**.
+
+The temporary edits were removed from `src/fs.rs` after capturing the red:
+its bytes match the pre-test commit exactly. The patch remains applicable, but
+is deliberately not active in the ordinary suite while waiting for the existing
+CI prerequisite. No tests or assertions were disabled, and production code,
+dependency pins, sibling checkouts and write gates are unchanged. Local baseline
+and red logs are under ignored `tmp/casefold-role-evidence` and
+`tmp/logs/casefold-role-red.log`. Later chats can reproduce the red by applying
+the committed patch to the unchanged source and running:
+
+```sh
+cd /workspace/rust-fs-ext4
+test "$(git hash-object src/fs.rs)" = "$(git rev-parse 1ee1fed:src/fs.rs)"
+git apply --check --unidiff-zero docs/CASEFOLD-METADATA-ROLE-RED.patch
+git apply --unidiff-zero docs/CASEFOLD-METADATA-ROLE-RED.patch
+/workspace/.cloud-setup/run-casefold.sh scripts/tier.sh casefold-role-red casefold-role-red 100 12000 -- scripts/test.sh --locked --lib casefold_role_
+```
+
+The patch has zero context so embedded blank context lines do not violate the
+repository's whitespace check. Verify the source identity as above before using
+it; if newer implementation commits changed the file, adapt the regressions to
+the new source rather than forcing the saved patch onto it.
+
+At this pause point, budget-repair CI **38507056428** and documentation-checkpoint
+CI **38509239857** still have VM suites in progress, with no reported job failures.
+Their full results remain pending. No production admission fix has been applied.
+Avoid extra status-only pushes while these runs finish.
+
+**Next bounded task:** verify the completed CI outcomes and inspect any failures.
+Once the prerequisite passes, apply and reproduce this patch, then implement a
+scoped metadata-role refusal contract and prove these same tests green. Preserve
+all baseline tests, buffered-state behavior and independent healthy-image Linux
+evidence. Do not claim all of finding 2 closed: staged descriptor/allocation
+state, journal ownership and map-node/data aliases still require qualification;
+mapping-shape finding 3 also remains open. Do not enable writes or deeper insertion.
 
 ## Explicit slow-fuzz qualification — 2026-10-13
 

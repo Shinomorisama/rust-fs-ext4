@@ -113,6 +113,25 @@ admission boundary. Include transaction-current allocation/metadata state and
 shared-node/data aliases. Existing successful tests using synthetic staged
 blocks are planner tests, not evidence that those blocks are correctly allocated.
 
+#### Metadata-alias reproduction — 2026-10-13 (fix pending)
+
+At source `1ee1fedf90f1056cc9f14d5550ecea4cbf460030`, three synthetic planner
+refusal tests reproduced acceptance of a staged, checksummed directory leaf at
+primary superblock block 0, block bitmap block 2 and inode-table block 5.
+The index root stays in its ordinary data block, and a valid two-extent map
+selects the metadata leaf. Each test fails because insertion returns `Ok(())`.
+This is now a demonstrated private-planner metadata-role gap, not an exposed
+public volume write or a Linux-clean malformed-image fixture.
+
+The reproducible test patch is
+[CASEFOLD-METADATA-ROLE-RED.patch](CASEFOLD-METADATA-ROLE-RED.patch); it is saved
+outside the active test source pending completion of the existing full-CI gate.
+`extprogress.md` records commands and the fresh 802-test baseline. Its refusal
+atomicity assertions must pass after the eventual fix; the red run fails before
+those assertions, so it does not establish them yet. Production admission,
+write gates, dependencies and siblings are unchanged. Finding 2 remains open,
+including staged role/allocation changes, journal ownership and map-node aliases.
+
 ### 3. Checksummed lookup is not complete map-shape validation
 
 `extent::lookup_verified` stops on the selected covering extent (reviewed lines

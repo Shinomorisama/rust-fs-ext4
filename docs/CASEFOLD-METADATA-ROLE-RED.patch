@@ -1,0 +1,66 @@
+diff --git a/src/fs.rs b/src/fs.rs
+index 4f1bfab..037d458 100644
+--- a/src/fs.rs
++++ b/src/fs.rs
+@@ -8971,0 +8972,61 @@ mod tests {
++    fn assert_casefold_metadata_role_refusal(metadata: u64) {
++        let (dev, fs) = mount_casefold_planning_fixture();
++        let (mut buf, _, leaf) = staged_casefold_index(&fs);
++        let bytes = buf.dirty.remove(&leaf).unwrap();
++        buf.put(metadata, bytes);
++        // Keep the index root in its ordinary data block. Only the selected
++        // leaf aliases metadata, with an otherwise valid two-extent map.
++        let (parent, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
++        raw[0x2a..0x2c].copy_from_slice(&2u16.to_le_bytes());
++        raw[0x38..0x3a].copy_from_slice(&1u16.to_le_bytes());
++        raw[0x40..0x44].copy_from_slice(&1u32.to_le_bytes());
++        raw[0x44..0x46].copy_from_slice(&1u16.to_le_bytes());
++        raw[0x46..0x48].copy_from_slice(&((metadata >> 32) as u16).to_le_bytes());
++        raw[0x48..0x4c].copy_from_slice(&(metadata as u32).to_le_bytes());
++        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
++            .unwrap();
++        let parent = Inode::parse(&raw).unwrap();
++        let before = buf.dirty.clone();
++        let allocation_before = buf.uninit_cleared.clone();
++        let disk_before = dev.bytes.lock().unwrap().clone();
++        let result = fs.buffer_add_dir_entry_indexed(
++            &mut buf,
++            2,
++            &parent,
++            b"New_Name",
++            100,
++            crate::dir::DirEntryType::RegFile,
++            true,
++        );
++        assert!(
++            matches!(result, Err(Error::CorruptDirEntry(_))),
++            "metadata leaf block {metadata}: {result:?}"
++        );
++        assert_eq!(buf.dirty, before);
++        assert_eq!(buf.uninit_cleared, allocation_before);
++        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
++    }
++
++    #[test]
++    fn casefold_role_refuses_primary_superblock_and_descriptor_aliases() {
++        for metadata in [0, 1] {
++            assert_casefold_metadata_role_refusal(metadata);
++        }
++    }
++
++    #[test]
++    fn casefold_role_refuses_bitmap_aliases() {
++        let (_, fs) = mount_casefold_planning_fixture();
++        for bitmap in [fs.groups[0].block_bitmap, fs.groups[0].inode_bitmap] {
++            assert_casefold_metadata_role_refusal(bitmap);
++        }
++    }
++
++    #[test]
++    fn casefold_role_refuses_inode_table_aliases() {
++        let (_, fs) = mount_casefold_planning_fixture();
++        // Keep the parent inode's own table block intact so the counterexample
++        // reaches directory admission rather than failing to read its inode.
++        assert_casefold_metadata_role_refusal(fs.groups[0].inode_table + 1);
++    }
++
