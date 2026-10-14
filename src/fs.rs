@@ -4025,6 +4025,11 @@ impl Filesystem {
                     if physical >= byte_limit / block_size {
                         return Err(Error::InvalidBlock(physical));
                     }
+                    if self.casefold_block_is_fixed_metadata(physical) {
+                        return Err(Error::CorruptDirEntry(
+                            "casefold directory block aliases fixed filesystem metadata",
+                        ));
+                    }
                     if !physical_seen.insert(physical) {
                         return Err(Error::CorruptDirEntry(
                             "casefold index blocks alias physical storage",
@@ -7552,6 +7557,41 @@ impl Filesystem {
         Ok(plan.first_block)
     }
 
+    /// Fixed metadata locations from the validated mounted geometry. This is
+    /// a refusal check, not proof of allocation or exclusive ownership: staged
+    /// descriptor changes, journal storage and map-node roles need separate
+    /// qualification before casefold writes can be enabled.
+    fn casefold_block_is_fixed_metadata(&self, block: u64) -> bool {
+        let block_size = u64::from(self.sb.block_size());
+        let first = u64::from(self.sb.first_data_block);
+        let primary = crate::superblock::SUPERBLOCK_OFFSET / block_size;
+        if block < first.max(primary) {
+            return true;
+        }
+        let blocks_per_group = u64::from(self.sb.blocks_per_group);
+        let group = (block - first) / blocks_per_group;
+        let mut head = block - (block - first) % blocks_per_group;
+        if group == 0 {
+            // The primary superblock still starts in block 1 on a 1 KiB
+            // bigalloc volume whose first group starts in block 0.
+            head = head.max(primary);
+        }
+        if block - head < self.sb.group_head_metadata_blocks(group) {
+            return true;
+        }
+        let table_blocks = (u64::from(self.sb.inodes_per_group) * u64::from(self.sb.inode_size))
+            .div_ceil(block_size);
+        // FLEX_BG can place another group's bitmaps/table in this group.
+        // Check every descriptor, not only the block's containing group.
+        self.groups.iter().any(|descriptor| {
+            block == descriptor.block_bitmap
+                || block == descriptor.inode_bitmap
+                || block
+                    .checked_sub(descriptor.inode_table)
+                    .is_some_and(|offset| offset < table_blocks)
+        })
+    }
+
     /// `block`, as `buf` has it staged, or as the device has it.
     fn buffered_block(&self, buf: &BlockBuffer, block: u64) -> Result<Vec<u8>> {
         match buf.dirty.get(&block) {
@@ -8965,6 +9005,132 @@ mod tests {
         );
         assert!(matches!(result, Err(Error::InvalidBlock(_))), "{result:?}");
         assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, allocation_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    fn assert_casefold_metadata_role_refusal(metadata: u64, root_alias: bool) {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, _, leaf) = staged_casefold_index(&fs);
+        let aliased = if root_alias { leaf - 1 } else { leaf };
+        let bytes = buf.dirty.remove(&aliased).unwrap();
+        buf.put(metadata, bytes);
+        // Only one directory block aliases metadata. The other stays in
+        // ordinary data storage, with an otherwise valid two-extent map.
+        let (parent, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        raw[0x2a..0x2c].copy_from_slice(&2u16.to_le_bytes());
+        raw[0x38..0x3a].copy_from_slice(&1u16.to_le_bytes());
+        let root = if root_alias { metadata } else { leaf - 1 };
+        let leaf = if root_alias { leaf } else { metadata };
+        raw[0x3a..0x3c].copy_from_slice(&((root >> 32) as u16).to_le_bytes());
+        raw[0x3c..0x40].copy_from_slice(&(root as u32).to_le_bytes());
+        raw[0x40..0x44].copy_from_slice(&1u32.to_le_bytes());
+        raw[0x44..0x46].copy_from_slice(&1u16.to_le_bytes());
+        raw[0x46..0x48].copy_from_slice(&((leaf >> 32) as u16).to_le_bytes());
+        raw[0x48..0x4c].copy_from_slice(&(leaf as u32).to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        let parent = Inode::parse(&raw).unwrap();
+        let before = buf.dirty.clone();
+        let allocation_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let result = fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(
+            matches!(result, Err(Error::CorruptDirEntry(_))),
+            "metadata block {metadata}, root alias {root_alias}: {result:?}"
+        );
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, allocation_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_role_refuses_primary_superblock_and_descriptor_aliases() {
+        for metadata in [0, 1] {
+            assert_casefold_metadata_role_refusal(metadata, false);
+        }
+    }
+
+    #[test]
+    fn casefold_role_refuses_bitmap_aliases() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        for bitmap in [fs.groups[0].block_bitmap, fs.groups[0].inode_bitmap] {
+            assert_casefold_metadata_role_refusal(bitmap, false);
+        }
+    }
+
+    #[test]
+    fn casefold_role_refuses_inode_table_aliases() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        // Keep the parent inode's own table block intact so the counterexample
+        // reaches directory admission rather than failing to read its inode.
+        let table_blocks = (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
+            .div_ceil(u64::from(BS));
+        for metadata in [
+            fs.groups[0].inode_table + 1,
+            fs.groups[0].inode_table + table_blocks - 1,
+        ] {
+            assert_casefold_metadata_role_refusal(metadata, false);
+        }
+    }
+
+    #[test]
+    fn casefold_role_refuses_metadata_roots_with_an_ordinary_leaf() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        for metadata in [
+            0,
+            1,
+            fs.groups[0].block_bitmap,
+            fs.groups[0].inode_table + 1,
+        ] {
+            assert_casefold_metadata_role_refusal(metadata, true);
+        }
+    }
+
+    #[test]
+    fn casefold_role_accepts_data_immediately_after_the_inode_table() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, _, leaf) = staged_casefold_index(&fs);
+        let table_blocks = (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
+            .div_ceil(u64::from(BS));
+        let root = fs.groups[0].inode_table + table_blocks;
+        let parent = relocate_staged_casefold_index(&fs, &mut buf, leaf, root);
+        let before = buf.dirty.clone();
+        let allocation_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        )
+        .unwrap();
+        let entries = crate::dir::parse_block_verified(
+            &buf.dirty[&(root + 1)],
+            true,
+            2,
+            parent.generation,
+            &fs.csum,
+        )
+        .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, b"New_Name");
+        for (block, bytes) in before {
+            if block != root + 1 {
+                assert_eq!(buf.dirty[&block], bytes);
+            }
+        }
         assert_eq!(buf.uninit_cleared, allocation_before);
         assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
     }

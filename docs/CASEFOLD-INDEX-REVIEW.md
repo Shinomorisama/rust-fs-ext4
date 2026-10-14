@@ -69,6 +69,31 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Scoped fixed-metadata follow-up — 2026-10-14
+
+Part of finding 2 now has a red-to-green correction. A fresh 802-test baseline
+passed, and the saved metadata-leaf regressions again returned `Ok(())` before
+the fix. Expanded tests also reproduced metadata-root acceptance with an
+ordinary leaf. Four negative tests and the positive inode-table boundary test
+now pass; refusals preserve the complete dirty map, allocation flags and device
+bytes. These are synthetic planner regressions, not Linux-clean malformed images.
+
+Every mapped directory root/leaf is refused before staged-byte admission if its
+address belongs to fixed mounted metadata: group-head superblock/descriptor
+copies or reserved GDT, any descriptor's bitmaps, or any complete inode table.
+The existing group layout helper supplies head geometry, and every descriptor
+is checked to account for FLEX_BG placement. The preceding bounds, checksums,
+disk/staged map agreement and admitted-leaf reuse remain in place.
+
+This checks mounted fixed locations only. It does not validate transaction-current
+descriptor/allocation state, journal/other ownership, external map-node/data
+aliases or complete mapping shape. Findings 2 and 3 remain open. Full baseline,
+lint and CLI results are recorded in `extprogress.md`; exact-commit independent
+Linux and full CI for this new code remain pending. The prerequisite full CI
+at `643fd2a`, `1ee1fed` and `d6ae8d8` passed; the downloaded last run's suite log
+confirms healthy-image insertion executed successfully on the preceding source.
+Keep public writes, deeper insertion and growth blocked.
+
 ### 1. Physical filesystem bounds are not part of admission
 
 In the reviewed `src/fs.rs` at lines 3947–3992, the mapper returns a physical
@@ -113,7 +138,7 @@ admission boundary. Include transaction-current allocation/metadata state and
 shared-node/data aliases. Existing successful tests using synthetic staged
 blocks are planner tests, not evidence that those blocks are correctly allocated.
 
-#### Metadata-alias reproduction — 2026-10-13 (fix pending)
+#### Metadata-alias reproduction — 2026-10-13 (historical red)
 
 At source `1ee1fedf90f1056cc9f14d5550ecea4cbf460030`, three synthetic planner
 refusal tests reproduced acceptance of a staged, checksummed directory leaf at
@@ -124,13 +149,15 @@ This is now a demonstrated private-planner metadata-role gap, not an exposed
 public volume write or a Linux-clean malformed-image fixture.
 
 The reproducible test patch is
-[CASEFOLD-METADATA-ROLE-RED.patch](CASEFOLD-METADATA-ROLE-RED.patch); it is saved
-outside the active test source pending completion of the existing full-CI gate.
-`extprogress.md` records commands and the fresh 802-test baseline. Its refusal
-atomicity assertions must pass after the eventual fix; the red run fails before
-those assertions, so it does not establish them yet. Production admission,
-write gates, dependencies and siblings are unchanged. Finding 2 remains open,
+[CASEFOLD-METADATA-ROLE-RED.patch](CASEFOLD-METADATA-ROLE-RED.patch); it was saved
+outside the active test source while the existing full-CI gate was pending.
+`extprogress.md` records commands and the fresh 802-test baseline. At that historical checkpoint, refusal
+atomicity assertions still needed a green result: the red run failed before
+those assertions. Production admission, write gates, dependencies and siblings
+were unchanged during preparation. Finding 2 remains open,
 including staged role/allocation changes, journal ownership and map-node aliases.
+The 2026-10-14 follow-up incorporates and extends these tests and fixes their
+mounted fixed-location counterexamples; do not reapply the historical patch.
 
 ### 3. Checksummed lookup is not complete map-shape validation
 
@@ -170,8 +197,9 @@ link accounting, timestamps and stale-entry replacement remain the caller's
 responsibility. Qualify complete namespace operations, operation-wide
 serialization and crash recovery before relaxing any volume write gate.
 
-Finding 1 is addressed by the boundary-fix follow-up above; check its fresh
-focused Linux and full CI outcomes. The next implementation checkpoint should
-reproduce and close the scoped metadata-role gap in finding 2. Keep finding 3
+Finding 1 is addressed by the boundary-fix follow-up above. The fixed-location
+subset of finding 2 is addressed by the 2026-10-14 correction; check its fresh
+focused Linux and full CI outcomes before the next role-validation checkpoint.
+Then reproduce and qualify external map-node/data aliases. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.

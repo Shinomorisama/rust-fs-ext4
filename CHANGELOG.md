@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- Private casefold indexed insertion refuses directory blocks that alias fixed
+  filesystem metadata from the mounted geometry, preserving buffered/device
+  state on refusal. Complete ownership qualification remains pending and public
+  casefold writes remain blocked.
 - Directory lookup validates casefold encoding and inode flags at each path
   component before reading entries, including calls made without mounting.
 - Mounts and metadata reloads refuse unrecognized casefold encodings and flags,
