@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- Private casefold mapping-node reads refuse fixed filesystem metadata locations
+  before reading disk or staged bytes, preserving buffered/device state on
+  refusal. Complete ownership qualification and public casefold writes remain
+  blocked.
 - Private casefold indexed insertion refuses overlap between directory data and
   external mapping blocks visited in either disk or staged views, including a
   mapping block discovered after its directory-data role was admitted. Refusal

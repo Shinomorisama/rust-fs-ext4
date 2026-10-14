@@ -69,7 +69,41 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Fixed-metadata mapping-node refusal follow-up — 2026-10-14
+
+Another fixed-location subset of finding 2 is reproduced and corrected. At
+`8f94cf8`, a fresh 810-test baseline passed. Three new negative tests returned
+`Ok(())` for checksummed extent nodes at superblock block 0, bitmap block 2 and
+inode-table block 5. Cases also cover the descriptor, inode bitmap and last
+inode-table block, with disk-only and identical-staged nodes. All five focused
+tests pass, including a positive node exactly after the inode table and a node
+reachable only in the staged view while both views return identical directory
+data mappings. The full tier passes 815 tests with all 810 baseline occurrences
+retained; lint and the release CLI build also pass.
+Refusals preserve the complete dirty map, allocation flags and device bytes;
+the positive cases verify stored name/inode and change only the selected leaf.
+These are synthetic planner fixtures; clean cache invalidation makes direct
+backing-byte changes visible without bypassing extent checksum verification.
+
+The private mapping wrapper now refuses any read that touches fixed mounted
+metadata before reading disk or staged bytes. It reuses the existing role
+classifier; bounds, extent checksums, disk/staged mapping agreement, visited
+mapping-node/data disjointness and selected-leaf address reuse remain intact.
+Both previous full CI runs and the latest focused Linux insertion run passed;
+the downloaded insertion log confirms the exact test executed. The new source
+requires its own independent CI. Final local results are in `extprogress.md`.
+
+Finding 2 remains open for transaction-current descriptors/allocation,
+journal/other ownership and unused mapping branches; complete mapping shape
+in finding 3 and operation-wide serialization remain unqualified. Next
+reproduce staged descriptor relocation and define a scoped refusal that retains
+valid counter-only updates. Keep public writes, deeper insertion and growth blocked.
+
 ### Visited mapping-node/data overlap follow-up — 2026-10-14
+
+Follow-up: its exact-commit focused and full CI at `8f94cf8` now passed. The
+fixed-metadata mapping-node checkpoint above supersedes its next task; older
+pending statuses below describe that checkpoint's original pause point.
 
 Another bounded subset of finding 2 now has a red-to-green correction. At
 `3be872e`, a fresh 807-test baseline passed. Two synthetic thirteen-block
@@ -227,9 +261,9 @@ responsibility. Qualify complete namespace operations, operation-wide
 serialization and crash recovery before relaxing any volume write gate.
 
 Finding 1 is addressed by the boundary-fix follow-up above. Fixed directory
-metadata locations and visited mapping-node/data overlaps have scoped
-corrections recorded above; inspect their exact-commit CI before broadening
-support. Next reproduce and qualify mapping-node aliases of fixed metadata,
-while retaining the remaining transaction-current ownership gaps. Keep finding 3
+and visited mapping-node metadata locations and mapping-node/data overlaps have
+scoped corrections recorded above; inspect the latest exact-commit CI before
+broadening support. Next reproduce staged descriptor relocation and define
+its bounded refusal while retaining other ownership gaps. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.

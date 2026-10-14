@@ -377,9 +377,11 @@ impl crate::block_io::BlockDevice for StagedTreeNodes<'_> {
 
 /// The private casefold admission mapper must stay inside the filesystem,
 /// even when a larger backing device or a staged node could supply bytes.
-/// It bounds reads and records visited map blocks for a later data-role check;
-/// allocation, fixed map-node metadata roles and full ownership remain separate.
+/// It bounds reads, refuses fixed metadata locations and records visited map
+/// blocks for a later data-role check. Allocation and full ownership remain
+/// separate qualification requirements.
 struct CasefoldMapDevice<'a> {
+    fs: &'a Filesystem,
     inner: &'a dyn BlockDevice,
     byte_limit: u64,
     block_size: u64,
@@ -393,6 +395,14 @@ impl BlockDevice for CasefoldMapDevice<'_> {
             .ok_or(Error::InvalidBlock(offset / self.block_size))?;
         if end > self.byte_limit {
             return Err(Error::InvalidBlock(offset / self.block_size));
+        }
+        if !buf.is_empty()
+            && (offset / self.block_size..=(end - 1) / self.block_size)
+                .any(|block| self.fs.casefold_block_is_fixed_metadata(block))
+        {
+            return Err(Error::CorruptDirEntry(
+                "casefold block-map node aliases fixed filesystem metadata",
+            ));
         }
         self.inner.read_at(offset, buf)?;
         if !buf.is_empty() {
@@ -3976,6 +3986,7 @@ impl Filesystem {
             let byte_limit = self.byte_ceiling()?;
             let map_blocks = Mutex::new(std::collections::HashSet::new());
             let disk = CasefoldMapDevice {
+                fs: self,
                 inner: self.dev.as_ref(),
                 byte_limit,
                 block_size,
@@ -3986,6 +3997,7 @@ impl Filesystem {
                 nodes: &buf.dirty,
             };
             let staged_view = CasefoldMapDevice {
+                fs: self,
                 inner: &staged,
                 byte_limit,
                 block_size,
@@ -7587,7 +7599,7 @@ impl Filesystem {
 
     /// Fixed metadata locations from the validated mounted geometry. This is
     /// a refusal check, not proof of allocation or exclusive ownership: staged
-    /// descriptor changes, journal storage and map-node roles need separate
+    /// descriptor changes, journal storage and full map-node ownership need
     /// qualification before casefold writes can be enabled.
     fn casefold_block_is_fixed_metadata(&self, block: u64) -> bool {
         let block_size = u64::from(self.sb.block_size());
@@ -8983,6 +8995,207 @@ mod tests {
         fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
             .unwrap();
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
+    }
+
+    fn relocate_casefold_extent_node(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        old_node: u64,
+        new_node: u64,
+        bytes: Vec<u8>,
+        staged: bool,
+    ) -> Inode {
+        buf.dirty.remove(&old_node);
+        let start = (new_node * u64::from(BS)) as usize;
+        dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&bytes);
+        // This fixture edits the backing device after mounting. Discard clean
+        // cached reads so both mapping views see the new checksummed bytes.
+        fs.dev.invalidate_cache().unwrap();
+        if staged {
+            buf.put(new_node, bytes);
+        }
+        let (parent, mut raw) = fs.buffered_inode_verified(buf, 2).unwrap();
+        assert!(fs.csum.verify_extent_tail(
+            2,
+            parent.generation,
+            &fs.read_block(new_node).unwrap(),
+        ));
+        raw[0x38..0x3c].copy_from_slice(&(new_node as u32).to_le_bytes());
+        raw[0x3c..0x3e].copy_from_slice(&((new_node >> 32) as u16).to_le_bytes());
+        fs.buffer_write_dir_inode(buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        Inode::parse(&raw).unwrap()
+    }
+
+    fn assert_casefold_map_metadata_refusal(metadata: u64) {
+        for staged in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, _, _, old_node) = staged_casefold_external_map(&dev, &fs);
+            let bytes = fs.read_block(old_node).unwrap();
+            let parent = relocate_casefold_extent_node(
+                &dev, &fs, &mut buf, old_node, metadata, bytes, staged,
+            );
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            let result = fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            );
+            assert!(
+                matches!(result, Err(Error::CorruptDirEntry(_))),
+                "map node in metadata block {metadata}, staged {staged}: {result:?}"
+            );
+            assert_eq!(buf.dirty, before);
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
+    }
+
+    #[test]
+    fn casefold_map_metadata_refuses_superblock_and_descriptor_nodes() {
+        for metadata in [0, 1] {
+            assert_casefold_map_metadata_refusal(metadata);
+        }
+    }
+
+    #[test]
+    fn casefold_map_metadata_refuses_bitmap_nodes() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        for metadata in [fs.groups[0].block_bitmap, fs.groups[0].inode_bitmap] {
+            assert_casefold_map_metadata_refusal(metadata);
+        }
+    }
+
+    #[test]
+    fn casefold_map_metadata_refuses_inode_table_nodes() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        let table_blocks = (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
+            .div_ceil(u64::from(BS));
+        // Leave the parent inode's own table block intact.
+        for metadata in [
+            fs.groups[0].inode_table + 1,
+            fs.groups[0].inode_table + table_blocks - 1,
+        ] {
+            assert_casefold_map_metadata_refusal(metadata);
+        }
+    }
+
+    #[test]
+    fn casefold_map_metadata_refuses_a_node_only_in_the_staged_view() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, _, _, node) = staged_casefold_external_map(&dev, &fs);
+        let leaf_node = fs.read_block(node).unwrap();
+        let child = node + 1;
+        let metadata = fs.groups[0].inode_table + 1;
+        let start = (child * u64::from(BS)) as usize;
+        dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&leaf_node);
+        buf.put(metadata, leaf_node.clone());
+        let (parent, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        raw[0x2e..0x30].copy_from_slice(&2u16.to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        // Disk and staged indices route through different child blocks, but
+        // those children contain identical checksummed data mappings.
+        let mut index = vec![0; BS as usize];
+        index[..12].copy_from_slice(&leaf_node[..12]);
+        index[2..4].copy_from_slice(&1u16.to_le_bytes());
+        index[6..8].copy_from_slice(&1u16.to_le_bytes());
+        index[16..20].copy_from_slice(&(child as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        let start = (node * u64::from(BS)) as usize;
+        dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&index);
+        fs.dev.invalidate_cache().unwrap();
+        index[16..20].copy_from_slice(&(metadata as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        buf.put(node, index);
+        let parent = Inode::parse(&raw).unwrap();
+        let before = buf.dirty.clone();
+        let allocation_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let result = fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(Error::CorruptDirEntry(
+                    "casefold block-map node aliases fixed filesystem metadata",
+                ))
+            ),
+            "{result:?}"
+        );
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, allocation_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_map_metadata_accepts_a_node_immediately_after_the_inode_table() {
+        for staged in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, leaf, old_node) = staged_casefold_external_map(&dev, &fs);
+            let table_blocks = (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
+                .div_ceil(u64::from(BS));
+            let new_node = fs.groups[0].inode_table + table_blocks;
+            // Move directory data away so the node can occupy the first block
+            // after the table without aliasing either directory data block.
+            let root_bytes = buf.dirty.remove(&(leaf - 1)).unwrap();
+            let leaf_bytes = buf.dirty.remove(&leaf).unwrap();
+            buf.put(new_node + 2, root_bytes);
+            buf.put(new_node + 3, leaf_bytes);
+            let mut bytes = fs.read_block(old_node).unwrap();
+            bytes[20..24].copy_from_slice(&((new_node + 2) as u32).to_le_bytes());
+            bytes[32..36].copy_from_slice(&((new_node + 3) as u32).to_le_bytes());
+            fs.csum.patch_extent_tail(2, parent.generation, &mut bytes);
+            let parent = relocate_casefold_extent_node(
+                &dev, &fs, &mut buf, old_node, new_node, bytes, staged,
+            );
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            )
+            .unwrap();
+            let entries = crate::dir::parse_block_verified(
+                &buf.dirty[&(new_node + 3)],
+                true,
+                2,
+                parent.generation,
+                &fs.csum,
+            )
+            .unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].name, b"New_Name");
+            assert_eq!(entries[0].inode, 100);
+            assert_eq!(buf.dirty.len(), before.len());
+            for (block, bytes) in before {
+                if block != new_node + 3 {
+                    assert_eq!(buf.dirty[&block], bytes);
+                }
+            }
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
     }
 
     // A thirteen-block planner fixture reaches the legacy single-indirect
