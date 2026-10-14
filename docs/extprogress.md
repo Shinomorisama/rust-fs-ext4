@@ -66,9 +66,66 @@ permission to relax write gates, modify siblings or push to `main`.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
 - Local validation: **802 unit tests pass; lint and CLI build pass**. All 801 test occurrences from the pre-integration baseline remain present and passing.
+- The separately selected slow deep-walk fuzz test passed at source commit
+  `643fd2a26d50e24b4d06d2b2872bfdd538cfbb22`: one executed, zero failed or
+  ignored. It remains ignored in the ordinary suite; see the explicit run below.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
+
+## Explicit slow-fuzz qualification — 2026-10-13
+
+The pre-existing ignored `deep_walk_byte_flip_fuzz_never_panics` test was run
+explicitly at source commit `643fd2a26d50e24b4d06d2b2872bfdd538cfbb22`, using
+the `fixtures` artifact from that commit's CI run
+[38507056428](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38507056428).
+The four Linux-created htree, xattr, checksum-seed and inline images are
+16/8/16/8 MiB respectively. No image was generated with host oracle tools or
+mounted on this host. The test uses read-only in-memory copies.
+
+The release run passed **one test, zero failed or ignored**, in 10.04 seconds.
+It exercised 18,432 byte-corruption cases and 36 device truncations, requiring
+the mount/audit/extent walks to return results without panicking. This establishes
+the test's no-panic property on those images, not correctness of every successful
+parse, writable casefold operations, concurrent mutation or crash recovery.
+The tier log is 8 lines / 327 bytes; the existing floor reader confirms one
+executed test and refuses ignored results for this explicitly named run.
+
+The pinned core 0.3.0 and unchanged lock were verified through locked metadata
+in the isolated source view. Four symlinks in ignored `test-disks/*.img` point to
+the downloaded CI images; no existing files were overwritten. This avoids a
+fixture-directory binding problem in the initial runtime attempt. The actual
+core checkout remains clean at onboarding v0.3.6. Test code, its assertions and
+the ordinary suite's selection were unchanged; the default suite's ignored
+result remains distinct from this separate successful execution.
+
+When these generated images and local helper are available, the tested commands
+are:
+
+```sh
+cd /workspace/rust-fs-ext4
+/workspace/.cloud-setup/run-casefold.sh scripts/tier.sh slow-fuzz slow-fuzz 100 10000 -- scripts/test.sh --locked --release --test fuzz_smoke deep_walk_byte_flip_fuzz_never_panics -- --exact --ignored
+/workspace/.cloud-setup/run-casefold.sh bash scripts/core.sh test-floor --refuse-ignored slow-fuzz 1
+```
+
+The one-test floor belongs only to this exact-name ad hoc run; existing standard
+tier floors are unchanged. Fresh local evidence is in ignored `tmp/logs/slow-fuzz.log`
+and `tmp/slow-fuzz-evidence`, including fixture SHA-256 digests, source commit,
+artifact run and locked metadata. Restore the fixtures safely from CI if absent;
+do not substitute self-generated images or silently decline to run the test.
+
+At this checkpoint, all eight completed jobs of CI run 38507056428 succeeded;
+the x86_64 host/VM suite and the separately compiled guest suite were still
+running. **Full CI remains pending**, not passed. This documentation-only
+checkpoint preserves the tested source and all write gates.
+
+**Next bounded task:** verify the budget-repair run's completed result and
+inspect any failed tier. Once the CI prerequisite passes, reproduce the scoped
+metadata/map-node role-validation counterexample from review finding 2, then
+implement its admission/refusal contract with unchanged-buffer tests. Mapping
+shape finding 3 remains open. Keep writes, collisions/growth and deeper insertion
+blocked. Do not rerun completed research or report ordinary-suite ignored tests
+as if they executed; use separate exact-source evidence where applicable.
 
 ## Kernel output-budget repair and CI evidence — 2026-10-13
 
