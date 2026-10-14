@@ -4079,6 +4079,7 @@ impl Filesystem {
                     "casefold directory data aliases block-map storage",
                 ));
             }
+            self.casefold_check_staged_superblock(buf)?;
             self.casefold_check_staged_descriptors(buf)?;
             if target_ino == 0 || target_ino > self.sb.inodes_count {
                 return Err(Error::InvalidArgument("invalid directory entry inode"));
@@ -7598,10 +7599,54 @@ impl Filesystem {
         Ok(plan.first_block)
     }
 
+    /// Keep the mounted layout, identity and comparison/checksum policy stable.
+    /// Only the free counters patched by buffer_patch_sb_counters may change;
+    /// checksum validity does not qualify any other staged superblock edit.
+    fn casefold_check_staged_superblock(&self, buf: &BlockBuffer) -> Result<()> {
+        let bs = u64::from(self.sb.block_size());
+        let block = crate::superblock::SUPERBLOCK_OFFSET / bs;
+        let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
+        let Some(bytes) = buf.dirty.get(&block) else {
+            return Ok(());
+        };
+        if bytes.len() != bs as usize {
+            return Err(Error::Corrupt(
+                "casefold staged superblock block size mismatch",
+            ));
+        }
+        let raw = bytes
+            .get(offset..offset + crate::superblock::SUPERBLOCK_SIZE)
+            .ok_or(Error::Corrupt("casefold staged superblock outside block"))?;
+        if !self.csum.verify_superblock(raw) {
+            return Err(Error::BadChecksum { what: "superblock" });
+        }
+        let mounted = self
+            .sb
+            .raw
+            .get(..0x3fc)
+            .ok_or(Error::Corrupt("casefold mounted superblock truncated"))?;
+        // Compare every byte before the verified checksum, including reserved
+        // fields. The low free-block/inode counters and high free-block counter
+        // are the sole exceptions; this does not audit their accounting.
+        if raw[..0x3fc]
+            .iter()
+            .zip(mounted)
+            .enumerate()
+            .any(|(field, (current, old))| {
+                !(0x0c..0x14).contains(&field) && !(0x158..0x15c).contains(&field) && current != old
+            })
+        {
+            return Err(Error::Unsupported(
+                "casefold insertion after staged superblock change",
+            ));
+        }
+        Ok(())
+    }
+
     /// Cached metadata roles are usable only while staged primary descriptors
     /// retain their mounted addresses. Counter changes are allowed, but moving
     /// metadata needs a separately qualified transaction-current role map.
-    /// Staged superblock geometry and allocation/ownership remain unqualified.
+    /// Staged superblock edits have their own guard; allocation remains unqualified.
     fn casefold_check_staged_descriptors(&self, buf: &BlockBuffer) -> Result<()> {
         for (group, mounted) in self.groups.iter().enumerate() {
             let (block, offset) = self.sb.descriptor_location(group as u64);
@@ -7638,10 +7683,9 @@ impl Filesystem {
     }
 
     /// Fixed metadata locations from the validated mounted geometry. This is
-    /// a refusal check, not proof of allocation or exclusive ownership: staged
-    /// metadata relocation, superblock geometry, journal storage and full
-    /// map-node ownership need
-    /// qualification before casefold writes can be enabled.
+    /// a refusal check, not proof of allocation or exclusive ownership. Staged
+    /// layout changes are refused separately; journal/other ownership and full
+    /// map-node qualification remain required before enabling casefold writes.
     fn casefold_block_is_fixed_metadata(&self, block: u64) -> bool {
         let block_size = u64::from(self.sb.block_size());
         let first = u64::from(self.sb.first_data_block);
@@ -9036,6 +9080,181 @@ mod tests {
         fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
             .unwrap();
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
+    }
+
+    fn stage_casefold_superblock_byte(fs: &Filesystem, buf: &mut BlockBuffer, field: usize) {
+        let bs = u64::from(fs.sb.block_size());
+        let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
+        let bytes = buf
+            .get_mut(fs, crate::superblock::SUPERBLOCK_OFFSET / bs)
+            .unwrap();
+        let raw = &mut bytes[offset..offset + crate::superblock::SUPERBLOCK_SIZE];
+        raw[field] ^= 1;
+        let checksum = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+        raw[0x3fc..0x400].copy_from_slice(&checksum.to_le_bytes());
+        assert!(fs.csum.verify_superblock(raw));
+    }
+
+    fn assert_casefold_staged_superblock_refusal(field: usize) {
+        for external_map in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, _) = if external_map {
+                let (buf, parent, leaf, _) = staged_casefold_external_map(&dev, &fs);
+                (buf, parent, leaf)
+            } else {
+                staged_casefold_index(&fs)
+            };
+            stage_casefold_superblock_byte(&fs, &mut buf, field);
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            let result = fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            );
+            assert!(
+                matches!(
+                    result,
+                    Err(Error::Unsupported(
+                        "casefold insertion after staged superblock change",
+                    ))
+                ),
+                "field {field:#x}, external map {external_map}: {result:?}"
+            );
+            assert_eq!(buf.dirty, before);
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_superblock_refuses_geometry_changes() {
+        // Counts, group/block/inode geometry, descriptor layout and backups.
+        for field in [
+            0x00, 0x04, 0x14, 0x18, 0x20, 0x28, 0x58, 0xce, 0xfe, 0x104, 0x150, 0x24c,
+        ] {
+            assert_casefold_staged_superblock_refusal(field);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_superblock_refuses_name_and_checksum_policy_changes() {
+        // Feature bits, UUID, hash seed/version/flags, checksum and Unicode policy.
+        for field in [
+            0x5c, 0x60, 0x62, 0x64, 0x68, 0xec, 0xf8, 0xfc, 0x160, 0x175, 0x270, 0x27c, 0x27e,
+        ] {
+            assert_casefold_staged_superblock_refusal(field);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_superblock_refuses_other_non_counter_changes() {
+        // Other edits are outside the deliberately narrow counter-only contract.
+        for field in [0x30, 0x78, 0xe8, 0x3fb] {
+            assert_casefold_staged_superblock_refusal(field);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_superblock_refuses_malformed_blocks() {
+        for truncated in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            fs.buffer_patch_sb_counters(&mut buf, -1, -1).unwrap();
+            let bs = u64::from(BS);
+            let block = crate::superblock::SUPERBLOCK_OFFSET / bs;
+            let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
+            if truncated {
+                buf.dirty.get_mut(&block).unwrap().truncate(offset + 1023);
+            } else {
+                buf.dirty.get_mut(&block).unwrap()[offset + 0x3fc] ^= 1;
+            }
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            let result = fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            );
+            let refused = if truncated {
+                matches!(
+                    result,
+                    Err(Error::Corrupt(
+                        "casefold staged superblock block size mismatch"
+                    ))
+                )
+            } else {
+                matches!(result, Err(Error::BadChecksum { what: "superblock" }))
+            };
+            assert!(refused, "{result:?}");
+            assert_eq!(buf.dirty, before);
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_superblock_accepts_free_counter_updates() {
+        for external_map in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, leaf) = if external_map {
+                let (buf, parent, leaf, _) = staged_casefold_external_map(&dev, &fs);
+                (buf, parent, leaf)
+            } else {
+                staged_casefold_index(&fs)
+            };
+            fs.buffer_patch_sb_counters(&mut buf, -1, -1).unwrap();
+            let bs = u64::from(BS);
+            let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
+            let bytes = &buf.dirty[&(crate::superblock::SUPERBLOCK_OFFSET / bs)];
+            let raw = &bytes[offset..offset + crate::superblock::SUPERBLOCK_SIZE];
+            let current = Superblock::parse(raw.to_vec()).unwrap();
+            assert!(fs.csum.verify_superblock(raw));
+            assert_eq!(current.free_blocks_count, fs.sb.free_blocks_count - 1);
+            assert_eq!(current.free_inodes_count, fs.sb.free_inodes_count - 1);
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            )
+            .unwrap();
+            let entries = crate::dir::parse_block_verified(
+                &buf.dirty[&leaf],
+                true,
+                2,
+                parent.generation,
+                &fs.csum,
+            )
+            .unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].name, b"New_Name");
+            assert_eq!(entries[0].inode, 100);
+            assert_eq!(buf.dirty.len(), before.len());
+            for (block, bytes) in before {
+                if block != leaf {
+                    assert_eq!(buf.dirty[&block], bytes);
+                }
+            }
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
     }
 
     fn stage_casefold_descriptor_pointer(

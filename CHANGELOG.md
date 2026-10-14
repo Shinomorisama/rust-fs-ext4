@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- Private casefold indexed insertion verifies staged superblock checksums and
+  admits only the existing free-counter edits. Layout, identity, policy and
+  other superblock changes refuse before insertion bytes change; buffered/device
+  state is preserved and public casefold writes remain blocked.
 - Private casefold indexed insertion validates staged primary descriptors and
   refuses changed bitmap/inode-table addresses before staging the insertion.
   Valid counter-only updates remain admissible; malformed descriptors refuse

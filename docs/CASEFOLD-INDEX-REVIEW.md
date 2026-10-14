@@ -69,7 +69,40 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Staged superblock stability follow-up — 2026-10-14
+
+At `1a6e8d1`, a fresh 820-test baseline passed. Four new negative planner tests
+reproduced `Ok(())` despite staged geometry, feature/policy, other non-counter
+or checksum changes. All five focused tests now pass, covering the relevant
+layout/Unicode/hash/checksum fields, reserved bytes and truncation, with a
+free-counter control for inline and external maps. Refusals preserve every
+dirty block, allocation flag and device byte; the control verifies free counts,
+stored name/inode and mutation of only the selected leaf.
+
+After read-only directory/mapping admission and before the descriptor check or
+insertion edits, the helper verifies a full primary superblock region and its
+checksum, then compares all pre-checksum bytes with the mounted raw superblock.
+Only the existing free-counter ranges are exempt; their checksum must verify.
+Other edits, including informational/orphan fields, are unsupported until
+qualified. Unknown/reserved bytes are not silently admitted. This stabilizes
+cached layout, identity and comparison/checksum policy without parsing a new
+unqualified geometry, and preserves the existing corruption refusals.
+
+The guard does not audit counter accounting, allocation, journal/other ownership,
+unused branches, complete mapping shape, external mutation or serialization.
+Findings 2 and 3 remain open. Next review current allocation/ownership requirements
+and reproduce one bounded missing-allocation counterexample; existing synthetic
+planner fixtures do not establish correct allocation. Preserve all baseline
+occurrences and update fixtures explicitly for any new allocation precondition.
+Previous focused Linux and full CI passed, and the insertion log was inspected;
+new-source independent CI remains required. Final local validation passed 825
+units with all 820 baseline occurrences retained, lint and the release CLI build.
+Keep public writes, deeper insertion, collisions and growth blocked.
+
 ### Staged descriptor relocation follow-up — 2026-10-14
+
+Follow-up: exact-commit focused Linux and full CI at `1a6e8d1` now passed; the
+staged-superblock checkpoint supersedes its next task and pending status below.
 
 At `986808c`, a fresh 815-test baseline passed. Four new negative planner tests
 reproduced `Ok(())` for staged bitmap/inode-table relocations, high pointer changes
@@ -292,9 +325,9 @@ responsibility. Qualify complete namespace operations, operation-wide
 serialization and crash recovery before relaxing any volume write gate.
 
 Finding 1 is addressed by the boundary-fix follow-up above. Fixed metadata roles,
-visited mapping-node/data overlap and staged descriptor relocations have scoped
-refusals recorded above; inspect the latest exact-commit CI before broadening
-support. Next reproduce staged superblock layout/policy changes and define a
-bounded refusal while retaining other ownership gaps. Keep finding 3
+visited mapping-node/data overlap and staged descriptor/superblock changes have
+scoped refusals recorded above; inspect the latest exact-commit CI before
+broadening support. Next review current allocation/ownership and reproduce one
+bounded missing-allocation case, respecting planner-fixture limits. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.
