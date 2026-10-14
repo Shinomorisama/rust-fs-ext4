@@ -56,6 +56,12 @@ permission to relax write gates, modify siblings or push to `main`.
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
+- Latest review checkpoint: remaining allocation/ownership admission is reviewed
+  at `b7b0325`. Three refusal tests reproduce acceptance of free directory/map
+  storage, including a checksum-valid staged bitmap change. The reproducible
+  tests are saved in `docs/CASEFOLD-ALLOCATION-RED.patch`; production source and
+  write gates are unchanged. See the allocation review below for the contract,
+  evidence and next implementation task. This is preparation, not a fixed gap.
 - Latest integration checkpoint: upstream ordinary-volume recovery recount fix
   `d7519c7f90ef9ec2c538949459c0d4a68655d145` (#508) is backported with its Linux
   crash-image test and a new local regression. Local units, lint and CLI build
@@ -68,13 +74,15 @@ permission to relax write gates, modify siblings or push to `main`.
   mounted contents. Other superblock edits remain unsupported. The descriptor,
   bounds, fixed metadata, mapping-node/data overlap, checksum and disk/staged
   mapping checks remain. See the staged-superblock checkpoint below and use
-  `git log` to identify its commit. New-source independent CI is pending.
+  `git log` to identify its commit (`b7b0325`). Its focused Linux insertion test
+  passed; full CI remains pending at the allocation-review checkpoint.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Local validation: **825 unit tests pass**, retaining all 820 fresh baseline
-  test occurrences (multiset comparison). All five focused staged-superblock
-  tests pass, including the free-counter control. Lint and the locked release
-  CLI build/install pass; new-source independent CI remains pending.
+- Local validation: the allocation review's fresh baseline and restored suite
+  both pass **825 unit tests**, retaining exactly all 825 baseline occurrences
+  (multiset comparison). Lint and the locked release CLI build/install pass.
+  Its three saved reproductions fail on acceptance; no allocation fix is claimed.
+  The preceding superblock fix's five focused tests remain active and passing.
 - The separately selected slow deep-walk fuzz test passed at source commit
   `643fd2a26d50e24b4d06d2b2872bfdd538cfbb22`: one executed, zero failed or
   ignored. It remains ignored in the ordinary suite; see the explicit run below.
@@ -106,6 +114,14 @@ permission to relax write gates, modify siblings or push to `main`.
   including both VM suites and the aggregate gate. Downloaded its insertion
   log: exactly one passed, zero failed or ignored, covering four existing
   profiles (133 lines / 7,953 bytes). These results qualify the preceding source.
+- Staged-superblock checkpoint `b7b0325` passed its exact-commit
+  [focused Linux workflow](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38642467164).
+  Downloaded and inspected the insertion log: exactly one passed, zero failed
+  or ignored, across four existing profiles (133 lines / 7,954 bytes). Its
+  [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38642467254)
+  remains in progress: nine jobs passed, including compiled-in-guest; the x86_64
+  oracle suite is running, with no failures observed. Earlier results do not
+  imply this remaining job passed.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - The required core pin remains `v0.3.0`
@@ -114,7 +130,96 @@ permission to relax write gates, modify siblings or push to `main`.
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
 
+## Allocation/ownership review and regression preparation — 2026-10-14
+
+At source `b7b0325eeaa6d8e2f46f1e346c3ea680e875b3c3`, a fresh local baseline
+passed **825 unit tests**, zero failed or ignored. The focused Linux insertion
+log was downloaded and inspected as recorded above; full CI remains pending.
+No production source, dependency/lock, sibling or write gate changes here.
+
+Review finding 2 now has three demonstrated missing-allocation cases:
+
+- A valid external extent node at block 549 is marked free on disk.
+- Valid staged directory root/leaf blocks at 8190/8191 are within the filesystem,
+  outside fixed metadata and marked free.
+- Directory root block 516 is allocated on disk but free in the current staged
+  bitmap, with refreshed bitmap and descriptor checksums.
+
+Each new test verifies current initialized descriptor flags, descriptor and
+bitmap checksums and actual allocation bits before insertion. The external
+extent tail verifies too. **All three fail because insertion returns `Ok(())`,
+not because setup, checksums or fixtures are missing.** These are synthetic
+private-planner counterexamples, not public volume writes or Linux-clean images.
+The post-refusal dirty-map/allocation-flag/device assertions have not yet passed:
+the red run stops at each acceptance assertion. There is no green fix claim.
+
+The failing tests are retained in
+[CASEFOLD-ALLOCATION-RED.patch](CASEFOLD-ALLOCATION-RED.patch), outside active
+test source while the bounded allocation contract and fixture updates are
+prepared. No tests are ignored, bypassed or relabeled passing. The active source
+was restored byte-for-byte, and `git apply --check` confirms the patch applies.
+The red tier executed exactly three tests: zero passed, three failed, zero
+ignored (36 lines / 1,628 bytes). Local evidence is under ignored
+`tmp/casefold-allocation-review-evidence` and `tmp/logs/casefold-allocation-red.log`.
+The saved patch reconstructs tested source blob
+`ad76a284fbeba3f71e76915b786f9d4a0098cf62`; retained `src/fs.rs` is unchanged
+at blob `07691ec3c6f5c28c5657f81db1f34ffc14b1b0b2`.
+
+After saving/reversing the reproduction patch, the active full local unit tier
+again passed **825 tests**, zero failed or ignored, in 1,073 lines / 66,364 bytes
+within its unchanged budget. Multiset comparison retains exactly all 825 fresh
+baseline occurrences, with none added or lost. These passes concern the retained
+suite, not the three intentionally failing reproductions.
+Fresh lint (including provenance and Unicode-table checks), shared-agent and
+whitespace checks pass, as does the locked release CLI build/install. The newly
+tracked patch also passes provenance/whitespace checks and applies cleanly.
+
+To reproduce against the reviewed source or a later checkpoint with identical
+`src/fs.rs`, first preserve unrelated local changes and verify patch applicability:
+
+```sh
+git apply --check docs/CASEFOLD-ALLOCATION-RED.patch
+git apply docs/CASEFOLD-ALLOCATION-RED.patch
+/workspace/.cloud-setup/run-casefold.sh scripts/tier.sh casefold-allocation-red casefold-allocation-red 180 20000 -- scripts/test.sh --locked --lib fs::tests::casefold_allocation_refuses
+# Expected before the fix: exit 101; all three fail on Ok(()).
+# Preserve the log. Reverse only this patch if no subsequent source edits exist:
+git apply --reverse docs/CASEFOLD-ALLOCATION-RED.patch
+```
+
+The helper path above belongs to this cloud instance; fresh environments should
+use the equivalent pinned setup documented below. These tests need no VM or
+host oracle. A later fix must incorporate and retain the same refusal assertions
+in active source, prove them green, and run the full baseline and independent CI.
+
+The [focused review](CASEFOLD-INDEX-REVIEW.md) specifies the next guard: all
+admitted directory blocks and mapping nodes visited in either view must have
+current initialized/checksum-valid bitmap evidence; use transaction-current
+descriptors/flags, not only mounted caches. Initially refuse uninitialized-group
+and bigalloc profiles rather than guessing allocation. Correct newly staged
+allocations need positive controls, and every existing planner fixture that
+relies on free storage needs an explicit allocation update with its original
+behavioral assertions retained. A used bit still does **not** establish which
+inode owns storage. Journal/other ownership, unused/shadowed map branches,
+complete map shape and operation-wide serialization remain open.
+
+Stage 5 remains **not yet quantified**. This checkpoint establishes the defect
+and fix contract; it does not advance write support. Public casefold writes,
+deeper insertion, collisions, splitting/growth and index dropping remain blocked.
+
+**Next bounded task:** inspect the outstanding full-CI outcome at `b7b0325` and
+the review checkpoint's own runs; resolve failures before broadening support.
+Apply the saved allocation regressions, implement the scoped current-allocation
+refusal under the review contract, and explicitly update planner fixtures.
+Prove the same three tests green, add allocated/currently-staged positive and
+malformed bitmap/flag/profile controls, retain all 825 baseline occurrences,
+then run lint, release CLI and exact-commit focused Linux/full CI. Do not claim
+ownership qualified or broaden index depth from a bitmap-only fix.
+
 ## Staged superblock counter-only contract — 2026-10-14
+
+Follow-up: its focused Linux workflow now passed and the retained insertion log
+was inspected. Full CI remains pending. The allocation-review checkpoint above
+supersedes this section's next task; production source is unchanged by that review.
 
 At source `1a6e8d1da3ddad40f91eb2ea0972c13a9019d690`, a fresh local baseline
 passed **820 unit tests**. Its exact-commit focused Linux insertion and full CI
@@ -831,7 +936,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The new staged superblock contract passed 825 local units, lint and the CLI build; its exact-commit independent CI remains pending. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract at `b7b0325` passed 825 local units, lint, the CLI build and focused Linux insertion; full CI remains pending. The allocation review reproduces three free-storage acceptance cases and records the next refusal contract; no production change or ownership qualification is claimed. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
@@ -934,10 +1039,12 @@ The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
 **Next bounded task:** use the latest 2026-10-14 current checkpoint above.
-Inspect this new checkpoint's exact-commit focused Linux insertion and full CI
-results. Then review current allocation/ownership and reproduce one bounded
-missing-allocation case. Preserve all baseline occurrences and update synthetic
-planner fixtures explicitly for any new allocation precondition. Retain the
+Inspect the pending full CI at `b7b0325` and this review checkpoint's own runs.
+The allocation review and three failing reproductions are complete; next apply
+`docs/CASEFOLD-ALLOCATION-RED.patch` and implement the bounded current-allocation
+refusal under the review contract. Preserve all 825 baseline occurrences and
+explicitly allocate the synthetic fixtures that require it, retaining their
+original assertions and adding positive/malformed allocation controls. Retain the
 current role checks and unchanged-buffer assertions. Allocation, journal/other ownership
 and complete mapping shape remain open.
 Do not proceed to intermediate-level insertion until the remaining admission
@@ -969,6 +1076,6 @@ Committed documentation: `docs/CASEFOLD-BEHAVIOR.md`, `docs/CASEFOLD-STAGE0.md`,
 
 The original detailed plan is `/workspace/casefold-implementation-plan.md`, outside the repository. Its baseline findings and future-tense descriptions are historical; use this note and verified code/CI state for current progress. In particular, do not infer a safe malformed-name fallback from that old plan: later observations led to the current refusal policy. This note contains the continuation essentials even if that original file is unavailable.
 
-Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The latest staged-superblock checkpoint still needs its own outcomes. No claim is made here that a separate coverage workflow ran at the latest commit.
+Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion; its full CI remains pending. The allocation review adds a saved failing-test patch and no production change. No claim is made here that a separate coverage workflow ran at the latest commit.
 
 This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. Verify the selected commit against its own CI; earlier successful runs are evidence for those earlier checkpoints. Update this handoff as implementation checkpoints are completed.

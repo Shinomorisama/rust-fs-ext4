@@ -69,7 +69,108 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Allocation/ownership review and reproduced gap — 2026-10-14
+
+Reviewed the private planner at `b7b0325eeaa6d8e2f46f1e346c3ea680e875b3c3`.
+Its exact-commit focused Linux insertion test passed across the four existing
+profiles; the downloaded log contains one passed test, zero failed or ignored
+(133 lines / 7,954 bytes). At final review, full CI has nine successful jobs;
+the x86_64 oracle suite is still running, with no failures observed.
+This checkpoint changes neither production admission nor the write gates.
+
+The existing checks establish address bounds, fixed roles, visited map/data
+disjointness and staged layout stability. None reads allocation bitmaps.
+Three new refusal tests all reproduce `Ok(())`:
+
+- A valid external extent node at block 549 is free in the on-disk bitmap.
+- Valid staged directory root/leaf blocks at 8190/8191 are in bounds, outside
+  fixed metadata, but free in the bitmap.
+- Directory root block 516 is allocated on disk but free in a staged bitmap
+  with refreshed bitmap and descriptor checksums.
+
+The tests verify initialized descriptor flags, descriptor/bitmap checksums and
+the actual group-relative bits before invoking insertion. The external extent
+tail also verifies. They are synthetic planner counterexamples, not Linux-clean
+images or public writes. Their required unchanged-buffer/device assertions are
+after the refusal assertion and **have not passed**: all three currently stop
+on acceptance. The complete failing tests are retained in
+[CASEFOLD-ALLOCATION-RED.patch](CASEFOLD-ALLOCATION-RED.patch), outside active
+test source until the bounded fix. No test is marked ignored or weakened;
+the unchanged active suite is revalidated separately in `extprogress.md`.
+
+#### Contract for the next bounded allocation refusal
+
+1. Preserve the existing read-only admission and error checks. Before editing
+   or staging the selected leaf, require allocation of **every** admitted
+   directory block and every mapping block visited in either disk/staged view,
+   including unselected leaves and staged-only nodes. A chosen leaf alone is
+   insufficient. Do not turn a refusal into a growth/index-drop signal.
+2. Resolve each containing group from validated mounted geometry, but obtain
+   its descriptor and bitmap from the current buffer, falling back to current
+   device reads. Require full blocks/slices, descriptor checksum and the existing
+   stable-address contract. Mounted `groups` and `allocation_groups()` provide
+   cached state; they do not replace current bitmap checksums or descriptor flags.
+   Reconcile relevant `buf.uninit_cleared` state with the descriptor rather than
+   silently preferring a contradictory flag source. A checksum-valid staged
+   counter or bitmap edit does not itself prove allocation.
+3. Initially refuse an admitted data/map block in a `BLOCK_UNINIT` group.
+   Such a bitmap has no trustworthy ordinary allocation bits. Do not infer
+   ownership by synthesizing an all-free bitmap or from the fixed-role helper.
+   Initialized groups need current bitmap checksum verification using the
+   mounted checksum policy. For the initial ordinary-block profiles, cover
+   `ceil(blocks_per_group / 8)` bytes, compare the low 16 bits for a 32-byte
+   descriptor and all 32 bits for a 64-byte descriptor. Do not silently truncate
+   coverage to fit a malformed bitmap or apply this block rule to bigalloc.
+   A missing used bit must be a corruption refusal, with no buffer/device edits.
+4. Initially bound this guard to ordinary block allocation. Explicitly refuse
+   `BIGALLOC` until cluster indexing, checksum coverage and sharing are qualified;
+   one bitmap bit there represents a cluster, not one physical block. Retain
+   bounds checks before indexing and reject truncated/out-of-range bitmaps.
+5. Admit a correctly staged allocation using its **current** used bit; requiring
+   the old disk bit too would reject legitimate allocations. Add positive
+   controls for unchanged allocated storage and real buffered allocation with
+   current checksums/flags. Update existing planner fixtures explicitly, including
+   external/legacy nodes, relocated boundary blocks and unselected leaves. Keep
+   every baseline test occurrence and its original behavioral assertion; do not
+   add test-only bypasses or claim these fixtures prove ownership.
+
+#### Ownership is a separate, still-open requirement
+
+A used bit records allocation, not which inode owns the block. In particular,
+the default planner fixture extends root inode 2 into block 517 without proving
+that block belongs to it. Checksum-valid bytes do not establish ownership either.
+The directory's complete data/map storage must eventually be disjoint from
+the internal journal's data and mapping nodes, other inodes' data/map blocks,
+extended attributes and other reserved ownership roles. Unsupported/external
+journal profiles need an explicit refusal or separate qualification. No
+filesystem-wide current owner index is supplied by the reviewed insertion path.
+
+`JournalWriter` builds a private mount-time journal physical map; the insertion
+planner neither consults it nor validates journal ownership through the current
+transaction. Reusing that vector alone would omit current journal inode/map
+changes and mapping-node storage. Define a verified, transaction-current owner
+proof (or a narrower supported profile) before claiming this part of finding 2
+closed. It also needs operation-wide serialization so ownership/allocation
+cannot change between proof and commit. Finding 3's complete mapping-shape
+validation remains separate: visited-node checks omit unused/shadowed branches.
+
+Published format references, not implementation source:
+[bitmaps](https://docs.kernel.org/filesystems/ext4/bitmaps.html),
+[group descriptors](https://docs.kernel.org/filesystems/ext4/group_descr.html),
+[checksums](https://docs.kernel.org/filesystems/ext4/checksums.html), and
+[bigalloc](https://docs.kernel.org/filesystems/ext4/bigalloc.html).
+Own MIT source reviewed: `buffer_add_dir_entry_indexed`, `allocation_groups`,
+`plan_buffered_block_allocation_excluding`, `buffer_mark_block_run_used`,
+`buffer_refresh_bitmap_csum`, `BlockBuffer`, `bgd`, `alloc`, `checksum`,
+`superblock` and `journal_writer`. No host oracle/mount or forbidden source
+was used. Allocation refusal is the next implementation checkpoint; journal/
+other ownership, full map shape and serialization remain open afterward.
+
 ### Staged superblock stability follow-up — 2026-10-14
+
+Follow-up: the allocation review above supersedes this section's next task.
+The superblock checkpoint's focused Linux test now passed; full CI remains
+pending at review time. No new production source is introduced by the review.
 
 At `1a6e8d1`, a fresh 820-test baseline passed. Four new negative planner tests
 reproduced `Ok(())` despite staged geometry, feature/policy, other non-counter
@@ -327,7 +428,8 @@ serialization and crash recovery before relaxing any volume write gate.
 Finding 1 is addressed by the boundary-fix follow-up above. Fixed metadata roles,
 visited mapping-node/data overlap and staged descriptor/superblock changes have
 scoped refusals recorded above; inspect the latest exact-commit CI before
-broadening support. Next review current allocation/ownership and reproduce one
-bounded missing-allocation case, respecting planner-fixture limits. Keep finding 3
+broadening support. The allocation review now reproduces missing-allocation
+acceptance. Next implement its bounded refusal and explicitly update planner
+fixtures under the contract above. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.
