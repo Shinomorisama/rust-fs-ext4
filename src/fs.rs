@@ -4079,6 +4079,7 @@ impl Filesystem {
                     "casefold directory data aliases block-map storage",
                 ));
             }
+            self.casefold_check_staged_descriptors(buf)?;
             if target_ino == 0 || target_ino > self.sb.inodes_count {
                 return Err(Error::InvalidArgument("invalid directory entry inode"));
             }
@@ -7597,9 +7598,49 @@ impl Filesystem {
         Ok(plan.first_block)
     }
 
+    /// Cached metadata roles are usable only while staged primary descriptors
+    /// retain their mounted addresses. Counter changes are allowed, but moving
+    /// metadata needs a separately qualified transaction-current role map.
+    /// Staged superblock geometry and allocation/ownership remain unqualified.
+    fn casefold_check_staged_descriptors(&self, buf: &BlockBuffer) -> Result<()> {
+        for (group, mounted) in self.groups.iter().enumerate() {
+            let (block, offset) = self.sb.descriptor_location(group as u64);
+            let Some(bytes) = buf.dirty.get(&block) else {
+                continue;
+            };
+            if bytes.len() != self.sb.block_size() as usize {
+                return Err(Error::Corrupt(
+                    "casefold staged descriptor block size mismatch",
+                ));
+            }
+            let raw = bytes
+                .get(offset..offset + usize::from(self.sb.desc_size))
+                .ok_or(Error::Corrupt("casefold staged descriptor outside block"))?;
+            let stored = u16::from_le_bytes([raw[0x1e], raw[0x1f]]);
+            if crate::checksum::group_desc_csum(&self.sb, &self.csum, group as u32, raw)
+                .is_some_and(|expected| expected != stored)
+            {
+                return Err(Error::BadChecksum {
+                    what: "block group descriptor",
+                });
+            }
+            let current = BlockGroupDescriptor::parse(raw, self.sb.desc_size)?;
+            if current.block_bitmap != mounted.block_bitmap
+                || current.inode_bitmap != mounted.inode_bitmap
+                || current.inode_table != mounted.inode_table
+            {
+                return Err(Error::Unsupported(
+                    "casefold insertion after staged metadata relocation",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Fixed metadata locations from the validated mounted geometry. This is
     /// a refusal check, not proof of allocation or exclusive ownership: staged
-    /// descriptor changes, journal storage and full map-node ownership need
+    /// metadata relocation, superblock geometry, journal storage and full
+    /// map-node ownership need
     /// qualification before casefold writes can be enabled.
     fn casefold_block_is_fixed_metadata(&self, block: u64) -> bool {
         let block_size = u64::from(self.sb.block_size());
@@ -8995,6 +9036,204 @@ mod tests {
         fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
             .unwrap();
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
+    }
+
+    fn stage_casefold_descriptor_pointer(
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        pointer_offset: usize,
+        physical: u64,
+    ) {
+        let (block, offset) = fs.sb.descriptor_location(0);
+        let bytes = buf.get_mut(fs, block).unwrap();
+        bytes[offset + pointer_offset..offset + pointer_offset + 4]
+            .copy_from_slice(&(physical as u32).to_le_bytes());
+        assert!(fs.sb.desc_size >= 64);
+        bytes[offset + 0x20 + pointer_offset..offset + 0x24 + pointer_offset]
+            .copy_from_slice(&((physical >> 32) as u32).to_le_bytes());
+        fs.restamp_group_desc_csum(bytes, offset, 0);
+    }
+
+    fn assert_casefold_descriptor_relocation_refusal(pointer_offset: usize, map_node: bool) {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf, node) = staged_casefold_external_map(&dev, &fs);
+        stage_casefold_descriptor_pointer(
+            &fs,
+            &mut buf,
+            pointer_offset,
+            if map_node { node } else { leaf },
+        );
+        let before = buf.dirty.clone();
+        let allocation_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let result = fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(Error::Unsupported(
+                    "casefold insertion after staged metadata relocation",
+                ))
+            ),
+            "pointer offset {pointer_offset}, map node {map_node}: {result:?}"
+        );
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, allocation_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_staged_descriptor_refuses_bitmap_relocations() {
+        for pointer_offset in [0, 4] {
+            for map_node in [false, true] {
+                assert_casefold_descriptor_relocation_refusal(pointer_offset, map_node);
+            }
+        }
+    }
+
+    #[test]
+    fn casefold_staged_descriptor_refuses_inode_table_relocations() {
+        for map_node in [false, true] {
+            assert_casefold_descriptor_relocation_refusal(8, map_node);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_descriptor_refuses_high_pointer_changes() {
+        for pointer_offset in [0, 4, 8] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let mounted = match pointer_offset {
+                0 => fs.groups[0].block_bitmap,
+                4 => fs.groups[0].inode_bitmap,
+                _ => fs.groups[0].inode_table,
+            };
+            stage_casefold_descriptor_pointer(&fs, &mut buf, pointer_offset, mounted | (1 << 32));
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            let result = fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            );
+            assert!(
+                matches!(
+                    result,
+                    Err(Error::Unsupported(
+                        "casefold insertion after staged metadata relocation",
+                    ))
+                ),
+                "{result:?}"
+            );
+            assert_eq!(buf.dirty, before);
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_descriptor_refuses_malformed_descriptor_blocks() {
+        for truncated in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            fs.buffer_patch_bgd_counters(&mut buf, 0, -1, 0, 0).unwrap();
+            let (block, offset) = fs.sb.descriptor_location(0);
+            if truncated {
+                buf.dirty.get_mut(&block).unwrap().truncate(offset + 31);
+            } else {
+                buf.dirty.get_mut(&block).unwrap()[offset + 0x1e] ^= 1;
+            }
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            let result = fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            );
+            let refused = if truncated {
+                matches!(
+                    result,
+                    Err(Error::Corrupt(
+                        "casefold staged descriptor block size mismatch"
+                    ))
+                )
+            } else {
+                matches!(
+                    result,
+                    Err(Error::BadChecksum {
+                        what: "block group descriptor"
+                    })
+                )
+            };
+            assert!(refused, "{result:?}");
+            assert_eq!(buf.dirty, before);
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
+    }
+
+    #[test]
+    fn casefold_staged_descriptor_accepts_counter_only_updates() {
+        for external_map in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, leaf) = if external_map {
+                let (buf, parent, leaf, _) = staged_casefold_external_map(&dev, &fs);
+                (buf, parent, leaf)
+            } else {
+                staged_casefold_index(&fs)
+            };
+            fs.buffer_patch_bgd_counters(&mut buf, 0, -1, -1, 1)
+                .unwrap();
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                b"New_Name",
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            )
+            .unwrap();
+            let entries = crate::dir::parse_block_verified(
+                &buf.dirty[&leaf],
+                true,
+                2,
+                parent.generation,
+                &fs.csum,
+            )
+            .unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].name, b"New_Name");
+            assert_eq!(entries[0].inode, 100);
+            assert_eq!(buf.dirty.len(), before.len());
+            for (block, bytes) in before {
+                if block != leaf {
+                    assert_eq!(buf.dirty[&block], bytes);
+                }
+            }
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
     }
 
     fn relocate_casefold_extent_node(

@@ -69,7 +69,38 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Staged descriptor relocation follow-up — 2026-10-14
+
+At `986808c`, a fresh 815-test baseline passed. Four new negative planner tests
+reproduced `Ok(())` for staged bitmap/inode-table relocations, high pointer changes
+and a broken descriptor checksum. Cases also cover metadata moved into visited
+map-node storage and a truncated descriptor block. All five focused tests now
+pass, including the counter-only control for inline and external maps. Refusals
+preserve the complete dirty map, allocation flags and device bytes; the control
+verifies stored name/inode and changes only the selected leaf.
+
+After read-only directory/mapping admission and before editing/staging insertion,
+the private helper validates each staged primary descriptor's block/slice size
+and checksum, parses the existing format and compares complete bitmap/inode-table
+addresses against the mounted descriptors. Metadata relocation is unsupported;
+checksum/corruption errors refuse malformed descriptors. Checksummed counter-only
+updates remain admissible. Existing fixed-role and mapping corruption refusals
+keep their earlier read-only checks; no ordinary-directory path is changed.
+
+This does not build a general transaction-current ownership map. Non-address
+descriptor fields, staged superblock layout/policy, allocation, journal/other
+ownership, unused branches, complete mapping shape and serialization remain
+unqualified. Findings 2 and 3 stay open. Next reproduce staged superblock changes
+and define a bounded refusal that preserves valid counter-only updates. Previous
+exact-commit focused Linux and full CI passed, and the insertion log was inspected;
+new-source independent CI remains required. Final local validation passed 820
+units with all 815 baseline occurrences retained, lint and the release CLI build.
+Keep public writes, deeper insertion, collisions and growth blocked.
+
 ### Fixed-metadata mapping-node refusal follow-up — 2026-10-14
+
+Follow-up: exact-commit focused Linux and full CI at `986808c` now passed; the
+staged-descriptor follow-up supersedes its next task and pending status below.
 
 Another fixed-location subset of finding 2 is reproduced and corrected. At
 `8f94cf8`, a fresh 810-test baseline passed. Three new negative tests returned
@@ -260,10 +291,10 @@ link accounting, timestamps and stale-entry replacement remain the caller's
 responsibility. Qualify complete namespace operations, operation-wide
 serialization and crash recovery before relaxing any volume write gate.
 
-Finding 1 is addressed by the boundary-fix follow-up above. Fixed directory
-and visited mapping-node metadata locations and mapping-node/data overlaps have
-scoped corrections recorded above; inspect the latest exact-commit CI before
-broadening support. Next reproduce staged descriptor relocation and define
-its bounded refusal while retaining other ownership gaps. Keep finding 3
+Finding 1 is addressed by the boundary-fix follow-up above. Fixed metadata roles,
+visited mapping-node/data overlap and staged descriptor relocations have scoped
+refusals recorded above; inspect the latest exact-commit CI before broadening
+support. Next reproduce staged superblock layout/policy changes and define a
+bounded refusal while retaining other ownership gaps. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.

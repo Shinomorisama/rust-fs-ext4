@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- Private casefold indexed insertion validates staged primary descriptors and
+  refuses changed bitmap/inode-table addresses before staging the insertion.
+  Valid counter-only updates remain admissible; malformed descriptors refuse
+  without changing buffered/device state. Public casefold writes remain blocked.
 - Private casefold mapping-node reads refuse fixed filesystem metadata locations
   before reading disk or staged bytes, preserving buffered/device state on
   refusal. Complete ownership qualification and public casefold writes remain
