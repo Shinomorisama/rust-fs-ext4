@@ -65,6 +65,7 @@ below. Add these custom destinations when restricted egress is used:
 |---|---|
 | `api.github.com` | Repository access, exact-commit CI/job status, artifact requests, and authorized workflow operations |
 | `*.blob.core.windows.net` | GitHub Actions log/artifact storage; its numbered download host can change between runs |
+| `results-receiver.actions.githubusercontent.com` | GitHub Actions individual job-log downloads |
 | `unicode.org`, `www.unicode.org` | Official Unicode data/specifications for casefold work |
 | `docs.kernel.org` | Published filesystem format documentation permitted by the clean-room rules |
 

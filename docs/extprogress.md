@@ -59,7 +59,9 @@ permission to relax write gates, modify siblings or push to `main`.
 - Latest integration checkpoint: upstream ordinary-volume recovery recount fix
   `d7519c7f90ef9ec2c538949459c0d4a68655d145` (#508) is backported with its Linux
   crash-image test and a new local regression. Local units, lint and CLI build
-  pass; independent Linux execution and this checkpoint's CI remain unverified.
+  pass. Its independent Linux crash-image test now passed in both kernel and
+  guest tiers; full CI at `0896577` failed because the kernel log exceeded its
+  line budget. The measured repair below still needs its own fresh CI outcome.
 - Latest implementation work: private casefold index admission now bounds physical data and external map reads to the mounted filesystem, preserving the preceding checksummed disk/staged mapping checks and admitted-leaf reuse. See the physical boundary fix below and use `git log` to identify the current checkpoint.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
@@ -67,6 +69,56 @@ permission to relax write gates, modify siblings or push to `main`.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
+
+## Kernel output-budget repair and CI evidence — 2026-10-13
+
+Inspected exact-commit CI run
+[38489085592](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38489085592)
+at recovery checkpoint `0896577084ec20d8168d9720cfaf60ad27f3e31d`. Its retained
+`tier-logs-x86_64` artifact contains **28 kernel tests passed, zero failed or
+ignored**, in **464 lines / 40,920 bytes**. This exceeds the old 460-line cap by
+four; replaying the captured output through the actual tier wrapper reproduces
+exit **65**. The byte cap was 42,000, leaving little headroom.
+
+The new recovery regression
+`a_lazy_mount_writes_into_an_uninit_group_only_after_replaying_the_kernels_log`
+executed and passed in both that kernel tier and the separately compiled guest
+suite. Its kernel log records filesystem checking and cold kernel readback.
+The guest job succeeded with **1,618 passed, zero failed and one ignored**:
+the pre-existing slow `deep_walk_byte_flip_fuzz_never_panics` test was not run.
+Do not describe that result as a zero-ignored or exhaustive suite pass. The
+x86_64 job stopped at the kernel budget, so its later tiers were unrun.
+
+`chores.yml` now caps kernel output at **620 lines / 55,000 bytes**, restoring
+approximately **34% headroom in both dimensions** against the observed log.
+The complete captured output passes these revised limits, with a byte comparison
+confirming no output changed. The floor reader counts all 28 tests against the
+unchanged floor of 3. Both existing output-budget/floor shell guards and all
+**87 CI-configuration tests** pass; provenance, whitespace and shared-agent
+checks pass. Production code, tests, selection, assertions, dependencies and
+write gates are unchanged. This replay validates the configuration change;
+it is not a fresh Linux test execution or proof that the new commit's CI passed.
+
+The preceding boundary fix `fe7e088a3a115bee68d1ccab4d7ee0bfc8c37484` has successful
+full CI (38331234132) and focused Stage 0 CI (38331234257). The focused artifact
+was downloaded and its exact insertion log inspected: **one passed, zero failed
+or ignored**, with the existing independent Linux/e2fsck assertions completed.
+
+GitHub source, API status/permissions and real artifact downloads now work with
+existing credentials; official Unicode and published ext4 references return
+HTTP 200. Individual job-log retrieval additionally needs
+`results-receiver.actions.githubusercontent.com`. That exact destination was
+added to the environment draft while preserving prior rules and presets; apply
+and publish that network change before claiming individual job-log access works.
+Retained local evidence is under ignored `tmp/kernel-budget-evidence` and
+`/workspace/.cloud-setup/ci-0896577`; later chats should use the CI artifacts.
+
+**Next bounded task:** check this budget-repair commit's exact-commit CI and
+resolve any remaining failures or ignored-test qualification before extending
+index admission. Then reproduce the metadata/map-node role-validation gap in
+review finding 2 and implement its scoped refusal contract. Finding 3 remains
+open. Keep casefold write gates, collision/growth refusals and public APIs intact;
+do not add intermediate-level insertion yet. Pause after this repair checkpoint.
 
 ## Upstream recovery integration — 2026-10-13
 
@@ -311,7 +363,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
 | **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The original insertion bytes passed four Linux profiles; new mapping hardening is locally tested and needs fresh CI. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
-| **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. An ordinary-volume recovery recount fix is backported and locally tested; its independent Linux crash test still needs CI validation. Keep casefold repair and unsupported feature combinations blocked. |
+| **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair still needs a fresh outcome. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next

@@ -161,7 +161,14 @@ chore_min_version: 0.6.0
 #                                                    36404048578), which failed
 #                                                    the tier with exit 65 and
 #                                                    nothing red inside it
-#     kernel      352 /  27,924      460 /  42,000   Two binaries
+#     kernel      464 /  40,920      620 /  55,000   ~34% / ~34% headroom.
+#                                                    RE-MEASURED at 0896577,
+#                                                    CI run 38489085592: all
+#                                                    28 tests passed, but the
+#                                                    recovery regression took
+#                                                    the log four lines over
+#                                                    the old 460-line cap.
+#                                                    Earlier measurement: two binaries
 #                                                    more: group_layout_oracle.rs
 #                                                    (nine tests, two of them
 #                                                    kernel resizes) and
@@ -529,9 +536,10 @@ tasks:
 
   test:kernel:
     desc: 'The driver writes, THE KERNEL reads back: our images loop-mounted by Linux in the guest'
-    # Casefold evidence: run 37698972634 retained 404 lines / 34,221 bytes.
-    # The new cold-create calls in run 37733726483 add 24 lines / 3,176 bytes
-    # on the same CI path layout. Allow their evidence plus modest headroom.
+    # Run 38489085592 at 0896577 retained 464 lines / 40,920 bytes, with
+    # 28 passed, zero failed or ignored. The recovery regression exceeded
+    # the old 460-line cap by four. 620/55,000 restores ~34% headroom in
+    # both dimensions without removing any independent-validation output.
     # The gap e2fsprogs cannot close: a volume it calls clean can still be
     # one Linux mounts differently. These tests write with the Rust API
     # and with the C ABI, mount read-only in the guest, and compare names,
@@ -539,7 +547,7 @@ tasks:
     # written — plus the reverse direction, and a deliberate corruption
     # that must fail.
     cmds:
-      - 'scripts/tier.sh test:kernel kernel 460 42000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
+      - 'scripts/tier.sh test:kernel kernel 620 55000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
       - 'bash scripts/core.sh test-floor kernel 3'
 
   test:lwext4:
