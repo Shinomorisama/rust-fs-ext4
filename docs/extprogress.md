@@ -56,13 +56,54 @@ permission to relax write gates, modify siblings or push to `main`.
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
+- Latest integration checkpoint: upstream ordinary-volume recovery recount fix
+  `d7519c7f90ef9ec2c538949459c0d4a68655d145` (#508) is backported with its Linux
+  crash-image test and a new local regression. Local units, lint and CLI build
+  pass; independent Linux execution and this checkpoint's CI remain unverified.
 - Latest implementation work: private casefold index admission now bounds physical data and external map reads to the mounted filesystem, preserving the preceding checksummed disk/staged mapping checks and admitted-leaf reuse. See the physical boundary fix below and use `git log` to identify the current checkpoint.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Local validation: **801 unit tests pass; lint and CLI build pass**. All 796 preceding baseline test occurrences remain present and passing.
+- Local validation: **802 unit tests pass; lint and CLI build pass**. All 801 test occurrences from the pre-integration baseline remain present and passing.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - `rust-fs-core` remains at `v0.3.0` (`9e900154a7dff2a6c8f136db31def33bed9f09cc`). Neither it nor `fs-linux-test-harness` is to be modified.
+
+## Upstream recovery integration — 2026-10-13
+
+Backported upstream `antimatter-studios/rust-fs-ext4` commit
+`d7519c7f90ef9ec2c538949459c0d4a68655d145` (#508). Finishing writable journal
+recovery now restores the primary superblock's free block and inode totals from
+the recovered group descriptors, including a clean journal with a leftover
+recovery marker. The branch's earlier CASEFOLD/MMP/ENCRYPT refusal still executes
+before either kind of recovery write. Casefold support and write gates are unchanged.
+
+The upstream `tests/lazy_write_over_kernel_log.rs` is retained byte-for-byte.
+It checks Linux crash recovery followed by writes into an uninitialised group,
+then independent filesystem checking and kernel readback. It compiles locally
+but **has not executed here**: this host lacks KVM, and the GitHub API route is
+currently denied. Do not describe its assertions as passed at this checkpoint.
+
+A new local test in `clean_journal_write_refusal.rs` reproduced recovery leaving
+the free-block total at 0 instead of 6,902; it failed before the fix and passes
+afterward. All four tests in that binary pass, including unchanged-byte/no-write
+refusals for protected features. The full unit tier passes **802 tests, zero
+failed or ignored**, preserving all 801 baseline passing occurrences as a multiset.
+`chore lint`, `chore cli:install`, provenance and shared-agent checks pass.
+No upstream dependency, CLI packaging, CI-policy or shared-agent upgrade was
+merged. Source compatibility alone does not qualify the independent crash test.
+
+Validation used the existing pinned-core archive through an isolated PRoot view,
+restored under `/workspace/.cloud-setup`, with the GNU linker option described
+below. Signed Debian package indexes and package checksums were retained. The
+real core checkout remains clean at onboarding v0.3.6; locks and dependency
+declarations are unchanged. Fresh local evidence is under ignored
+`tmp/upstream-recovery-evidence` and `tmp/logs/recovery-recount-{red,green}.log`.
+
+**Next bounded task:** verify this checkpoint's exact-commit full CI, explicitly
+confirming the new Linux crash-image test executed and passed, and check the
+boundary fix's focused Linux evidence. Resolve failures before implementing the
+remaining metadata/map-node role-validation gap (review finding 2) and map-shape
+qualification (finding 3). Do not enable writes or add intermediate insertion.
 
 ## Physical admission boundary fix — 2026-10-12
 
@@ -270,7 +311,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
 | **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The original insertion bytes passed four Linux profiles; new mapping hardening is locally tested and needs fresh CI. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
-| **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. Keep casefold repair and unsupported feature combinations blocked. |
+| **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. An ordinary-volume recovery recount fix is backported and locally tested; its independent Linux crash test still needs CI validation. Keep casefold repair and unsupported feature combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next

@@ -120,6 +120,36 @@ fn an_ordinary_volume_still_clears_a_leftover_recovery_marker() {
 }
 
 #[test]
+fn clearing_leftover_recovery_restores_stale_free_space_and_inode_totals() {
+    let dev = volume(0);
+    let mut sb = Superblock::read(dev.as_ref()).unwrap();
+    let expected_blocks = sb.free_blocks_count;
+    let expected_inodes = sb.free_inodes_count;
+    assert!(expected_blocks > 0 && expected_inodes > 0);
+
+    // Model a crash after the journal was cleared but before the primary
+    // superblock's summary was brought up to date. Keep the allocation
+    // descriptors and bitmaps unchanged, so their original totals are known.
+    sb.raw[0x0C..0x10].copy_from_slice(&0_u32.to_le_bytes());
+    sb.raw[0x10..0x14].copy_from_slice(&0_u32.to_le_bytes());
+    sb.raw[0x158..0x15C].copy_from_slice(&0_u32.to_le_bytes());
+    let checksum = fs_ext4::checksum::linux_crc32c(!0, &sb.raw[..0x3fc]);
+    sb.raw[0x3fc..0x400].copy_from_slice(&checksum.to_le_bytes());
+    dev.writable.store(true, Ordering::SeqCst);
+    dev.write_at(SUPERBLOCK_OFFSET, &sb.raw).unwrap();
+    dev.writable.store(false, Ordering::SeqCst);
+
+    let mut fs = Filesystem::mount_lazy(dev.clone()).unwrap();
+    assert!(jbd2::read_superblock(&fs).unwrap().unwrap().is_clean());
+    dev.writable.store(true, Ordering::SeqCst);
+    assert_eq!(fs.replay_journal_if_dirty().unwrap(), 0);
+    let recovered = Superblock::read(dev.as_ref()).unwrap();
+    assert_eq!(recovered.free_blocks_count, expected_blocks);
+    assert_eq!(recovered.free_inodes_count, expected_inodes);
+    assert_eq!(recovered.feature_incompat & Incompat::RECOVER.bits(), 0);
+}
+
+#[test]
 fn a_device_that_stays_read_only_keeps_the_recovery_marker() {
     let dev = volume(Incompat::CASEFOLD.bits());
     let before = dev.bytes.lock().unwrap().clone();
