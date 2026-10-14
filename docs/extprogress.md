@@ -63,17 +63,18 @@ permission to relax write gates, modify siblings or push to `main`.
   guest tiers; full CI at `0896577` failed because the kernel log exceeded its
   line budget. The measured repair's full CI now passed at `643fd2a`; subsequent
   full runs at `1ee1fed` and `d6ae8d8` also passed.
-- Latest implementation work: private casefold index admission now refuses
-  directory blocks in known fixed metadata locations from the mounted geometry.
-  The prior filesystem bounds, checksummed disk/staged mapping agreement and
-  admitted-leaf reuse remain. See the scoped role checkpoint below and use
+- Latest implementation work: private casefold index admission now also refuses
+  overlap between directory data and visited external mapping blocks, including
+  mapping blocks discovered after their directory-data role was admitted. The
+  prior fixed-metadata, bounds, checksummed disk/staged mapping agreement and
+  admitted-leaf checks remain. See the mapping-role checkpoint below and use
   `git log` to identify its commit. Independent CI for this new fix is pending.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Local validation: **807 unit tests pass**, with all 802 fresh baseline test
-  occurrences retained (multiset comparison), and lint passes. All five focused
-  role tests pass, including the previously red refusals. The locked release CLI
-  build/install also passes.
+- Local validation: **810 unit tests pass**, retaining all 807 fresh baseline
+  test occurrences (multiset comparison), and lint passes. The three new focused
+  mapping-role tests pass, including two reproduced red refusals. The locked
+  release CLI build/install also passes.
 - The separately selected slow deep-walk fuzz test passed at source commit
   `643fd2a26d50e24b4d06d2b2872bfdd538cfbb22`: one executed, zero failed or
   ignored. It remains ignored in the ordinary suite; see the explicit run below.
@@ -81,6 +82,12 @@ permission to relax write gates, modify siblings or push to `main`.
   reproduced metadata root/leaf acceptance before the scoped fix; those same
   tests and a positive inode-table boundary test now pass. This addresses only
   the fixed-location subset of review finding 2, not complete ownership checks.
+- Fixed-metadata checkpoint `3be872e` passed its exact-commit
+  [focused Linux workflow](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38542952071).
+  Downloaded its insertion log: exactly one passed, zero failed or ignored,
+  covering four profiles (133 lines / 7,954 bytes). Its
+  [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38542952151)
+  still has two VM suites running, with no reported failures. Do not call it passed.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - The required core pin remains `v0.3.0`
@@ -89,7 +96,68 @@ permission to relax write gates, modify siblings or push to `main`.
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
 
+## Visited mapping-block/data overlap refusal — 2026-10-14
+
+At source `3be872e8a8794239182918ffc4b21121d97ac29e`, a fresh local baseline
+passed **807 unit tests**. The preceding fixed-metadata change's exact-commit
+focused Linux insertion workflow passed; downloaded and inspected the retained
+insertion log, confirming one executed test, zero failed or ignored, and its
+independent Linux/e2fsck checks across four profiles. Its full CI is still
+pending in two VM suites, with all eight completed jobs successful. This new
+change only narrows admission and does not extend write support.
+
+Two new refusal regressions were red: the private planner returned `Ok(())`
+when physical block **517** was both directory leaf 1 and the legacy
+single-indirect mapping block. A thirteen-block directory reads that map block
+only when reaching logical block 12, after earlier directory leaves have been
+admitted. One test selects the aliased leaf for insertion; the other selects
+the final ordinary leaf, proving that unselected leaves also need role checks.
+A positive test with a separate mapping block passed before and after the fix.
+These are synthetic, deliberately unallocated planner fixtures with unique
+directory addresses and valid name routing/checksums, not Linux-clean images
+or qualification of legacy-map writes.
+
+`CasefoldMapDevice` now records physical blocks successfully read by the
+existing extent/legacy mappers in a per-call set shared by disk and staged
+views. After the complete directory admission walk, insertion refuses any
+intersection with its directory-data addresses, before editing or staging the
+copied leaf. Repeated reads of a shared mapping block remain allowed. Tracking
+read locations in both views does not assume that identical returned mappings
+necessarily traverse identical nodes. The mapper's filesystem bounds and
+existing extent checksums and disk/staged mapping agreement are unchanged.
+
+All three focused tests now pass. Their disk-only and identical-staged-node
+cases execute; each refusal verifies unchanged dirty blocks, allocation flags
+and device bytes. The positive cases verify the inserted name/inode, require
+only the selected leaf to change and preserve device/allocation state. This
+records visited mapping nodes only: unused/shadowed branches, complete map
+shape, fixed metadata roles of mapping nodes, transaction-current descriptors
+and allocation, journal/other ownership and operation-wide serialization are
+still unqualified. Findings 2 and 3 remain open. Stage 5 completion remains
+**not yet quantified**; public writes, deeper insertion and growth stay blocked.
+
+The full local unit tier passed **810 tests**, zero failed or ignored, in
+1,058 lines / 65,157 bytes within its unchanged budget. Multiset comparison
+retains all 807 baseline occurrences and adds exactly the three new tests.
+Lint, provenance, whitespace and shared-agent checks pass. The locked release
+CLI build/install passes. Fresh logs are under ignored `tmp/casefold-map-role-evidence` and
+`tmp/logs/casefold-map-role-{red,green}.log`. Independent focused Linux/full CI
+for this new source is pending after push. Do not substitute the previous
+checkpoint's successful focused run for new-source evidence.
+
+**Next bounded task:** inspect both pending full-CI results and this new
+checkpoint's focused insertion log. Resolve any failure before broadening
+support. Then reproduce and qualify fixed-metadata aliases of mapping nodes
+(the existing fixed-role check covers directory data only), retaining the
+visited-node/data refusal and unchanged-state assertions. Keep transaction-current
+allocation/descriptor state, journal ownership and complete mapping shape
+explicitly open. Do not enable writes or intermediate-level insertion yet.
+
 ## Scoped fixed-metadata role refusal — 2026-10-14
+
+Follow-up: its exact-commit focused insertion workflow at `3be872e` has now
+passed and its retained log was inspected, as recorded above. Full CI remains
+pending; the mapping-role checkpoint supersedes this section's next task.
 
 The prerequisite full CI runs completed successfully:
 [643fd2a / 38507056428](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38507056428),
@@ -548,13 +616,13 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. The new fixed-metadata refusal passed 807 local units, lint and the CLI build; its exact-commit independent CI is pending. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Fixed-metadata refusal passed 807 local units and exact-commit focused Linux validation, with full CI pending. The new visited mapping-node/data refusal passed 810 local units, lint and the CLI build; its exact-commit independent CI remains pending. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. Check current full CI and fresh Linux fixture results, then implement a bounded supported indexed insertion path behind the volume write gate. Direct routing probes and explicit fallback refusals are in place; complete write admission and collision/growth qualification remain.
+1. Check current full CI and exact-commit focused Linux insertion evidence, then continue the bounded role-validation task recorded in the current checkpoint. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
@@ -650,10 +718,10 @@ The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_
 
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
-**Next bounded task:** use the 2026-10-14 current checkpoint above. First verify
-its exact-commit focused Linux insertion and full CI results. Then reproduce and
-qualify the next remaining role counterexample, external map-node/data aliasing,
-while preserving unchanged-buffer refusals. Transaction-current descriptor and
+**Next bounded task:** use the latest 2026-10-14 current checkpoint above.
+Inspect exact-commit focused Linux insertion and both pending full CI results.
+Then reproduce and qualify fixed-metadata aliases of mapping nodes, retaining
+visited mapping-node/data refusals and unchanged-buffer assertions. Transaction-current descriptor and
 allocation state, journal/other ownership and complete mapping shape remain open.
 Do not proceed to intermediate-level insertion until the remaining admission
 review findings are resolved and independently qualified. The eventual deeper

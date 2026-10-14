@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- Private casefold indexed insertion refuses overlap between directory data and
+  external mapping blocks visited in either disk or staged views, including a
+  mapping block discovered after its directory-data role was admitted. Refusal
+  preserves buffered/device state; public casefold writes remain blocked.
 - Private casefold indexed insertion refuses directory blocks that alias fixed
   filesystem metadata from the mounted geometry, preserving buffered/device
   state on refusal. Complete ownership qualification remains pending and public

@@ -69,6 +69,35 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Visited mapping-node/data overlap follow-up — 2026-10-14
+
+Another bounded subset of finding 2 now has a red-to-green correction. At
+`3be872e`, a fresh 807-test baseline passed. Two synthetic thirteen-block
+legacy-map fixtures reproduced `Ok(())` when leaf 1's physical block 517 also
+held the single-indirect pointers read for logical block 12. The selected-leaf
+and unselected-leaf cases both failed their required refusal; a separate-node
+positive control passed. All three focused tests now pass in both disk-only
+and identical-staged-node cases. Refusals preserve every dirty block,
+allocation flag and device byte. The positive control changes only the selected
+leaf and verifies the new name/inode; it does not qualify legacy write profiles.
+
+The private mapping wrapper records successfully read physical block locations
+from both views in one per-call set. After full directory admission and before
+editing/staging the copied leaf, its visited mapping-block set must be disjoint
+from all admitted directory-data addresses. This catches a mapping node first
+discovered after its data role was admitted, including an unselected leaf.
+Repeated node reads remain valid. Bounds, checksum checks, disk/staged mapping
+agreement and selected-leaf address reuse remain unchanged.
+
+Unused/shadowed mapping branches, fixed-metadata roles of mapping nodes,
+transaction-current descriptor/allocation state, journal/other ownership,
+complete mapping shape and operation-wide serialization remain unqualified.
+Findings 2 and 3 remain open. The preceding fixed-metadata source's exact-commit
+focused Linux run passed and its insertion artifact was inspected; its full CI
+still has two VM suites pending. New-source independent CI is also required.
+See `extprogress.md` for final local validation and exact checkpoint results.
+Public casefold writes, deeper insertion, collisions and growth remain blocked.
+
 ### Scoped fixed-metadata follow-up — 2026-10-14
 
 Part of finding 2 now has a red-to-green correction. A fresh 802-test baseline
@@ -197,9 +226,10 @@ link accounting, timestamps and stale-entry replacement remain the caller's
 responsibility. Qualify complete namespace operations, operation-wide
 serialization and crash recovery before relaxing any volume write gate.
 
-Finding 1 is addressed by the boundary-fix follow-up above. The fixed-location
-subset of finding 2 is addressed by the 2026-10-14 correction; check its fresh
-focused Linux and full CI outcomes before the next role-validation checkpoint.
-Then reproduce and qualify external map-node/data aliases. Keep finding 3
+Finding 1 is addressed by the boundary-fix follow-up above. Fixed directory
+metadata locations and visited mapping-node/data overlaps have scoped
+corrections recorded above; inspect their exact-commit CI before broadening
+support. Next reproduce and qualify mapping-node aliases of fixed metadata,
+while retaining the remaining transaction-current ownership gaps. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.

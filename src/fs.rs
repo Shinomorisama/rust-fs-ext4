@@ -377,11 +377,13 @@ impl crate::block_io::BlockDevice for StagedTreeNodes<'_> {
 
 /// The private casefold admission mapper must stay inside the filesystem,
 /// even when a larger backing device or a staged node could supply bytes.
-/// This bounds reads; allocation and metadata-role qualification are separate.
+/// It bounds reads and records visited map blocks for a later data-role check;
+/// allocation, fixed map-node metadata roles and full ownership remain separate.
 struct CasefoldMapDevice<'a> {
     inner: &'a dyn BlockDevice,
     byte_limit: u64,
     block_size: u64,
+    map_blocks: &'a Mutex<std::collections::HashSet<u64>>,
 }
 
 impl BlockDevice for CasefoldMapDevice<'_> {
@@ -392,7 +394,17 @@ impl BlockDevice for CasefoldMapDevice<'_> {
         if end > self.byte_limit {
             return Err(Error::InvalidBlock(offset / self.block_size));
         }
-        self.inner.read_at(offset, buf)
+        self.inner.read_at(offset, buf)?;
+        if !buf.is_empty() {
+            // This device is used only for external block-map reads. Retain
+            // both views' read locations, even when their mappings agree.
+            let mut blocks = self
+                .map_blocks
+                .lock()
+                .map_err(|_| Error::Corrupt("casefold block-map role lock poisoned"))?;
+            blocks.extend(offset / self.block_size..=(end - 1) / self.block_size);
+        }
+        Ok(())
     }
 
     fn size_bytes(&self) -> u64 {
@@ -3962,10 +3974,12 @@ impl Filesystem {
             // Admission reads must not mark index/leaf blocks dirty on refusal.
             let block_size = u64::from(self.sb.block_size());
             let byte_limit = self.byte_ceiling()?;
+            let map_blocks = Mutex::new(std::collections::HashSet::new());
             let disk = CasefoldMapDevice {
                 inner: self.dev.as_ref(),
                 byte_limit,
                 block_size,
+                map_blocks: &map_blocks,
             };
             let staged = StagedTreeNodes {
                 fs: self,
@@ -3975,6 +3989,7 @@ impl Filesystem {
                 inner: &staged,
                 byte_limit,
                 block_size,
+                map_blocks: &map_blocks,
             };
             let ctx = crate::extent::ExtentVerifyCtx {
                 ino: parent_ino,
@@ -4039,6 +4054,19 @@ impl Filesystem {
                     self.buffered_block(buf, physical)
                 },
             )?;
+            // A later logical lookup may first read a map node whose block
+            // was already admitted as directory data. Check the complete
+            // read set before editing or staging even the selected leaf.
+            if map_blocks
+                .lock()
+                .map_err(|_| Error::Corrupt("casefold block-map role lock poisoned"))?
+                .iter()
+                .any(|block| physical_seen.contains(block))
+            {
+                return Err(Error::CorruptDirEntry(
+                    "casefold directory data aliases block-map storage",
+                ));
+            }
             if target_ino == 0 || target_ino > self.sb.inodes_count {
                 return Err(Error::InvalidArgument("invalid directory entry inode"));
             }
@@ -8955,6 +8983,178 @@ mod tests {
         fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
             .unwrap();
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
+    }
+
+    // A thirteen-block planner fixture reaches the legacy single-indirect
+    // pointer only after the first eleven leaves have been admitted. When
+    // aliased, leaf 1's live inode number is also that pointer's data address.
+    // These are deliberately unallocated planner blocks, not a clean image.
+    fn staged_casefold_legacy_role_fixture(
+        dev: &MemDev,
+        fs: &Filesystem,
+        alias: bool,
+        staged_node: bool,
+        select_first: bool,
+    ) -> (BlockBuffer, Inode, u64, Vec<u8>, u64) {
+        let (mut buf, parent, first_leaf) = staged_casefold_index(fs);
+        let root_block = first_leaf - 1;
+        let last_leaf = first_leaf + 100;
+        assert!(last_leaf <= u64::from(fs.sb.inodes_count));
+        let empty = buf.dirty[&first_leaf].clone();
+        for logical in 2..12u64 {
+            buf.put(root_block + logical, empty.clone());
+        }
+        buf.put(last_leaf, empty.clone());
+        let old_name = b"Old_Name";
+        let mut first = empty;
+        first[..4].copy_from_slice(&(last_leaf as u32).to_le_bytes());
+        first[6] = old_name.len() as u8;
+        first[7] = 1;
+        first[8..8 + old_name.len()].copy_from_slice(old_name);
+        assert!(fs
+            .csum
+            .patch_dir_entry_tail(2, parent.generation, &mut first));
+        buf.put(first_leaf, first.clone());
+
+        let encoding = parent.directory_casefold_encoding(&fs.sb).unwrap();
+        let version = crate::hash::effective_version(
+            crate::hash::HashVersion::from_u8(buf.dirty[&root_block][28]).unwrap(),
+            fs.sb.unsigned_hash(),
+        );
+        let old_hash = crate::casefold::LookupName::new(old_name, encoding)
+            .unwrap()
+            .hash(version, &fs.sb.hash_seed)
+            .major;
+        let boundary = old_hash.checked_add(2).unwrap();
+        let last_boundary = boundary.checked_add(20).unwrap();
+        let query = (0..1024)
+            .map(|n| format!("New_Name_{n}").into_bytes())
+            .find(|name| {
+                let hash = crate::casefold::LookupName::new(name, encoding)
+                    .unwrap()
+                    .hash(version, &fs.sb.hash_seed)
+                    .major;
+                if select_first {
+                    hash < boundary
+                } else {
+                    hash >= last_boundary
+                }
+            })
+            .expect("a query in the intended leaf's hash range");
+        let root = buf.dirty.get_mut(&root_block).unwrap();
+        root[34..36].copy_from_slice(&12u16.to_le_bytes());
+        for logical in 2..=12u32 {
+            let offset = 32 + (logical as usize - 1) * 8;
+            root[offset..offset + 4].copy_from_slice(&(boundary + (logical - 2) * 2).to_le_bytes());
+            root[offset + 4..offset + 8].copy_from_slice(&logical.to_le_bytes());
+        }
+        assert!(fs.csum.patch_dx_tail(2, parent.generation, root, 32));
+
+        let node = if alias { first_leaf } else { first_leaf + 32 };
+        let mut node_bytes = if alias { first } else { vec![0; BS as usize] };
+        node_bytes[..4].copy_from_slice(&(last_leaf as u32).to_le_bytes());
+        let start = (node * u64::from(BS)) as usize;
+        dev.bytes.lock().unwrap()[start..start + BS as usize].copy_from_slice(&node_bytes);
+        if staged_node {
+            buf.put(node, node_bytes);
+        } else {
+            buf.dirty.remove(&node);
+        }
+        let (_, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        raw[4..8].copy_from_slice(&(13 * BS).to_le_bytes());
+        raw[0x20..0x24].copy_from_slice(
+            &(parent.flags & !crate::inode::InodeFlags::EXTENTS.bits()).to_le_bytes(),
+        );
+        raw[0x28..0x64].fill(0);
+        for logical in 0..12u32 {
+            let offset = 0x28 + logical as usize * 4;
+            raw[offset..offset + 4]
+                .copy_from_slice(&((root_block + u64::from(logical)) as u32).to_le_bytes());
+        }
+        raw[0x58..0x5c].copy_from_slice(&(node as u32).to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        let selected = if select_first { first_leaf } else { last_leaf };
+        (buf, Inode::parse(&raw).unwrap(), node, query, selected)
+    }
+
+    fn assert_casefold_map_role_refusal(select_first: bool) {
+        for staged_node in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, node, query, _) =
+                staged_casefold_legacy_role_fixture(&dev, &fs, true, staged_node, select_first);
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            let result = fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                &query,
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            );
+            assert!(
+                matches!(result, Err(Error::CorruptDirEntry(_))),
+                "map-node block {node}, staged {staged_node}, selected {select_first}: {result:?}"
+            );
+            assert_eq!(buf.dirty, before);
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
+    }
+
+    #[test]
+    fn casefold_map_role_refuses_a_selected_leaf_used_as_a_later_map_node() {
+        assert_casefold_map_role_refusal(true);
+    }
+
+    #[test]
+    fn casefold_map_role_refuses_an_unselected_leaf_used_as_a_later_map_node() {
+        assert_casefold_map_role_refusal(false);
+    }
+
+    #[test]
+    fn casefold_map_role_accepts_a_separate_legacy_mapping_block() {
+        for staged_node in [false, true] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let (mut buf, parent, node, query, selected) =
+                staged_casefold_legacy_role_fixture(&dev, &fs, false, staged_node, true);
+            let before = buf.dirty.clone();
+            let allocation_before = buf.uninit_cleared.clone();
+            let disk_before = dev.bytes.lock().unwrap().clone();
+            fs.buffer_add_dir_entry_indexed(
+                &mut buf,
+                2,
+                &parent,
+                &query,
+                100,
+                crate::dir::DirEntryType::RegFile,
+                true,
+            )
+            .unwrap();
+            assert_ne!(selected, node);
+            let entries = crate::dir::parse_block_verified(
+                &buf.dirty[&selected],
+                true,
+                2,
+                parent.generation,
+                &fs.csum,
+            )
+            .unwrap();
+            assert_eq!(entries.len(), 2);
+            assert!(entries
+                .iter()
+                .any(|entry| entry.name == query && entry.inode == 100));
+            for (block, bytes) in before {
+                if block != selected {
+                    assert_eq!(buf.dirty[&block], bytes);
+                }
+            }
+            assert_eq!(buf.uninit_cleared, allocation_before);
+            assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+        }
     }
 
     fn padded_casefold_planning_fixture() -> (std::sync::Arc<MemDev>, Filesystem) {
