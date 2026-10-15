@@ -69,7 +69,114 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Collector implementation and resource review — 2026-10-14
+
+Reviewed `7bdfe0cf83d3d65f4068225707c379f3fad9e6aa`, its complete private
+collector/tests, the real staged-view control and the saved Linux evidence.
+Both [focused Linux validation](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38675564104)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38675564205)
+passed at that exact commit. Full CI includes both VM suites, wasm, semver,
+MSRV, unit/CLI/provenance jobs and the aggregate gate. The preceding review's
+full CI at `80caea6` also passed.
+
+Downloaded the actual focused artifact. The new FIEMAP test executed exactly
+once, zero failed/ignored (23 lines / 1,601 bytes); its log records successful
+Linux population and non-repairing e2fsck for both block sizes. The existing
+insertion test also executed once, zero failed/ignored, across its four profiles
+(133 lines / 7,954 bytes). This is independent source qualification, not only
+a successful workflow badge or a compilation check.
+
+Saved Linux FIEMAP reports and public-format raw image observations give:
+
+| Block size | File | Extent depth | Data records | Data blocks | Map blocks | Returned claims |
+|---|---|---|---|---|---|---|
+| 1 KiB | Inline | 0 | 1 | 1 | 0 | 1 |
+| 1 KiB | External | 1 | 17 | 19 | 1 | 18 |
+| 4 KiB | Inline | 0 | 1 | 1 | 0 | 1 |
+| 4 KiB | External | 1 | 17 | 19 | 1 | 18 |
+
+Each external file has 16 initialized one-block ranges and one three-block
+unwritten range at logical blocks 1024–1026, past visible EOF at block 497.
+Linux reports 40 allocated sectors at 1 KiB and 160 at 4 KiB: 19 data plus
+one mapping block. The test compares all data locations/lengths/unwritten flags
+with FIEMAP, and the total including map nodes with the inode sector count.
+The raw observations are a profile audit of these already independently checked
+images, not another host oracle or performance measurement.
+
+**Decision:** no implementation blocker found for this standalone read-only
+primitive within its stated profile/preconditions. It is ready to be used by
+the next private snapshot-building components. It remains disconnected from
+admission. This decision does not certify a mounted/current owner cache, enable
+writes or close findings 2 and 3. No production fix or new test is introduced
+by this review; `extprogress.md` records fresh baseline retention.
+
+The source review checked these invariants:
+
+- Exact 60-byte root, supported checksum/block profile and depth at most five
+  precede traversal. Node count/capacity checks and the existing header parser
+  bound all record slices; exact decreasing depth bounds scratch slicing and
+  recursion. The caller must still verify the inode and stable view: inline
+  data has no external checksum that could establish that precondition.
+- Children are filesystem/device-bounded and checksum-verified before their
+  headers/descendants are interpreted. Every declared branch is visited;
+  first-key agreement and parent intervals exclude shadowed logical records,
+  while sparse gaps are allowed. Physical sorting checks adjacent disjoint
+  intervals and catches cross-branch role aliases; no payload is read.
+- Reads, declared-record visits and pushes cannot exceed their explicit caps.
+  Output and per-level scratch reservations are fallible and their combined
+  requested byte arithmetic is checked. Siblings reuse scratch; sorting is
+  in-place with bounded `O(C log C)` work. Read/validation/limit errors discard
+  local results without editing device or buffer; no shared state is published.
+
+#### Requirements carried into the snapshot builder
+
+1. **One aggregate budget.** Per-tree limits reset on each call; they do not
+   bound a volume-wide scan. Charge all descriptors/bitmap/inode probes, metadata
+   reads, tree records, claims, overlap work and allocation requests against
+   shared remaining limits. Bound retained index capacity, transient tree output,
+   scratch and reverse dependencies together, including their peak coexistence.
+2. **Count capacity, not only populated ranges.** The collector reserves the
+   full caller-supplied claim cap and returns that vector. The current Linux
+   control requests 1,024 slots even for its one-claim inline file. Do not retain
+   one such vector per inode and charge only `len()`. Either charge retained
+   capacities or fallibly copy populated claims into one bounded arena and drop
+   transient output before processing the next inode. Copying must include peak
+   old/new allocations in the budget; shrinking is not a substitute for that
+   proof. Allocator overhead/device caches remain outside requested-byte bounds.
+3. **Respect the independent depth matrix.** Linux evidence here covers depths
+   zero and one. Depth two through five have synthetic controls, including the
+   maximum-depth chain, but no new independent matrix in this checkpoint. The
+   initial snapshot profile must refuse those depths or add independent deeper
+   controls before admitting them; do not infer full qualification from the cap.
+4. **Establish every owner before publication.** Collect every allocated inode,
+   not only reachable names or positive-link-count files. Interpret reserved
+   roles explicitly, validate current allocation/fixed roles, and refuse unknown
+   inode/attribute/legacy profiles. A successfully collected tree proves neither
+   inode allocation nor exclusive ownership against other trees. A partial scan
+   or exhausted budget cannot produce an apparently complete snapshot.
+5. **Keep transaction gates.** This review adds no operation guard, epoch,
+   dependency closure, current overlay, final seal, failure handling or device
+   exclusivity. A newly built snapshot is not a cache safe for later admission
+   until those reviewed lifecycle requirements exist. Never rebuild it by
+   scanning the card on every insertion as an implicit fallback.
+
+**Next bounded checkpoint:** implement the snapshot builder's private bounded
+allocated-inode inventory, not admission. Verify current descriptor/bitmap
+checksums, bounds, initialization/unknown flags and final-group coverage before
+returning every set inode bit, including reserved and unlinked allocated slots.
+Keep role interpretation and complete cross-owner snapshots as later components;
+an inventory alone must not claim ownership. Use shared limits for group/bit
+probes, reads, output and scratch, require no partial result on errors, and test
+disk/staged bitmap changes, shared descriptor blocks, invalid tails/checksums,
+initialization state, reserved IDs and exact/exhausted budgets. Add independent
+Linux bitmap/inventory controls before qualifying that component. Preserve all
+872 passing unit occurrences, the existing Linux controls and every write gate.
+
 ### Private bounded extent-ownership collector — 2026-10-14
+
+Follow-up: this landed at `7bdfe0c`. Its exact-commit Linux FIEMAP/insertion
+and full CI passed; the implementation/resource review above supersedes its
+pending status and next task without widening the collector or admission profile.
 
 Following the design review at `80caea6`, `extent::ownership::collect` now
 provides a crate-private read-only primitive. It is deliberately disconnected
