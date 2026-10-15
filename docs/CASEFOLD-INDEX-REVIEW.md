@@ -69,7 +69,44 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Allocation-oracle block-zero repair — 2026-10-15
+
+At source `1fcb361`, focused CI and both full library executions failed at
+`debugfs testb 0`: the tool refuses zero even when it belongs to the filesystem's
+allocation domain. The verdict reader correctly rejected its zero-status failed
+request. Two 1 KiB profiles completed (2,043 answers, 1,573 allocated blocks and
+two allocated runs each); 4 KiB/32 formatted/populated and passed judged e2fsck
+before the failure, and 4 KiB/64 remained unrun. This is an oracle-query defect;
+it does not establish a production allocation defect or qualify all four profiles.
+CI links, actual artifacts and scope are recorded in `extprogress.md`.
+
+The test-only repair keeps every nonzero `debugfs testb` answer and compares it
+with complete `dumpe2fs` free-block lists. The report reader requires every group
+in order with exact filesystem bounds, one explicit list each (including empty
+lists), matching group/global free counts and no duplicate/outside addresses.
+The complete set also supplies zero's actual allocation classification. All
+valid singletons, coalesced allocated runs, the free-range refusal and block-zero
+domain checks remain. No zero-is-allocated exception, verdict relaxation, test
+skip or production change is introduced. Saved `.free-blocks.txt` reports join
+the existing focused artifact; the exact filter and one-test floor remain.
+
+Two local controls use a captured tool report and synthetic alterations to pin
+zero's classification and reject incomplete/inconsistent reports, including an
+empty list without an explicit zero count. The capture's uninitialized metadata
+groups qualify report syntax only, not the allocation verifier's positive profile.
+The production verifier and existing twenty controls remain unchanged; local
+counts and new independent CI status are maintained in `extprogress.md`.
+
+**Next:** require exact-commit focused/full CI and inspect complete actual
+allocation/free-list evidence on all four profiles, then finish the verifier's
+implementation/resource review before selecting the complete owner join. The
+three saved cross-inode aliases and all aggregate lifecycle/write gates remain.
+
 ### Private bounded current block-allocation intervals — 2026-10-15
+
+Follow-up: initial independent CI failed on the oracle's block-zero query; the
+test-only repair above supersedes that query. Complete VM qualification and the
+implementation/evidence review remain outstanding.
 
 `block_allocation::verify` now checks physically ordered, disjoint, nonempty
 intervals directly against current bitmap bytes. It requires a trusted coherent

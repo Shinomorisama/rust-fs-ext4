@@ -1,0 +1,108 @@
+Filesystem volume name:   <none>
+Last mounted on:          <not available>
+Filesystem UUID:          f7f2e73c-aee1-47c6-af1c-040f936fb02b
+Filesystem magic number:  0xEF53
+Filesystem revision #:    1 (dynamic)
+Filesystem features:      filetype extent metadata_csum
+Filesystem flags:         signed_directory_hash
+Default mount options:    user_xattr acl
+Filesystem state:         clean
+Errors behavior:          Continue
+Filesystem OS type:       Linux
+Inode count:              128
+Block count:              4096
+Reserved block count:     0
+Overhead clusters:        40
+Free blocks:              4051
+Free inodes:              117
+First block:              0
+Block size:               4096
+Fragment size:            4096
+Blocks per group:         512
+Fragments per group:      512
+Inodes per group:         16
+Inode blocks per group:   1
+Filesystem created:       Thu Oct 15 18:51:29 2026
+Last mount time:          n/a
+Last write time:          Thu Oct 15 18:51:29 2026
+Mount count:              0
+Maximum mount count:      -1
+Last checked:             Thu Oct 15 18:51:29 2026
+Check interval:           0 (<none>)
+Lifetime writes:          101 kB
+Reserved blocks uid:      0 (user root)
+Reserved blocks gid:      0 (group root)
+First inode:              11
+Inode size:	          256
+Required extra isize:     32
+Desired extra isize:      32
+Default directory hash:   half_md4
+Directory Hash Seed:      2fd1b003-f4c7-4beb-a7d8-dca55a947996
+Checksum type:            crc32c
+Checksum:                 0xb56712ac
+
+
+Group 0: (Blocks 0-511) csum 0x9a6e [ITABLE_ZEROED]
+  Primary superblock at 0, Group descriptors at 1-1
+  Block bitmap at 2 (+2), csum 0x0000c726
+  Inode bitmap at 3 (+3), csum 0x0000637c
+  Inode table at 4-4 (+4)
+  502 free blocks, 5 free inodes, 2 directories, 5 unused inodes
+  Free blocks: 10-511
+  Free inodes: 12-16
+Group 1: (Blocks 512-1023) csum 0xceae [INODE_UNINIT, BLOCK_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 512, Group descriptors at 513-513
+  Block bitmap at 514 (+2), csum 0x00000000
+  Inode bitmap at 515 (+3), csum 0x00000000
+  Inode table at 516-516 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 517-1023
+  Free inodes: 17-32
+Group 2: (Blocks 1024-1535) csum 0x78e5 [INODE_UNINIT, BLOCK_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 1024, Group descriptors at 1025-1025
+  Block bitmap at 1026 (+2), csum 0x00000000
+  Inode bitmap at 1027 (+3), csum 0x00000000
+  Inode table at 1028-1028 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 1029-1535
+  Free inodes: 33-48
+Group 3: (Blocks 1536-2047) csum 0xc773 [INODE_UNINIT, BLOCK_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 1536, Group descriptors at 1537-1537
+  Block bitmap at 1538 (+2), csum 0x00000000
+  Inode bitmap at 1539 (+3), csum 0x00000000
+  Inode table at 1540-1540 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 1541-2047
+  Free inodes: 49-64
+Group 4: (Blocks 2048-2559) csum 0x6282 [INODE_UNINIT, BLOCK_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 2048, Group descriptors at 2049-2049
+  Block bitmap at 2050 (+2), csum 0x00000000
+  Inode bitmap at 2051 (+3), csum 0x00000000
+  Inode table at 2052-2052 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 2053-2559
+  Free inodes: 65-80
+Group 5: (Blocks 2560-3071) csum 0xdd14 [INODE_UNINIT, BLOCK_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 2560, Group descriptors at 2561-2561
+  Block bitmap at 2562 (+2), csum 0x00000000
+  Inode bitmap at 2563 (+3), csum 0x00000000
+  Inode table at 2564-2564 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 2565-3071
+  Free inodes: 81-96
+Group 6: (Blocks 3072-3583) csum 0x6b5f [INODE_UNINIT, BLOCK_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 3072, Group descriptors at 3073-3073
+  Block bitmap at 3074 (+2), csum 0x00000000
+  Inode bitmap at 3075 (+3), csum 0x00000000
+  Inode table at 3076-3076 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 3077-3583
+  Free inodes: 97-112
+Group 7: (Blocks 3584-4095) csum 0xceae [INODE_UNINIT, ITABLE_ZEROED]
+  Backup superblock at 3584, Group descriptors at 3585-3585
+  Block bitmap at 3586 (+2), csum 0x0000e981
+  Inode bitmap at 3587 (+3), csum 0x00000000
+  Inode table at 3588-3588 (+4)
+  507 free blocks, 16 free inodes, 0 directories, 16 unused inodes
+  Free blocks: 3589-4095
+  Free inodes: 113-128

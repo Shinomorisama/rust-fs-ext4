@@ -303,6 +303,157 @@ pub(crate) fn verify(
     Ok(())
 }
 
+/// Test-only reader of complete dumpe2fs group free lists. Explicit counts and
+/// coverage distinguish an allocated block zero from a missing/truncated list.
+#[cfg(test)]
+fn oracle_free_blocks(
+    report: &str,
+    first: u64,
+    end: u64,
+    bpg: u64,
+) -> Result<std::collections::BTreeSet<u64>> {
+    const BAD: Error = Error::Corrupt("incomplete or inconsistent oracle free-block report");
+    if bpg == 0 || end <= first || end - first > 1_000_000 {
+        return Err(BAD);
+    }
+    let number = |text: &str| text.trim().parse::<u64>().map_err(|_| BAD);
+    let expected_groups = (end - first).div_ceil(bpg);
+    let mut global = None;
+    let mut groups = 0;
+    let mut current = None;
+    let mut group_count = None;
+    let mut listed = false;
+    let mut free = std::collections::BTreeSet::new();
+    for line in report.lines() {
+        if let Some(value) = line.strip_prefix("Free blocks:") {
+            if global.replace(number(value)?).is_some() {
+                return Err(BAD);
+            }
+        } else if let Some((group, bounds)) = line
+            .strip_prefix("Group ")
+            .and_then(|r| r.split_once(": (Blocks "))
+        {
+            if (current.is_some() && !listed)
+                || groups >= expected_groups
+                || number(group)? != groups
+            {
+                return Err(BAD);
+            }
+            let bounds = bounds.split_once(')').ok_or(BAD)?.0;
+            let (lo, hi) = bounds.split_once('-').ok_or(BAD)?;
+            let lo = number(lo)?;
+            let hi = number(hi)?;
+            let start = groups
+                .checked_mul(bpg)
+                .and_then(|n| first.checked_add(n))
+                .ok_or(BAD)?;
+            let stop = start.checked_add(bpg).ok_or(BAD)?.min(end);
+            if lo != start || hi != stop - 1 {
+                return Err(BAD);
+            }
+            current = Some((start, stop));
+            groups += 1;
+            group_count = None;
+            listed = false;
+        } else if let Some(value) = line.strip_prefix("  Free blocks:") {
+            let (start, stop) = current.ok_or(BAD)?;
+            if listed {
+                return Err(BAD);
+            }
+            let before = free.len();
+            if !value.trim().is_empty() {
+                for item in value.trim().split(',') {
+                    let (lo, hi) = match item.split_once('-') {
+                        Some((a, b)) => (number(a)?, number(b)?),
+                        None => {
+                            let n = number(item)?;
+                            (n, n)
+                        }
+                    };
+                    if lo < start || hi >= stop || lo > hi {
+                        return Err(BAD);
+                    }
+                    for block in lo..=hi {
+                        if !free.insert(block) {
+                            return Err(BAD);
+                        }
+                    }
+                }
+            }
+            if Some((free.len() - before) as u64) != group_count {
+                return Err(BAD);
+            }
+            listed = true;
+        } else if current.is_some() {
+            if let Some((count, _)) = line.trim_start().split_once(" free blocks,") {
+                if group_count.replace(number(count)?).is_some() {
+                    return Err(BAD);
+                }
+            }
+        }
+    }
+    if groups != expected_groups || !listed || global != Some(free.len() as u64) {
+        return Err(BAD);
+    }
+    Ok(free)
+}
+
+#[cfg(test)]
+mod oracle_report_tests {
+    use super::*;
+
+    // Black-box dumpe2fs output from focused run 38787960237,
+    // fixed-metadata-4096-32-0.locations.txt, with trailing whitespace trimmed.
+    // This is a tool report, not tool implementation source.
+    const CAPTURED: &str = include_str!("../tests/data/block-allocation-dumpe2fs.txt");
+
+    #[test]
+    fn captured_free_lists_include_the_block_zero_domain_and_fail_closed() {
+        let free = oracle_free_blocks(CAPTURED, 0, 4096, 512).unwrap();
+        assert_eq!(free.len(), 4051);
+        assert!(!free.contains(&0));
+        assert!(free.contains(&10) && free.contains(&4095));
+        // A synthetic report alteration keeps the counts unchanged, but makes
+        // zero explicitly free. Never silently classify it as always allocated.
+        let changed = CAPTURED.replace("  Free blocks: 10-511", "  Free blocks: 0, 11-511");
+        assert!(oracle_free_blocks(&changed, 0, 4096, 512)
+            .unwrap()
+            .contains(&0));
+        for damaged in [
+            CAPTURED.replace("  Free blocks: 10-511", ""),
+            CAPTURED.replace("  Free blocks: 10-511", "  Free blocks: 10-511, 10"),
+            CAPTURED.replace("  Free blocks: 10-511", "  Free blocks: 10-512"),
+            CAPTURED.replace("  Free blocks: 10-511", "  Free blocks: 11-511"),
+            CAPTURED.replace("Group 1: (Blocks 512-1023)", "Group 2: (Blocks 512-1023)"),
+            CAPTURED.replace(
+                "Free blocks:              4051",
+                "Free blocks:              4050",
+            ),
+            CAPTURED.lines().take(60).collect::<Vec<_>>().join("\n"),
+        ] {
+            assert!(oracle_free_blocks(&damaged, 0, 4096, 512).is_err());
+        }
+    }
+
+    #[test]
+    fn empty_group_free_lists_require_an_explicit_zero_count() {
+        // Synthetic report syntax control, not a filesystem qualification.
+        let report = "Free blocks: 2\nGroup 0: (Blocks 0-7)\n  0 free blocks, 0 free inodes\n  Free blocks: \nGroup 1: (Blocks 8-15)\n  2 free blocks, 0 free inodes\n  Free blocks: 8, 15\n";
+        assert_eq!(
+            oracle_free_blocks(report, 0, 16, 8).unwrap(),
+            [8, 15].into()
+        );
+        assert!(oracle_free_blocks(
+            &report.replace("  0 free blocks", "  1 free blocks"),
+            0,
+            16,
+            8
+        )
+        .is_err());
+        assert!(oracle_free_blocks(&report.replace("  Free blocks: \n", ""), 0, 16, 8).is_err());
+    }
+}
+
 #[cfg(test)]
 mod needs_host {
     use super::*;
@@ -391,8 +542,22 @@ mod needs_host {
                 .unwrap();
                 let first = u64::from(fs.sb.first_data_block);
                 let end = fs.sb.blocks_count;
+                let dumped = oracle("dumpe2fs").arg(&image).output();
+                assert!(
+                    dumped.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&dumped.stderr)
+                );
+                let free_report = String::from_utf8(dumped.stdout).unwrap();
+                std::fs::write(base.with_extension("free-blocks.txt"), &free_report).unwrap();
+                let free =
+                    oracle_free_blocks(&free_report, first, end, u64::from(fs.sb.blocks_per_group))
+                        .unwrap();
                 let commands = base.with_extension("commands.txt");
-                let text: String = (first..end)
+                // Measured in run 38787960237: testb refuses zero, including
+                // when the filesystem's allocation domain starts at zero.
+                let queried_first = first.max(1);
+                let text: String = (queried_first..end)
                     .map(|block| format!("testb {block}\n"))
                     .collect();
                 std::fs::write(&commands, text).unwrap();
@@ -421,15 +586,30 @@ mod needs_host {
                         _ => panic!("unrecognized block allocation answer: {line}"),
                     };
                     assert!(
-                        block >= first && block < end && answers.insert(block, allocated).is_none(),
+                        block >= queried_first
+                            && block < end
+                            && answers.insert(block, allocated).is_none(),
                         "duplicate/outside block answer"
                     );
                 }
                 assert_eq!(
                     answers.len() as u64,
-                    end - first,
+                    end - queried_first,
                     "incomplete debugfs allocation report"
                 );
+                for (&block, &allocated) in &answers {
+                    assert_eq!(
+                        allocated,
+                        !free.contains(&block),
+                        "tools disagree about block {block}"
+                    );
+                }
+                if first == 0 {
+                    // This is an observed allocation answer from the complete,
+                    // count-checked free list, not a generic zero-block exception.
+                    assert!(answers.insert(0, !free.contains(&0)).is_none());
+                }
+                assert_eq!(answers.len() as u64, end - first);
                 let used = answers.values().filter(|allocated| **allocated).count();
                 assert!(used > 0 && used < answers.len());
                 let limits = Limits {
