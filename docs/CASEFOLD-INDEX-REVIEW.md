@@ -69,7 +69,111 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Fixed-metadata implementation and evidence review — 2026-10-15
+
+Reviewed `95cb21810b0e43edfbabcaf1b7d55e5d83d23787`, the complete private
+collector, seventeen controls and VM oracle/workflow. Its exact-commit
+[focused VM validation](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38771333034)
+passed. Downloaded the actual artifact and inspected every saved metadata image/
+location report plus metadata/role/inventory/insertion/FIEMAP logs. The new
+metadata test executed once, zero failed/ignored (59 lines / 7,385 bytes), across
+**14 profiles, 196 groups and 943 protected ranges**. Every format and judged
+non-repairing e2fsck check passed, and the complete typed/grouped interval list
+matched `dumpe2fs`, not just its size. Full source CI is still running at the
+initial review check; final status is maintained in `extprogress.md`.
+
+Role, inventory, insertion and FIEMAP tests each executed once, zero failed/
+ignored (41 lines / 4,671 bytes; 33 / 3,357; 133 / 7,954; 23 / 1,601).
+The source hashes match the final locally validated implementation. No production
+fix or new test is introduced by this review.
+
+| Block size / descriptor | Normal-profile groups | Dense ranges | Classic sparse ranges / reserved GDT blocks | Sparse-super2 ranges |
+|---|---|---|---|---|
+| 1 KiB / 32 | 8 | 41 | 40 / 255 | 31 |
+| 1 KiB / 64 | 8 | 41 | 40 / 256 | 31 |
+| 4 KiB / 32 | 8 | 40 | 39 / 63 | 30 |
+| 4 KiB / 64 | 8 | 40 | 39 / 127 | 30 |
+
+Dense layouts have superblocks in all eight groups, classic sparse in 0/1/3/5/7,
+and sparse-super2 in 0/1/7. In each FLEX_BG profile, six of eight inode tables
+start before their own group. Two further dense 64-byte-descriptor profiles have
+two-block descriptor runs: 32 groups/161 ranges at 1 KiB and 68 groups/340 ranges
+at 4 KiB. A public-format raw audit additionally checked group coverage, every
+bitmap/table address and full table span, bounds and disjointness against the
+saved reports. These are small-image compatibility observations, not card-wide
+throughput or memory measurements. Partial final inode-group coverage remains
+synthetic; the 1 KiB images do independently exercise a partial final block group.
+
+**Decision:** no implementation blocker found within the standalone fixed-layout
+profile and trusted, coherent, stable-view preconditions. The collector is a
+private prerequisite for ownership construction; it proves no allocation bits,
+inode/extent ownership, epoch or transaction lifecycle. Most saved metadata
+profiles have INODE_UNINIT/BLOCK_UNINIT groups, and some have RESIZE_INODE; they
+are not automatically valid positive fixtures for the narrower inode inventory/
+role reader or a future allocation checker. Keep the qualified profile
+intersection explicit. The three saved cross-inode aliases remain unresolved.
+
+The review checked:
+
+- Supported sizes, nonzero bounded geometry, group/inode coverage and filesystem
+  extent checks precede slicing/traversal. The u32 group bound and bitmap-sized
+  group limit bound multiplication; range ends/group heads use checked bounds.
+  The primary geometry determines full backup descriptor/reserved runs and full
+  inode tables. It never treats unused slots or initialization flags as missing
+  physical reservations. Boot and superblock protection do not duplicate a block.
+- Current superblock/descriptor CRCs, identity and pending flags are checked;
+  staged copies take precedence and require exact size. Relocations refuse.
+  Backups are protected without trusting their stale contents as current state.
+  FLEX_BG ranges are checked globally, other placements against their own group;
+  physically sorted adjacent intervals detect all fixed-role conflicts.
+- One group/read/range/scratch limit set bounds the entire invocation. Fetches
+  debit before access, shared descriptor blocks reuse scratch, and both fixed
+  reservations are fallible with checked combined byte arithmetic. In-place
+  unstable sorting needs no secondary range vector. Limit/read/validation errors
+  discard local output without mutating the caller or publishing a partial proof.
+
+#### Next bounded prerequisite: current allocation of storage intervals
+
+Implement a private bounded verifier for proposed physical intervals before the
+complete owner join. The existing private insertion helper checks individual
+blocks with a growing bitmap cache; it is not an aggregate-bounded interval
+verifier. Preserve its existing behavior and keep the new component disconnected
+from admission. Require a trusted coherent stable current view and an explicitly
+qualified current layout; no mounted-only bitmap cache or reused old census.
+
+Validate input intervals, filesystem/group coverage and ordering, current
+superblock/descriptor identity/checksums, initialization/unknown/pending flags,
+bitmap bounds/sizes and descriptor-width checksum truncation. Verify every
+proposed block's current allocation directly against bitmap bytes/words without
+expanding payload runs into owner entries. Define and independently qualify
+final-group/padding/checksum coverage. Initially refuse BLOCK_UNINIT before
+interpreting unspecified bytes; the fixed collector's acceptance of its physical
+location is not permission to invent allocation bits.
+
+Use shared limits for intervals, groups, metadata reads, bit/word work and scratch
+across the whole invocation; charge staged copies and failed accesses. Reuse
+bounded buffers, refuse unsupported/exhausted states without mutation or partial
+publication, and charge coexistence with the other components in the eventual
+builder. One-KiB boot block zero has no allocation bit: retain its separate typed
+fixed protection, but reject generic proposed intervals below `first_data_block`.
+At 4 KiB superblock block zero is in the allocation domain and must be checked.
+Do not introduce a generic "zero is allocated" exception for data claims.
+
+Tests must cover staged bit changes/CRCs/flags, malformed sizes/pointers,
+cross-group intervals and boundaries, exact/exhausted limits, checksum widths,
+unknown initialization and unchanged inputs on failure. Require independent VM
+allocation answers on initialized positive profiles; the saved uninitialized
+metadata fixtures may support refusal controls but cannot silently become
+positive allocation proofs. Then review this verifier before the complete join
+of fixed roles, all typed inode/tree claims and current allocation. Cross-owner
+conflicts, shared peak budgets, complete-result coverage, operation guard/overlay/
+dependencies/sealing and invalidation/commit failure rules remain separate gates.
+
 ### Private bounded fixed-metadata interval collector — 2026-10-15
+
+Follow-up: source `95cb218` passed focused VM location and existing Linux tests;
+the implementation/evidence review above supersedes the pending focused status
+and review task. Full CI status is maintained in `extprogress.md`.
 
 The next component after the role review is implemented in `fixed_metadata`.
 It reads a current checksum-valid primary superblock and every current primary
