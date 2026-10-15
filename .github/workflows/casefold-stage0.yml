@@ -7,6 +7,9 @@ on:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
       - src/fs.rs
+      - src/extent.rs
+      - src/extent/**
+      - tests/extent_ownership_guest.py
       - src/path.rs
       - src/htree.rs
       - src/htree_mut.rs
@@ -56,6 +59,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:fixtures casefold-fixtures 1050 65000 -- scripts/test.sh --locked --release --test casefold_fixture_oracle -- --show-output
           bash scripts/core.sh test-floor casefold-fixtures 1
+      - name: Compare complete extent ownership with Linux FIEMAP
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/extent-ownership
+        run: |
+          scripts/tier.sh casefold:extent-owner casefold-extent-owner 1050 65000 -- scripts/test.sh --locked --release --lib extent::ownership::tests::needs_host::linux_fiemap_matches_complete_inline_and_external_ownership -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-extent-owner 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,5 +75,7 @@ jobs:
             tmp/logs/casefold-fixtures.log
             tmp/casefold-index-insert/
             tmp/logs/casefold-index-insert.log
+            tmp/logs/casefold-extent-owner.log
+            tmp/extent-ownership/
           if-no-files-found: error
           retention-days: 30

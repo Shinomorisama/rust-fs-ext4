@@ -13,6 +13,10 @@
 
 ### Added
 
+- A private read-only extent-ownership collector checks the complete tree and
+  returns bounded data/mapping intervals, including unwritten storage beyond
+  EOF. The initial checksummed 1 KiB/4 KiB profile has explicit resource limits;
+  ownership admission and public casefold writes remain blocked.
 - Read-only casefold lookup uses frozen Unicode 12.1 comparisons and folded
   HTree hashing in linear directories and indexes with leaves directly under
   the root. Stored spelling and ordinary

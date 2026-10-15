@@ -69,7 +69,85 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private bounded extent-ownership collector — 2026-10-14
+
+Following the design review at `80caea6`, `extent::ownership::collect` now
+provides a crate-private read-only primitive. It is deliberately disconnected
+from insertion admission and does not build a volume owner index. The shared
+public lookup/collection APIs and all write gates are unchanged.
+
+Before implementation, seven malformed-tree cases were tested against the
+existing `collect_all_with_nodes` adapter. All seven failed specifically on
+acceptance, while a healthy disjoint control passed: unselected-child checksum,
+wrong child depth, shadowed/parent-key coverage, capacity, duplicate child,
+data/map role overlap and zero-length extent. The same refusal assertions now
+pass using the new collector. This demonstrates why the existing public helper
+cannot itself serve as an ownership proof; it does not change that helper's API.
+
+The collector requires an already verified 60-byte inode root and its inode/
+generation checksum context, a stable device or staged view, filesystem block
+bounds and explicit limits. The initial supported profile is metadata checksums,
+1 KiB/4 KiB blocks, root capacity at most four and full-capacity external nodes.
+Other block sizes, disabled checksums and smaller external capacities are
+unsupported. The capacity restriction keeps the tail at the location supported
+by the existing checksum verifier; broader profiles need independent evidence.
+
+It walks every declared child/record, including unwritten and beyond-EOF
+storage, with no payload reads or expansion into per-data-block claims. Before
+following a child it bounds the address and verifies its checksum; exact depth,
+capacities/counts, nonempty children/indexes, strictly increasing index keys,
+parent-first-key agreement, logical ordering/parent intervals and physical
+bounds are required. Sparse leading/interior/trailing holes are allowed.
+Physical sorting rejects overlap between any pair of claims, including
+repeated nodes and data/map aliases across branches. Cycles cannot evade exact
+decreasing depth; all traversal is also bounded by read/record/claim limits.
+
+Results identify the inode/generation and complete disjoint physical intervals
+with data logical offsets/unwritten flags or mapping-node roles. Any error
+returns no result. It never changes its input bytes, device or transaction
+buffer. Current allocation, fixed metadata, other inode/attribute roles and
+concurrent/external mutation remain separate prerequisites.
+
+Limits are caller-supplied, with no production defaults: node reads, examined
+records, output claim count and scratch bytes. Before walking, fallible fixed
+reservations request at most `claims * size_of::<Claim>()` output bytes and
+`depth * block_size` scratch bytes, with checked combined arithmetic. The same
+per-depth buffers are reused across siblings; maximum depth five means at most
+six recursive frames. Record/claim/read limits are enforced before excess work,
+with in-place physical sorting bounded by `O(C log C)` for claim cap `C`.
+Allocator overhead and the supplied device's own cache are outside these
+allocation-request bounds; this is not a measured full-card memory/latency claim.
+No partial list, unbounded fallback scan or growing visited-node set is used.
+
+Expanded local controls cover exact/short/zero budgets and size overflow,
+empty inline roots, maximum depth, cycles, logical/end/address boundaries,
+high physical addresses, 32,768-block initialized extents, unwritten ranges,
+read errors, checksum identity and unsupported profiles. A filesystem-level
+test uses the real `StagedTreeNodes` overlay: changing only an external child
+changes the returned data claim while the disk claim stays separate; a staged
+checksum error preserves the whole buffer, pending flags and device bytes.
+
+A new independent `needs_host` control creates 1 KiB/4 KiB Linux files with
+inline and external trees, sparse leading holes and KEEP_SIZE preallocation
+beyond EOF. Its public FIEMAP ioctl report is compared with every returned data
+interval/unwritten flag; Linux's allocated-sector count must equal all data plus
+mapping claims. Non-repairing e2fsck checks the image. The focused workflow runs
+this test with an execution floor of one and saves its log, Linux reports and
+images, alongside the existing four-profile insertion evidence. This new oracle
+has not run on this cloud host, which lacks KVM; exact-commit CI is required.
+
+See `extprogress.md` for final local counts and CI status. Findings 2 and 3,
+the three saved cross-inode aliases, snapshot/overlay integration, operation-wide
+serialization and failure/invalidation handling remain open. After inspecting
+the new independent results, review this primitive and its resource profile
+before starting the bounded complete snapshot builder. Public writes, deeper
+insertion, collisions, splitting/growth and index dropping remain blocked.
+
 ### Transaction-current ownership design review — 2026-10-14
+
+Follow-up: the collector checkpoint above implements the first private
+primitive. The design's snapshot, serialization, overlay and integration gates
+remain unimplemented; its other-owner tests still require the eventual fix.
 
 Reviewed own MIT source at `f9a0df0544072b0e252d5d4ff2912c70f1838a0b`.
 Its [focused Linux run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38666477495)

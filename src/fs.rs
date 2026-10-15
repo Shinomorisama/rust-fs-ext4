@@ -9374,6 +9374,70 @@ mod tests {
         (buf, Inode::parse(&raw).unwrap(), leaf, node_block)
     }
 
+    #[test]
+    fn extent_ownership_uses_staged_children_and_preserves_the_complete_buffer() {
+        use crate::extent::ownership::{collect, Geometry, Limits, Role};
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let (mut buf, parent, leaf, node) = staged_casefold_external_map(&dev, &fs);
+        let ctx = crate::extent::ExtentVerifyCtx {
+            ino: 2,
+            generation: parent.generation,
+            csum: &fs.csum,
+        };
+        let geometry = Geometry {
+            block_size: BS,
+            first_block: u64::from(fs.sb.first_data_block),
+            end_block: fs.byte_ceiling().unwrap() / u64::from(BS),
+        };
+        let limits = Limits {
+            node_reads: 4,
+            records: 16,
+            claims: 16,
+            scratch_bytes: 5 * BS as usize,
+        };
+        let disk = collect(&parent.block, fs.dev.as_ref(), &ctx, geometry, limits).unwrap();
+        assert!(disk
+            .claims
+            .iter()
+            .any(|c| c.start == leaf && matches!(c.role, Role::Data { logical: 1, .. })));
+        let mut changed = fs.read_block(node).unwrap();
+        changed[32..36].copy_from_slice(&((leaf + 10) as u32).to_le_bytes());
+        fs.csum
+            .patch_extent_tail(2, parent.generation, &mut changed);
+        buf.put(node, changed);
+        let before = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let staged = StagedTreeNodes {
+            fs: &fs,
+            nodes: &buf.dirty,
+        };
+        let current = collect(&parent.block, &staged, &ctx, geometry, limits).unwrap();
+        assert!(current
+            .claims
+            .iter()
+            .any(|c| c.start == leaf + 10 && matches!(c.role, Role::Data { logical: 1, .. })));
+        assert!(!current.claims.iter().any(|c| c.start == leaf));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        buf.dirty.get_mut(&node).unwrap()[100] ^= 1;
+        let before = buf.dirty.clone();
+        let staged = StagedTreeNodes {
+            fs: &fs,
+            nodes: &buf.dirty,
+        };
+        assert!(matches!(
+            collect(&parent.block, &staged, &ctx, geometry, limits),
+            Err(Error::BadChecksum {
+                what: "extent block"
+            })
+        ));
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
     // Allocation-review reproductions for the ordinary-block planner profile.
     // These establish the bitmap state, not exclusive inode ownership.
     fn casefold_review_block_allocated(fs: &Filesystem, buf: &BlockBuffer, block: u64) -> bool {

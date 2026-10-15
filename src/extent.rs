@@ -44,6 +44,10 @@ use crate::block_io::BlockDevice;
 use crate::checksum::Checksummer;
 use crate::error::{Error, Result};
 
+// Prerequisite for ownership admission; not connected to any write path yet.
+#[allow(dead_code)]
+pub(crate) mod ownership;
+
 /// Context for verifying extent-block tail checksums during a tree walk.
 ///
 /// Pass `Some(&ctx)` to `lookup_verified` / `map_logical_verified` /
