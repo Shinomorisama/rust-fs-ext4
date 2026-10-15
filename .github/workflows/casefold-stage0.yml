@@ -10,8 +10,10 @@ on:
       - src/extent.rs
       - src/extent/**
       - src/inode_inventory.rs
+      - src/inode_roles.rs
       - src/lib.rs
       - tests/inode_inventory_guest.py
+      - tests/inode_roles_guest.py
       - tests/extent_ownership_guest.py
       - src/path.rs
       - src/htree.rs
@@ -74,6 +76,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:inode-inventory casefold-inode-inventory 1050 65000 -- scripts/test.sh --locked --release --lib inode_inventory::needs_host::linux_inventory_matches_every_debugfs_allocation_bit -- --exact --show-output
           bash scripts/core.sh test-floor casefold-inode-inventory 1
+      - name: Compare current inode roles with Linux records
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/inode-roles
+        run: |
+          scripts/tier.sh casefold:inode-roles casefold-inode-roles 1050 65000 -- scripts/test.sh --locked --release --lib inode_roles::needs_host::linux_roles_match_every_allocated_debugfs_record -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-inode-roles 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -88,5 +96,7 @@ jobs:
             tmp/extent-ownership/
             tmp/logs/casefold-inode-inventory.log
             tmp/inode-inventory/
+            tmp/logs/casefold-inode-roles.log
+            tmp/inode-roles/
           if-no-files-found: error
           retention-days: 30

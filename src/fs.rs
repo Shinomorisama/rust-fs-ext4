@@ -9407,6 +9407,461 @@ mod tests {
         assert_eq!(*dev.bytes.lock().unwrap(), bytes);
     }
 
+    // First exercised with the existing verified reader as an adapter. That
+    // helper validates a body, not whether its storage role is qualified.
+    fn role_read_for_test(fs: &Filesystem, buf: &BlockBuffer, ino: u32) -> Result<()> {
+        assert!(inventory_for_test(fs, buf).unwrap().contains(&ino));
+        crate::inode_roles::Reader::new(
+            fs,
+            buf,
+            crate::inode_roles::Limits {
+                records: 1,
+                reads: 1,
+                scratch_bytes: BS as usize + 256,
+            },
+        )?
+        .read(ino)
+        .map(|_| ())
+    }
+
+    fn stage_role_body(
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        edit: impl FnOnce(&mut [u8]),
+    ) {
+        let mut raw = fs.build_regular_file_inode(ino, 0o600).unwrap();
+        edit(&mut raw);
+        let generation = Inode::parse(&raw).unwrap().generation;
+        fs.csum.patch_inode_checksum(ino, generation, &mut raw);
+        fs.buffer_write_inode(buf, ino, &raw).unwrap();
+        let bit = (ino - 1) as usize;
+        buf.get_mut(fs, fs.groups[0].inode_bitmap).unwrap()[bit / 8] |= 1 << (bit % 8);
+        fs.buffer_refresh_bitmap_csum(buf, 0, true).unwrap();
+    }
+
+    fn role_refused(dev: &MemDev, fs: &Filesystem, buf: &BlockBuffer, ino: u32) {
+        let dirty = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        assert!(
+            role_read_for_test(fs, buf, ino).is_err(),
+            "unqualified inode role accepted"
+        );
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
+    #[test]
+    fn inode_role_refuses_unknown_storage_flags() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |raw| raw[0x23] |= 0x80);
+        role_refused(&dev, &fs, &buf, 42);
+    }
+
+    #[test]
+    fn inode_role_refuses_external_attributes() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |raw| {
+            raw[0x68..0x6c].copy_from_slice(&512u32.to_le_bytes())
+        });
+        role_refused(&dev, &fs, &buf, 42);
+    }
+
+    #[test]
+    fn inode_role_refuses_inline_attributes() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |raw| {
+            raw[160..164].copy_from_slice(&0xea020000u32.to_le_bytes())
+        });
+        role_refused(&dev, &fs, &buf, 42);
+    }
+
+    #[test]
+    fn inode_role_refuses_storage_in_inactive_reserved_record() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 3, |raw| {
+            raw[..2].fill(0);
+            raw[26..28].fill(0);
+            raw[32..36].fill(0);
+            raw[40..100].fill(0);
+            raw[40..44].copy_from_slice(&512u32.to_le_bytes());
+        });
+        role_refused(&dev, &fs, &buf, 3);
+    }
+
+    #[test]
+    fn inode_role_healthy_extent_file_is_accepted() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |_| {});
+        role_read_for_test(&fs, &buf, 42).unwrap();
+    }
+
+    fn role_record(fs: &Filesystem, buf: &BlockBuffer, ino: u32) -> crate::inode_roles::Record {
+        assert!(inventory_for_test(fs, buf).unwrap().contains(&ino));
+        crate::inode_roles::Reader::new(fs, buf, role_limits())
+            .unwrap()
+            .read(ino)
+            .unwrap()
+    }
+
+    fn role_limits() -> crate::inode_roles::Limits {
+        crate::inode_roles::Limits {
+            records: 2,
+            reads: 2,
+            scratch_bytes: BS as usize + 256,
+        }
+    }
+
+    #[test]
+    fn inode_role_distinguishes_root_reserved_and_ordinary_directory() {
+        use crate::inode_roles::{Role, Storage};
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        assert_eq!(role_record(&fs, &buf, 2).role, Role::RootDirectory);
+        assert_eq!(role_record(&fs, &buf, 11).role, Role::Directory);
+        stage_role_body(&fs, &mut buf, 3, |raw| {
+            raw[..2].fill(0);
+            raw[26..28].fill(0);
+            raw[32..100].fill(0);
+        });
+        let reserved = role_record(&fs, &buf, 3);
+        assert_eq!(reserved.role, Role::InactiveReserved);
+        assert_eq!(reserved.storage, Storage::None);
+    }
+
+    #[test]
+    fn inode_role_preserves_staged_generation_and_zero_link_allocation() {
+        use crate::inode_roles::Role;
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |raw| {
+            raw[100..104].copy_from_slice(&17u32.to_le_bytes());
+            raw[26..28].fill(0);
+        });
+        let before = buf.dirty.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let record = role_record(&fs, &buf, 42);
+        assert_eq!((record.ino, record.generation, record.links), (42, 17, 0));
+        assert_eq!(record.role, Role::Regular);
+        assert_eq!(buf.dirty, before);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        assert!(!inventory_for_test(&fs, &BlockBuffer::new(BS))
+            .unwrap()
+            .contains(&42));
+    }
+
+    #[test]
+    fn inode_role_checks_checksum_identity_in_both_views() {
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        fs.dev = dev.clone(); // Observe deliberate disk faults without a device cache.
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |_| {});
+        let mut wrong = fs.build_regular_file_inode(43, 0o600).unwrap();
+        fs.csum
+            .patch_inode_checksum(43, Inode::parse(&wrong).unwrap().generation, &mut wrong);
+        fs.buffer_write_inode(&mut buf, 42, &wrong).unwrap();
+        role_refused(&dev, &fs, &buf, 42);
+        let (block, offset) = bgd::locate_inode(&fs.sb, &fs.groups, 2).unwrap();
+        buf.get_mut(&fs, block).unwrap();
+        dev.bytes.lock().unwrap()[block as usize * BS as usize + offset as usize + 100] ^= 1;
+        let mut reader = crate::inode_roles::Reader::new(&fs, &buf, role_limits()).unwrap();
+        // The staged table still has the old valid root; the disk view does not.
+        assert_eq!(reader.read(2).unwrap().ino, 2);
+        let disk = BlockBuffer::new(BS);
+        assert!(matches!(
+            crate::inode_roles::Reader::new(&fs, &disk, role_limits())
+                .unwrap()
+                .read(2),
+            Err(Error::BadChecksum { what: "inode" })
+        ));
+    }
+
+    #[test]
+    fn inode_role_classifies_fast_and_block_symlinks_and_fifo() {
+        use crate::inode_roles::{Role, Storage};
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |raw| {
+            raw[..2].copy_from_slice(&(crate::inode::S_IFLNK | 0o777).to_le_bytes());
+            raw[4..8].copy_from_slice(&4u32.to_le_bytes());
+            raw[32..100].fill(0);
+            raw[40..44].copy_from_slice(b"dest");
+        });
+        assert_eq!(role_record(&fs, &buf, 42).storage, Storage::FastSymlink);
+        stage_role_body(&fs, &mut buf, 42, |raw| {
+            raw[..2].copy_from_slice(&(crate::inode::S_IFLNK | 0o777).to_le_bytes());
+            raw[4..8].copy_from_slice(&100u32.to_le_bytes());
+            raw[28..32].copy_from_slice(&8u32.to_le_bytes());
+        });
+        let long = role_record(&fs, &buf, 42);
+        assert_eq!(
+            (long.role, long.storage),
+            (Role::Symlink, Storage::Extents { depth: 0 })
+        );
+        stage_role_body(&fs, &mut buf, 42, |raw| {
+            raw[..2].copy_from_slice(&(crate::inode::S_IFIFO | 0o600).to_le_bytes());
+            raw[32..100].fill(0);
+        });
+        assert_eq!(
+            (
+                role_record(&fs, &buf, 42).role,
+                role_record(&fs, &buf, 42).storage
+            ),
+            (Role::Fifo, Storage::None)
+        );
+    }
+
+    #[test]
+    fn inode_role_refuses_unqualified_types_flags_and_root_headers() {
+        use crate::inode::InodeFlags;
+        for case in 0..12 {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            stage_role_body(&fs, &mut buf, 42, |raw| match case {
+                0 => raw[..2].fill(0),
+                1 => raw[..2].copy_from_slice(&(crate::inode::S_IFCHR | 0o600).to_le_bytes()),
+                2 => raw[..2].copy_from_slice(&(crate::inode::S_IFSOCK | 0o600).to_le_bytes()),
+                3 => raw[32..36].fill(0),
+                4 => raw[32..36].copy_from_slice(
+                    &(InodeFlags::EXTENTS | InodeFlags::HUGE_FILE)
+                        .bits()
+                        .to_le_bytes(),
+                ),
+                5 => raw[32..36].copy_from_slice(
+                    &(InodeFlags::EXTENTS | InodeFlags::EA_INODE)
+                        .bits()
+                        .to_le_bytes(),
+                ),
+                6 => raw[32..36].copy_from_slice(
+                    &(InodeFlags::EXTENTS | InodeFlags::INLINE_DATA)
+                        .bits()
+                        .to_le_bytes(),
+                ),
+                7 => raw[46..48].copy_from_slice(&2u16.to_le_bytes()),
+                8 => raw[44..46].copy_from_slice(&5u16.to_le_bytes()),
+                9 => raw[40..42].fill(0),
+                10 => raw[42..44].copy_from_slice(&5u16.to_le_bytes()),
+                _ => raw[32..36].copy_from_slice(
+                    &(InodeFlags::EXTENTS | InodeFlags::CASEFOLD)
+                        .bits()
+                        .to_le_bytes(),
+                ),
+            });
+            role_refused(&dev, &fs, &buf, 42);
+        }
+    }
+
+    #[test]
+    fn inode_role_rejects_bad_fast_symlink_and_fifo_storage() {
+        for case in 0..5 {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            stage_role_body(&fs, &mut buf, 42, |raw| {
+                raw[..2].copy_from_slice(&(crate::inode::S_IFLNK | 0o777).to_le_bytes());
+                raw[4..8].copy_from_slice(&4u32.to_le_bytes());
+                raw[32..100].fill(0);
+                raw[40..44].copy_from_slice(b"dest");
+                match case {
+                    0 => raw[4..8].fill(0),
+                    1 => raw[4..8].copy_from_slice(&61u32.to_le_bytes()),
+                    2 => raw[41] = 0,
+                    3 => raw[45] = 1,
+                    _ => raw[..2].copy_from_slice(&(crate::inode::S_IFIFO | 0o600).to_le_bytes()),
+                }
+            });
+            role_refused(&dev, &fs, &buf, 42);
+        }
+    }
+
+    #[test]
+    fn inode_role_supports_low_only_checksum_and_refuses_unknown_extra_or_fragment() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |raw| raw[128..].fill(0));
+        role_record(&fs, &buf, 42);
+        for case in 0..2 {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            stage_role_body(&fs, &mut buf, 42, |raw| {
+                if case == 0 {
+                    raw[128..130].copy_from_slice(&4u16.to_le_bytes());
+                } else {
+                    raw[0x70] = 1;
+                }
+            });
+            role_refused(&dev, &fs, &buf, 42);
+        }
+    }
+
+    #[test]
+    fn inode_role_shares_limits_across_records_and_staged_fetches() {
+        use crate::inode_roles::{Limits, Reader};
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        stage_role_body(&fs, &mut buf, 42, |_| {});
+        for limits in [
+            Limits {
+                records: 1,
+                ..role_limits()
+            },
+            Limits {
+                reads: 1,
+                ..role_limits()
+            },
+        ] {
+            let mut reader = Reader::new(&fs, &buf, limits).unwrap();
+            reader.read(42).unwrap();
+            assert!(matches!(
+                reader.read(42),
+                Err(Error::Unsupported("inode role resource limit"))
+            ));
+        }
+        let mut exact = Reader::new(&fs, &buf, role_limits()).unwrap();
+        exact.read(42).unwrap();
+        exact.read(42).unwrap();
+        for limits in [
+            Limits {
+                records: 0,
+                ..role_limits()
+            },
+            Limits {
+                reads: 0,
+                ..role_limits()
+            },
+        ] {
+            assert!(Reader::new(&fs, &buf, limits).unwrap().read(42).is_err());
+        }
+        assert!(Reader::new(
+            &fs,
+            &buf,
+            Limits {
+                scratch_bytes: BS as usize + 255,
+                ..role_limits()
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn inode_role_refuses_malformed_tables_bounds_and_invalid_ids() {
+        use crate::inode_roles::Reader;
+        for length in [BS as usize - 1, BS as usize + 1] {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            stage_role_body(&fs, &mut buf, 42, |_| {});
+            let (block, _) = bgd::locate_inode(&fs.sb, &fs.groups, 42).unwrap();
+            buf.dirty.get_mut(&block).unwrap().resize(length, 0);
+            role_refused(&dev, &fs, &buf, 42);
+        }
+        let (_, mut fs) = mount_casefold_planning_fixture();
+        let buf = BlockBuffer::new(BS);
+        for ino in [0, fs.sb.inodes_count + 1] {
+            assert!(matches!(
+                Reader::new(&fs, &buf, role_limits()).unwrap().read(ino),
+                Err(Error::InvalidInode(_))
+            ));
+        }
+        fs.groups[0].inode_table = fs.sb.blocks_count;
+        assert!(matches!(
+            Reader::new(&fs, &buf, role_limits()).unwrap().read(2),
+            Err(Error::InvalidBlock(_))
+        ));
+    }
+
+    #[test]
+    fn inode_role_refuses_unqualified_volume_and_journal_profiles() {
+        for case in 0..12 {
+            let (_, mut fs) = mount_casefold_planning_fixture();
+            let buf = BlockBuffer::new(BS);
+            match case {
+                0 => fs.sb.feature_compat |= features::Compat::RESIZE_INODE.bits(),
+                1 => fs.sb.feature_ro_compat |= features::RoCompat::QUOTA.bits(),
+                2 => fs.sb.feature_compat |= features::Compat::ORPHAN_FILE.bits(),
+                3 => fs.sb.feature_incompat |= 0x80000000,
+                4 => fs.sb.creator_os = 1,
+                5 => fs.sb.first_inode = 12,
+                6 => fs.sb.last_orphan = 42,
+                7 => fs.sb.inode_size = 128,
+                8 => fs.csum.enabled = false,
+                9 => fs.sb.raw[0xe0] = 8,
+                10 => fs.sb.raw[0xd0] = 1,
+                _ => fs.sb.raw[0xe4] = 1,
+            }
+            assert!(crate::inode_roles::Reader::new(&fs, &buf, role_limits()).is_err());
+            assert!(buf.dirty.is_empty());
+        }
+    }
+
+    #[test]
+    fn inode_role_read_errors_consume_the_shared_fetch_budget() {
+        struct FailedRead;
+        impl crate::block_io::BlockDevice for FailedRead {
+            fn read_at(&self, _: u64, _: &mut [u8]) -> Result<()> {
+                Err(std::io::Error::other("injected role read error").into())
+            }
+            fn size_bytes(&self) -> u64 {
+                VOL
+            }
+        }
+        let (_, mut fs) = mount_casefold_planning_fixture();
+        fs.dev = std::sync::Arc::new(FailedRead);
+        let buf = BlockBuffer::new(BS);
+        let mut reader = crate::inode_roles::Reader::new(
+            &fs,
+            &buf,
+            crate::inode_roles::Limits {
+                reads: 1,
+                ..role_limits()
+            },
+        )
+        .unwrap();
+        assert!(matches!(reader.read(2), Err(Error::Io(_))));
+        assert!(matches!(
+            reader.read(2),
+            Err(Error::Unsupported("inode role resource limit"))
+        ));
+        assert!(buf.dirty.is_empty());
+    }
+
+    #[test]
+    fn inode_role_distinguishes_the_declared_inline_extent_journal() {
+        use crate::inode_roles::{Role, Storage};
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let mut raw = fs.sb.raw.clone();
+        raw[0x5c..0x60].copy_from_slice(&features::Compat::HAS_JOURNAL.bits().to_le_bytes());
+        raw[0xe0..0xe4].copy_from_slice(&8u32.to_le_bytes());
+        let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+        raw[0x3fc..].copy_from_slice(&crc.to_le_bytes());
+        fs.sb = Superblock::parse(raw).unwrap();
+        buf.get_mut(&fs, 0).unwrap()[1024..2048].copy_from_slice(&fs.sb.raw);
+        stage_role_body(&fs, &mut buf, 8, |raw| {
+            raw[4..8].copy_from_slice(&BS.to_le_bytes());
+            raw[28..32].copy_from_slice(&(BS / 512).to_le_bytes());
+            raw[42..44].copy_from_slice(&1u16.to_le_bytes());
+            raw[56..58].copy_from_slice(&1u16.to_le_bytes());
+            raw[60..64].copy_from_slice(&512u32.to_le_bytes());
+        });
+        let journal = role_record(&fs, &buf, 8);
+        assert_eq!(
+            (journal.role, journal.storage),
+            (Role::Journal, Storage::Extents { depth: 0 })
+        );
+        stage_role_body(&fs, &mut buf, 8, |raw| {
+            raw[4..8].copy_from_slice(&BS.to_le_bytes());
+            raw[42..44].copy_from_slice(&1u16.to_le_bytes());
+            raw[46..48].copy_from_slice(&1u16.to_le_bytes());
+        });
+        role_refused(&dev, &fs, &buf, 8);
+    }
+
     #[test]
     fn buffered_removal_rechecks_the_current_directory_checksum() {
         let dev = formatted();

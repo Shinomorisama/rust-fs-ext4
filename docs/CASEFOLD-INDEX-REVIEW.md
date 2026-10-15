@@ -69,7 +69,85 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private verified current inode-role reader — 2026-10-15
+
+The next private component after the inventory review is now implemented in
+`inode_roles`. `Reader` requires a successful current inventory and only its
+allocated IDs, on the same trusted mounted geometry and stable device/buffer
+view. It does not revalidate the inventory, descriptors or allocation per record,
+and carries no epoch token. A future builder must establish that precondition,
+visit every allocated ID exactly once, and discard all accumulated results on
+any refusal; this reader alone does not provide a complete-result snapshot.
+
+The initial profile uses metadata checksums, 1 KiB/4 KiB blocks, 256-byte Linux
+inodes, first ordinary inode 11, and explicit feature allowlists. Resize, quota,
+orphan/recovery, external-journal and unknown feature profiles refuse. No journal
+requires zero journal fields; an internal journal must be declared as inode 8
+with no external UUID/device. Inactive reserved records require mode/links zero
+and no size, sectors, flags, block contents or attribute storage. Root inode 2
+must be a directory; a declared journal must be a nonempty regular inode.
+Ordinary allocated zero-link records are retained and interpreted normally.
+
+Each read returns inode/generation, typed role, size, sector/link counts and the
+verified 60-byte storage area. Extent-backed regular files/directories and
+block-backed symlinks have an admitted inline header with depth zero or one;
+the journal is initially limited to depth zero. Only EXTENTS is allowed for file,
+journal and block-backed symlink records; directories additionally allow INDEX
+and validated CASEFOLD policy. The complete extent collector must still verify
+every record/child and account for all storage; role classification does not
+check extent payload records, external nodes, sector totals or global conflicts.
+
+Fast symlinks require zero sectors/flags, a nonempty target of at most 60 bytes,
+no embedded NUL and zero unused storage bytes. FIFO records require zero storage.
+Character/block devices, sockets, ordinary mode-zero records, legacy/inline maps,
+unknown flags, HUGE_FILE storage units and external attributes refuse. Extra
+inode sections are limited to observed sizes zero or 32; bytes beyond the extra
+section must all be zero, refusing inline attribute references as well. Fragment
+addresses refuse. This narrow ownership-interpretation profile does not change
+the existing general inode reader or its supported read matrix.
+
+Reads use current staged table bytes when present, requiring exactly one block,
+and otherwise the device. Table addresses/body slices are bounded before use.
+Inode checksums include inode number and generation, using a fixed 256-byte
+stack copy with the checksum slots cleared; the zero-extra profile compares
+only the low checksum half. One fallible table-block allocation is reused.
+Record attempts and logical fetches, including staged/failing accesses, debit
+shared counters across calls. Metadata scratch requires `block_size + 256`
+bytes; fixed reader/parsed-record stack state, allocator overhead and device
+cache are outside that scratch figure. No result vectors are retained by this
+component. The eventual builder must charge this buffer's retained capacity,
+inventory capacity, role/claim arenas and transient outputs together.
+
+Four controls first failed on acceptance through the existing verified inode
+reader: unknown storage flags, external attributes, inline attributes, and storage
+hidden in an inactive reserved record. A healthy file control passed. Those
+same refusal assertions pass with the new component. Seventeen focused controls
+cover current staged identity, zero-link allocation, both-view checksums, fast/
+block symlinks, FIFO, explicit journal role, header/type/flag/attribute profiles,
+low-only checksums, exact/exhausted shared limits, malformed tables, bounds and
+read faults. See `extprogress.md` for full baseline retention and final checks.
+
+A new independent VM test formats four no-journal block/descriptor profiles and
+two 64-bit internal-journal profiles. Linux initializes both groups, creates and
+removes files, creates both symlink shapes, a FIFO and a depth-one extent file.
+It requires judged non-repairing e2fsck cleanliness, classifies every allocated
+ID including reserved slots, and compares its type and sectors with exactly one
+saved `debugfs stat` result per ID. It requires both symlink forms, FIFO, the
+external-map file and the declared journal outcome. The focused workflow enforces
+one executed test and saves images/commands/raw reports/log. This new oracle is
+compiled but unrun locally; exact-commit CI remains pending after push.
+
+No production mutation path calls this reader. The three other-inode alias
+failures, fixed/block-allocation checks, snapshot construction/overlay, final
+sealing, mutation invalidation, operation guard and failure publication rules
+remain open. Inspect new CI and review the component before joining it to the
+complete collector under aggregate budgets; keep every write gate in place.
+
 ### Inode-inventory implementation and evidence review — 2026-10-15
+
+Follow-up: the private role reader above implements this review's next component.
+Inventory source `4309ed1` now passed full CI as well as focused Linux validation.
+This does not qualify the new role reader or a complete owner snapshot.
 
 Reviewed `4309ed114caca9d13c31e6647276ca883c116781`, the complete private
 inventory, its fifteen unit controls, VM fixture and focused workflow. Its

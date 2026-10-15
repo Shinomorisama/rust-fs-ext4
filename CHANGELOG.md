@@ -13,6 +13,10 @@
 
 ### Added
 
+- A private bounded current inode-role reader distinguishes qualified reserved,
+  root, journal, file, directory, symlink and FIFO records after a same-view
+  allocation inventory. Unknown storage/attribute profiles refuse; complete
+  ownership checks and public casefold write admission remain separate.
 - A private bounded inode inventory validates current superblock, descriptor
   and initialized bitmap contents before returning all allocated IDs. Reserved
   and zero-link slots remain visible; ownership interpretation and public
