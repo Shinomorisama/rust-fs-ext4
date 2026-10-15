@@ -4083,6 +4083,10 @@ impl Filesystem {
                 buf,
                 physical_seen.iter().chain(map_blocks.iter()).copied(),
             )?;
+            self.casefold_check_journal_roles(
+                buf,
+                physical_seen.iter().chain(map_blocks.iter()).copied(),
+            )?;
             if target_ino == 0 || target_ino > self.sb.inodes_count {
                 return Err(Error::InvalidArgument("invalid directory entry inode"));
             }
@@ -7684,6 +7688,66 @@ impl Filesystem {
         Ok(())
     }
 
+    /// Read current allocation metadata, preserving mounted pointer roles and
+    /// reconciling the transaction's pending initialization state.
+    fn casefold_current_descriptor(
+        &self,
+        buf: &BlockBuffer,
+        group: usize,
+        limit: u64,
+    ) -> Result<BlockGroupDescriptor> {
+        let mounted = self
+            .groups
+            .get(group)
+            .ok_or(Error::Corrupt("casefold allocation group outside table"))?;
+        let (descriptor_block, offset) = self.sb.descriptor_location(group as u64);
+        if descriptor_block >= limit {
+            return Err(Error::InvalidBlock(descriptor_block));
+        }
+        let bytes = self.buffered_block(buf, descriptor_block)?;
+        if bytes.len() != self.sb.block_size() as usize {
+            return Err(Error::Corrupt(
+                "casefold allocation descriptor block size mismatch",
+            ));
+        }
+        let raw = bytes
+            .get(offset..offset + usize::from(self.sb.desc_size))
+            .ok_or(Error::Corrupt(
+                "casefold allocation descriptor outside block",
+            ))?;
+        let current = BlockGroupDescriptor::parse(raw, self.sb.desc_size)?;
+        if crate::checksum::group_desc_csum(&self.sb, &self.csum, group as u32, raw)
+            != Some(current.checksum)
+        {
+            return Err(Error::BadChecksum {
+                what: "block group descriptor",
+            });
+        }
+        if current.block_bitmap != mounted.block_bitmap
+            || current.inode_bitmap != mounted.inode_bitmap
+            || current.inode_table != mounted.inode_table
+        {
+            return Err(Error::Unsupported(
+                "casefold insertion after staged metadata relocation",
+            ));
+        }
+        if buf
+            .uninit_cleared
+            .get(&group)
+            .is_some_and(|flags| *flags != current.flags)
+        {
+            return Err(Error::Corrupt(
+                "casefold allocation flags disagree with descriptor",
+            ));
+        }
+        if current.flags & !bgd::BgdFlags::all().bits() != 0 {
+            return Err(Error::Unsupported(
+                "casefold insertion with unknown allocation flags",
+            ));
+        }
+        Ok(current)
+    }
+
     /// Require current allocation bits for admitted directory and visited map
     /// blocks. This is not proof of exclusive inode ownership. See the public
     /// bitmap/group-descriptor/checksum specifications and CASEFOLD-INDEX-REVIEW.
@@ -7715,53 +7779,8 @@ impl Filesystem {
             let relative = block - first;
             let group = usize::try_from(relative / bpg).map_err(|_| Error::InvalidBlock(block))?;
             let bit = relative % bpg;
-            let mounted = self.groups.get(group).ok_or(Error::InvalidBlock(block))?;
             if let std::collections::hash_map::Entry::Vacant(entry) = bitmaps.entry(group) {
-                let (descriptor_block, offset) = self.sb.descriptor_location(group as u64);
-                if descriptor_block >= limit {
-                    return Err(Error::InvalidBlock(descriptor_block));
-                }
-                let bytes = self.buffered_block(buf, descriptor_block)?;
-                if bytes.len() != bs as usize {
-                    return Err(Error::Corrupt(
-                        "casefold allocation descriptor block size mismatch",
-                    ));
-                }
-                let raw = bytes
-                    .get(offset..offset + usize::from(self.sb.desc_size))
-                    .ok_or(Error::Corrupt(
-                        "casefold allocation descriptor outside block",
-                    ))?;
-                let current = BlockGroupDescriptor::parse(raw, self.sb.desc_size)?;
-                if crate::checksum::group_desc_csum(&self.sb, &self.csum, group as u32, raw)
-                    != Some(current.checksum)
-                {
-                    return Err(Error::BadChecksum {
-                        what: "block group descriptor",
-                    });
-                }
-                if current.block_bitmap != mounted.block_bitmap
-                    || current.inode_bitmap != mounted.inode_bitmap
-                    || current.inode_table != mounted.inode_table
-                {
-                    return Err(Error::Unsupported(
-                        "casefold insertion after staged metadata relocation",
-                    ));
-                }
-                if buf
-                    .uninit_cleared
-                    .get(&group)
-                    .is_some_and(|flags| *flags != current.flags)
-                {
-                    return Err(Error::Corrupt(
-                        "casefold allocation flags disagree with descriptor",
-                    ));
-                }
-                if current.flags & !bgd::BgdFlags::all().bits() != 0 {
-                    return Err(Error::Unsupported(
-                        "casefold insertion with unknown allocation flags",
-                    ));
-                }
+                let current = self.casefold_current_descriptor(buf, group, limit)?;
                 if current.flags().contains(bgd::BgdFlags::BLOCK_UNINIT) {
                     return Err(Error::Unsupported(
                         "casefold insertion with uninitialized block bitmap",
@@ -7796,38 +7815,197 @@ impl Filesystem {
         Ok(())
     }
 
+    /// The declared internal journal, even on a read-only casefold mount with
+    /// no live writer. The initial profile has a stable checksummed inode and
+    /// a complete initialized inline extent map; other shapes remain refused.
+    fn casefold_check_journal_roles(
+        &self,
+        buf: &BlockBuffer,
+        blocks: impl IntoIterator<Item = u64>,
+    ) -> Result<()> {
+        let declaration = self
+            .sb
+            .raw
+            .get(0xd0..0xe8)
+            .ok_or(Error::Corrupt("casefold journal declaration truncated"))?;
+        if declaration[..16].iter().any(|byte| *byte != 0)
+            || declaration[20..24] != [0; 4]
+            || self.sb.feature_incompat & crate::features::Incompat::JOURNAL_DEV.bits() != 0
+        {
+            return Err(Error::Unsupported("casefold external journal profile"));
+        }
+        let has_journal = self.sb.feature_compat & crate::features::Compat::HAS_JOURNAL.bits() != 0;
+        let ino = self.sb.journal_inode;
+        if !has_journal && ino == 0 {
+            return Ok(());
+        }
+        if !has_journal || ino == 0 {
+            return Err(Error::Unsupported(
+                "casefold inconsistent journal declaration",
+            ));
+        }
+        let (disk, disk_raw) = self.read_inode_verified(ino)?;
+        let (journal, current_raw) = self.buffered_inode_verified(buf, ino)?;
+        if current_raw != disk_raw {
+            return Err(Error::Unsupported(
+                "casefold insertion after staged journal inode change",
+            ));
+        }
+        if !disk.is_file()
+            || journal.flags != crate::inode::InodeFlags::EXTENTS.bits()
+            || journal.file_acl != 0
+        {
+            return Err(Error::Unsupported("casefold journal inode profile"));
+        }
+        let bs = u64::from(self.sb.block_size());
+        let limit = self.byte_ceiling()? / bs;
+        if journal.size < 2 * bs || !journal.size.is_multiple_of(bs) {
+            return Err(Error::Unsupported("casefold journal size profile"));
+        }
+        self.casefold_check_journal_inode_allocated(buf, ino, limit)?;
+        let header = crate::extent::ExtentHeader::parse(&journal.block)?;
+        if header.depth != 0 {
+            return Err(Error::Unsupported("casefold external journal mapping"));
+        }
+        if header.entries == 0 || header.max == 0 || header.max > 4 || header.entries > 4 {
+            return Err(Error::CorruptExtentTree("casefold journal inline capacity"));
+        }
+        let mut ranges: Vec<(u64, u64)> = Vec::new();
+        let mut covered = 0u64;
+        for index in 0..usize::from(header.entries) {
+            let offset = 12 + index * 12;
+            let extent = crate::extent::Extent::parse(&journal.block[offset..offset + 12])?;
+            if extent.uninitialized {
+                return Err(Error::Unsupported("casefold uninitialized journal extent"));
+            }
+            if extent.length == 0 || u64::from(extent.logical_block) != covered {
+                return Err(Error::CorruptExtentTree(
+                    "casefold journal logical coverage",
+                ));
+            }
+            let start = extent.physical_block;
+            let end = start
+                .checked_add(u64::from(extent.length))
+                .ok_or(Error::InvalidBlock(start))?;
+            if start < u64::from(self.sb.first_data_block) || end > limit {
+                return Err(Error::InvalidBlock(start));
+            }
+            if ranges
+                .iter()
+                .any(|&(old_start, old_end)| start < old_end && old_start < end)
+            {
+                return Err(Error::CorruptExtentTree(
+                    "casefold journal physical overlap",
+                ));
+            }
+            if self.casefold_range_is_fixed_metadata(start, end) {
+                return Err(Error::CorruptDirEntry(
+                    "casefold journal aliases fixed metadata",
+                ));
+            }
+            ranges.push((start, end));
+            covered += u64::from(extent.length);
+        }
+        if covered != journal.size / bs {
+            return Err(Error::Unsupported(
+                "casefold journal allocation outside file size",
+            ));
+        }
+        self.casefold_check_allocation(buf, ranges.iter().flat_map(|&(start, end)| start..end))?;
+        if blocks.into_iter().any(|block| {
+            ranges
+                .iter()
+                .any(|&(start, end)| start <= block && block < end)
+        }) {
+            return Err(Error::CorruptDirEntry(
+                "casefold directory storage aliases journal",
+            ));
+        }
+        Ok(())
+    }
+
+    fn casefold_check_journal_inode_allocated(
+        &self,
+        buf: &BlockBuffer,
+        ino: u32,
+        limit: u64,
+    ) -> Result<()> {
+        let group = ((ino - 1) / self.sb.inodes_per_group) as usize;
+        let current = self.casefold_current_descriptor(buf, group, limit)?;
+        if current.flags().contains(bgd::BgdFlags::INODE_UNINIT) {
+            return Err(Error::Unsupported(
+                "casefold uninitialized journal inode bitmap",
+            ));
+        }
+        if current.inode_bitmap >= limit {
+            return Err(Error::InvalidBlock(current.inode_bitmap));
+        }
+        let bitmap = self.buffered_block(buf, current.inode_bitmap)?;
+        let coverage = (self.sb.inodes_per_group as usize).div_ceil(8);
+        if bitmap.len() != self.sb.block_size() as usize || coverage > bitmap.len() {
+            return Err(Error::Corrupt(
+                "casefold journal inode bitmap size mismatch",
+            ));
+        }
+        let crc = crate::checksum::linux_crc32c(self.csum.seed, &bitmap[..coverage]);
+        let mask = if self.sb.desc_size >= 64 {
+            u32::MAX
+        } else {
+            0xffff
+        };
+        if crc & mask != current.inode_bitmap_csum {
+            return Err(Error::BadChecksum {
+                what: "inode bitmap",
+            });
+        }
+        if !crate::alloc::bit_is_set(&bitmap, (ino - 1) % self.sb.inodes_per_group) {
+            return Err(Error::Corrupt("casefold journal inode is not allocated"));
+        }
+        Ok(())
+    }
+
     /// Fixed metadata locations from the validated mounted geometry. This is
     /// a refusal check, not proof of allocation or exclusive ownership. Staged
     /// layout changes are refused separately; journal/other ownership and full
     /// map-node qualification remain required before enabling casefold writes.
     fn casefold_block_is_fixed_metadata(&self, block: u64) -> bool {
+        block
+            .checked_add(1)
+            .is_none_or(|end| self.casefold_range_is_fixed_metadata(block, end))
+    }
+
+    /// Range checks avoid scanning every journal block against every group.
+    fn casefold_range_is_fixed_metadata(&self, start: u64, end: u64) -> bool {
+        if start >= end {
+            return false;
+        }
         let block_size = u64::from(self.sb.block_size());
         let first = u64::from(self.sb.first_data_block);
         let primary = crate::superblock::SUPERBLOCK_OFFSET / block_size;
-        if block < first.max(primary) {
+        if start < first.max(primary) {
             return true;
         }
         let blocks_per_group = u64::from(self.sb.blocks_per_group);
-        let group = (block - first) / blocks_per_group;
-        let mut head = block - (block - first) % blocks_per_group;
-        if group == 0 {
-            // The primary superblock still starts in block 1 on a 1 KiB
-            // bigalloc volume whose first group starts in block 0.
-            head = head.max(primary);
-        }
-        if block - head < self.sb.group_head_metadata_blocks(group) {
-            return true;
+        for group in (start - first) / blocks_per_group..=(end - 1 - first) / blocks_per_group {
+            let mut head = first + group * blocks_per_group;
+            if group == 0 {
+                // The 1 KiB primary can be in block 1 of a group starting at 0.
+                head = head.max(primary);
+            }
+            let head_end = head.saturating_add(self.sb.group_head_metadata_blocks(group));
+            if head < head_end && start < head_end && head < end {
+                return true;
+            }
         }
         let table_blocks = (u64::from(self.sb.inodes_per_group) * u64::from(self.sb.inode_size))
             .div_ceil(block_size);
         // FLEX_BG can place another group's bitmaps/table in this group.
         // Check every descriptor, not only the block's containing group.
         self.groups.iter().any(|descriptor| {
-            block == descriptor.block_bitmap
-                || block == descriptor.inode_bitmap
-                || block
-                    .checked_sub(descriptor.inode_table)
-                    .is_some_and(|offset| offset < table_blocks)
+            (start <= descriptor.block_bitmap && descriptor.block_bitmap < end)
+                || (start <= descriptor.inode_bitmap && descriptor.inode_bitmap < end)
+                || (start < descriptor.inode_table.saturating_add(table_blocks)
+                    && descriptor.inode_table < end)
         })
     }
 
@@ -9659,6 +9837,464 @@ mod tests {
         let (mut buf, parent, leaf) = staged_casefold_index(&fs);
         assert!(casefold_review_block_allocated(&fs, &buf, leaf));
         assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
+    }
+
+    // A self-contained declared-journal planner fixture. Ordinary file APIs
+    // allocate the storage before it is transferred to reserved inode 8 and
+    // journal/casefold policy is declared. Linux-created images remain the
+    // independent profile evidence; this is not a Linux-clean image claim.
+    fn casefold_journal_fixture_device() -> (std::sync::Arc<MemDev>, u64) {
+        let dev = formatted();
+        let first = {
+            let fs = mount(&dev);
+            let temporary = fs.apply_create("/journal-storage", 0o600).unwrap();
+            let mut data = vec![0; 8 * BS as usize];
+            for (offset, value) in [
+                (0, crate::jbd2::JBD2_MAGIC_NUMBER),
+                (4, crate::jbd2::JBD2_SUPERBLOCK_V2),
+                (0x0c, BS),
+                (0x10, 8),
+                (0x14, 1),
+                (0x18, 1),
+                (0x40, 1),
+            ] {
+                data[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+            }
+            data[0x30..0x40].copy_from_slice(&fs.sb.uuid);
+            data[0x100..0x110].copy_from_slice(&fs.sb.uuid);
+            fs.apply_pwrite("/journal-storage", 0, &data).unwrap();
+            let (journal, mut raw) = fs.read_inode_verified(temporary).unwrap();
+            let first = fs.map_inode_logical(&journal, 0).unwrap().unwrap();
+            let header = crate::extent::ExtentHeader::parse(&journal.block).unwrap();
+            assert_eq!((header.depth, header.entries), (0, 1));
+            assert!(crate::alloc::bit_is_set(
+                &fs.read_block(fs.groups[0].inode_bitmap).unwrap(),
+                7
+            ));
+            fs.csum
+                .patch_inode_checksum(8, journal.generation, &mut raw);
+            let mut buf = BlockBuffer::new(BS);
+            fs.buffer_write_inode(&mut buf, 8, &raw).unwrap();
+            let (root, _) = fs.read_inode_verified(2).unwrap();
+            fs.buffer_remove_dir_entry(&mut buf, 2, &root, b"journal-storage")
+                .unwrap();
+            fs.buffer_free_inode_slot(&mut buf, temporary).unwrap();
+            fs.buffer_write_inode(&mut buf, temporary, &vec![0; usize::from(fs.sb.inode_size)])
+                .unwrap();
+            fs.buffer_patch_sb_counters(&mut buf, 0, 1).unwrap();
+            fs.commit_block_buffer(buf).unwrap();
+            first
+        };
+        {
+            let mut bytes = dev.bytes.lock().unwrap();
+            let raw = &mut bytes[1024..2048];
+            let compat = u32::from_le_bytes(raw[0x5c..0x60].try_into().unwrap());
+            raw[0x5c..0x60].copy_from_slice(
+                &(compat | crate::features::Compat::HAS_JOURNAL.bits()).to_le_bytes(),
+            );
+            raw[0xe0..0xe4].copy_from_slice(&8u32.to_le_bytes());
+            let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+            raw[0x3fc..0x400].copy_from_slice(&crc.to_le_bytes());
+        }
+        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+        (dev, first)
+    }
+
+    fn mount_casefold_journal_fixture() -> (std::sync::Arc<MemDev>, Filesystem, u64) {
+        let (dev, first) = casefold_journal_fixture_device();
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        assert_eq!(fs.sb.journal_inode, 8);
+        assert!(fs.journal.is_none(), "casefold must not open a live writer");
+        let jsb = crate::jbd2::read_superblock(&fs).unwrap().unwrap();
+        jsb.validate_plain_recovery(BS, fs.sb.blocks_count).unwrap();
+        assert!(jsb.is_clean());
+        let (journal, _) = fs.read_inode_verified(8).unwrap();
+        assert_eq!(fs.map_inode_logical(&journal, 1).unwrap(), Some(first + 1));
+        (dev, fs, first)
+    }
+
+    fn assert_casefold_journal_role_refusal(map_node: bool, root_alias: bool) {
+        let (dev, fs, first) = mount_casefold_journal_fixture();
+        let alias = first + 1; // Keep the journal superblock intact.
+        let (mut buf, parent) = if map_node {
+            let (mut buf, _, _, node) = staged_casefold_external_map(&dev, &fs);
+            let bytes = fs.read_block(node).unwrap();
+            let parent =
+                relocate_casefold_extent_node(&dev, &fs, &mut buf, node, alias, bytes, false);
+            (buf, parent)
+        } else {
+            let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+            let root = leaf - 1;
+            let bytes = buf
+                .dirty
+                .remove(&if root_alias { root } else { leaf })
+                .unwrap();
+            buf.put(alias, bytes);
+            let (_, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+            raw[0x2a..0x2c].copy_from_slice(&2u16.to_le_bytes());
+            raw[0x38..0x3a].copy_from_slice(&1u16.to_le_bytes());
+            let root_physical = if root_alias { alias } else { root };
+            raw[0x3a..0x3c].copy_from_slice(&((root_physical >> 32) as u16).to_le_bytes());
+            raw[0x3c..0x40].copy_from_slice(&(root_physical as u32).to_le_bytes());
+            raw[0x40..0x44].copy_from_slice(&1u32.to_le_bytes());
+            raw[0x44..0x46].copy_from_slice(&1u16.to_le_bytes());
+            let leaf_physical = if root_alias { leaf } else { alias };
+            raw[0x46..0x48].copy_from_slice(&((leaf_physical >> 32) as u16).to_le_bytes());
+            raw[0x48..0x4c].copy_from_slice(&(leaf_physical as u32).to_le_bytes());
+            fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+                .unwrap();
+            (buf, Inode::parse(&raw).unwrap())
+        };
+        assert!(casefold_review_block_allocated(&fs, &buf, alias));
+        assert!(!fs.casefold_block_is_fixed_metadata(alias));
+        assert!(crate::jbd2::read_superblock(&fs)
+            .unwrap()
+            .unwrap()
+            .is_clean());
+        let before = buf.dirty.clone();
+        let flags_before = buf.uninit_cleared.clone();
+        let disk_before = dev.bytes.lock().unwrap().clone();
+        let result = fs.buffer_add_dir_entry_indexed(
+            &mut buf,
+            2,
+            &parent,
+            b"New_Name",
+            100,
+            crate::dir::DirEntryType::RegFile,
+            true,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(Error::CorruptDirEntry(
+                    "casefold directory storage aliases journal"
+                ))
+            ),
+            "journal block {alias}, map {map_node}, root {root_alias}: {result:?}"
+        );
+        assert_eq!(buf.dirty, before);
+        assert_eq!(buf.uninit_cleared, flags_before);
+        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
+    }
+
+    #[test]
+    fn casefold_journal_refuses_a_leaf_in_nonzero_journal_data() {
+        assert_casefold_journal_role_refusal(false, false);
+    }
+
+    #[test]
+    fn casefold_journal_refuses_a_root_in_nonzero_journal_data() {
+        assert_casefold_journal_role_refusal(false, true);
+    }
+
+    #[test]
+    fn casefold_journal_refuses_a_mapping_node_in_nonzero_journal_data() {
+        assert_casefold_journal_role_refusal(true, false);
+    }
+
+    #[test]
+    fn casefold_journal_accepts_disjoint_storage_in_a_shared_inode_table_block() {
+        let (dev, fs, first) = mount_casefold_journal_fixture();
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        let (block, _) = bgd::locate_inode(&fs.sb, &fs.groups, 8).unwrap();
+        assert!(buf.dirty.contains_key(&block));
+        assert_ne!(leaf, first);
+        assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
+    }
+
+    fn rewrite_casefold_journal_inode(dev: &MemDev, fs: &Filesystem, edit: impl FnOnce(&mut [u8])) {
+        let (_, mut raw) = fs.read_inode_verified(8).unwrap();
+        edit(&mut raw);
+        let inode = Inode::parse(&raw).unwrap();
+        fs.csum.patch_inode_checksum(8, inode.generation, &mut raw);
+        let (block, offset) = bgd::locate_inode(&fs.sb, &fs.groups, 8).unwrap();
+        let start = (block * u64::from(BS)) as usize + offset as usize;
+        dev.bytes.lock().unwrap()[start..start + raw.len()].copy_from_slice(&raw);
+        fs.dev.invalidate_cache().unwrap();
+    }
+
+    #[test]
+    fn casefold_journal_checks_both_inode_checksums_and_complete_buffered_slice() {
+        for scenario in 0..3 {
+            let (dev, fs, _) = mount_casefold_journal_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let (block, offset) = bgd::locate_inode(&fs.sb, &fs.groups, 8).unwrap();
+            if scenario == 0 {
+                let at = (block * u64::from(BS)) as usize + offset as usize + 0x7c;
+                dev.bytes.lock().unwrap()[at] ^= 1;
+                fs.dev.invalidate_cache().unwrap();
+            } else if scenario == 1 {
+                buf.dirty.get_mut(&block).unwrap()[offset as usize + 0x7c] ^= 1;
+            } else {
+                buf.dirty
+                    .get_mut(&block)
+                    .unwrap()
+                    .truncate(offset as usize + usize::from(fs.sb.inode_size) - 1);
+            }
+            let error = casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name");
+            assert!(
+                if scenario == 2 {
+                    matches!(error, Error::Corrupt("inode slice exceeds block data"))
+                } else {
+                    matches!(error, Error::BadChecksum { what: "inode" })
+                },
+                "{error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn casefold_journal_refuses_checksum_valid_staged_inode_changes() {
+        for field in [4, 0x08, 0x20, 0x34, 0x3c, 0x64, 0x68] {
+            let (dev, fs, _) = mount_casefold_journal_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let (_, mut raw) = fs.buffered_inode_verified(&buf, 8).unwrap();
+            raw[field] ^= 1;
+            let current = Inode::parse(&raw).unwrap();
+            fs.csum
+                .patch_inode_checksum(8, current.generation, &mut raw);
+            fs.buffer_write_inode(&mut buf, 8, &raw).unwrap();
+            assert!(matches!(
+                casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+                Error::Unsupported("casefold insertion after staged journal inode change")
+            ));
+        }
+    }
+
+    #[test]
+    fn casefold_journal_checks_complete_inline_shape_and_storage_roles() {
+        for scenario in 0..12 {
+            let (dev, fs, first) = mount_casefold_journal_fixture();
+            rewrite_casefold_journal_inode(&dev, &fs, |raw| match scenario {
+                0 => raw[0x2c..0x2e].copy_from_slice(&5u16.to_le_bytes()),
+                1 => raw[0x2e..0x30].copy_from_slice(&1u16.to_le_bytes()),
+                2 => raw[0x38..0x3a].copy_from_slice(&32769u16.to_le_bytes()),
+                3 => raw[0x34..0x38].copy_from_slice(&1u32.to_le_bytes()),
+                4 => raw[0x38..0x3a].fill(0),
+                5 => raw[0x38..0x3a].copy_from_slice(&7u16.to_le_bytes()),
+                6 => raw[0x3c..0x40]
+                    .copy_from_slice(&((fs.sb.blocks_count - 4) as u32).to_le_bytes()),
+                7 => raw[0x3c..0x40]
+                    .copy_from_slice(&((fs.groups[0].inode_table + 1) as u32).to_le_bytes()),
+                8 => {
+                    raw[0x2a..0x2c].copy_from_slice(&2u16.to_le_bytes());
+                    raw[0x38..0x3a].copy_from_slice(&4u16.to_le_bytes());
+                    raw[0x40..0x44].copy_from_slice(&4u32.to_le_bytes());
+                    raw[0x44..0x46].copy_from_slice(&4u16.to_le_bytes());
+                    raw[0x48..0x4c].copy_from_slice(&((first + 2) as u32).to_le_bytes());
+                }
+                9 => raw[0x20..0x24].fill(0),
+                10 => raw[0x68..0x6c].copy_from_slice(&1u32.to_le_bytes()),
+                11 => raw[..2].copy_from_slice(&0x41edu16.to_le_bytes()),
+                _ => unreachable!(),
+            });
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let error = casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name");
+            let expected = match scenario {
+                0 | 3 | 4 | 8 => matches!(error, Error::CorruptExtentTree(_)),
+                1 => matches!(
+                    error,
+                    Error::Unsupported("casefold external journal mapping")
+                ),
+                2 => matches!(
+                    error,
+                    Error::Unsupported("casefold uninitialized journal extent")
+                ),
+                5 => matches!(
+                    error,
+                    Error::Unsupported("casefold journal allocation outside file size")
+                ),
+                6 => matches!(error, Error::InvalidBlock(_)),
+                7 => matches!(
+                    error,
+                    Error::CorruptDirEntry("casefold journal aliases fixed metadata")
+                ),
+                _ => matches!(error, Error::Unsupported("casefold journal inode profile")),
+            };
+            assert!(expected, "scenario {scenario}: {error:?}");
+        }
+    }
+
+    #[test]
+    fn casefold_journal_checks_inode_bitmap_flags_checksum_size_and_used_bit() {
+        for scenario in 0..4 {
+            let (dev, fs, _) = mount_casefold_journal_fixture();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let bitmap = fs.groups[0].inode_bitmap;
+            match scenario {
+                0 => buf.get_mut(&fs, bitmap).unwrap()[0] ^= 0x80,
+                1 => {
+                    buf.get_mut(&fs, bitmap).unwrap()[0] &= !0x80;
+                    fs.buffer_refresh_bitmap_csum(&mut buf, 0, true).unwrap();
+                }
+                2 => buf.get_mut(&fs, bitmap).unwrap().truncate(BS as usize - 1),
+                3 => stage_casefold_allocation_flags(
+                    &fs,
+                    &mut buf,
+                    fs.groups[0].flags | bgd::BgdFlags::INODE_UNINIT.bits(),
+                ),
+                _ => unreachable!(),
+            }
+            let error = casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name");
+            assert!(
+                match scenario {
+                    0 => matches!(
+                        error,
+                        Error::BadChecksum {
+                            what: "inode bitmap"
+                        }
+                    ),
+                    1 => matches!(
+                        error,
+                        Error::Corrupt("casefold journal inode is not allocated")
+                    ),
+                    2 => matches!(
+                        error,
+                        Error::Corrupt("casefold journal inode bitmap size mismatch")
+                    ),
+                    _ => matches!(
+                        error,
+                        Error::Unsupported("casefold uninitialized journal inode bitmap")
+                    ),
+                },
+                "{error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn casefold_journal_requires_all_owned_data_to_be_allocated() {
+        let (dev, fs, first) = mount_casefold_journal_fixture();
+        let (mut buf, parent, _) = staged_casefold_index(&fs);
+        let bit = (first + 7 - u64::from(fs.sb.first_data_block)) as usize;
+        buf.get_mut(&fs, fs.groups[0].block_bitmap).unwrap()[bit / 8] &= !(1 << (bit % 8));
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::CorruptDirEntry("casefold storage block is not allocated")
+        ));
+    }
+
+    #[test]
+    fn casefold_journal_refuses_external_and_inconsistent_declarations() {
+        for scenario in 0..4 {
+            let (dev, _) = casefold_journal_fixture_device();
+            {
+                let mut bytes = dev.bytes.lock().unwrap();
+                let raw = &mut bytes[1024..2048];
+                match scenario {
+                    0 => raw[0xe0..0xe4].fill(0),
+                    1 => raw[0xe4..0xe8].copy_from_slice(&1u32.to_le_bytes()),
+                    2 => raw[0xd0] = 1,
+                    _ => {
+                        let flags = u32::from_le_bytes(raw[0x5c..0x60].try_into().unwrap());
+                        raw[0x5c..0x60].copy_from_slice(
+                            &(flags & !crate::features::Compat::HAS_JOURNAL.bits()).to_le_bytes(),
+                        );
+                    }
+                }
+                let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+                raw[0x3fc..0x400].copy_from_slice(&crc.to_le_bytes());
+            }
+            let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+            let (mut buf, parent, _) = staged_casefold_index(&fs);
+            let error = casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name");
+            assert!(
+                if scenario == 1 || scenario == 2 {
+                    matches!(
+                        error,
+                        Error::Unsupported("casefold external journal profile")
+                    )
+                } else {
+                    matches!(
+                        error,
+                        Error::Unsupported("casefold inconsistent journal declaration")
+                    )
+                },
+                "{error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn casefold_journal_accepts_a_complete_multi_extent_inline_map() {
+        let (dev, fs, first) = mount_casefold_journal_fixture();
+        rewrite_casefold_journal_inode(&dev, &fs, |raw| {
+            raw[0x2a..0x2c].copy_from_slice(&2u16.to_le_bytes());
+            raw[0x38..0x3a].copy_from_slice(&4u16.to_le_bytes());
+            raw[0x40..0x44].copy_from_slice(&4u32.to_le_bytes());
+            raw[0x44..0x46].copy_from_slice(&4u16.to_le_bytes());
+            raw[0x48..0x4c].copy_from_slice(&((first + 4) as u32).to_le_bytes());
+        });
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
+    }
+
+    #[test]
+    fn casefold_journal_refuses_an_unselected_leaf_in_journal_storage() {
+        let (dev, fs, first) = mount_casefold_journal_fixture();
+        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
+        buf.put(first + 1, buf.dirty[&leaf].clone());
+        let encoding = parent.directory_casefold_encoding(&fs.sb).unwrap();
+        let hash = crate::casefold::LookupName::new(b"New_Name", encoding)
+            .unwrap()
+            .hash(crate::hash::HashVersion::HalfMd4, &fs.sb.hash_seed)
+            .major;
+        let root = buf.dirty.get_mut(&(leaf - 1)).unwrap();
+        root[34..36].copy_from_slice(&2u16.to_le_bytes());
+        root[40..44].copy_from_slice(&hash.checked_add(2).unwrap().to_le_bytes());
+        root[44..48].copy_from_slice(&2u32.to_le_bytes());
+        fs.csum.patch_dx_tail(2, parent.generation, root, 32);
+        let (_, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        raw[4..8].copy_from_slice(&(3 * BS).to_le_bytes());
+        raw[0x2a..0x2c].copy_from_slice(&2u16.to_le_bytes());
+        raw[0x40..0x44].copy_from_slice(&2u32.to_le_bytes());
+        raw[0x44..0x46].copy_from_slice(&1u16.to_le_bytes());
+        raw[0x48..0x4c].copy_from_slice(&((first + 1) as u32).to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        let parent = Inode::parse(&raw).unwrap();
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::CorruptDirEntry("casefold directory storage aliases journal")
+        ));
+    }
+
+    #[test]
+    fn casefold_journal_refuses_a_mapping_node_reached_only_in_the_staged_view() {
+        let (dev, fs, first) = mount_casefold_journal_fixture();
+        let (mut buf, parent, _, node) = staged_casefold_external_map(&dev, &fs);
+        let leaf_node = fs.read_block(node).unwrap();
+        let child = node + 1;
+        let alias = first + 1;
+        let mut index = vec![0; BS as usize];
+        index[..12].copy_from_slice(&leaf_node[..12]);
+        index[2..4].copy_from_slice(&1u16.to_le_bytes());
+        index[6..8].copy_from_slice(&1u16.to_le_bytes());
+        index[16..20].copy_from_slice(&(child as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        {
+            let mut bytes = dev.bytes.lock().unwrap();
+            let at = (node * u64::from(BS)) as usize;
+            bytes[at..at + BS as usize].copy_from_slice(&index);
+            let at = (child * u64::from(BS)) as usize;
+            bytes[at..at + BS as usize].copy_from_slice(&leaf_node);
+        }
+        fs.dev.invalidate_cache().unwrap();
+        index[16..20].copy_from_slice(&(alias as u32).to_le_bytes());
+        fs.csum.patch_extent_tail(2, parent.generation, &mut index);
+        buf.put(node, index);
+        buf.put(alias, leaf_node);
+        let (_, mut raw) = fs.buffered_inode_verified(&buf, 2).unwrap();
+        raw[0x2e..0x30].copy_from_slice(&2u16.to_le_bytes());
+        fs.buffer_write_dir_inode(&mut buf, 2, parent.generation, &mut raw)
+            .unwrap();
+        let parent = Inode::parse(&raw).unwrap();
+        stage_casefold_planner_blocks(&fs, &mut buf, [node, child]);
+        assert!(matches!(
+            casefold_allocation_error(&dev, &fs, &mut buf, &parent, b"New_Name"),
+            Error::CorruptDirEntry("casefold directory storage aliases journal")
+        ));
     }
 
     fn stage_casefold_superblock_byte(fs: &Filesystem, buf: &mut BlockBuffer, field: usize) {

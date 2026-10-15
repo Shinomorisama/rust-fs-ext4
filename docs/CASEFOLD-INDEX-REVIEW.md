@@ -69,7 +69,75 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Scoped internal-journal role refusal — 2026-10-14
+
+At `da2ffcd`, a fresh 839-test baseline passed. A self-contained declared-journal
+fixture reproduced acceptance of a directory root, leaf and external map node
+at nonzero journal data block 522. Journal block zero remains intact and parses
+as clean. The fixture first allocates storage with ordinary file APIs, transfers
+it to checksummed reserved inode 8, releases the temporary file inode/name,
+then declares journal/casefold policy before a read-only mount. This is a planner
+fixture, not a new Linux-clean image claim or public-write bypass.
+
+All three negatives failed on `Ok(())`; the disjoint-storage control passed.
+The same refusal and complete unchanged-buffer/flag/device assertions now pass.
+The expanded focused run passes 68 tests: all 55 preceding fs casefold tests
+plus 13 journal tests. The full local tier passes 852 tests with all 839 fresh
+baseline occurrences retained. Lint and locked release CLI build/install pass;
+new-source exact-commit focused Linux/full CI remain pending. `extprogress.md`
+records the measured logs and continuation task.
+
+After existing read-only admission and allocation checks, before insertion edits,
+the new guard inspects the filesystem journal declaration rather than the absent
+live writer. The initial profile requires zero external-device/UUID fields,
+consistent journal presence/inode declarations, and a stable verified regular
+inode with only the extent flag and no external attribute storage. It verifies
+the current inode bitmap checksum/used bit and initialization state. A journal
+inode change anywhere in its buffered slice is unsupported; changes to another
+inode sharing its table block remain admissible.
+
+The journal map must be complete, initialized and inline (one to four records).
+Every record is inspected: capacity, nonzero lengths, ordered contiguous logical
+coverage, exact file-size coverage, physical bounds and disjoint physical ranges.
+External/legacy maps, unwritten extents, size/preallocation outside this profile
+and external journals remain unsupported. Reserved/fixed filesystem metadata
+cannot be journal data. Every owned block must have current allocation evidence.
+All admitted directory data and mapping nodes visited in either view must be
+disjoint from those journal ranges, including unselected leaves and staged-only
+nodes. Alias refusal does not become a growth/index-drop signal.
+
+The shared current-descriptor reader retains the allocation checkpoint's
+checksum, pointer-stability, pending-flag and unknown-flag checks. Fixed metadata
+classification now handles intervals, with the point check delegating to it;
+this avoids testing every journal block against every group descriptor. There
+are at most four ranges and 131,072 bitmap-bit probes from initialized inline
+extent lengths. The guard does not scan other files or build a volume owner map.
+
+Controls cover disk/current inode checksums and truncated buffered slices,
+checksum-valid staged inode edits, malformed/unsupported complete inline maps,
+metadata/physical overlaps, current inode bitmap checksum/size/flags/used bit,
+an unallocated journal tail, inconsistent/external declarations, two-record
+healthy maps, shared inode-table blocks, an unselected journal-backed leaf and
+a map node reached only in the staged view while data mappings agree. Refusals
+preserve the entire buffer/flags/device; successful insertion changes only its
+selected leaf and preserves the name/inode assertions.
+
+The existing four Linux-created profiles remain the independent healthy-image
+matrix; new-source exact-commit focused/full CI is required after push. The
+synthetic multi-record control does not extend the independent profile matrix.
+JBD2 contents/lifecycle, concurrent/external mutation, other inode/attribute
+ownership and complete directory map shape remain unqualified. In particular,
+the three other-owner counterexamples below are **not fixed** by journal-only
+protection. Next design a bounded transaction-current owner-map strategy before
+its refusal implementation; preserve those tests and their disjoint control.
+Public casefold writes, deeper insertion, splitting/growth and index dropping
+remain blocked.
+
 ### Current ownership review and reproduced aliases — 2026-10-14
+
+The journal checkpoint above supersedes this section's next task. The three
+cross-inode aliases and their saved patch remain unresolved; journal protection
+does not establish a general owner proof.
 
 Reviewed at `96b3b72b7a51ba49f5918044038551942893eafa`. Its exact-commit
 [focused Linux insertion](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38656514666)
@@ -604,8 +672,8 @@ Finding 1 is addressed by the boundary-fix follow-up above. Fixed metadata roles
 visited mapping-node/data overlap and staged descriptor/superblock changes have
 scoped refusals recorded above; inspect the latest exact-commit CI before
 broadening support. The bounded allocation refusal and explicit planner fixture
-updates above now address the reproduced missing-allocation cases. The ownership
-review now demonstrates three allocated cross-inode aliases. Next reproduce and
-qualify the initial journal-role refusal, retaining those other-owner gaps. Keep finding 3
+updates above now address the reproduced missing-allocation cases. The scoped
+journal guard addresses its three reproduced aliases. Next design bounded
+transaction-current ownership tracking for the three other-inode gaps. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.

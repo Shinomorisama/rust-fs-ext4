@@ -22,6 +22,11 @@
 
 ### Fixed
 
+- Private casefold indexed insertion refuses directory data or visited mapping
+  nodes that overlap the declared internal journal. The initial profile verifies
+  a stable checksummed inode, current allocation and the complete inline extent
+  map; unqualified journal profiles refuse. Other-inode ownership remains open
+  and public casefold writes remain blocked.
 - Private casefold indexed insertion requires checksum-valid current allocation
   bits for all admitted directory blocks and mapping blocks visited in either
   view. Free storage, uninitialized/unknown allocation flags, malformed bitmaps
