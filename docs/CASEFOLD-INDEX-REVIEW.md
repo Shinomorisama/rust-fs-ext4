@@ -69,7 +69,127 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Current ownership review and reproduced aliases — 2026-10-14
+
+Reviewed at `96b3b72b7a51ba49f5918044038551942893eafa`. Its exact-commit
+[focused Linux insertion](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38656514666)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38656514635)
+passed. The downloaded insertion log confirms one passed test, zero failed or
+ignored, across the four existing profiles (133 lines / 7,953 bytes). Those
+results qualify the allocation checkpoint; this review changes no production code.
+
+The current allocation guard accepts three demonstrated cross-inode aliases:
+
+| Planner storage | Other current owner | Observed result |
+|---|---|---|
+| Directory leaf at block 517 | `lost+found` directory inode 11 maps this data block on disk and in the buffer | `Ok(())` |
+| External directory-map node at block 521 | Ordinary file `/owner` maps this data block on disk and in the buffer | `Ok(())` |
+| External directory-map node at block 549 | `/owner` maps this block only through its checksummed buffered inode; its disk inode still maps block 521 | `Ok(())` |
+
+These are self-contained synthetic planner fixtures built through this crate's
+formatter and ordinary file APIs. The file's payload is valid extent-node bytes;
+its allocation and payload write precede the read-only casefold mount. The map
+cases move directory root/leaf storage to explicitly allocated blocks 8190/8191
+so they do not also alias `lost+found`. Each negative verifies the current
+checksummed owner inode and mappings, and the production allocation guard passes
+before insertion. They do not bypass the insertion guard or enable public writes.
+The pending-owner case demonstrates why mounted ownership alone is insufficient.
+These are not Linux-clean staged operations or whole-operation qualifications.
+
+All three refusal tests fail specifically on acceptance. Their post-refusal
+dirty-map, pending-flag and device-byte assertions have **not passed**, because
+execution stops at `Ok(())`. A fourth, positive control passes: allocated
+directory/map storage is disjoint from the named ordinary file and `lost+found`,
+the inserted spelling/inode is correct, and only the selected leaf changes.
+This control is not a global owner-map audit. All four tests are retained in
+[CASEFOLD-OWNERSHIP-RED.patch](CASEFOLD-OWNERSHIP-RED.patch); the active source is
+restored unchanged and its baseline is revalidated in `extprogress.md`.
+
+#### Journal findings and initial refusal contract
+
+1. A read-only casefold mount deliberately does not open `JournalWriter`:
+   `Filesystem::mount` opens it only after `write_refusal()` succeeds. Therefore
+   `fs.journal.is_none()` cannot establish absence of journal ownership. Consult
+   the filesystem journal declaration, including inode/device/UUID fields and
+   feature policy; an external or inconsistent declaration must not silently
+   become the no-journal case.
+2. `JournalWriter`'s private physical vector describes the active ring through
+   mounted/device mappings. It is not a current-buffer owner proof, does not
+   identify the journal's external mapping nodes and cannot be reused blindly.
+   `jbd2::read_superblock` reads/parses an unbuffered raw inode; a new owner guard
+   needs the applicable inode checksum, current allocation and mapping validation.
+3. Protect the declared journal inode's complete allocated storage, including
+   mapping nodes and preallocation, rather than only payload selected by a
+   directory lookup or only the active ring length. Compare against **every**
+   admitted directory block and every visited directory mapping node, including
+   unselected leaves and staged-only roles. A used bit or a valid extent checksum
+   cannot substitute for this role separation.
+4. The existing Linux images offer a bounded initial journal profile. Raw bytes
+   from the retained insertion images show inode 8, size 4 MiB, depth zero and
+   one initialized inline extent beginning at logical block zero:
+
+   | Block size | Strict/non-strict profiles | Journal physical start | Blocks |
+   |---|---|---|---|
+   | 1 KiB | Both | 16899 | 4096 |
+   | 4 KiB | Both | 1033 | 1024 |
+
+   These are observations from the already validated images, not a new journal
+   corruption test or permission to assume all journals have that shape. A first
+   guard can qualify complete inline extent records and explicitly refuse other
+   shapes. Validate the entire declared inline record set, logical coverage,
+   initialized lengths, physical bounds/overlap, and fixed-metadata separation.
+   Do not copy the selected-lookup limitation identified in finding 3 into the
+   owner proof. Legacy/external journal maps need separate qualification.
+5. Use verified current inode bytes and mapping policy. Initially refuse staged
+   journal inode/map relocation rather than trusting a mounted address vector.
+   Updating another inode in the same inode-table block is not itself a journal
+   change: inspect the journal's complete inode slice. Keep checksum and extent
+   errors, buffer/device immutability, and no-growth refusal behavior intact.
+6. Before implementing that scoped guard, reproduce a journal-storage alias
+   using a Linux-created fixture or a self-contained declared-journal planner
+   fixture. Include a nonzero journal data block so the demonstration does not
+   depend on corrupting the journal superblock parser. Require negative root/
+   leaf/map-role cases, staged-policy refusals and healthy/no-journal controls;
+   preserve the existing four-profile Linux cold lookup/e2fsck test.
+
+#### Other-owner proof remains a separate design requirement
+
+The three reproductions concern other inodes, not journal data. A journal-only
+guard will leave them unresolved. Before general ownership admission, define a
+bounded, transaction-current owner map or a deliberately narrower profile.
+Current inode bitmap/checksum and initialization state must determine which
+inodes exist; account for reserved inode roles without interpreting every reserved
+slot as a normal file. Include newly allocated/freed inodes and buffered inode
+updates, all external map nodes, unwritten/preallocated extents (also beyond
+file size), and external attribute storage. Fast symlinks/inline data are not
+block-address arrays, and legal attribute sharing is not directory storage.
+
+A scan of cached mounted inodes would miss the pending-owner counterexample.
+An unbounded full-volume scan on every insertion is not a practical proof for
+the intended 1.5 TB card. Specify memory/work bounds, invalidation and incremental
+updates under operation-wide serialization, from duplicate checking through
+allocation/planning/commit. Concurrent or external changes remain unqualified.
+Do not claim finding 2 closed from the journal subset or allocation bits alone;
+finding 3's unused/shadowed mappings and complete map shape remain open.
+
+Public format references used:
+[superblock](https://docs.kernel.org/filesystems/ext4/super.html),
+[journal](https://docs.kernel.org/filesystems/ext4/journal.html),
+[inodes](https://docs.kernel.org/filesystems/ext4/inodes.html), and
+[block maps](https://docs.kernel.org/filesystems/ext4/blockmap.html).
+Own MIT source reviewed: `Filesystem::mount`, `BlockBuffer`,
+`buffered_inode_verified`, indexed admission/allocation, `JournalWriter::open`,
+`jbd2::read_superblock`, journal mapping, extent parsing/collection and the
+formatter. No kernel/e2fsprogs implementation source or host oracle/mount was used.
+The next bounded checkpoint is the journal alias reproduction and initial guard
+qualification above. Public writes, deeper insertion, splitting/growth and index
+dropping remain blocked.
+
 ### Current-allocation refusal follow-up — 2026-10-14
+
+Follow-up: exact-commit focused Linux and full CI at `96b3b72` now passed; the
+insertion log was downloaded and inspected. The ownership review above supersedes
+this section's next task. Its other-owner counterexamples are not fixed yet.
 
 The three saved allocation regressions were applied to `065f9a8` and rerun:
 all three failed specifically on `Ok(())` after a fresh 825-test baseline.
@@ -484,7 +604,8 @@ Finding 1 is addressed by the boundary-fix follow-up above. Fixed metadata roles
 visited mapping-node/data overlap and staged descriptor/superblock changes have
 scoped refusals recorded above; inspect the latest exact-commit CI before
 broadening support. The bounded allocation refusal and explicit planner fixture
-updates above now address the reproduced missing-allocation cases. Next review
-current journal/other ownership and reproduce an allocated-storage alias. Keep finding 3
+updates above now address the reproduced missing-allocation cases. The ownership
+review now demonstrates three allocated cross-inode aliases. Next reproduce and
+qualify the initial journal-role refusal, retaining those other-owner gaps. Keep finding 3
 open until its mapping-shape tests and contract are satisfied.
 Deeper index insertion, splitting/growth and write activation remain later work.

@@ -1,0 +1,172 @@
+diff --git a/src/fs.rs b/src/fs.rs
+index 31613a6..d084a7b 100644
+--- a/src/fs.rs
++++ b/src/fs.rs
+@@ -9664,3 +9664,167 @@ mod tests {
++    fn assert_casefold_ownership_refusal(
++        dev: &MemDev,
++        fs: &Filesystem,
++        buf: &mut BlockBuffer,
++        parent: &Inode,
++        alias: u64,
++    ) {
++        let before = buf.dirty.clone();
++        let flags_before = buf.uninit_cleared.clone();
++        let disk_before = dev.bytes.lock().unwrap().clone();
++        let result = fs.buffer_add_dir_entry_indexed(
++            buf,
++            2,
++            parent,
++            b"New_Name",
++            100,
++            crate::dir::DirEntryType::RegFile,
++            true,
++        );
++        assert!(
++            matches!(result, Err(Error::CorruptDirEntry(_))),
++            "allocated ownership alias at {alias}: {result:?}"
++        );
++        assert_eq!(buf.dirty, before);
++        assert_eq!(buf.uninit_cleared, flags_before);
++        assert_eq!(*dev.bytes.lock().unwrap(), disk_before);
++    }
++
++    #[test]
++    fn casefold_ownership_refuses_a_leaf_owned_by_another_directory() {
++        let (dev, fs) = mount_casefold_planning_fixture();
++        let owner = fs.lookup_at(2, b"lost+found").unwrap();
++        assert_ne!(owner, 2);
++        let (mut buf, parent, leaf) = staged_casefold_index(&fs);
++        let (disk_owner, _) = fs.read_inode_verified(owner).unwrap();
++        let (current_owner, _) = fs.buffered_inode_verified(&buf, owner).unwrap();
++        assert_eq!(fs.map_inode_logical(&disk_owner, 0).unwrap(), Some(leaf));
++        assert_eq!(fs.map_inode_logical(&current_owner, 0).unwrap(), Some(leaf));
++        assert!(casefold_review_block_allocated(&fs, &buf, leaf));
++        fs.casefold_check_allocation(&buf, [leaf - 1, leaf])
++            .unwrap();
++        assert_casefold_ownership_refusal(&dev, &fs, &mut buf, &parent, leaf);
++    }
++
++    // A normal file whose payload happens to be valid directory-map bytes.
++    // Creating it before the casefold mount establishes real inode allocation
++    // and disk ownership without a public casefold-write bypass.
++    fn mount_casefold_owned_payload() -> (std::sync::Arc<MemDev>, Filesystem, u32, Vec<u8>) {
++        let dev = formatted();
++        let (owner, payload) = {
++            let fs = mount(&dev);
++            let owner = fs.apply_create("/owner", 0o644).unwrap();
++            let (_, parent, _, node) = staged_casefold_external_map(&dev, &fs);
++            let root = fs.sb.blocks_count - 2;
++            let mut payload = fs.read_block(node).unwrap();
++            payload[20..24].copy_from_slice(&(root as u32).to_le_bytes());
++            payload[32..36].copy_from_slice(&((root + 1) as u32).to_le_bytes());
++            assert!(fs
++                .csum
++                .patch_extent_tail(2, parent.generation, &mut payload));
++            assert_eq!(
++                fs.apply_pwrite("/owner", 0, &payload).unwrap(),
++                u64::from(BS)
++            );
++            (owner, payload)
++        };
++        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
++        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
++        (dev, fs, owner, payload)
++    }
++
++    fn staged_casefold_owned_map(
++        dev: &MemDev,
++        fs: &Filesystem,
++        owner: u32,
++        payload: &[u8],
++        staged_owner: bool,
++        alias: bool,
++    ) -> (BlockBuffer, Inode, u64, u64) {
++        let (mut buf, _, leaf, old_node) = staged_casefold_external_map(dev, fs);
++        let root = fs.sb.blocks_count - 2;
++        let root_bytes = buf.dirty.remove(&(leaf - 1)).unwrap();
++        let leaf_bytes = buf.dirty.remove(&leaf).unwrap();
++        buf.put(root, root_bytes);
++        buf.put(root + 1, leaf_bytes);
++        let (disk_owner, mut raw) = fs.read_inode_verified(owner).unwrap();
++        assert_eq!(disk_owner.size, u64::from(BS));
++        assert_eq!(disk_owner.links_count, 1);
++        let file_block = fs.map_inode_logical(&disk_owner, 0).unwrap().unwrap();
++        assert_eq!(fs.read_block(file_block).unwrap(), payload);
++        let node = if alias && !staged_owner {
++            file_block
++        } else {
++            old_node
++        };
++        let parent = relocate_casefold_extent_node(
++            dev,
++            fs,
++            &mut buf,
++            old_node,
++            node,
++            payload.to_vec(),
++            false,
++        );
++        if alias && staged_owner {
++            let header = crate::extent::ExtentHeader::parse(&disk_owner.block).unwrap();
++            assert_eq!((header.depth, header.entries), (0, 1));
++            raw[0x3a..0x3c].copy_from_slice(&((node >> 32) as u16).to_le_bytes());
++            raw[0x3c..0x40].copy_from_slice(&(node as u32).to_le_bytes());
++            fs.csum
++                .patch_inode_checksum(owner, disk_owner.generation, &mut raw);
++            fs.buffer_write_inode(&mut buf, owner, &raw).unwrap();
++        }
++        stage_casefold_planner_blocks(fs, &mut buf, [root, root + 1, node]);
++        assert!(!fs.casefold_block_is_fixed_metadata(node));
++        assert_ne!(node, root);
++        assert_ne!(node, root + 1);
++        assert_eq!(fs.map_inode_logical(&parent, 0).unwrap(), Some(root));
++        assert_eq!(fs.map_inode_logical(&parent, 1).unwrap(), Some(root + 1));
++        fs.casefold_check_allocation(&buf, [root, root + 1, node])
++            .unwrap();
++        (buf, parent, root + 1, node)
++    }
++
++    fn assert_casefold_owned_map_refusal(staged_owner: bool) {
++        let (dev, fs, owner, payload) = mount_casefold_owned_payload();
++        let (mut buf, parent, _, node) =
++            staged_casefold_owned_map(&dev, &fs, owner, &payload, staged_owner, true);
++        let (current_owner, _) = fs.buffered_inode_verified(&buf, owner).unwrap();
++        assert_eq!(fs.map_inode_logical(&current_owner, 0).unwrap(), Some(node));
++        if staged_owner {
++            let (disk_owner, _) = fs.read_inode_verified(owner).unwrap();
++            assert_ne!(fs.map_inode_logical(&disk_owner, 0).unwrap(), Some(node));
++        }
++        assert_casefold_ownership_refusal(&dev, &fs, &mut buf, &parent, node);
++    }
++
++    #[test]
++    fn casefold_ownership_refuses_a_map_node_owned_by_another_file() {
++        assert_casefold_owned_map_refusal(false);
++    }
++
++    #[test]
++    fn casefold_ownership_refuses_a_map_node_owned_only_in_the_pending_transaction() {
++        assert_casefold_owned_map_refusal(true);
++    }
++
++    #[test]
++    fn casefold_ownership_accepts_disjoint_allocated_directory_and_mapping_storage() {
++        let (dev, fs, owner, payload) = mount_casefold_owned_payload();
++        let (mut buf, parent, leaf, node) =
++            staged_casefold_owned_map(&dev, &fs, owner, &payload, false, false);
++        let (file, _) = fs.buffered_inode_verified(&buf, owner).unwrap();
++        let file_block = fs.map_inode_logical(&file, 0).unwrap().unwrap();
++        assert!(![leaf - 1, leaf, node].contains(&file_block));
++        let lost_found = fs.lookup_at(2, b"lost+found").unwrap();
++        let (directory, _) = fs.buffered_inode_verified(&buf, lost_found).unwrap();
++        for logical in 0..directory.size.div_ceil(u64::from(BS)) {
++            let block = fs.map_inode_logical(&directory, logical).unwrap().unwrap();
++            assert!(![leaf - 1, leaf, node].contains(&block));
++        }
++        assert_casefold_allocation_success(&dev, &fs, &mut buf, &parent, leaf);
++    }
++
+     fn stage_casefold_superblock_byte(fs: &Filesystem, buf: &mut BlockBuffer, field: usize) {
+         let bs = u64::from(fs.sb.block_size());
+         let offset = (crate::superblock::SUPERBLOCK_OFFSET % bs) as usize;
