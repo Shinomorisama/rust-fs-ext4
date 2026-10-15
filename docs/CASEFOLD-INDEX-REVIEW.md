@@ -69,7 +69,74 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private bounded allocated-inode inventory — 2026-10-14
+
+Following the collector/resource review at `7825062`, the new private
+`inode_inventory::collect` enumerates all current set inode bits, including
+reserved and allocated zero-link slots. It reads no inode bodies and does not
+infer owners from directory reachability. It is disconnected from admission;
+the existing mounted allocation helper and ordinary mutation paths are unchanged.
+
+Before implementation, the existing mounted helper reproduced three acceptance
+failures (bad staged descriptor CRC, bad staged bitmap CRC, initialized-policy
+change) and one missed current allocation. The healthy reserved-ID control
+passed. The same assertions pass against the new inventory. Expanded local
+controls cover exact/exhausted aggregate limits, partial final-group coverage,
+shared descriptors, malformed block sizes, checksum-valid bad padding inside
+and outside CRC coverage, pending/unknown flags, relocation/bounds, superblock
+policy changes, freed bits, allocated zero-link bodies and read failures.
+
+The initial profile requires metadata checksums, 1 KiB/4 KiB blocks, 32/64-byte
+descriptors, valid mounted geometry and stable device/staged contents. META_BG,
+bigalloc and INODE_UNINIT are explicitly unsupported; unspecified bitmap bytes
+are never interpreted as live allocation. Known BLOCK_UNINIT/ITABLE_ZEROED flags
+do not themselves invalidate an initialized inode bitmap. Pending initialization
+flags must agree with current descriptor flags and stay within the group table.
+
+The current superblock must verify and match mounted bytes except the existing
+free-counter fields. Every descriptor verifies with its group context; metadata
+pointers remain mounted and bounded. Bitmap CRC width follows descriptor size.
+Coverage must account for every inode group, including a partial last group;
+all bits beyond valid IDs, including full-block padding beyond checksum coverage,
+must be set and are excluded from output. Output IDs are ascending and unique.
+Basic within-group metadata aliases refuse; complete cross-group metadata roles
+and allocation/ownership conflicts remain snapshot-building requirements.
+
+One limit set covers the entire invocation: groups, full bitmap-bit probes,
+logical fetches (including staged copies), output IDs and scratch. Group/bit
+work is checked before scanning; reads and output pushes cannot exceed caps.
+The descriptor block is cached across neighboring groups, so the two-group
+control needs four logical reads: superblock, one descriptor block, two bitmaps.
+Two fixed buffers are reused; fallible reservations request at most
+`4 * inode_cap + 2 * block_size` bytes, with checked arithmetic. Retained vector
+capacity, allocator overhead/device cache and later tree/role storage must still
+be accounted for by a complete builder; this is not a measured card/RSS bound.
+Staged sizes are checked before copying, so malformed dirty blocks are not cloned
+outside the scratch bound. All errors drop the local output and preserve the
+full dirty map/pending flags/device; no cache/snapshot is published.
+
+New independent CI controls format four Linux profiles: both block sizes and
+both descriptor widths, each with two groups sharing a primary descriptor block.
+Linux creates/removes files across the group boundary, directories, a symlink
+and a hard link, leaving both inode bitmaps initialized. Non-repairing e2fsck
+must pass; the inventory must equal every valid ID's `debugfs testi` answer,
+including reserved IDs and free slots. Missing/duplicate oracle answers fail.
+The workflow requires one executed test and retains images/command files/raw
+allocation reports/logs alongside insertion and FIEMAP evidence. This oracle
+is compiled but unrun locally; exact-commit Linux/full CI remains required.
+
+See `extprogress.md` for final counts/status. Partial-last-group and allocated
+zero-link cases are synthetic unit fixtures, not Linux-clean image claims.
+The inventory proves no inode-body checksum, reserved role, mapping/attribute
+ownership or transaction epoch. The three saved cross-inode refusals remain
+unresolved. Next inspect CI and review this component before verified current
+inode-role classification and joining roles with complete extent claims under
+aggregate snapshot budgets. Keep every write gate and lifecycle requirement.
+
 ### Collector implementation and resource review — 2026-10-14
+
+Follow-up: the private inventory above implements its next component; source
+qualification, typed roles, complete snapshots and admission remain distinct.
 
 Reviewed `7bdfe0cf83d3d65f4068225707c379f3fad9e6aa`, its complete private
 collector/tests, the real staged-view control and the saved Linux evidence.

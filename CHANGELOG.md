@@ -13,6 +13,10 @@
 
 ### Added
 
+- A private bounded inode inventory validates current superblock, descriptor
+  and initialized bitmap contents before returning all allocated IDs. Reserved
+  and zero-link slots remain visible; ownership interpretation and public
+  casefold write admission remain separate and blocked.
 - A private read-only extent-ownership collector checks the complete tree and
   returns bounded data/mapping intervals, including unwritten storage beyond
   EOF. The initial checksummed 1 KiB/4 KiB profile has explicit resource limits;

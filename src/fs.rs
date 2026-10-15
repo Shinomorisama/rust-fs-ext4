@@ -9036,6 +9036,377 @@ mod tests {
         Filesystem::mount(dev.clone()).expect("mount")
     }
 
+    fn inventory_limits(fs: &Filesystem) -> crate::inode_inventory::Limits {
+        crate::inode_inventory::Limits {
+            groups: fs.groups.len() as u64,
+            bit_probes: fs.groups.len() as u64 * u64::from(fs.sb.block_size()) * 8,
+            reads: 1 + 2 * fs.groups.len() as u64,
+            inodes: 64,
+            scratch_bytes: 2 * fs.sb.block_size() as usize,
+        }
+    }
+
+    fn inventory_for_test(fs: &Filesystem, buf: &BlockBuffer) -> Result<Vec<u32>> {
+        crate::inode_inventory::collect(fs, buf, inventory_limits(fs))
+            .map(|inventory| inventory.inodes)
+    }
+
+    fn inventory_refused(dev: &MemDev, fs: &Filesystem, buf: &BlockBuffer) {
+        let dirty = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let result = inventory_for_test(fs, buf);
+        assert!(result.is_err(), "inode inventory accepted: {result:?}");
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
+    #[test]
+    fn inode_inventory_refuses_bad_current_descriptor() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let (block, offset) = fs.sb.descriptor_location(0);
+        buf.get_mut(&fs, block).unwrap()[offset + 0x1e] ^= 1;
+        inventory_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn inode_inventory_refuses_bad_current_bitmap() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        buf.get_mut(&fs, fs.groups[0].inode_bitmap).unwrap()[5] ^= 1;
+        inventory_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn inode_inventory_refuses_uninitialized_current_bitmap() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let (block, offset) = fs.sb.descriptor_location(0);
+        buf.get_mut(&fs, block).unwrap()[offset + 0x12] |= bgd::BgdFlags::INODE_UNINIT.bits() as u8;
+        fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+        inventory_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn inode_inventory_includes_new_current_allocation() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        assert!(!fs.inode_bit_is_set(42).unwrap());
+        buf.get_mut(&fs, fs.groups[0].inode_bitmap).unwrap()[41 / 8] |= 1 << (41 % 8);
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, true).unwrap();
+        let dirty = buf.dirty.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        assert!(inventory_for_test(&fs, &buf).unwrap().contains(&42));
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
+    #[test]
+    fn inode_inventory_healthy_includes_reserved_ids() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let buf = BlockBuffer::new(BS);
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let inodes = inventory_for_test(&fs, &buf).unwrap();
+        assert!((1..fs.sb.first_inode).all(|ino| inodes.contains(&ino)));
+        assert!(inodes.contains(&fs.lookup_at(2, b"lost+found").unwrap()));
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        assert!(buf.dirty.is_empty());
+    }
+
+    // Synthetic geometry/bitmap fixture; not an independently clean image.
+    fn inventory_two_groups() -> (std::sync::Arc<MemDev>, Filesystem, BlockBuffer) {
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let ipg = fs.sb.inodes_per_group;
+        let mut raw = fs.sb.raw.clone();
+        raw[..4].copy_from_slice(&(ipg + 13).to_le_bytes());
+        raw[0x20..0x24].copy_from_slice(&4096u32.to_le_bytes());
+        let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+        raw[0x3fc..0x400].copy_from_slice(&crc.to_le_bytes());
+        fs.sb = Superblock::parse(raw).unwrap();
+        let sb_block = crate::superblock::SUPERBLOCK_OFFSET / u64::from(BS);
+        let offset = (crate::superblock::SUPERBLOCK_OFFSET % u64::from(BS)) as usize;
+        let bytes = buf.get_mut(&fs, sb_block).unwrap();
+        bytes[offset..offset + 1024].copy_from_slice(&fs.sb.raw);
+        let mut second = fs.groups[0];
+        second.block_bitmap = 5000;
+        second.inode_bitmap = 5001;
+        second.inode_table = 5100;
+        second.flags = 0;
+        fs.groups.push(second);
+        let (block, at) = fs.sb.descriptor_location(1);
+        assert_eq!(fs.sb.descriptor_location(0).0, block);
+        let bytes = buf.get_mut(&fs, block).unwrap();
+        bytes[at..at + 64].fill(0);
+        bytes[at..at + 4].copy_from_slice(&5000u32.to_le_bytes());
+        bytes[at + 4..at + 8].copy_from_slice(&5001u32.to_le_bytes());
+        bytes[at + 8..at + 12].copy_from_slice(&5100u32.to_le_bytes());
+        let mut bitmap = vec![0xff; BS as usize];
+        for bit in 0..13 {
+            bitmap[bit / 8] &= !(1 << (bit % 8));
+        }
+        bitmap[0] |= 1;
+        bitmap[12 / 8] |= 1 << (12 % 8);
+        buf.put(5001, bitmap);
+        fs.buffer_refresh_bitmap_csum(&mut buf, 1, true).unwrap();
+        (dev, fs, buf)
+    }
+
+    #[test]
+    fn inode_inventory_covers_partial_final_group_and_shared_descriptors() {
+        let (dev, fs, buf) = inventory_two_groups();
+        let dirty = buf.dirty.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let mut limits = inventory_limits(&fs);
+        limits.reads = 4; // superblock, shared descriptor, two bitmaps
+        limits.inodes = 13;
+        let inodes = crate::inode_inventory::collect(&fs, &buf, limits)
+            .unwrap()
+            .inodes;
+        let mut expected: Vec<_> = (1..=11).collect();
+        expected.extend([fs.sb.inodes_per_group + 1, fs.sb.inodes_per_group + 13]);
+        assert_eq!(inodes, expected);
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
+    #[test]
+    fn inode_inventory_enforces_all_aggregate_limits_without_partial_results() {
+        use crate::inode_inventory::{collect, Limits};
+        let (dev, fs, buf) = inventory_two_groups();
+        let exact = Limits {
+            reads: 4,
+            inodes: 13,
+            ..inventory_limits(&fs)
+        };
+        assert_eq!(collect(&fs, &buf, exact).unwrap().inodes.len(), 13);
+        for small in [
+            Limits { groups: 1, ..exact },
+            Limits {
+                bit_probes: exact.bit_probes - 1,
+                ..exact
+            },
+            Limits { reads: 3, ..exact },
+            Limits { reads: 0, ..exact },
+            Limits {
+                inodes: 12,
+                ..exact
+            },
+            Limits { inodes: 0, ..exact },
+            Limits {
+                inodes: usize::MAX,
+                ..exact
+            },
+            Limits {
+                scratch_bytes: exact.scratch_bytes - 1,
+                ..exact
+            },
+        ] {
+            let dirty = buf.dirty.clone();
+            let flags = buf.uninit_cleared.clone();
+            let bytes = dev.bytes.lock().unwrap().clone();
+            assert!(matches!(
+                collect(&fs, &buf, small),
+                Err(Error::Unsupported("inode inventory resource limit"))
+            ));
+            assert_eq!(buf.dirty, dirty);
+            assert_eq!(buf.uninit_cleared, flags);
+            assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn inode_inventory_refuses_padding_inside_and_outside_checksum_coverage() {
+        for bit in [13, BS as usize * 8 - 1] {
+            let (dev, fs, mut buf) = inventory_two_groups();
+            buf.dirty.get_mut(&5001).unwrap()[bit / 8] &= !(1 << (bit % 8));
+            fs.buffer_refresh_bitmap_csum(&mut buf, 1, true).unwrap();
+            inventory_refused(&dev, &fs, &buf);
+        }
+    }
+
+    #[test]
+    fn inode_inventory_refuses_malformed_staged_block_sizes() {
+        for kind in 0..3 {
+            for length in [BS as usize - 1, BS as usize + 1] {
+                let (dev, fs) = mount_casefold_planning_fixture();
+                let mut buf = BlockBuffer::new(BS);
+                let block = match kind {
+                    0 => 0,
+                    1 => fs.sb.descriptor_location(0).0,
+                    _ => fs.groups[0].inode_bitmap,
+                };
+                buf.put(block, vec![0; length]);
+                inventory_refused(&dev, &fs, &buf);
+            }
+        }
+    }
+
+    #[test]
+    fn inode_inventory_reconciles_pending_and_unknown_flags() {
+        for mode in 0..4 {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            match mode {
+                0 => {
+                    let (block, at) = fs.sb.descriptor_location(0);
+                    buf.get_mut(&fs, block).unwrap()[at + 0x13] |= 0x80;
+                    fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+                }
+                1 => {
+                    buf.uninit_cleared
+                        .insert(0, fs.groups[0].flags ^ bgd::BgdFlags::ITABLE_ZEROED.bits());
+                }
+                2 => {
+                    buf.uninit_cleared.insert(fs.groups.len(), 0);
+                }
+                _ => {
+                    let (block, at) = fs.sb.descriptor_location(0);
+                    buf.get_mut(&fs, block).unwrap()[at + 0x12] |=
+                        bgd::BgdFlags::INODE_UNINIT.bits() as u8;
+                    fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+                    let flags = fs.groups[0].flags | bgd::BgdFlags::INODE_UNINIT.bits();
+                    buf.uninit_cleared.insert(0, flags);
+                }
+            }
+            inventory_refused(&dev, &fs, &buf);
+        }
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let (block, at) = fs.sb.descriptor_location(0);
+        let flags = fs.groups[0].flags | bgd::BgdFlags::BLOCK_UNINIT.bits();
+        buf.get_mut(&fs, block).unwrap()[at + 0x12..at + 0x14]
+            .copy_from_slice(&flags.to_le_bytes());
+        fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+        buf.uninit_cleared.insert(0, flags);
+        assert_eq!(
+            inventory_for_test(&fs, &buf).unwrap(),
+            (1..=11).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn inode_inventory_refuses_relocated_and_out_of_bounds_metadata() {
+        for mode in 0..5 {
+            let (dev, mut fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            let (block, at) = fs.sb.descriptor_location(0);
+            let address = match mode {
+                0 => 5001,
+                1 => fs.sb.blocks_count,
+                2 => block,
+                3 => fs.groups[0].inode_table,
+                _ => 0,
+            };
+            buf.get_mut(&fs, block).unwrap()[at + 4..at + 8]
+                .copy_from_slice(&(address as u32).to_le_bytes());
+            if mode != 0 {
+                fs.groups[0].inode_bitmap = address;
+            }
+            fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+            inventory_refused(&dev, &fs, &buf);
+        }
+    }
+
+    #[test]
+    fn inode_inventory_refuses_bad_or_changed_superblock_but_allows_counters() {
+        for mode in 0..2 {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            let bytes = buf.get_mut(&fs, 0).unwrap();
+            bytes[1024 + 0x88] ^= 1;
+            if mode == 1 {
+                let crc = crate::checksum::linux_crc32c(!0, &bytes[1024..1024 + 0x3fc]);
+                bytes[1024 + 0x3fc..2048].copy_from_slice(&crc.to_le_bytes());
+            }
+            inventory_refused(&dev, &fs, &buf);
+        }
+        let (_, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        fs.buffer_patch_sb_counters(&mut buf, -1, -1).unwrap();
+        assert_eq!(
+            inventory_for_test(&fs, &buf).unwrap(),
+            (1..=11).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn inode_inventory_refuses_invalid_group_geometry_and_profiles() {
+        for mode in 0..14 {
+            let (dev, mut fs) = mount_casefold_planning_fixture();
+            match mode {
+                0 => fs.sb.inodes_per_group = 0,
+                1 => fs.sb.inodes_per_group = BS * 8 + 8,
+                2 => fs.sb.inodes_per_group -= 1,
+                3 => fs.sb.blocks_per_group = 0,
+                4 => fs.sb.inodes_count = 0,
+                5 => fs.groups.clear(),
+                6 => fs.sb.inodes_count += fs.sb.inodes_per_group,
+                7 => fs.sb.desc_size = 128,
+                8 => fs.csum.enabled = false,
+                9 => fs.sb.feature_incompat |= crate::features::Incompat::META_BG.bits(),
+                10 => fs.sb.feature_ro_compat |= crate::features::RoCompat::BIGALLOC.bits(),
+                11 => fs.sb.inode_size = 0,
+                12 => fs.sb.blocks_count += 1,
+                _ => fs.sb.first_data_block = fs.sb.blocks_count as u32,
+            }
+            inventory_refused(&dev, &fs, &BlockBuffer::new(BS));
+        }
+    }
+
+    #[test]
+    fn inode_inventory_tracks_freed_bits_and_allocated_zero_link_records() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let bitmap = buf.get_mut(&fs, fs.groups[0].inode_bitmap).unwrap();
+        bitmap[10 / 8] &= !(1 << (10 % 8));
+        bitmap[41 / 8] |= 1 << (41 % 8);
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, true).unwrap();
+        let mut raw = fs.build_regular_file_inode(42, 0o600).unwrap();
+        raw[26..28].fill(0);
+        fs.csum
+            .patch_inode_checksum(42, Inode::parse(&raw).unwrap().generation, &mut raw);
+        fs.buffer_write_inode(&mut buf, 42, &raw).unwrap();
+        assert_eq!(
+            fs.buffered_inode_verified(&buf, 42).unwrap().0.links_count,
+            0
+        );
+        let dirty = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let current = inventory_for_test(&fs, &buf).unwrap();
+        assert!(!current.contains(&11));
+        assert!(current.contains(&42));
+        assert!(!inventory_for_test(&fs, &BlockBuffer::new(BS))
+            .unwrap()
+            .contains(&42));
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
+    #[test]
+    fn inode_inventory_propagates_read_errors_without_mutation() {
+        struct FailedRead;
+        impl crate::block_io::BlockDevice for FailedRead {
+            fn read_at(&self, _: u64, _: &mut [u8]) -> Result<()> {
+                Err(std::io::Error::other("injected inventory read error").into())
+            }
+            fn size_bytes(&self) -> u64 {
+                VOL
+            }
+        }
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        fs.dev = std::sync::Arc::new(FailedRead);
+        let buf = BlockBuffer::new(BS);
+        let bytes = dev.bytes.lock().unwrap().clone();
+        assert!(matches!(inventory_for_test(&fs, &buf), Err(Error::Io(_))));
+        assert!(buf.dirty.is_empty());
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
     #[test]
     fn buffered_removal_rechecks_the_current_directory_checksum() {
         let dev = formatted();

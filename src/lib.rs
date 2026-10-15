@@ -46,6 +46,9 @@ pub mod indirect_mut;
 pub mod inline_data;
 pub(crate) mod inline_mut;
 pub mod inode;
+// Private snapshot prerequisite; not connected to write admission.
+#[allow(dead_code)]
+pub(crate) mod inode_inventory;
 pub mod jbd2;
 pub mod journal;
 pub mod journal_apply;
