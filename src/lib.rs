@@ -25,6 +25,9 @@ pub mod alloc;
 pub mod bgd;
 pub mod block_cache;
 pub mod block_io;
+// Private allocation prerequisite; not connected to write admission.
+#[allow(dead_code)]
+pub(crate) mod block_allocation;
 pub mod casefold;
 pub mod checksum;
 pub mod dir;

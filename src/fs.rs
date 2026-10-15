@@ -9485,6 +9485,581 @@ mod tests {
         assert!(fixed_probe(&fs, &BlockBuffer::new(BS), fs.groups[0].inode_table).unwrap());
     }
 
+    fn allocation_probe(fs: &Filesystem, buf: &BlockBuffer, ranges: &[(u64, u64)]) -> Result<()> {
+        let ranges: Vec<_> = ranges
+            .iter()
+            .map(|(start, end)| crate::block_allocation::Range {
+                start: *start,
+                end: *end,
+            })
+            .collect();
+        crate::block_allocation::verify(fs, buf, &ranges, allocation_limits(fs))
+    }
+
+    fn allocation_limits(fs: &Filesystem) -> crate::block_allocation::Limits {
+        crate::block_allocation::Limits {
+            ranges: 128,
+            groups: fs.groups.len() as u64,
+            reads: 1 + 2 * fs.groups.len() as u64,
+            bitmap_bytes: 4 * u64::from(fs.sb.block_size()) * fs.groups.len() as u64,
+            scratch_bytes: 2 * fs.sb.block_size() as usize,
+        }
+    }
+
+    fn allocation_fixture() -> (std::sync::Arc<MemDev>, Filesystem, BlockBuffer) {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        // Qualify full-block padding independently of this formatter's policy.
+        let valid = fs.sb.blocks_count as usize;
+        let bitmap = buf.get_mut(&fs, fs.groups[0].block_bitmap).unwrap();
+        for bit in valid..BS as usize * 8 {
+            bitmap[bit / 8] |= 1 << (bit % 8);
+        }
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        (dev, fs, buf)
+    }
+
+    #[test]
+    fn block_allocation_refuses_clear_padding_outside_checksum() {
+        let (_, fs, mut buf) = allocation_fixture();
+        // Use a smaller declared group to leave bytes outside checksum coverage.
+        let mut fs = fs;
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            raw[0x20..0x24].copy_from_slice(&8192u32.to_le_bytes());
+        });
+        buf.get_mut(&fs, fs.groups[0].block_bitmap).unwrap()[BS as usize - 1] = 0x7f;
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        assert!(allocation_probe(&fs, &buf, &[(0, 1)]).is_err());
+    }
+
+    #[test]
+    fn block_allocation_refuses_bad_current_superblock() {
+        let (_, fs, mut buf) = allocation_fixture();
+        buf.get_mut(&fs, 0).unwrap()[1024 + 0x3fc] ^= 1;
+        assert!(allocation_probe(&fs, &buf, &[(0, 1)]).is_err());
+    }
+
+    #[test]
+    fn block_allocation_healthy_superblock_bit_is_checked() {
+        let (_, fs, buf) = allocation_fixture();
+        allocation_probe(&fs, &buf, &[(0, 1)]).unwrap();
+    }
+
+    fn allocation_unchanged(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &BlockBuffer,
+        ranges: &[crate::block_allocation::Range],
+        limits: crate::block_allocation::Limits,
+    ) -> Result<()> {
+        let dirty = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let input = ranges.to_vec();
+        let result = crate::block_allocation::verify(fs, buf, ranges, limits);
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        assert_eq!(ranges, input);
+        result
+    }
+
+    fn allocation_groups(many: bool) -> (std::sync::Arc<MemDev>, Filesystem, BlockBuffer) {
+        let (dev, fs, mut buf) = fixed_groups(many);
+        for group in 0..fs.groups.len() {
+            buf.put(fs.groups[group].block_bitmap, vec![0xff; BS as usize]);
+            fs.buffer_refresh_bitmap_csum(&mut buf, group, false)
+                .unwrap();
+        }
+        (dev, fs, buf)
+    }
+
+    #[test]
+    fn block_allocation_enforces_exact_and_exhausted_shared_limits() {
+        use crate::block_allocation::{Limits, Range};
+        let (dev, fs, buf) = allocation_fixture();
+        let ranges = [Range { start: 0, end: 1 }, Range { start: 1, end: 2 }];
+        let exact = Limits {
+            ranges: 2,
+            groups: 1,
+            reads: 3,
+            bitmap_bytes: 2 * u64::from(BS) + 2,
+            scratch_bytes: 2 * BS as usize,
+        };
+        allocation_unchanged(&dev, &fs, &buf, &ranges, exact).unwrap();
+        for small in [
+            Limits { ranges: 1, ..exact },
+            Limits { groups: 0, ..exact },
+            Limits { reads: 2, ..exact },
+            Limits { reads: 0, ..exact },
+            Limits {
+                bitmap_bytes: exact.bitmap_bytes - 1,
+                ..exact
+            },
+            Limits {
+                scratch_bytes: exact.scratch_bytes - 1,
+                ..exact
+            },
+        ] {
+            assert!(matches!(
+                allocation_unchanged(&dev, &fs, &buf, &ranges, small),
+                Err(Error::Unsupported("block allocation resource limit"))
+            ));
+        }
+    }
+
+    #[test]
+    fn block_allocation_covers_cross_group_ranges_with_multiple_descriptor_blocks() {
+        use crate::block_allocation::{Limits, Range};
+        let (dev, fs, buf) = allocation_groups(true);
+        assert_eq!(fs.groups.len(), 69);
+        let ranges = [Range {
+            start: 0,
+            end: fs.sb.blocks_count,
+        }];
+        let exact = Limits {
+            ranges: 1,
+            groups: 69,
+            reads: 72,
+            bitmap_bytes: 2 * u64::from(BS) * 69 + fs.sb.blocks_count / 8,
+            scratch_bytes: 2 * BS as usize,
+        };
+        allocation_unchanged(&dev, &fs, &buf, &ranges, exact).unwrap();
+        for small in [
+            Limits {
+                groups: 68,
+                ..exact
+            },
+            Limits { reads: 71, ..exact },
+            Limits {
+                bitmap_bytes: exact.bitmap_bytes - 1,
+                ..exact
+            },
+        ] {
+            assert!(matches!(
+                allocation_unchanged(&dev, &fs, &buf, &ranges, small),
+                Err(Error::Unsupported("block allocation resource limit"))
+            ));
+        }
+    }
+
+    #[test]
+    fn block_allocation_masks_partial_bytes_and_checks_zero_normally() {
+        let (_, fs, mut buf) = allocation_groups(false);
+        let bitmap = fs.groups[0].block_bitmap;
+        buf.get_mut(&fs, bitmap).unwrap()[0] = 0x7e;
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        allocation_probe(&fs, &buf, &[(1, 7)]).unwrap();
+        for range in [(0, 1), (7, 8), (0, 7), (1, 8)] {
+            assert!(matches!(
+                allocation_probe(&fs, &buf, &[range]),
+                Err(Error::Corrupt("block allocation clear proposed bit"))
+            ));
+        }
+        for bit in [8, 63, 64, 1023] {
+            let (_, fs, mut buf) = allocation_groups(false);
+            buf.get_mut(&fs, fs.groups[0].block_bitmap).unwrap()[bit / 8] &= !(1 << (bit % 8));
+            fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+            allocation_probe(&fs, &buf, &[(bit as u64 - 1, bit as u64)]).unwrap();
+            assert!(allocation_probe(&fs, &buf, &[(bit as u64, bit as u64 + 1)]).is_err());
+        }
+    }
+
+    #[test]
+    fn block_allocation_observes_staged_allocation_and_freeing() {
+        let (dev, fs, mut buf) = allocation_fixture();
+        let bitmap = fs.groups[0].block_bitmap;
+        let block = (0..fs.sb.blocks_count)
+            .find(|bit| buf.dirty[&bitmap][*bit as usize / 8] & (1 << (*bit % 8)) == 0)
+            .unwrap();
+        assert!(allocation_probe(&fs, &BlockBuffer::new(BS), &[(block, block + 1)]).is_err());
+        buf.get_mut(&fs, bitmap).unwrap()[block as usize / 8] |= 1 << (block % 8);
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        let ranges = [crate::block_allocation::Range {
+            start: block,
+            end: block + 1,
+        }];
+        allocation_unchanged(&dev, &fs, &buf, &ranges, allocation_limits(&fs)).unwrap();
+        buf.get_mut(&fs, bitmap).unwrap()[block as usize / 8] &= !(1 << (block % 8));
+        fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+        assert!(matches!(
+            allocation_unchanged(&dev, &fs, &buf, &ranges, allocation_limits(&fs)),
+            Err(Error::Corrupt("block allocation clear proposed bit"))
+        ));
+    }
+
+    #[test]
+    fn block_allocation_checks_disk_and_staged_bitmap_and_descriptor_crcs() {
+        for staged in [false, true] {
+            for descriptor in [false, true] {
+                let (dev, fs) = mount_casefold_planning_fixture();
+                let mut buf = BlockBuffer::new(BS);
+                let (block, offset, what) = if descriptor {
+                    let (block, at) = fs.sb.descriptor_location(0);
+                    (block, at + 0x1e, "block group descriptor")
+                } else {
+                    (fs.groups[0].block_bitmap, 0, "block bitmap")
+                };
+                if staged {
+                    buf.get_mut(&fs, block).unwrap()[offset] ^= 1;
+                } else {
+                    dev.bytes.lock().unwrap()[block as usize * BS as usize + offset] ^= 1;
+                    // Raw fixture mutation ends cache coherence; restore it
+                    // before asking the verifier about the new device view.
+                    fs.dev.invalidate_cache().unwrap();
+                }
+                let actual = allocation_probe(&fs, &buf, &[(0, 1)]);
+                assert!(
+                    matches!(&actual,
+                    Err(Error::BadChecksum { what: found }) if *found == what),
+                    "staged={staged} descriptor={descriptor}: {actual:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn block_allocation_refuses_malformed_current_block_sizes() {
+        for kind in 0..3 {
+            for length in [BS as usize - 1, BS as usize + 1] {
+                let (dev, fs, mut buf) = allocation_fixture();
+                let block = match kind {
+                    0 => 0,
+                    1 => fs.sb.descriptor_location(0).0,
+                    _ => fs.groups[0].block_bitmap,
+                };
+                buf.put(block, vec![0; length]);
+                assert!(matches!(
+                    allocation_unchanged(
+                        &dev,
+                        &fs,
+                        &buf,
+                        &[crate::block_allocation::Range { start: 0, end: 1 }],
+                        allocation_limits(&fs)
+                    ),
+                    Err(Error::Corrupt("block allocation staged block size"))
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn block_allocation_refuses_current_pointer_relocations() {
+        for field in 0..3 {
+            let (_, fs, mut buf) = allocation_fixture();
+            let (block, at) = fs.sb.descriptor_location(0);
+            buf.get_mut(&fs, block).unwrap()[at + field * 4] ^= 1;
+            fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+            assert!(matches!(
+                allocation_probe(&fs, &buf, &[(0, 1)]),
+                Err(Error::Unsupported("block allocation metadata relocation"))
+            ));
+        }
+    }
+
+    #[test]
+    fn block_allocation_checks_current_superblock_identity_but_allows_counters() {
+        let (_, fs, mut buf) = allocation_fixture();
+        fs.buffer_patch_sb_counters(&mut buf, -1, 0).unwrap();
+        allocation_probe(&fs, &buf, &[(0, 1)]).unwrap();
+        let raw = &mut buf.get_mut(&fs, 0).unwrap()[1024..2048];
+        raw[0x68] ^= 1;
+        let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+        raw[0x3fc..].copy_from_slice(&crc.to_le_bytes());
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(0, 1)]),
+            Err(Error::Unsupported("block allocation changed superblock"))
+        ));
+    }
+
+    #[test]
+    fn block_allocation_refuses_uninitialized_before_bitmap_access_and_checks_flags() {
+        let (_, fs, mut buf) = allocation_fixture();
+        let (block, at) = fs.sb.descriptor_location(0);
+        let write_flags = |buf: &mut BlockBuffer, flags: u16| {
+            buf.get_mut(&fs, block).unwrap()[at + 0x12..at + 0x14]
+                .copy_from_slice(&flags.to_le_bytes());
+            fs.buffer_patch_bgd_counters(buf, 0, 0, 0, 0).unwrap();
+        };
+        let known = bgd::BgdFlags::INODE_UNINIT.bits() | bgd::BgdFlags::ITABLE_ZEROED.bits();
+        write_flags(&mut buf, known);
+        buf.uninit_cleared.insert(0, known);
+        allocation_probe(&fs, &buf, &[(0, 1)]).unwrap();
+        buf.uninit_cleared.insert(0, 0);
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(0, 1)]),
+            Err(Error::Corrupt("block allocation pending flags disagree"))
+        ));
+        buf.uninit_cleared.clear();
+        buf.uninit_cleared.insert(1, known);
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(0, 1)]),
+            Err(Error::Corrupt(
+                "block allocation pending group outside table"
+            ))
+        ));
+        buf.uninit_cleared.clear();
+        write_flags(&mut buf, 0x8000);
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(0, 1)]),
+            Err(Error::Unsupported("block allocation profile"))
+        ));
+        write_flags(&mut buf, bgd::BgdFlags::BLOCK_UNINIT.bits());
+        buf.put(fs.groups[0].block_bitmap, vec![]);
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(0, 1)]),
+            Err(Error::Unsupported("block allocation uninitialized bitmap"))
+        ));
+    }
+
+    #[test]
+    fn block_allocation_checks_partial_final_group_padding_inside_and_outside_crc() {
+        for bit in [1021, BS as usize * 8 - 1] {
+            let (_, mut fs, mut buf) = allocation_groups(false);
+            fixed_edit_sb(&mut fs, &mut buf, |raw| {
+                raw[4..8].copy_from_slice(&8189u32.to_le_bytes())
+            });
+            allocation_probe(&fs, &buf, &[(8188, 8189)]).unwrap();
+            let group = fs.groups.len() - 1;
+            buf.get_mut(&fs, fs.groups[group].block_bitmap).unwrap()[bit / 8] &= !(1 << (bit % 8));
+            fs.buffer_refresh_bitmap_csum(&mut buf, group, false)
+                .unwrap();
+            assert!(matches!(
+                allocation_probe(&fs, &buf, &[(8188, 8189)]),
+                Err(Error::Corrupt("block allocation clear padding bit"))
+            ));
+        }
+    }
+
+    #[test]
+    fn block_allocation_checks_descriptor_width_checksum_truncation() {
+        for descriptor in [32u16, 64] {
+            let (_, mut fs, mut buf) = allocation_fixture();
+            if descriptor == 32 {
+                fixed_edit_sb(&mut fs, &mut buf, |raw| {
+                    let flags = u32::from_le_bytes(raw[0x60..0x64].try_into().unwrap());
+                    raw[0x60..0x64].copy_from_slice(
+                        &(flags & !features::Incompat::BIT64.bits()).to_le_bytes(),
+                    );
+                    raw[0xfe..0x100].copy_from_slice(&32u16.to_le_bytes());
+                });
+            }
+            fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+            allocation_probe(&fs, &buf, &[(0, 1)]).unwrap();
+            let (block, at) = fs.sb.descriptor_location(0);
+            buf.get_mut(&fs, block).unwrap()[at + 0x38] ^= 1;
+            fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+            if descriptor == 32 {
+                allocation_probe(&fs, &buf, &[(0, 1)]).unwrap();
+            } else {
+                assert!(matches!(
+                    allocation_probe(&fs, &buf, &[(0, 1)]),
+                    Err(Error::BadChecksum {
+                        what: "block bitmap"
+                    })
+                ));
+            }
+            buf.get_mut(&fs, block).unwrap()[at + 0x18] ^= 1;
+            fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+            assert!(matches!(
+                allocation_probe(&fs, &buf, &[(0, 1)]),
+                Err(Error::BadChecksum {
+                    what: "block bitmap"
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn block_allocation_refuses_unsupported_profiles_and_inconsistent_geometry() {
+        for case in 0..17 {
+            let (dev, mut fs, buf) = allocation_fixture();
+            match case {
+                0 => fs.sb.feature_incompat |= features::Incompat::META_BG.bits(),
+                1 => fs.sb.feature_ro_compat |= features::RoCompat::BIGALLOC.bits(),
+                2 => fs.sb.feature_compat |= 0x80000000,
+                3 => fs.sb.blocks_per_group = 0,
+                4 => fs.sb.blocks_per_group = 32769,
+                5 => fs.sb.blocks_per_group = 8191,
+                6 => fs.sb.inodes_per_group = 0,
+                7 => fs.sb.inodes_count = 0,
+                8 => fs.sb.inodes_count += fs.sb.inodes_per_group,
+                9 => fs.csum.enabled = false,
+                10 => fs.sb.desc_size = 128,
+                11 => fs.sb.first_data_block = 1,
+                12 => fs.sb.inode_size = 0,
+                13 => fs.sb.creator_os = 1,
+                14 => fs.groups.clear(),
+                15 => fs.sb.blocks_count += 1,
+                _ => fs.sb.blocks_count = 0,
+            }
+            assert!(allocation_unchanged(
+                &dev,
+                &fs,
+                &buf,
+                &[crate::block_allocation::Range { start: 0, end: 1 }],
+                allocation_limits(&fs)
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn block_allocation_refuses_invalid_order_overlap_and_bounds() {
+        let (dev, fs, buf) = allocation_fixture();
+        for pairs in [
+            vec![(0, 0)],
+            vec![(1, 0)],
+            vec![(8191, 8193)],
+            vec![(u64::MAX - 1, u64::MAX)],
+            vec![(1, 3), (2, 4)],
+            vec![(2, 3), (0, 1)],
+        ] {
+            let ranges: Vec<_> = pairs
+                .iter()
+                .map(|(start, end)| crate::block_allocation::Range {
+                    start: *start,
+                    end: *end,
+                })
+                .collect();
+            assert!(matches!(
+                allocation_unchanged(&dev, &fs, &buf, &ranges, allocation_limits(&fs)),
+                Err(Error::InvalidArgument(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn block_allocation_supports_flex_bitmap_placement_without_changing_bit_origin() {
+        let (_, mut fs, mut buf) = allocation_groups(false);
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            let flags = u32::from_le_bytes(raw[0x60..0x64].try_into().unwrap());
+            raw[0x60..0x64]
+                .copy_from_slice(&(flags | features::Incompat::FLEX_BG.bits()).to_le_bytes());
+        });
+        fixed_pointer(&mut fs, &mut buf, 1, 0, 400);
+        buf.put(400, vec![0xff; BS as usize]);
+        buf.get_mut(&fs, 400).unwrap()[0] &= !1;
+        fs.buffer_refresh_bitmap_csum(&mut buf, 1, false).unwrap();
+        allocation_probe(&fs, &buf, &[(1025, 1026)]).unwrap();
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(1024, 1025)]),
+            Err(Error::Corrupt("block allocation clear proposed bit"))
+        ));
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            let flags = u32::from_le_bytes(raw[0x60..0x64].try_into().unwrap());
+            raw[0x60..0x64]
+                .copy_from_slice(&(flags & !features::Incompat::FLEX_BG.bits()).to_le_bytes());
+        });
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(1025, 1026)]),
+            Err(Error::Corrupt(
+                "block allocation metadata outside own group"
+            ))
+        ));
+    }
+
+    #[test]
+    fn block_allocation_refuses_bitmap_aliases_and_invalid_table_spans() {
+        for address in [0, 1, 8192, u64::MAX] {
+            let (_, mut fs, mut buf) = allocation_fixture();
+            fixed_pointer(&mut fs, &mut buf, 0, 0, address);
+            assert!(allocation_probe(&fs, &buf, &[(0, 1)]).is_err());
+        }
+        for field in [1, 2] {
+            let (_, mut fs, mut buf) = allocation_fixture();
+            let bitmap = fs.groups[0].block_bitmap;
+            fixed_pointer(&mut fs, &mut buf, 0, field, bitmap);
+            assert!(matches!(
+                allocation_probe(&fs, &buf, &[(0, 1)]),
+                Err(Error::Corrupt("block allocation bitmap metadata alias"))
+            ));
+        }
+        let (_, mut fs, mut buf) = allocation_fixture();
+        fixed_pointer(&mut fs, &mut buf, 0, 2, 8191);
+        assert!(matches!(
+            allocation_probe(&fs, &buf, &[(0, 1)]),
+            Err(Error::InvalidBlock(8191))
+        ));
+    }
+
+    #[test]
+    fn block_allocation_propagates_read_errors_and_debits_before_access() {
+        struct FailingRead {
+            dev: std::sync::Arc<MemDev>,
+            fail: u64,
+            seen: std::sync::Arc<std::sync::Mutex<Vec<u64>>>,
+        }
+        impl crate::block_io::BlockDevice for FailingRead {
+            fn read_at(&self, at: u64, out: &mut [u8]) -> Result<()> {
+                let block = at / u64::from(BS);
+                self.seen.lock().unwrap().push(block);
+                if block == self.fail {
+                    return Err(std::io::Error::other("injected allocation read error").into());
+                }
+                self.dev.read_at(at, out)
+            }
+            fn size_bytes(&self) -> u64 {
+                VOL
+            }
+        }
+        for failure in 0..3 {
+            let (dev, mut fs) = mount_casefold_planning_fixture();
+            let fail = match failure {
+                0 => 0,
+                1 => fs.sb.descriptor_location(0).0,
+                _ => fs.groups[0].block_bitmap,
+            };
+            let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            fs.dev = std::sync::Arc::new(FailingRead {
+                dev: dev.clone(),
+                fail,
+                seen: seen.clone(),
+            });
+            let ranges = [crate::block_allocation::Range { start: 0, end: 1 }];
+            let buf = BlockBuffer::new(BS);
+            let limits = allocation_limits(&fs);
+            assert!(matches!(
+                allocation_unchanged(&dev, &fs, &buf, &ranges, limits),
+                Err(Error::Io(_))
+            ));
+            assert_eq!(seen.lock().unwrap().len(), failure + 1);
+            seen.lock().unwrap().clear();
+            assert!(matches!(
+                allocation_unchanged(
+                    &dev,
+                    &fs,
+                    &buf,
+                    &ranges,
+                    crate::block_allocation::Limits {
+                        reads: failure as u64,
+                        ..limits
+                    }
+                ),
+                Err(Error::Unsupported("block allocation resource limit"))
+            ));
+            assert_eq!(seen.lock().unwrap().len(), failure);
+        }
+    }
+
+    #[test]
+    fn block_allocation_empty_input_still_verifies_current_superblock() {
+        let (_, fs, mut buf) = allocation_fixture();
+        let limits = crate::block_allocation::Limits {
+            ranges: 0,
+            groups: 0,
+            reads: 1,
+            bitmap_bytes: 0,
+            scratch_bytes: 2 * BS as usize,
+        };
+        crate::block_allocation::verify(&fs, &buf, &[], limits).unwrap();
+        buf.get_mut(&fs, 0).unwrap()[1024 + 0x3fc] ^= 1;
+        assert!(matches!(
+            crate::block_allocation::verify(&fs, &buf, &[], limits),
+            Err(Error::BadChecksum { what: "superblock" })
+        ));
+    }
+
     fn fixed_edit_sb(fs: &mut Filesystem, buf: &mut BlockBuffer, edit: impl FnOnce(&mut [u8])) {
         let mut raw = fs.sb.raw.clone();
         edit(&mut raw);

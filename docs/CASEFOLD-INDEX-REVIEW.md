@@ -69,6 +69,74 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private bounded current block-allocation intervals — 2026-10-15
+
+`block_allocation::verify` now checks physically ordered, disjoint, nonempty
+intervals directly against current bitmap bytes. It requires a trusted coherent
+stable mount/buffer view and a successfully qualified fixed layout on that same
+view. It neither re-proves every fixed-role separation nor builds/caches/publishes
+an owner snapshot, and remains disconnected from insertion/public write admission.
+The existing insertion helper is unchanged. A successful empty input proves no
+claim coverage; it still verifies the current superblock.
+
+The new component validates ordinary allocation geometry, group/inode coverage,
+the full filesystem extent, 1/4 KiB blocks and 32/64-byte descriptors before
+traversal. Unknown feature/geometry profiles refuse. Current primary superblock
+CRC and identity are checked, allowing only existing free-counter differences.
+Each touched current descriptor has its CRC, all three stable metadata pointers,
+known flags, pending initialization agreement and bitmap/table bounds checked.
+Non-FLEX placement must remain in its owning group. BLOCK_UNINIT refuses before
+bitmap access, even if its staged bytes are present. INODE_UNINIT/ITABLE_ZEROED
+are known flags but do not themselves make block bits unspecified.
+
+Every current bitmap fetch has exact-size checks, descriptor-width checksum
+truncation over `blocks_per_group / 8` bytes, and full-block padding validation.
+This initial profile requires a byte-aligned blocks-per-group count. Every bit
+after the group's actual filesystem end, both inside checksum coverage and beyond
+it, must be one. Ranges never admit such padding. Boot block zero at 1 KiB is
+outside the bitmap domain and remains separately protected; superblock block zero
+at 4 KiB is an ordinary proposed bit and is checked without an exception.
+
+One invocation shares range/group/logical-read/bitmap-work/scratch caps. Two
+fallibly reserved blocks are reused: one descriptor block and one bitmap.
+Ordered ranges retain only the last group bitmap and descriptor block, so nearby
+ranges share reads without a growing group cache. No per-data-block vector or
+owner entry is generated. Bitmap work charges two full block sizes per touched
+group before checksum/padding work, then the bytes covered by each range/group
+segment, including repeated edge bytes. Reads debit before staged/device access;
+all errors discard the local proof and preserve caller/device inputs. The future
+builder must still charge this scratch alongside all coexisting retained capacity
+and enforce a whole-view lifecycle; per-component limits do not establish that.
+
+The initial baseline adapter to the old helper accepted a corrupt current
+superblock and clear padding beyond checksum coverage; its healthy control
+passed. Those same three assertions pass through the new component. Expanded
+controls cover current allocation/freeing, both bitmap/descriptor CRC sources,
+superblock identity/counters, malformed staged sizes, pointer relocation, flags,
+partial-byte edges, block zero, final-group padding, both checksum widths,
+unsupported geometry, invalid/overlapping intervals, FLEX placement, metadata
+aliases/table bounds, injected reads, empty input and exact/exhausted shared caps.
+A full 69-group interval exercises two primary descriptor blocks with no payload
+block expansion. Fresh counts/results are maintained in `extprogress.md`.
+
+The new VM oracle is compiled locally but unrun here (no KVM). It formats four
+profiles (1/4 KiB, 32/64-byte descriptors), makes Linux initialize both allocation
+groups, checks judged non-repairing e2fsck and the fixed-layout prerequisite, then
+compares each valid singleton against an explicit `debugfs testb` answer. It also
+checks every coalesced allocated run together, free-block refusal, partial final
+groups and the block-zero domain. Images, command files, complete reports and
+summaries are retained by the focused workflow; its exact filter and one-test
+floor prevent a zero-test success. New-source independent CI remains pending.
+
+**Next bounded checkpoint:** inspect exact-commit focused/full CI and actual
+allocation reports/images, resolve any failure, then review current-view, byte
+masks/padding, bounds, profile intersection and aggregate resource contracts.
+Only afterward choose the complete ownership join of fixed roles, every typed
+allocated inode's full tree and verified current allocation. Cross-owner
+conflicts, complete claim coverage, peak budgets, guard/overlay/dependencies/
+sealing/invalidation and commit failures remain separate gates. The three saved
+other-inode aliases remain unresolved and every public write gate stays blocked.
+
 ### Fixed-metadata implementation and evidence review — 2026-10-15
 
 Reviewed `95cb21810b0e43edfbabcaf1b7d55e5d83d23787`, the complete private
@@ -79,8 +147,8 @@ location report plus metadata/role/inventory/insertion/FIEMAP logs. The new
 metadata test executed once, zero failed/ignored (59 lines / 7,385 bytes), across
 **14 profiles, 196 groups and 943 protected ranges**. Every format and judged
 non-repairing e2fsck check passed, and the complete typed/grouped interval list
-matched `dumpe2fs`, not just its size. Full source CI is still running at the
-initial review check; final status is maintained in `extprogress.md`.
+matched `dumpe2fs`, not just its size. Its full source CI and the subsequent
+documentation review's full CI now passed; links are in `extprogress.md`.
 
 Role, inventory, insertion and FIEMAP tests each executed once, zero failed/
 ignored (41 lines / 4,671 bytes; 33 / 3,357; 133 / 7,954; 23 / 1,601).

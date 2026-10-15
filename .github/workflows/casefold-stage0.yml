@@ -12,8 +12,10 @@ on:
       - src/inode_inventory.rs
       - src/inode_roles.rs
       - src/fixed_metadata.rs
+      - src/block_allocation.rs
       - src/lib.rs
       - tests/inode_inventory_guest.py
+      - tests/block_allocation_guest.py
       - tests/inode_roles_guest.py
       - tests/extent_ownership_guest.py
       - src/path.rs
@@ -89,6 +91,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:fixed-metadata casefold-fixed-metadata 1050 65000 -- scripts/test.sh --locked --release --lib fixed_metadata::needs_host::linux_locations_match_complete_fixed_metadata_ranges -- --exact --show-output
           bash scripts/core.sh test-floor casefold-fixed-metadata 1
+      - name: Compare bounded allocation intervals with every Linux block bit
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/block-allocation
+        run: |
+          scripts/tier.sh casefold:block-allocation casefold-block-allocation 1050 65000 -- scripts/test.sh --locked --release --lib block_allocation::needs_host::linux_allocation_intervals_match_every_debugfs_block_bit -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-block-allocation 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -107,5 +115,7 @@ jobs:
             tmp/inode-roles/
             tmp/logs/casefold-fixed-metadata.log
             tmp/fixed-metadata/
+            tmp/logs/casefold-block-allocation.log
+            tmp/block-allocation/
           if-no-files-found: error
           retention-days: 30

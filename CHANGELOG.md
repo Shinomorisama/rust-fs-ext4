@@ -13,6 +13,9 @@
 
 ### Added
 
+- A private bounded interval verifier checks current initialized block allocation
+  with staged precedence, checksums, full bitmap padding and shared resource
+  limits. Complete ownership and public casefold write admission remain separate.
 - A private bounded fixed-metadata collector validates the current primary
   layout and returns disjoint boot, superblock/descriptor, bitmap and inode-table
   protection ranges, including backups and cross-group placement. Ownership
