@@ -69,6 +69,179 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Transaction-current ownership design review — 2026-10-14
+
+Reviewed own MIT source at `f9a0df0544072b0e252d5d4ff2912c70f1838a0b`.
+Its [focused Linux run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38666477495)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38666477535)
+passed. The downloaded insertion log executes one test across four profiles,
+zero failed/ignored (133 lines / 7,953 bytes). This qualifies the scoped journal
+checkpoint, not the owner-index proposal below.
+
+The saved other-owner patch applies to this source and still executes four
+tests: three fail specifically on `Ok(())` at blocks 517, 521 and 549, while
+the disjoint control passes (37 lines / 1,893 bytes). The patch was reversed
+after this observation; the unchanged production baseline is revalidated in
+`extprogress.md`. No owner refusal is implemented by this review.
+
+**Decision:** use a complete, bounded ownership snapshot per mount epoch plus
+a transaction overlay, only after operation-wide serialization and write-path
+coverage exist. Do not integrate a mounted-only cache or scan the whole volume
+on each insertion. A snapshot that cannot complete within its supported profile
+and resource limits refuses write admission; it never publishes partial proof.
+This is a design selected for incremental implementation, not an enablement
+review. Keep findings 2 and 3 and every existing write gate open.
+
+#### Evidence that constrains integration
+
+| Existing path | Consequence for the design |
+|---|---|
+| `buffer_add_dir_entry_indexed` maps referenced logical blocks through the current inode root in two device views | The visited-node set is not the whole tree. Unused/shadowed references need a complete ownership walk; do not call the disk view a separate disk-inode-root walk. |
+| `extent::collect_all_with_nodes` recursively gathers records without an ownership work budget or full structural proof | Do not turn it directly into admission. `extent_tree_runs` checks node tails after collection but uses the device view and is also not a current ownership proof. |
+| `BlockBuffer::dirty`, `put` and `get_mut` permit direct staging | Tracking only `buffer_write_inode` misses changed external map nodes, bitmap bits and raw inode-table patches. Derive changed dependencies from final dirty bytes as well. |
+| `commit_block_buffer` locks the journal only after the caller finishes planning | This lock cannot serialize duplicate checks, allocation or ownership admission. No-journal commits lack even that journal lock. |
+| `write_inode_raw`, direct descriptor writes, replay, recovery and `fresh_read` exist outside the normal buffer lifecycle | Audit them before trusting an epoch. Each must join the operation guard and update or invalidate ownership before mutation; otherwise retain write refusal. |
+| `Filesystem::dev` is public and callers can retain their own device handle | An internal mutex cannot stop external changes. Exclusive device ownership is a prerequisite; explicit refresh discards proof. Arbitrary concurrent device mutation remains unsupported. |
+| External attributes may legally share a block | Ownership needs roles and multiple references; a single block-to-inode map is insufficient. Attribute sharing never licenses directory storage. |
+
+#### Completeness and supported roles
+
+Bootstrap after journal replay/orphan recovery and under exclusive device access.
+Read current verified descriptors and inode bitmaps, including initialization
+state, checksum width, final-group coverage and reserved-inode rules. Do not use
+`inode_bit_is_set` alone: its mounted allocation view and unchecked bitmap are
+not the required proof. Enumerate all allocated inodes, including unlinked
+allocated inodes; directory reachability and positive link counts are not the
+enumeration criterion. Interpret reserved slots by their documented role, not
+as ordinary files merely because their allocation bits are set. Unsupported
+active reserved roles or unqualified layouts refuse the initial profile.
+
+Each claim records a checked physical half-open interval, inode number and
+generation, storage role, logical interval where applicable, and view/epoch.
+Keep data extents as intervals, never one owner entry per payload block. Walk
+every declared map record, including unwritten/preallocated storage beyond
+`i_size`, and every external mapping node. Check bounds before reads, node
+capacity, exact decreasing depth, checksums before following children, logical
+ordering/parent key ranges, duplicate children/cycles, and physical overlaps.
+The tree's own data and mapping roles must be disjoint. A selected lookup is
+not a substitute for that walk. Budget exhaustion and unsupported shapes return
+errors, with no truncated claim list.
+
+Initial collectors cover extent-mapped ordinary files/directories and the
+already restricted journal profile. Legacy indirect maps and special reserved
+layouts remain unsupported until completely walked and independently qualified.
+Classify fast symlinks, inline data and device payloads before looking at
+`i_block`; never interpret their bytes as block addresses. Unsupported flags,
+attribute-value inodes, inline layouts or special inode profiles refuse the
+snapshot, rather than disappearing from it. An initial narrow implementation
+may refuse all external attributes. Later attribute support must record every
+reference, verify its block and sharing policy, and include attribute-value
+storage before admitting that profile. Unknown ownership cannot mean unowned.
+
+Keep fixed metadata and journal roles protected separately. Require current
+allocation for recorded claims. Detect illegal overlapping claims, including
+two roles of one inode; do not let later interval insertion overwrite an earlier
+owner. Legal shared attribute claims need explicit representation. A hard link
+is another name for the same inode, not another storage owner.
+
+#### Transaction overlay and revalidation
+
+Retain reverse dependencies from inode-table blocks to inode slices, bitmap
+blocks to allocation groups, and external map/attribute blocks to every owning
+inode. A changed external child can relocate storage without changing its inode
+root; rebuild affected owners through the staged view, discovering new children
+while walking. Dirty inode-table blocks require comparing all contained slices,
+not invalidating or approving every inode merely because it shares the block.
+Allocation bitmap differences include newly allocated/freed/reused inode slots;
+inode identity includes generation. Reconcile descriptor initialization changes.
+
+Use the final dirty map, not a helper-maintained touched list alone, to determine
+the dependency closure. Dirty superblock/layout/descriptor changes retain the
+existing narrow refusals. Unexpected bitmap/table/map writes, missing dependency
+coverage or ambiguous staging refuse admission. Never assume a staged payload
+is a map node just because its bytes happen to parse as one.
+
+Build an isolated overlay of affected owners without mutating the committed
+index. Keep committed claims protective until commit succeeds. In the initial
+profile, any storage transfer from another inode in the same transaction is
+unsupported even if its bit has been cleared; retaining old claims conservatively
+prevents an early reuse from erasing the original owner. New current claims
+protect newly allocated/remapped storage, which catches the buffered-only owner
+at block 549. Directory data and map roles must agree with the complete current
+parent walk and remain disjoint from all conflicting claims in both views.
+
+Any ownership-relevant edit after admission invalidates that admission. Seal
+and validate the final candidate before device writes; prove the selected leaf
+edit leaves owner mappings unchanged. Revalidate after later helpers have
+composed changes (rename continues planning after insertion). Pending claims,
+bitmaps and dirty bytes are discarded together on precommit failure. No shared
+snapshot publication occurs during planning.
+
+#### Serialization, commit and failure
+
+Acquire a mount operation guard before path resolution/duplicate checks and
+retain it through allocation, planning, final ownership checks, durable commit
+and index publication. Path and inode entry points must share guarded internal
+helpers, avoiding recursive locking when wrappers call one another. Define one
+lock order: operation guard before allocation-state/cache/journal locks; no
+commit-held callback may reacquire the operation guard. Review callback/reentry
+behavior and reader consistency separately before enabling public writes.
+
+An overlay carries its base epoch and buffer revision; a stale epoch/revision
+cannot authorize a write. Prepare every allocation needed to publish the next
+index before the first device write, then publish without fallible allocation
+only after commit reports durable success. A journal/device failure can leave
+replayable or partly written bytes: invalidate ownership and refuse subsequent
+writes until recovery/remount. Do not roll back only the in-memory index and
+continue as though the old disk state were known. Poisoning has the same refusal.
+Explicit refresh, replay, geometry changes and raw mutation discard the proof
+before work starts; rebuilding is explicit, not an automatic scan per insertion.
+
+#### Resource contract and acceptance gates
+
+An interval index avoids a per-block owner array for the 1.5 TB goal, but a
+highly fragmented card can still exceed memory/work limits. Account for peak
+committed index plus reverse dependencies, staged replacements, sorting scratch,
+visited sets and buffers, not only the final claim vector. No eviction may
+convert unknown coverage into apparent freedom. Use fallible growth and checked
+arithmetic. A builder/overlay must charge each inode/bitmap probe, record/edge,
+metadata read, range query and byte allocation before doing that work.
+
+For the next private collector, propose explicit caller-supplied limits for
+node reads, examined records, output claims and scratch bytes, with tiny-limit
+boundary tests. Enforce a depth cap of five from the public extent format.
+Production scan/transaction limits need measured profiles and fragmentation
+data before integration; no defaults, latency or real-card capacity are qualified
+by this review. Bootstrap is bounded and performed once for a valid epoch;
+ordinary overlays revisit changed dependencies only. Exceeding a limit gives
+an explicit unsupported/resource refusal before mutation, never a partial proof
+or a fallback to an unbounded scan.
+
+Implementation gates, in dependency order:
+
+1. Add a private, read-only complete extent-ownership collector with explicit
+   budgets. Reproduce unused/shadowed child, bad-depth/key/capacity/checksum,
+   duplicate/cyclic child and unwritten/beyond-EOF cases before their fixes.
+   Require both device and staged-view tests, exact role/range output, immutable
+   inputs on failure, and healthy inline/external Linux reference controls.
+   This is the **next bounded checkpoint**; do not wire it into admission yet.
+2. Build a complete bounded snapshot for an explicit inode/feature profile,
+   including bitmap/current-allocation validation, reserved roles and conflicts.
+   Test refusal on incomplete scans/limits; measure retained and peak resources.
+3. Add operation-wide serialization and the full mutation/invalidation audit,
+   then transaction overlays/final sealing and commit-failure handling. Test
+   changed child without inode edit, shared inode-table blocks, slot reuse,
+   later-helper edits, abort, durable publication, refresh and failed commits.
+4. Integrate admission only when these prerequisites hold. Activate all three
+   saved other-owner refusals and the disjoint control together; require their
+   full unchanged-buffer/flag/device assertions. Preserve every existing test
+   occurrence, lint/build checks and four-profile Linux insertion evidence;
+   add independent profile validation for each newly admitted map/role.
+
+The collector alone does not solve the three current owner aliases, establish
+operation concurrency safety, close complete directory-map qualification or
+authorize public writes. These remain explicit later integration gates.
+
 ### Scoped internal-journal role refusal — 2026-10-14
 
 At `da2ffcd`, a fresh 839-test baseline passed. A self-contained declared-journal
@@ -84,8 +257,8 @@ The same refusal and complete unchanged-buffer/flag/device assertions now pass.
 The expanded focused run passes 68 tests: all 55 preceding fs casefold tests
 plus 13 journal tests. The full local tier passes 852 tests with all 839 fresh
 baseline occurrences retained. Lint and locked release CLI build/install pass;
-new-source exact-commit focused Linux/full CI remain pending. `extprogress.md`
-records the measured logs and continuation task.
+exact-commit focused Linux/full CI subsequently passed at `f9a0df0`, as recorded
+in the ownership design review above. `extprogress.md` records the measured logs.
 
 After existing read-only admission and allocation checks, before insertion edits,
 the new guard inspects the filesystem journal declaration rather than the absent
@@ -123,13 +296,14 @@ preserve the entire buffer/flags/device; successful insertion changes only its
 selected leaf and preserves the name/inode assertions.
 
 The existing four Linux-created profiles remain the independent healthy-image
-matrix; new-source exact-commit focused/full CI is required after push. The
+matrix; exact-commit focused/full CI passed at `f9a0df0`. The
 synthetic multi-record control does not extend the independent profile matrix.
 JBD2 contents/lifecycle, concurrent/external mutation, other inode/attribute
 ownership and complete directory map shape remain unqualified. In particular,
 the three other-owner counterexamples below are **not fixed** by journal-only
-protection. Next design a bounded transaction-current owner-map strategy before
-its refusal implementation; preserve those tests and their disjoint control.
+protection. The design review above now records the bounded transaction-current
+owner-map strategy and next collector checkpoint; preserve those tests and their
+disjoint control before the eventual refusal implementation.
 Public casefold writes, deeper insertion, splitting/growth and index dropping
 remain blocked.
 

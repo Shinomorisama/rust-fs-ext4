@@ -56,12 +56,21 @@ permission to relax write gates, modify siblings or push to `main`.
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
+- Latest review checkpoint: the journal guard's exact-commit focused Linux and
+  full CI passed at `f9a0df0`. A focused transaction-current ownership design
+  review selects a complete bounded epoch snapshot plus transaction overlay,
+  conditional on operation-wide serialization and mutation/invalidation coverage.
+  The three saved other-owner aliases were rerun and still fail on acceptance;
+  their disjoint control passes. This review changes no production source or
+  gate. Next implement and test a private bounded complete extent-ownership
+  collector, without connecting it to admission. See the review checkpoint below
+  and `docs/CASEFOLD-INDEX-REVIEW.md` for contracts and implementation gates.
 - Latest implementation checkpoint: private indexed insertion now refuses
   overlap with the declared internal journal's complete initialized inline
   extent map. It verifies a stable journal inode, current inode/block allocation,
   full mapping shape and disjoint directory/map roles. External or unqualified
   journal maps and staged journal inode changes remain unsupported. See the
-  scoped journal checkpoint below. New-source independent CI remains pending;
+  scoped journal checkpoint below. Its exact-commit independent CI now passed;
   other-inode ownership and the volume write gate are unchanged.
 - Ownership-review checkpoint: current journal/other ownership was reviewed at
   `96b3b72`. Three allocated cross-inode aliases reproduce acceptance: a leaf
@@ -150,9 +159,15 @@ permission to relax write gates, modify siblings or push to `main`.
   source; it does not add independent qualification of ownership refusals.
 - Ownership-review full CI at `da2ffcd`
   ([run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38664567403))
-  remains in progress: the x86_64 oracle and compiled-in-guest suites are running;
-  the other eight jobs passed, with no failures observed. That checkpoint changed
-  no production source. Its result does not qualify this new journal guard.
+  now **passed**. That checkpoint changed no production source. Its result is
+  separate from the journal guard's own successful validation below.
+- Journal guard `f9a0df0544072b0e252d5d4ff2912c70f1838a0b` passed
+  [focused Linux validation](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38666477495)
+  and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38666477535),
+  including both VM suites and the aggregate gate. Its downloaded insertion
+  log confirms exactly one passed test, zero failed/ignored, across four existing
+  profiles (133 lines / 7,953 bytes). This is emitted-byte qualification for the
+  existing private insertion path, not a global ownership or public-write proof.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - The required core pin remains `v0.3.0`
@@ -161,7 +176,79 @@ permission to relax write gates, modify siblings or push to `main`.
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
 
+## Transaction-current ownership design checkpoint — 2026-10-14
+
+Reviewed at `f9a0df0544072b0e252d5d4ff2912c70f1838a0b`, with the source and
+remote tip equal and a clean tree. Git/API/artifact access and pull/push
+permissions work through the existing bindings; no environment configuration
+change, new credential, sibling edit, dependency/pin/lock change or host oracle
+was needed. Both exact-commit journal CI runs above passed, as did the preceding
+ownership review's full CI. The focused artifact was downloaded and its actual
+insertion log inspected, including all four 1 KiB/4 KiB strict/non-strict profiles.
+
+A fresh unit baseline passed **852 tests**, zero failed/ignored. Applied the
+unchanged saved `docs/CASEFOLD-OWNERSHIP-RED.patch` temporarily: its four tests
+execute, with **three acceptance failures** at blocks 517, 521 and 549 and
+**one passing disjoint control**, zero ignored (37 lines / 1,893 bytes). Reversed
+the patch after preserving the log. These are still unresolved refusal tests;
+their unchanged-state assertions have not passed. Production source is restored
+byte-for-byte, not left with expected-failing tests in the active suite.
+
+The focused design review in `docs/CASEFOLD-INDEX-REVIEW.md` records concrete
+source constraints: current admission's two mapping views share the current
+inode root; visited nodes are not a complete tree walk; raw dirty-map edits can
+change owners without `buffer_write_inode`; the journal mutex starts at commit;
+direct writes/replay/refresh and public device access prevent assuming a stable
+mount epoch. A shared attribute block needs roles/multiple references.
+
+The selected design is a complete bounded snapshot once per valid epoch, with
+interval claims and reverse dependencies, plus an isolated transaction-current
+overlay. Unsupported inode/map/reserved/attribute profiles or exhausted limits
+refuse completion; partial coverage never means unowned. Include allocated
+unlinked inodes, unwritten/beyond-EOF extents, every map node, current allocation
+and complete tree structure. Derive dependencies from final dirty bytes; compare
+individual inode slices; handle newly allocated/freed/reused slots and child-map
+edits without inode edits. Retain committed claims until success, initially
+refusing cross-inode reuse within one transaction. Final edits invalidate prior
+admission. Publish a prepared overlay only after durable success; partial or
+uncertain commit invalidates proof and stops writes. An operation guard must
+span resolution/duplicate checks through commit/publication; explicit refresh,
+raw mutation and recovery invalidate the epoch. External mutation remains
+unsupported. The review defines budgets for all work/peak memory, resource-limit
+failure behavior, lock-order requirements and staged acceptance tests. Production
+limits and real-card performance remain unmeasured; this is not implementation
+or write qualification.
+
+After reversing the patch, the full unit tier again passed **852 tests**, zero
+failed/ignored, within its unchanged output budget (1,100 lines / 68,661 bytes).
+Multiset comparison retains every one of the 852 fresh baseline test occurrences,
+with none added or removed. Fresh lint (fmt, clippy, provenance and Unicode
+verification), shared-agent and whitespace checks pass. The release CLI is not
+rebuilt for this documentation-only review; its implementation checkpoint build
+and exact-source full CI passed. Production source is unchanged. Ignored evidence is under
+`tmp/casefold-owner-design-evidence`; the original four counterexamples stay in
+the existing committed patch. No new independent oracle is claimed for the
+proposed owner index. Stage 5 progress remains **not yet quantified**, and the
+three cross-inode aliases, mapping-shape integration, operation concurrency,
+crash qualification, deeper insertion and collision/splitting/growth remain open.
+Public casefold writes, index dropping and Windows/SteamOS use stay unqualified.
+
+**Next bounded task:** add a private read-only complete extent-ownership
+collector with explicit caller-supplied node-read, record, claim and scratch
+budgets. Reproduce its missing whole-tree/shape checks before fixes; verify
+inline/external initialized and unwritten/beyond-EOF claims, unused/shadowed
+children, checksums/depth/key/capacity, duplicates/cycles, bounds and limit
+failures in device and staged views. Require exact role/range output, unchanged
+inputs on failure and independent Linux healthy-image controls. Keep it
+disconnected from insertion admission until snapshot, serialization, overlays,
+invalidation and final commit validation are implemented and reviewed; those
+later gates must make the saved three owner refusals and disjoint control green.
+
 ## Scoped inline-journal role refusal — 2026-10-14
+
+Follow-up: this source landed at `f9a0df0` and its exact-commit focused Linux
+and full CI now passed, as recorded above. The design checkpoint supersedes
+this historical section's next task; the guard's implementation scope is unchanged.
 
 At source `da2ffcd321c67093573bd83d4bd1cc77b749cd5d`, a fresh local baseline
 passed **839 unit tests**, zero failed or ignored. The preceding allocation
@@ -218,7 +305,8 @@ comparison retains all 839 baseline occurrences and adds exactly 13 journal
 tests. Lint (including provenance/Unicode tables), shared-agent/whitespace checks
 and locked release CLI build/install pass. Fresh evidence is under ignored
 `tmp/casefold-journal-role-evidence` and `tmp/logs/casefold-journal-{red,green}.log`.
-New-source exact-commit focused Linux and full CI remain pending after push.
+Its new-source exact-commit focused Linux and full CI subsequently passed at
+`f9a0df0`; see the current evidence above.
 
 Stage 5 remains **not yet quantified**. This addresses journal roles within the
 restricted private profile, not general inode/attribute ownership, JBD2 lifecycle,
@@ -1208,13 +1296,13 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard now refuses all three reproduced journal aliases and passes 852 local units, lint and the CLI build; its independent CI remains pending. The three other-inode ownership aliases remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The transaction-current ownership design review is recorded; its next checkpoint is a private bounded complete extent-ownership collector, without admission integration. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. Check current full CI and exact-commit focused Linux insertion evidence, then continue the bounded role-validation task recorded in the current checkpoint. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
+1. Check the latest checkpoint CI, then implement the private bounded complete extent-ownership collector recorded in the current design checkpoint. The journal guard already passed exact-commit focused Linux and full CI. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
@@ -1311,14 +1399,14 @@ The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
 **Next bounded task:** use the latest 2026-10-14 current checkpoint above.
-Inspect this journal guard's exact-commit focused Linux insertion and full CI.
-Its three journal aliases and new refusal controls are active and passing; keep
-all baseline occurrences and unchanged-state checks. The three other-inode
-aliases and disjoint control remain in the historical ownership patch, unresolved.
-Next review bounded transaction-current ownership tracking, including supported
-roles, resource bounds, invalidation/rollback and serialization. Do not use a
-mounted-only owner cache or rescan every file per insertion. Complete directory
-mapping shape and operation-wide serialization remain open.
+The journal guard's exact-commit focused Linux and full CI passed. The bounded
+transaction-current ownership design review is recorded above. Implement and
+test its private complete extent-ownership collector next, disconnected from
+insertion admission. Keep all baseline occurrences and unchanged-state checks.
+The three other-inode aliases and disjoint control remain in the saved patch,
+unresolved. Complete directory mapping shape, snapshot/overlay integration,
+mutation invalidation and operation-wide serialization remain open. Do not use
+a mounted-only owner cache or rescan every file per insertion.
 Do not proceed to intermediate-level insertion until the remaining admission
 review findings are resolved and independently qualified. The eventual deeper
 insertion checkpoint must retain whole-directory uniqueness, complete entry
@@ -1348,6 +1436,6 @@ Committed documentation: `docs/CASEFOLD-BEHAVIOR.md`, `docs/CASEFOLD-STAGE0.md`,
 
 The original detailed plan is `/workspace/casefold-implementation-plan.md`, outside the repository. Its baseline findings and future-tense descriptions are historical; use this note and verified code/CI state for current progress. In particular, do not infer a safe malformed-name fallback from that old plan: later observations led to the current refusal policy. This note contains the continuation essentials even if that original file is unavailable.
 
-Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion and full CI; the allocation review at `065f9a8` passed full CI. The current-allocation guard at `96b3b72` passed focused Linux and full CI; its insertion log was inspected. The ownership review retains three unresolved other-inode aliases in a self-contained patch. The scoped journal guard addresses its own three aliases with fresh local evidence; new-source independent CI remains pending. No claim is made here that a separate coverage workflow ran at the latest commit.
+Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion and full CI; the allocation review at `065f9a8` passed full CI. The current-allocation guard at `96b3b72` passed focused Linux and full CI; its insertion log was inspected. The ownership review retains three unresolved other-inode aliases in a self-contained patch. The scoped journal guard at `f9a0df0` passed exact-commit focused Linux/full CI; its actual insertion log was inspected. The current owner-design review reran the three other-inode failures and selects a private bounded complete extent-ownership collector as the next checkpoint, without changing source or enabling writes. No claim is made here that a separate coverage workflow ran at the latest commit.
 
 This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. Verify the selected commit against its own CI; earlier successful runs are evidence for those earlier checkpoints. Update this handoff as implementation checkpoints are completed.
