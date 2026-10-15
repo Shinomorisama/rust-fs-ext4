@@ -69,7 +69,105 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Inode-inventory implementation and evidence review — 2026-10-15
+
+Reviewed `4309ed114caca9d13c31e6647276ca883c116781`, the complete private
+inventory, its fifteen unit controls, VM fixture and focused workflow. Its
+[focused Linux run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38685893409)
+passed. Downloaded and inspected the actual images, allocation commands/reports
+and logs. The new inventory test executed once, zero failed/ignored (33 lines /
+3,357 bytes). Existing insertion and FIEMAP tests each executed once, zero
+failed/ignored (133 lines / 7,953 bytes and 23 lines / 1,601 bytes respectively).
+The separate full CI is still running at this review's initial check; its final
+status and this checkpoint's local validation are recorded in `extprogress.md`.
+
+| Block size | Descriptor bytes | Groups / inode slots | Allocated per group | Free per group |
+|---|---|---|---|---|
+| 1 KiB | 32 | 2 / 64 | 22, 11 | 10, 21 |
+| 1 KiB | 64 | 2 / 64 | 22, 11 | 10, 21 |
+| 4 KiB | 32 | 2 / 64 | 22, 11 | 10, 21 |
+| 4 KiB | 64 | 2 / 64 | 22, 11 | 10, 21 |
+
+For each image, Linux population and non-repairing e2fsck passed. Every one of
+the 64 IDs has exactly one saved allocation answer. The test compares the
+complete result with those answers, including reserved IDs 1–10 and free slots.
+A raw public-format audit also checked both bitmaps against the reports, full
+padding, initialized flags (ITABLE_ZEROED only), and the shared primary descriptor
+block. These are small-image compatibility controls, not large-card performance
+or a measured memory bound. Partial final inode groups and allocated zero-link
+bodies remain synthetic controls; this Linux fixture does not qualify them
+independently. It has no journal, resize inode, quota or attribute-owner matrix.
+
+**Decision:** no implementation blocker found within this standalone allocation
+scan's stated supported profile and stable trusted-mount preconditions. No source
+fix or new regression test is needed for this review. The scan is suitable as a
+private prerequisite for role classification; it establishes neither ownership
+nor reusable transaction-current state. Keep it disconnected from admission.
+
+The source review checked:
+
+- Supported block/descriptor sizes and nonzero bounded group geometry precede
+  slicing, division and descriptor lookup. Group coverage plus `s_inodes_count`
+  bounds every emitted ID; ascending group/bit traversal cannot duplicate IDs.
+  The final group's valid count excludes padding from output. Full bitmap-block
+  padding is checked even where it lies outside the checksum's covered bytes.
+- Current superblock identity/checksum precedes descriptor reads; permitted free
+  counters do not change addressing. Each current descriptor verifies in its
+  group context, preserves mounted metadata addresses and reconciles pending
+  flags. INODE_UNINIT refuses before unspecified bitmap contents are read.
+  Bitmap checksum width follows the admitted descriptor width. Current staged
+  bytes take precedence and must have exactly one block's length.
+- Group/probe work is checked up front, each logical fetch is charged before
+  access, and output capacity is checked before pushing. Fixed fallible output
+  and two-block scratch reservations use checked requested-byte arithmetic;
+  descriptor caching reuses scratch across groups. Any failure drops local
+  output, with no device/buffer mutation or publication. The fifteen controls
+  include exhausted limits, current staged changes and unchanged-state checks.
+
+#### Contracts for the next role-classification component
+
+1. **Use the same stable current view.** The returned ID vector carries no
+   epoch or allocation dependencies and reads no inode bodies. It becomes stale
+   if allocation changes. A later component must not combine an earlier census
+   with newer inode/table/tree contents or treat a fresh census as operation-wide
+   serialization. Bound and verify staged inode-table blocks before interpreting
+   complete inode records; preserve the current superblock/descriptor contract.
+2. **Give every allocated ID an explicit outcome.** Include reserved and
+   zero-link records; never infer allocation or ownership from reachability,
+   type, size or link count alone. The saved Linux images have mode-zero reserved
+   bodies as well as root inode 2; none of their reserved bodies is all-zero.
+   Do not assume every reserved record is an ordinary extent file, or that
+   mode zero alone permits ignoring storage. Establish each admitted reserved
+   role and its checksum/storage rules using documented fields and independent
+   fixtures. Refuse unqualified reserved/journal/resize/quota/orphan profiles.
+3. **Make map and attribute policy explicit.** Verify current ordinary inode
+   checksums and identity, distinguish supported extent-backed files/directories,
+   fast versus block-backed symlinks, and storage-free special records. Refuse
+   unknown flag/type combinations, legacy/inline maps and external attributes
+   until their full storage interpretation is qualified. Check inline attribute
+   layouts or refuse them; they can encode references beyond `i_file_acl`.
+   Preserve the collector's independent depth-zero/one matrix rather than
+   treating its synthetic maximum depth as independent qualification.
+4. **Keep complete-builder gates separate.** This scan does not check block
+   allocation or all cross-group metadata roles. Allowing BLOCK_UNINIT here
+   does not qualify a block-allocation policy. Before publishing ownership,
+   combine fixed roles, every admitted inode's complete storage claims and
+   allocation checks; reject all conflicts under shared read/work/claim and
+   peak-capacity budgets. Charge retained inventory capacity together with
+   role/tree output and scratch, not just populated IDs. No partial snapshot
+   may escape on an unknown role, limit, read or validation failure.
+
+The three saved other-inode alias failures remain unresolved. Complete snapshot
+construction, transaction overlay/invalidation, operation guard, commit failure
+handling and public write activation remain separate checkpoints. The next
+bounded implementation is a private verified current inode-role classifier,
+with independent role controls; do not wire it into insertion admission yet.
+
 ### Private bounded allocated-inode inventory — 2026-10-14
+
+Follow-up: source `4309ed1` passed focused Linux allocation/insertion/FIEMAP;
+the implementation/evidence review above supersedes this section's pending
+focused status and review task. Full CI status is maintained in `extprogress.md`.
 
 Following the collector/resource review at `7825062`, the new private
 `inode_inventory::collect` enumerates all current set inode bits, including
