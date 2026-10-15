@@ -69,7 +69,111 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Inode-role implementation and evidence review — 2026-10-15
+
+Reviewed `ef1ca24d89a2b38a0e3a035c63466628bf3daceb`, its complete private
+reader, seventeen controls, VM fixture and focused workflow. Both exact-commit
+[focused Linux validation](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38691730821)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38691730797)
+passed, including both VM suites and the aggregate gate. The preceding review
+`d650d8e` also passed full CI. Downloaded the actual focused artifact and read
+the role/inventory/insertion/FIEMAP logs plus six role images/command files/reports.
+The new role test executed once, zero failed/ignored (41 lines / 4,671 bytes).
+Inventory, insertion and FIEMAP each executed once, zero failed/ignored (33 lines /
+3,357 bytes; 133 lines / 7,954 bytes; 23 lines / 1,601 bytes respectively).
+
+Each role image contains 37 allocated records and exactly one saved type/sector
+answer per record: **222 records across six profiles**. A public-format raw audit
+also matched command IDs to bitmap allocations and sector fields to the reports.
+
+| Block size | Descriptor bytes | Journal | Inactive reserved | Ordinary regular | Journal records | Directories / symlinks / FIFO |
+|---|---|---|---|---|---|---|
+| 1 KiB | 32 | No | 9 | 22 | 0 | 3 / 2 / 1 |
+| 1 KiB | 64 | No | 9 | 22 | 0 | 3 / 2 / 1 |
+| 1 KiB | 64 | Internal | 8 | 22 | 1 | 3 / 2 / 1 |
+| 4 KiB | 32 | No | 9 | 22 | 0 | 3 / 2 / 1 |
+| 4 KiB | 64 | No | 9 | 22 | 0 | 3 / 2 / 1 |
+| 4 KiB | 64 | Internal | 8 | 22 | 1 | 3 / 2 / 1 |
+
+Inactive reserved records have zero extra-section size and low-only checksums;
+the remaining records have 32-byte extra sections/full checksums. Short symlinks
+contain eight bytes with zero sectors. Long symlinks contain 100 bytes with a
+depth-zero map and 2/8 sectors respectively. Each sparse external-map file has
+depth one and 34/136 sectors, accounting for 16 data blocks plus one map block.
+Internal journals are inode 8 with depth-zero maps: 1 MiB/2,048 sectors at 1 KiB,
+and 4 MiB/8,192 sectors at 4 KiB. These are observations of independently checked
+small images, not performance measurements or a general journal/layout matrix.
+
+**Decision:** no implementation blocker found within this standalone role
+reader's narrow profile and same-view inventory/trusted-mount preconditions.
+No production fix or new test is needed for this review. The reader may serve
+as a private interpretation component in a later complete builder. It does not
+establish allocation, complete map validity, exclusive ownership or an epoch.
+The three saved cross-inode alias failures remain unresolved.
+
+The source review checked that validated 256-byte inode geometry bounds body
+slices, supported block sizes bound scratch arithmetic, and table addresses are
+checked before fetches. Staged blocks must have exactly one block's length.
+Parsing follows fixed fields only; the fixed checksum copy clears precisely the
+slots present under the admitted extra-section policy and salts with inode and
+generation. No checksum-verified pointer is followed by this component. Attribute,
+fragment, flag, type and unused-byte refusals precede a storage-free outcome;
+reserved/fast-symlink/FIFO records cannot silently discard nonzero storage fields.
+Shared record/fetch counters charge before the respective work, including errors,
+and only the private scratch/counters change. Returned records allocate no heap.
+
+#### Requirements carried into complete ownership construction
+
+1. **Prove coverage and a single view.** The reader neither validates allocation
+   nor prevents reuse of an old census. Establish current inventory/descriptor
+   identity in one stable epoch, visit every allocated ID once, retain zero-link
+   records and require the root/declared journal outcomes. Unknown roles or any
+   partial failure discard the whole construction. Rust borrows alone do not
+   exclude external writes through retained device handles or commit/replay.
+   Establish cache coherence/exclusive access or an explicit invalidating refresh;
+   pausing outside writes afterward does not refresh previously cached blocks.
+2. **Complete every storage interpretation.** An admitted extent header is not
+   a verified tree. Run the complete collector in the same view for every
+   extent-backed role, including unwritten/beyond-EOF ranges and every map node;
+   check allocation and sector accounting before publication. Keep journal claims
+   typed and counted once, distinct from fixed layout metadata. Preserve depths
+   zero/one and the narrower journal profile; do not extend them from synthetic
+   depth tests. Attributes, resize/quota/orphan layouts, devices/sockets and
+   unknown flags remain refused until their complete interpretation is qualified.
+3. **Charge coexistence, not only scratch.** The reader's reusable block plus
+   checksum copy is only metadata scratch. Charge retained inventory capacity,
+   this buffer, typed owner/claim arenas, transient tree capacity, dependencies,
+   sorting/overlap work and device/cache exclusions explicitly. Every primitive's
+   limits are local; budget their sums/peaks across the whole builder. Repeated
+   table fetches remain charged even when cached. No card-wide defaults or
+   per-insertion full scan is qualified by these tests.
+4. **Keep independent evidence scoped.** The six profiles qualify these observed
+   role/extra/map shapes, not every permitted feature-bit combination. Allocated
+   zero-link bodies, malformed/unknown-role refusals and staged edits remain
+   synthetic controls. A later snapshot needs its own independent whole-result
+   evidence; successful role/type and sector-field comparisons do not prove that
+   all returned physical ranges are allocated, disjoint or correctly owned.
+
+The next bounded component is a **private bounded current fixed-metadata interval
+collector**, before a complete builder. The existing mounted boolean refusal
+helper does not return a complete bounded role inventory. Enumerate all protected
+boot/primary/backup superblock and descriptor/reserved-descriptor ranges, every
+group's bitmap locations and full inode-table spans using the current validated
+layout. Handle FLEX_BG cross-group placement and complete bounds/overlap checks;
+use explicit group/read/range/scratch limits and fail without partial publication.
+Represent boot/superblock bytes sharing one physical block as one protection
+range; do not let interval insertion conceal a conflicting metadata location.
+Keep the journal in its separate inode-role/extent path, avoiding duplicate claims.
+Require staged checksum/layout/size controls, tiny-limit and unchanged-state
+controls, plus independent VM metadata-location reports. Block-allocation policy,
+the complete owner join, operation guard/overlay/dependencies, sealing/publication
+and invalidation/commit failures remain later gates. Do not connect admission yet.
+
 ### Private verified current inode-role reader — 2026-10-15
+
+Follow-up: source `ef1ca24` passed focused Linux and full CI. The implementation/
+evidence review above supersedes this section's pending CI status and review task;
+it adds no complete snapshot, lifecycle or write activation.
 
 The next private component after the inventory review is now implemented in
 `inode_roles`. `Reader` requires a successful current inventory and only its
