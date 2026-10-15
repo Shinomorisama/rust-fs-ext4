@@ -35,6 +35,9 @@ pub mod extent_mut;
 pub mod features;
 pub mod file_io;
 pub mod file_mut;
+// Private layout prerequisite; not connected to write admission.
+#[allow(dead_code)]
+pub(crate) mod fixed_metadata;
 pub mod fs;
 pub mod fs_core_bridge;
 pub mod fsck;

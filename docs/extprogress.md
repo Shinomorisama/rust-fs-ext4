@@ -56,6 +56,14 @@ permission to relax write gates, modify siblings or push to `main`.
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
+- Latest fixed-metadata checkpoint: a private bounded collector now validates
+  current primary superblock/descriptors and returns physically sorted disjoint
+  boot, superblock/descriptor/reserved-GDT, bitmap and full inode-table ranges.
+  It covers backups and FLEX_BG placement, preserves uninitialized reservations,
+  refuses relocations/unknown layouts/overlaps, and has explicit aggregate limits.
+  All 17 focused controls and 921 full unit tests pass; new-source independent
+  VM/full CI is pending.
+  No admission or public write gate is connected or relaxed.
 - Latest role review: `ef1ca24` passed exact-commit focused Linux and full CI.
   Downloaded and inspected six role images/reports (222 records), plus current
   insertion/inventory/FIEMAP logs. No blocker was found within the narrow private
@@ -146,12 +154,11 @@ permission to relax write gates, modify siblings or push to `main`.
   independent CI is separate from those preceding successful runs.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Local validation: **904 unit tests pass**. The role implementation retained
-  all 887 baseline occurrences and added 17 controls; this documentation review
-  retains every occurrence of its fresh 904-test baseline with no additions or
-  losses. Previous inventory/collector/staged controls, casefold tests and journal
-  refusals remain retained. Fresh lint passes. The identical source's locked
-  release CLI build/install and exact-commit CI CLI job already passed.
+- Local validation: **921 unit tests pass**, retaining all 904 fresh baseline
+  occurrences and adding exactly 17 fixed-metadata controls (multiset comparison).
+  All 17 focused controls pass. Previous role/inventory/collector/staged controls,
+  casefold tests and journal refusals remain retained. Fresh lint and the locked
+  release CLI build/install pass.
   Source `4309ed1` passed focused Linux allocation/insertion/FIEMAP/full CI.
   Role source `ef1ca24` also passed focused Linux/full CI; its implementation
   review is complete within the standalone profile. This review's fresh local
@@ -251,6 +258,10 @@ permission to relax write gates, modify siblings or push to `main`.
   block sizes (23 lines / 1,601 bytes). All have zero failed/ignored. Saved
   type/sector reports cover all 37 allocated records in each role image,
   including reserved slots and the declared journal: 222 records in total.
+- Role review `c1afa4771014233363a0978ddeb572f894c6a4f5` passed exact-commit
+  [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38705064937),
+  including both VM suites and the aggregate gate. That documentation-only
+  review did not qualify the new fixed-metadata source implemented below.
 - Previous checkpoint `a7db076`: [focused Linux insertion and fixture evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444906) **passed**. Its insertion step executed exactly one test covering four Linux profiles (133 log lines, 7,954 bytes). [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38131444887) also **passed**, confirmed in the final pre-push check. The mapping fix subsequently passed the focused Stage 0 workflow (38134122031). Full CI at the mapping fix (38134122021) and the earlier handoff commit (38134210737) failed; that unit artifact confirms all 796 tests passed and the log exceeded its line budget by two lines. See the access follow-up below.
 - Working tree clean at verification; the checkpoint is pushed to the fork.
 - The required core pin remains `v0.3.0`
@@ -259,7 +270,118 @@ permission to relax write gates, modify siblings or push to `main`.
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
 
+## Private bounded current fixed-metadata checkpoint — 2026-10-15
+
+Started at `c1afa4771014233363a0978ddeb572f894c6a4f5`, equal to the fetched
+remote tip with a clean tree. The fresh baseline passed **904 unit tests**, zero
+failed/ignored. The preceding role source and its review passed exact-commit
+focused Linux/full CI as recorded above. Existing Git/API bindings report pull/
+push access. The existing onboarding setup is reused without a configuration
+draft/publication, credential, sibling, dependency/pin/lock or write-gate change.
+
+Three refusal controls first failed on acceptance through the existing mounted
+boolean metadata helper: bad current descriptor checksum, checksum-valid changed
+superblock and cross-group fixed-role overlap. A healthy inode-table control
+passed (four executed, three failed, one passed, zero ignored). The same original
+assertions now pass through `fixed_metadata::collect`; the existing boolean helper
+is unchanged. The expanded cross-group case permits FLEX_BG before requiring an
+explicit overlap error, rather than passing on a same-group placement refusal.
+
+The red log is 37 lines / 1,638 bytes. The original four pass after the new
+component; the expanded focused run passes 17 (25 lines / 1,734 bytes).
+
+The new private collector verifies the current primary superblock and all
+primary descriptors under a trusted mount and stable device/buffer view. It
+preserves the existing narrow identity rules: free-counter-only superblock
+changes and descriptor counters/checksums/known flags may change, while metadata
+addresses stay mounted. Bad CRCs, malformed staged block sizes, pending-flag/group
+disagreements, unknown flags and unqualified layout features refuse. Its initial
+profile supports metadata checksums, 1 KiB/4 KiB blocks, 32/64-byte descriptors,
+Linux creator fields and explicit feature allowlists; META_BG/bigalloc refuse.
+
+Output ranges protect boot space, primary/backup superblocks, all primary/backup
+descriptor blocks, declared reserved-GDT blocks, every group's block/inode bitmap
+locations and its full declared inode table. Dense, classic sparse and sparse-
+super2 backup selection is explicit. Primary block zero at 4 KiB includes boot
+bytes in its superblock protection range; 1 KiB has a separate boot block. Bad
+backup IDs/duplicates, truncated group heads, out-of-range metadata and overlapping
+fixed roles across any groups refuse. FLEX_BG may place metadata outside its own
+group, still within the filesystem; without it, own-group spans must fit. Partial
+final inode groups retain their entire declared table span, not only valid IDs.
+
+Backups are protected from verified primary geometry without trusting their
+possibly stale contents as current authorities. Known initialization flags never
+remove physical reservations. This collector reads no allocation bitmap contents,
+inode bodies or journal maps. Admitting a resize reservation or uninitialized
+location here does not qualify resize-inode ownership or the narrower inventory/
+role profile. The eventual builder must take the intersection of qualified
+profiles and keep journal storage on its typed inode/complete extent path once.
+
+One invocation-wide limit set bounds groups, logical fetches (staged/failing reads
+included), ranges and two-block scratch. Shared descriptor blocks are cached.
+Checked requested allocation bytes are `range_cap * size_of::<Range>() + 2 * bs`;
+fallible fixed reservations and in-place sorting prevent hidden vector growth.
+Retained capacity, allocator overhead/device cache and later tree/role/dependency
+storage still need aggregate peak accounting. Any error drops the whole local
+result and preserves dirty blocks/pending flags/device bytes; no epoch or owner
+snapshot is published, and no real-card resource default is qualified.
+
+Seventeen focused controls pass: the original four plus complete typed output,
+cross-group placement/full partial-group tables, exact/exhausted limits, malformed
+sizes, all address relocations, CRC/counter rules, aliases/bounds/overflow,
+unsupported profiles/geometry, known/unknown initialization flags and pending
+state, dense/sparse/sparse2/reserved heads, shared multi-block descriptors,
+invalid backups/truncated heads and read faults. Expanded synthetic positive
+fixtures initially exposed an accidental bitmap/table overlap and uncleared
+descriptor bytes; those fixtures were corrected. They remain synthetic controls,
+not e2fsck-clean filesystem claims. The source/resource self-review found no
+blocker within the standalone fixed-layout contract; follow-up review and new
+independent source qualification remain required.
+
+A new VM oracle prepares **14 profiles**: both block sizes/descriptor widths
+across dense, classic sparse with reserved GDT/FLEX_BG and sparse-super2/FLEX_BG,
+plus larger multi-descriptor profiles at both block sizes. It requires judged
+non-repairing e2fsck cleanliness and exact equality of all typed/grouped protected
+intervals with complete saved `dumpe2fs` location reports. It requires every group
+report and intended reserved/cross-group/multi-descriptor shapes. The focused
+workflow adds an exact test filter, one-test floor and retained images/reports/log.
+It is compiled but unrun locally; there is no local KVM, host mount or host
+e2fsprogs invocation. Exact-commit VM metadata/insertion/inventory/role/FIEMAP
+and full CI remain pending after push; preceding successes do not qualify it.
+
+Final-source full units pass **921 tests**, zero failed/ignored (1,169 lines /
+74,363 bytes within the unchanged 1,400-line/85,000-byte budget). Multiset
+comparison retains all 904 fresh baseline occurrences and adds exactly the 17
+fixed-metadata controls. Lint (fmt/clippy, provenance and Unicode checks),
+shared-agent and whitespace checks pass; the saved other-owner patch remains
+applicable. The locked release CLI build/install passes and stages all four tools
+under `tmp/cli/bin`. Ignored evidence is under
+`tmp/casefold-fixed-evidence`, including fresh baseline/red/focused/full logs,
+fixture-failure diagnosis, multiset comparison and final validated source hashes.
+The three saved other-inode ownership aliases remain unresolved; this collector
+does not join ordinary storage claims or validate current allocation. Production
+insertion, journal guard, inode inventory/roles, complete extent collector and
+feature gates are unchanged; only private preparation and its tests are added.
+
+**Next bounded task:** inspect this checkpoint's exact-commit VM location,
+insertion/inventory/role/FIEMAP and full CI first, resolving failures before
+broadening source. Review this collector's coverage, current-view, profile and
+resource contract before complete ownership construction. Combine fixed ranges,
+typed inode roles and complete tree claims only with verified current allocation,
+all cross-owner conflicts and shared read/work/peak-capacity budgets. Preserve
+all baseline occurrences, saved owner failures/control and operation-wide guard,
+overlay/dependency/sealing/invalidation/commit-failure requirements. Do not wire
+admission or scan every file on each insertion. Keep every write gate intact.
+
+Stage 5 completion remains **not yet quantified**. Public casefold writes, deeper
+insertion, collisions, splitting/growth and index dropping remain blocked.
+Windows/SteamOS/real-card use and large-card performance remain unqualified.
+
 ## Inode-role implementation/evidence review checkpoint — 2026-10-15
+
+Follow-up: the review landed at `c1afa47` and its exact-commit full CI passed.
+The private fixed-metadata component above supersedes its next implementation
+task; new-source independent CI and a complete ownership snapshot remain separate.
 
 Reviewed `ef1ca24d89a2b38a0e3a035c63466628bf3daceb`, equal to the fetched
 remote tip with a clean tree. Its exact-commit focused Linux and full CI passed;
@@ -1919,13 +2041,13 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 focused controls, passes 904 local units and exact-commit Linux role/inventory/insertion/FIEMAP/full CI. Its implementation/evidence review found no blocker within the narrow standalone profile. A private current fixed-metadata interval collector is next before a complete bounded snapshot; admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete. The new private fixed-metadata collector adds 17 focused controls for current layout, backup/cross-group ranges, overlap/bounds and resources; new-source VM/full CI is pending. A complete bounded ownership snapshot remains to be built; admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. Implement the private bounded current fixed-metadata interval collector under the completed role review's contract, with independent VM metadata-location evidence. The role and inventory sources passed exact-commit focused Linux/full CI; complete ownership construction, current allocation and lifecycle integration remain separate and no admission is connected. The journal guard already passed exact-commit focused Linux and full CI. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
+1. Inspect the fixed-metadata collector's exact-commit VM location and other focused/full CI, then review its coverage/current-view/profile/resource contract before complete ownership construction with current allocation under aggregate budgets. The preceding role and inventory sources passed exact-commit focused Linux/full CI; lifecycle and admission integration remain separate. The journal guard already passed exact-commit focused Linux and full CI. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
@@ -2021,15 +2143,16 @@ The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_
 
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
-**Next bounded task:** use the latest 2026-10-15 inode-role review checkpoint above.
+**Next bounded task:** use the latest 2026-10-15 fixed-metadata checkpoint above.
 The journal guard's exact-commit focused Linux and full CI passed. The bounded
 transaction-current ownership design review and first private complete collector
 are recorded above. The collector's exact-commit insertion/FIEMAP and full CI
 passed, and its implementation/resource review is complete. The private bounded
 allocated-inode inventory passed focused Linux/full CI and its implementation
 review above. The private role reader passed exact-commit Linux/full CI and its
-implementation review. Build the bounded current fixed-metadata interval component
-before a complete owner snapshot. Keep it disconnected from
+implementation review. The private fixed-metadata interval component is now
+implemented; inspect its exact-commit CI and review it before a complete owner
+snapshot with verified current allocation. Keep it disconnected from
 insertion admission and retain all baseline occurrences/unchanged-state checks.
 The three other-inode aliases and disjoint control remain in the saved patch,
 unresolved. Complete directory mapping shape, snapshot/overlay integration,
@@ -2064,6 +2187,6 @@ Committed documentation: `docs/CASEFOLD-BEHAVIOR.md`, `docs/CASEFOLD-STAGE0.md`,
 
 The original detailed plan is `/workspace/casefold-implementation-plan.md`, outside the repository. Its baseline findings and future-tense descriptions are historical; use this note and verified code/CI state for current progress. In particular, do not infer a safe malformed-name fallback from that old plan: later observations led to the current refusal policy. This note contains the continuation essentials even if that original file is unavailable.
 
-Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion and full CI; the allocation review at `065f9a8` passed full CI. The current-allocation guard at `96b3b72` passed focused Linux and full CI; its insertion log was inspected. The ownership review retains three unresolved other-inode aliases in a self-contained patch. The scoped journal guard at `f9a0df0` passed exact-commit focused Linux/full CI; its actual insertion log was inspected. The owner-design review reran the three other-inode failures. The subsequent private bounded complete extent-ownership collector at `7bdfe0c` passed exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review records the independent depth-zero/one matrix and aggregate-budget/capacity requirements. The private inode inventory at `4309ed1` adds 15 local controls without admission integration and passed exact-commit focused Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private role reader at `ef1ca24` has 17 focused controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete within the narrow profile. A bounded current fixed-metadata interval collector is next before a complete snapshot and lifecycle integration. No claim is made here that a separate coverage workflow ran at the latest commit.
+Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion and full CI; the allocation review at `065f9a8` passed full CI. The current-allocation guard at `96b3b72` passed focused Linux and full CI; its insertion log was inspected. The ownership review retains three unresolved other-inode aliases in a self-contained patch. The scoped journal guard at `f9a0df0` passed exact-commit focused Linux/full CI; its actual insertion log was inspected. The owner-design review reran the three other-inode failures. The subsequent private bounded complete extent-ownership collector at `7bdfe0c` passed exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review records the independent depth-zero/one matrix and aggregate-budget/capacity requirements. The private inode inventory at `4309ed1` adds 15 local controls without admission integration and passed exact-commit focused Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private role reader at `ef1ca24` has 17 focused controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete within the narrow profile. The private fixed-metadata collector now adds 17 focused controls, with new-source VM/full CI pending. A complete snapshot with current allocation and lifecycle integration remains open. No claim is made here that a separate coverage workflow ran at the latest commit.
 
 This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. Verify the selected commit against its own CI; earlier successful runs are evidence for those earlier checkpoints. Update this handoff as implementation checkpoints are completed.

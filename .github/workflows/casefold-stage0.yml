@@ -11,6 +11,7 @@ on:
       - src/extent/**
       - src/inode_inventory.rs
       - src/inode_roles.rs
+      - src/fixed_metadata.rs
       - src/lib.rs
       - tests/inode_inventory_guest.py
       - tests/inode_roles_guest.py
@@ -82,6 +83,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:inode-roles casefold-inode-roles 1050 65000 -- scripts/test.sh --locked --release --lib inode_roles::needs_host::linux_roles_match_every_allocated_debugfs_record -- --exact --show-output
           bash scripts/core.sh test-floor casefold-inode-roles 1
+      - name: Compare complete fixed metadata ranges with Linux locations
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/fixed-metadata
+        run: |
+          scripts/tier.sh casefold:fixed-metadata casefold-fixed-metadata 1050 65000 -- scripts/test.sh --locked --release --lib fixed_metadata::needs_host::linux_locations_match_complete_fixed_metadata_ranges -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-fixed-metadata 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -98,5 +105,7 @@ jobs:
             tmp/inode-inventory/
             tmp/logs/casefold-inode-roles.log
             tmp/inode-roles/
+            tmp/logs/casefold-fixed-metadata.log
+            tmp/fixed-metadata/
           if-no-files-found: error
           retention-days: 30

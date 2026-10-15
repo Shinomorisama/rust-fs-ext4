@@ -13,6 +13,10 @@
 
 ### Added
 
+- A private bounded fixed-metadata collector validates the current primary
+  layout and returns disjoint boot, superblock/descriptor, bitmap and inode-table
+  protection ranges, including backups and cross-group placement. Ownership
+  construction and public casefold write admission remain separate.
 - A private bounded current inode-role reader distinguishes qualified reserved,
   root, journal, file, directory, symlink and FIFO records after a same-view
   allocation inventory. Unknown storage/attribute profiles refuse; complete

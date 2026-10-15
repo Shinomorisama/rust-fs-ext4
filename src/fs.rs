@@ -9407,6 +9407,452 @@ mod tests {
         assert_eq!(*dev.bytes.lock().unwrap(), bytes);
     }
 
+    // The mounted boolean helper has no current-state or complete-role proof.
+    fn fixed_probe(fs: &Filesystem, buf: &BlockBuffer, block: u64) -> Result<bool> {
+        crate::fixed_metadata::collect(fs, buf, fixed_limits(fs)).map(|layout| {
+            layout
+                .ranges
+                .iter()
+                .any(|range| range.start <= block && block < range.end)
+        })
+    }
+
+    fn fixed_limits(fs: &Filesystem) -> crate::fixed_metadata::Limits {
+        crate::fixed_metadata::Limits {
+            groups: fs.groups.len() as u64,
+            reads: 1 + fs.groups.len() as u64,
+            ranges: 64,
+            scratch_bytes: 2 * BS as usize,
+        }
+    }
+
+    fn fixed_refused(dev: &MemDev, fs: &Filesystem, buf: &BlockBuffer) {
+        let dirty = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        assert!(
+            fixed_probe(fs, buf, fs.groups[0].inode_table).is_err(),
+            "unqualified fixed metadata accepted"
+        );
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_bad_current_descriptor() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let (block, at) = fs.sb.descriptor_location(0);
+        buf.get_mut(&fs, block).unwrap()[at + 0x1e] ^= 1;
+        fixed_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_changed_current_superblock() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let raw = buf.get_mut(&fs, 0).unwrap();
+        raw[1024 + 0x88] ^= 1;
+        let crc = crate::checksum::linux_crc32c(!0, &raw[1024..1024 + 0x3fc]);
+        raw[1024 + 0x3fc..2048].copy_from_slice(&crc.to_le_bytes());
+        fixed_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_cross_group_role_overlap() {
+        let (dev, mut fs, mut buf) = inventory_two_groups();
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            let flags = u32::from_le_bytes(raw[0x60..0x64].try_into().unwrap());
+            raw[0x60..0x64]
+                .copy_from_slice(&(flags | features::Incompat::FLEX_BG.bits()).to_le_bytes());
+        });
+        fs.groups[1].inode_table = fs.groups[0].inode_table;
+        let (block, at) = fs.sb.descriptor_location(1);
+        buf.get_mut(&fs, block).unwrap()[at + 8..at + 12]
+            .copy_from_slice(&(fs.groups[0].inode_table as u32).to_le_bytes());
+        fs.buffer_patch_bgd_counters(&mut buf, 1, 0, 0, 0).unwrap();
+        fixed_refused(&dev, &fs, &buf);
+        assert!(matches!(
+            crate::fixed_metadata::collect(&fs, &buf, fixed_limits(&fs)),
+            Err(Error::Corrupt("fixed metadata role overlap"))
+        ));
+    }
+
+    #[test]
+    fn fixed_metadata_healthy_inode_table_is_protected() {
+        let (_, fs) = mount_casefold_planning_fixture();
+        assert!(fixed_probe(&fs, &BlockBuffer::new(BS), fs.groups[0].inode_table).unwrap());
+    }
+
+    fn fixed_edit_sb(fs: &mut Filesystem, buf: &mut BlockBuffer, edit: impl FnOnce(&mut [u8])) {
+        let mut raw = fs.sb.raw.clone();
+        edit(&mut raw);
+        let crc = crate::checksum::linux_crc32c(!0, &raw[..0x3fc]);
+        raw[0x3fc..].copy_from_slice(&crc.to_le_bytes());
+        fs.sb = Superblock::parse(raw).unwrap();
+        buf.get_mut(fs, 0).unwrap()[1024..2048].copy_from_slice(&fs.sb.raw);
+    }
+
+    fn fixed_pointer(
+        fs: &mut Filesystem,
+        buf: &mut BlockBuffer,
+        group: usize,
+        field: usize,
+        address: u64,
+    ) {
+        match field {
+            0 => fs.groups[group].block_bitmap = address,
+            1 => fs.groups[group].inode_bitmap = address,
+            _ => fs.groups[group].inode_table = address,
+        }
+        let (block, at) = fs.sb.descriptor_location(group as u64);
+        let raw = buf.get_mut(fs, block).unwrap();
+        raw[at + 4 * field..at + 4 * field + 4].copy_from_slice(&(address as u32).to_le_bytes());
+        raw[at + 32 + 4 * field..at + 36 + 4 * field]
+            .copy_from_slice(&((address >> 32) as u32).to_le_bytes());
+        fs.buffer_patch_bgd_counters(buf, group, 0, 0, 0).unwrap();
+    }
+
+    // Synthetic primary layouts, not Linux-clean image claims. Small groups
+    // exercise backups and descriptor boundaries without payload allocations.
+    fn fixed_groups(many: bool) -> (std::sync::Arc<MemDev>, Filesystem, BlockBuffer) {
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let bpg = if many { 120u32 } else { 1024 };
+        let groups = fs.sb.blocks_count.div_ceil(u64::from(bpg)) as u32;
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            raw[..4].copy_from_slice(&(groups * 16).to_le_bytes());
+            raw[0x20..0x24].copy_from_slice(&bpg.to_le_bytes());
+            raw[0x28..0x2c].copy_from_slice(&16u32.to_le_bytes());
+        });
+        let template = fs.groups[0];
+        fs.groups = vec![template; groups as usize];
+        for group in 0..groups as usize {
+            let start = group as u64 * u64::from(bpg);
+            let (block, at) = fs.sb.descriptor_location(group as u64);
+            buf.get_mut(&fs, block).unwrap()[at..at + 64].fill(0);
+            for (field, delta) in [(0, 8), (1, 9), (2, 16)] {
+                fixed_pointer(&mut fs, &mut buf, group, field, start + delta);
+            }
+        }
+        (dev, fs, buf)
+    }
+
+    #[test]
+    fn fixed_metadata_returns_complete_typed_disjoint_ranges() {
+        use crate::fixed_metadata::{collect, Role};
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let buf = BlockBuffer::new(BS);
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let layout = collect(&fs, &buf, fixed_limits(&fs)).unwrap();
+        assert_eq!(layout.ranges.len(), 5);
+        assert_eq!(layout.ranges[0].role, Role::Superblock);
+        assert_eq!((layout.ranges[0].start, layout.ranges[0].end), (0, 1));
+        for (role, start, length) in [
+            (Role::Descriptors, 1, 1),
+            (Role::BlockBitmap, fs.groups[0].block_bitmap, 1),
+            (Role::InodeBitmap, fs.groups[0].inode_bitmap, 1),
+            (
+                Role::InodeTable,
+                fs.groups[0].inode_table,
+                (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
+                    .div_ceil(u64::from(BS)),
+            ),
+        ] {
+            assert!(layout
+                .ranges
+                .iter()
+                .any(|r| r.role == role && r.start == start && r.end == start + length));
+        }
+        assert!(layout.ranges.windows(2).all(|r| r[0].end <= r[1].start));
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        assert!(buf.dirty.is_empty());
+    }
+
+    #[test]
+    fn fixed_metadata_covers_flex_placement_and_full_partial_group_table() {
+        use crate::fixed_metadata::{collect, Role};
+        let (_, mut fs, mut buf) = inventory_two_groups();
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            let flags = u32::from_le_bytes(raw[0x60..0x64].try_into().unwrap());
+            raw[0x60..0x64]
+                .copy_from_slice(&(flags | features::Incompat::FLEX_BG.bits()).to_le_bytes());
+        });
+        for (field, address) in [(0, 2048), (1, 2049), (2, 2050)] {
+            fixed_pointer(&mut fs, &mut buf, 1, field, address);
+        }
+        let ranges = collect(&fs, &buf, fixed_limits(&fs)).unwrap().ranges;
+        let table = ranges
+            .iter()
+            .find(|r| r.role == Role::InodeTable && r.group == 1)
+            .unwrap();
+        assert_eq!(table.start, 2050);
+        assert_eq!(
+            table.end - table.start,
+            (u64::from(fs.sb.inodes_per_group) * u64::from(fs.sb.inode_size))
+                .div_ceil(u64::from(BS))
+        );
+        assert!(table.end < 4096); // Group 1's full table lives in group 0.
+    }
+
+    #[test]
+    fn fixed_metadata_enforces_exact_and_exhausted_aggregate_limits() {
+        use crate::fixed_metadata::{collect, Limits};
+        let (dev, fs, buf) = inventory_two_groups();
+        let exact = Limits {
+            reads: 2,
+            ranges: 10,
+            ..fixed_limits(&fs)
+        };
+        assert_eq!(collect(&fs, &buf, exact).unwrap().ranges.len(), 10);
+        for limits in [
+            Limits { groups: 1, ..exact },
+            Limits { reads: 1, ..exact },
+            Limits { reads: 0, ..exact },
+            Limits { ranges: 9, ..exact },
+            Limits { ranges: 0, ..exact },
+            Limits {
+                ranges: usize::MAX,
+                ..exact
+            },
+            Limits {
+                scratch_bytes: 2 * BS as usize - 1,
+                ..exact
+            },
+        ] {
+            let dirty = buf.dirty.clone();
+            let flags = buf.uninit_cleared.clone();
+            let bytes = dev.bytes.lock().unwrap().clone();
+            assert!(matches!(
+                collect(&fs, &buf, limits),
+                Err(Error::Unsupported("fixed metadata resource limit"))
+            ));
+            assert_eq!(buf.dirty, dirty);
+            assert_eq!(buf.uninit_cleared, flags);
+            assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_malformed_current_block_sizes() {
+        for block in [0, 1] {
+            for length in [BS as usize - 1, BS as usize + 1] {
+                let (dev, fs) = mount_casefold_planning_fixture();
+                let mut buf = BlockBuffer::new(BS);
+                buf.put(block, vec![0; length]);
+                fixed_refused(&dev, &fs, &buf);
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_all_current_pointer_relocations() {
+        for field in 0..3 {
+            let (dev, fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            let (block, at) = fs.sb.descriptor_location(0);
+            buf.get_mut(&fs, block).unwrap()[at + field * 4..at + field * 4 + 4]
+                .copy_from_slice(&512u32.to_le_bytes());
+            fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+            fixed_refused(&dev, &fs, &buf);
+        }
+    }
+
+    #[test]
+    fn fixed_metadata_checks_superblock_crc_but_allows_free_counters() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let before = crate::fixed_metadata::collect(&fs, &buf, fixed_limits(&fs))
+            .unwrap()
+            .ranges;
+        fs.buffer_patch_sb_counters(&mut buf, -1, -1).unwrap();
+        assert_eq!(
+            crate::fixed_metadata::collect(&fs, &buf, fixed_limits(&fs))
+                .unwrap()
+                .ranges,
+            before
+        );
+        buf.get_mut(&fs, 0).unwrap()[1024 + 0x88] ^= 1;
+        fixed_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_aliases_and_invalid_table_spans() {
+        for address in [
+            0,
+            1,
+            2,
+            3,
+            VOL / u64::from(BS),
+            VOL / u64::from(BS) - 1,
+            u64::MAX,
+        ] {
+            let (dev, mut fs) = mount_casefold_planning_fixture();
+            let mut buf = BlockBuffer::new(BS);
+            fixed_pointer(&mut fs, &mut buf, 0, 2, address);
+            fixed_refused(&dev, &fs, &buf);
+        }
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let address = fs.groups[0].inode_bitmap;
+        fixed_pointer(&mut fs, &mut buf, 0, 0, address);
+        fixed_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn fixed_metadata_refuses_unqualified_profiles_and_group_geometry() {
+        for case in 0..12 {
+            let (dev, mut fs) = mount_casefold_planning_fixture();
+            let buf = BlockBuffer::new(BS);
+            match case {
+                0 => fs.sb.feature_incompat |= features::Incompat::META_BG.bits(),
+                1 => fs.sb.feature_ro_compat |= features::RoCompat::BIGALLOC.bits(),
+                2 => fs.sb.feature_compat |= 0x80000000,
+                3 => fs.sb.inode_size = 0,
+                4 => fs.sb.blocks_per_group = 0,
+                5 => fs.sb.inodes_per_group = 0,
+                6 => fs.sb.inodes_count = 0,
+                7 => fs.sb.inodes_count += fs.sb.inodes_per_group,
+                8 => fs.csum.enabled = false,
+                9 => fs.sb.desc_size = 128,
+                10 => fs.sb.first_data_block = 1,
+                _ => fs.sb.reserved_gdt_blocks = 1,
+            }
+            fixed_refused(&dev, &fs, &buf);
+        }
+    }
+
+    #[test]
+    fn fixed_metadata_preserves_uninitialized_reservations_and_checks_pending_flags() {
+        let (dev, fs) = mount_casefold_planning_fixture();
+        let mut buf = BlockBuffer::new(BS);
+        let expected = crate::fixed_metadata::collect(&fs, &buf, fixed_limits(&fs))
+            .unwrap()
+            .ranges;
+        let (block, at) = fs.sb.descriptor_location(0);
+        let flags = bgd::BgdFlags::all().bits();
+        buf.get_mut(&fs, block).unwrap()[at + 0x12..at + 0x14]
+            .copy_from_slice(&flags.to_le_bytes());
+        fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+        buf.uninit_cleared.insert(0, flags);
+        assert_eq!(
+            crate::fixed_metadata::collect(&fs, &buf, fixed_limits(&fs))
+                .unwrap()
+                .ranges,
+            expected
+        );
+        buf.uninit_cleared.insert(0, flags ^ 1);
+        fixed_refused(&dev, &fs, &buf);
+        buf.uninit_cleared.clear();
+        buf.uninit_cleared.insert(1, flags);
+        fixed_refused(&dev, &fs, &buf);
+        buf.uninit_cleared.clear();
+        buf.get_mut(&fs, block).unwrap()[at + 0x13] |= 0x80;
+        fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+        fixed_refused(&dev, &fs, &buf);
+    }
+
+    #[test]
+    fn fixed_metadata_covers_dense_sparse_and_sparse2_reserved_heads() {
+        use crate::fixed_metadata::{collect, Role};
+        for mode in 0..3 {
+            let (_, mut fs, mut buf) = fixed_groups(false);
+            fixed_edit_sb(&mut fs, &mut buf, |raw| {
+                raw[0x5c..0x60]
+                    .copy_from_slice(&features::Compat::RESIZE_INODE.bits().to_le_bytes());
+                raw[0xce..0xd0].copy_from_slice(&2u16.to_le_bytes());
+                if mode == 0 {
+                    raw[0x64..0x68]
+                        .copy_from_slice(&features::RoCompat::METADATA_CSUM.bits().to_le_bytes());
+                }
+                if mode == 2 {
+                    raw[0x5c..0x60].copy_from_slice(
+                        &(features::Compat::RESIZE_INODE | features::Compat::SPARSE_SUPER2)
+                            .bits()
+                            .to_le_bytes(),
+                    );
+                    raw[0x24c..0x250].copy_from_slice(&1u32.to_le_bytes());
+                    raw[0x250..0x254].copy_from_slice(&7u32.to_le_bytes());
+                }
+            });
+            let layout = collect(&fs, &buf, fixed_limits(&fs)).unwrap();
+            let expected: Vec<u32> = match mode {
+                0 => (0..8).collect(),
+                1 => vec![0, 1, 3, 5, 7],
+                _ => vec![0, 1, 7],
+            };
+            for role in [
+                Role::Superblock,
+                Role::Descriptors,
+                Role::ReservedDescriptors,
+            ] {
+                assert_eq!(
+                    layout
+                        .ranges
+                        .iter()
+                        .filter(|r| r.role == role)
+                        .map(|r| r.group)
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_metadata_reads_multiple_primary_descriptor_blocks_with_shared_budget() {
+        use crate::fixed_metadata::{collect, Limits};
+        let (_, fs, buf) = fixed_groups(true);
+        assert_eq!(fs.groups.len(), 69);
+        let exact = Limits {
+            reads: 3,
+            ranges: 512,
+            ..fixed_limits(&fs)
+        };
+        let layout = collect(&fs, &buf, exact).unwrap();
+        assert!(layout.ranges.len() > 69 * 3);
+        assert!(matches!(
+            collect(&fs, &buf, Limits { reads: 2, ..exact }),
+            Err(Error::Unsupported("fixed metadata resource limit"))
+        ));
+    }
+
+    #[test]
+    fn fixed_metadata_rejects_invalid_backup_groups_and_truncated_heads() {
+        let (dev, mut fs, mut buf) = fixed_groups(false);
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            raw[4..8].copy_from_slice(&7169u32.to_le_bytes());
+        });
+        fixed_refused(&dev, &fs, &buf);
+        for backups in [[1u32, 8], [1, 1], [0, 7]] {
+            let (dev, mut fs, mut buf) = fixed_groups(false);
+            fixed_edit_sb(&mut fs, &mut buf, |raw| {
+                raw[0x5c..0x60]
+                    .copy_from_slice(&features::Compat::SPARSE_SUPER2.bits().to_le_bytes());
+                raw[0x24c..0x250].copy_from_slice(&backups[0].to_le_bytes());
+                raw[0x250..0x254].copy_from_slice(&backups[1].to_le_bytes());
+            });
+            fixed_refused(&dev, &fs, &buf);
+        }
+    }
+
+    #[test]
+    fn fixed_metadata_propagates_read_errors_without_publication() {
+        struct FailedRead;
+        impl crate::block_io::BlockDevice for FailedRead {
+            fn read_at(&self, _: u64, _: &mut [u8]) -> Result<()> {
+                Err(std::io::Error::other("injected fixed metadata read error").into())
+            }
+            fn size_bytes(&self) -> u64 {
+                VOL
+            }
+        }
+        let (dev, mut fs) = mount_casefold_planning_fixture();
+        fs.dev = std::sync::Arc::new(FailedRead);
+        fixed_refused(&dev, &fs, &BlockBuffer::new(BS));
+    }
+
     // First exercised with the existing verified reader as an adapter. That
     // helper validates a body, not whether its storage role is qualified.
     fn role_read_for_test(fs: &Filesystem, buf: &BlockBuffer, ino: u32) -> Result<()> {

@@ -69,7 +69,86 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private bounded fixed-metadata interval collector — 2026-10-15
+
+The next component after the role review is implemented in `fixed_metadata`.
+It reads a current checksum-valid primary superblock and every current primary
+descriptor under one stable trusted device/buffer view. Superblock bytes match
+mounted contents except free counters; all three descriptor addresses preserve
+mounted locations. Descriptor checksums, unknown flags, pending initialization
+flags/group bounds and exact staged sizes are verified. The existing mounted
+boolean metadata helper is unchanged and no mutation path calls this collector.
+
+Its explicit feature/block/descriptor profile supports metadata checksums,
+1 KiB/4 KiB blocks, 32/64-byte descriptors and no META_BG/bigalloc. Unknown
+layout features and non-Linux creator profiles refuse. It enumerates one-block
+superblocks, complete primary/backup descriptor runs and declared reserved-GDT
+space according to dense, classic sparse or sparse-super2 placement. At 1 KiB
+the boot block is separate; at 4 KiB primary block zero protects both boot bytes
+and the superblock without a duplicate claim. Invalid sparse-super2 backup IDs,
+duplicates and group heads that exceed even a partial final group refuse.
+
+Every group's block/inode bitmap locations and full declared inode-table span
+are protected, including unused inode slots in a partial final inode group.
+FLEX_BG permits placement outside the owning group, but all ranges must fit the
+filesystem; without it each descriptor's ranges must fit its own group. Physical
+sorting rejects overlaps between any fixed roles, including cross-group tables,
+instead of allowing insertion to replace another role. Backups are protected
+from the verified primary geometry; their potentially stale contents are not
+used as current authorities or required to match current counters.
+
+Known INODE_UNINIT/BLOCK_UNINIT/ITABLE_ZEROED flags retain all physical
+reservations. This collector does not read bitmap contents, inode bodies or
+journal storage. Allowing these flags or resize-inode layout reservations here
+does not qualify the narrower inode inventory/role profile, allocation policy
+or resize inode ownership. A complete builder must use the intersection of its
+qualified component profiles and keep the typed journal/extent path counted once.
+
+One invocation-wide group limit bounds traversal; logical fetches (staged copies
+and failures included), output ranges and two-block scratch have explicit caps.
+Adjacent groups share the cached descriptor block. Checked allocation arithmetic
+covers `range_cap * size_of::<Range>() + 2 * block_size`; both vectors reserve
+fallibly and do not grow during traversal. Sorting uses bounded in-place
+`O(R log R)` work. Retained capacity, allocator overhead, device cache and later
+inventory/role/tree/dependency storage still need aggregate builder accounting.
+Any error drops the complete local result without changing buffer/device or
+publishing an epoch/snapshot; no card-wide resource defaults are qualified.
+
+Before implementation, three controls failed on acceptance through the mounted
+boolean helper: corrupt current descriptor, checksum-valid changed superblock,
+and overlapping current fixed roles across groups. A healthy table control
+passed. The same assertions now pass against the collector; the cross-group
+control explicitly permits FLEX_BG before requiring an overlap error. Seventeen
+focused controls cover complete typed/disjoint output, cross-group placement,
+full partial-group tables, shared/exhausted limits, malformed sizes, all pointer
+relocations, superblock CRC/counters, aliases/bounds/overflow, unknown profiles,
+initialization flags/pending state, three backup policies/reserved heads,
+multiple descriptor blocks, truncated heads and read errors. Synthetic positive
+fixtures were corrected when overlap and uncleared descriptor bytes were caught;
+they are not independently clean filesystem claims.
+
+A new independent VM oracle prepares 14 Linux-tool-created profiles: both block
+sizes/descriptor widths across dense, classic sparse with reserved GDT/FLEX_BG,
+and sparse-super2/FLEX_BG layouts, plus larger multi-descriptor profiles at each
+block size. It requires judged non-repairing e2fsck cleanliness and compares the
+entire typed/grouped interval list with saved `dumpe2fs` location reports. It
+requires every group report and the intended reserved, cross-group and extended
+descriptor shapes. The focused workflow enforces one executed test and saves
+images/reports/log. It is compiled but unrun locally; exact-commit CI is pending.
+
+The source/resource self-review found no blocker in this standalone fixed-layout
+contract. See `extprogress.md` for final validation. Current block allocation,
+all inode/extent owners, cross-owner conflicts and one coherent epoch remain
+unproved; the three saved other-inode alias failures remain unresolved. Inspect
+new CI and review this component before complete ownership construction, with
+aggregate budgets, dependency/overlay/guard/sealing and commit-failure contracts.
+Keep every existing operation/recovery/write gate; do not connect admission yet.
+
 ### Inode-role implementation and evidence review — 2026-10-15
+
+Follow-up: the private fixed-metadata collector above implements this review's
+next component. Its new source still needs its own independent CI and review;
+it does not implement the complete ownership join or lifecycle.
 
 Reviewed `ef1ca24d89a2b38a0e3a035c63466628bf3daceb`, its complete private
 reader, seventeen controls, VM fixture and focused workflow. Both exact-commit
