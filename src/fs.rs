@@ -3118,27 +3118,23 @@ impl Filesystem {
     /// Updates `i_ctime = now` and recomputes the inode checksum on csum-
     /// enabled mounts. Returns `Error::NotFound` if the path doesn't resolve,
     /// `Error::ReadOnly` on a RO mount.
+    /// Overlapping chmod calls on this mount refuse before callbacks. Other
+    /// operations and handle/device ownership still need caller serialization.
     pub fn apply_chmod(&self, path: &str, mode: u16) -> Result<()> {
         self.apply_chmod_bytes(path.as_bytes(), mode)
     }
 
     /// [`apply_chmod`](Self::apply_chmod) of a path given as bytes, never decoded.
     pub(crate) fn apply_chmod_bytes(&self, path: &[u8], mode: u16) -> Result<()> {
-        self.refuse_write()?;
-        let ino = self.resolve(path)?;
-        self.apply_chmod_ino(ino, mode)
+        self.guarded_chmod_bytes(path, mode)
     }
 
     /// [`apply_chmod`](Self::apply_chmod) on the inode `r` names.
     pub fn apply_chmod_ino(&self, r: impl Into<InodeRef>, mode: u16) -> Result<()> {
-        self.refuse_write()?;
-        let r = r.into();
-        let ino = r.ino;
-        let raw = self.plan_chmod(r, mode)?;
-        self.commit_inode_write(ino, &raw)
+        self.guarded_chmod_from(r, mode)
     }
 
-    /// Shared metadata semantics for legacy and private guarded chmod.
+    /// Shared inode metadata planning for public and private chmod.
     /// Reads/callbacks only; callers decide when to mark and commit.
     fn plan_chmod(&self, r: InodeRef, mode: u16) -> Result<Vec<u8>> {
         let ino = r.ino;

@@ -1,4 +1,4 @@
-//! Independent emitted-metadata evidence for the exact private adapter family.
+//! Independent emitted-metadata evidence for private and public chmod dispatch.
 use super::*;
 use crate::block_io::FileDevice;
 use fs_ext4_test_support::{assert_e2fsck_clean, guest_kernel_write, oracle};
@@ -17,10 +17,31 @@ impl crate::runtime::Runtime for Clock {
 
 #[test]
 fn linux_checks_private_chmod_metadata() {
+    check_profiles(Dispatch::Private);
+}
+
+#[test]
+fn linux_checks_public_chmod_metadata() {
+    check_profiles(Dispatch::Rust);
+    check_profiles(Dispatch::C);
+}
+
+#[derive(Clone, Copy)]
+enum Dispatch {
+    Private,
+    Rust,
+    C,
+}
+
+fn check_profiles(dispatch: Dispatch) {
+    let prefix = match dispatch {
+        Dispatch::Private => "private-chmod",
+        Dispatch::Rust => "public-rust-chmod",
+        Dispatch::C => "public-capi-chmod",
+    };
     for bs in [1024, 4096] {
         for journal in [false, true] {
-            let base =
-                fs_ext4_test_support::temp_dir().join(format!("private-chmod-{bs}-{journal}"));
+            let base = fs_ext4_test_support::temp_dir().join(format!("{prefix}-{bs}-{journal}"));
             let image = base.with_extension("img");
             let image_str = image.to_str().unwrap();
             std::fs::File::create(&image)
@@ -85,9 +106,64 @@ TIMES_PY
             let directory = fs.lookup_path_bytes(b"/directory").unwrap();
             let before_file = fs.read_inode_verified(file).unwrap().0;
             let before_dir = fs.read_inode_verified(directory).unwrap().0;
-            fs.guarded_chmod_bytes(b"/target", 0o16751).unwrap();
-            fs.guarded_chmod_ino(InodeRef::new(directory, before_dir.generation), 0o12750)
-                .unwrap();
+            let before_bytes = std::fs::read(&image).unwrap();
+            let fs = crate::capi::with_test_mount(fs, |handle, fs| {
+                match dispatch {
+                    Dispatch::Private => {
+                        fs.guarded_chmod_bytes(b"/target", 0o16751).unwrap();
+                        fs.guarded_chmod_ino(
+                            InodeRef::new(directory, before_dir.generation),
+                            0o12750,
+                        )
+                        .unwrap();
+                    }
+                    Dispatch::Rust => {
+                        let held = fs.chmod_operation().unwrap();
+                        assert!(matches!(
+                            fs.apply_chmod("/target", 0o777),
+                            Err(Error::Unsupported(_))
+                        ));
+                        assert!(matches!(
+                            fs.apply_chmod_ino(file, 0o777),
+                            Err(Error::Unsupported(_))
+                        ));
+                        assert_eq!(std::fs::read(&image).unwrap(), before_bytes);
+                        drop(held);
+                        fs.apply_chmod("/target", 0o16751).unwrap();
+                        fs.apply_chmod_ino(
+                            InodeRef::new(directory, before_dir.generation),
+                            0o12750,
+                        )
+                        .unwrap();
+                    }
+                    Dispatch::C => {
+                        use crate::capi::{fs_ext4_chmod, fs_ext4_chmod_ino, fs_ext4_last_errno};
+                        let path = std::ffi::CString::new("/target").unwrap();
+                        let held = fs.chmod_operation().unwrap();
+                        assert_eq!(unsafe { fs_ext4_chmod(handle, path.as_ptr(), 0o777) }, -1);
+                        assert_eq!(
+                            unsafe {
+                                fs_ext4_chmod_ino(handle, directory, before_dir.generation, 0o777)
+                            },
+                            -1
+                        );
+                        assert_eq!(std::fs::read(&image).unwrap(), before_bytes);
+                        drop(held);
+                        assert_eq!(unsafe { fs_ext4_chmod(handle, path.as_ptr(), 0o16751) }, 0);
+                        assert_eq!(fs_ext4_last_errno(), 0);
+                        assert_eq!(
+                            unsafe {
+                                fs_ext4_chmod_ino(handle, directory, before_dir.generation, 0o12750)
+                            },
+                            0
+                        );
+                        assert_eq!(fs_ext4_last_errno(), 0);
+                    }
+                }
+                let context = fs.chmod_operation().unwrap();
+                // Every actual dispatch traversed one marker and two commits.
+                assert_eq!(context.operation.status().epoch, 3);
+            });
             for (ino, before) in [(file, &before_file), (directory, &before_dir)] {
                 let after = fs.read_inode_verified(ino).unwrap().0;
                 assert_eq!(

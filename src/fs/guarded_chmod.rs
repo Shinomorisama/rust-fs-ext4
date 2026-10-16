@@ -1,4 +1,4 @@
-//! Private mount adapters; public delegates remain externally serialized.
+//! Mount-bound chmod dispatch; other families still need caller serialization.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,7 +44,6 @@ impl Drop for MountOperation<'_> {
     }
 }
 
-#[allow(dead_code)] // Deliberately private until independent evidence and review.
 impl Filesystem {
     fn chmod_operation(&self) -> Result<MountOperation<'_>> {
         if self.operation_failed.load(Ordering::SeqCst) {
@@ -82,9 +81,17 @@ impl Filesystem {
         self.chmod_bytes_in(&mut context, path, mode)
     }
 
+    #[allow(dead_code)] // Retained as a direct private-adapter control.
     pub(crate) fn guarded_chmod_ino(&self, r: InodeRef, mode: u16) -> Result<()> {
+        self.guarded_chmod_from(r, mode)
+    }
+
+    pub(super) fn guarded_chmod_from(&self, r: impl Into<InodeRef>, mode: u16) -> Result<()> {
         let mut context = self.chmod_operation()?;
-        self.chmod_ino_in(&mut context, r, mode)
+        // Into can run arbitrary caller code. Entry and verdict must precede it;
+        // conversion is planning, before any marker/effect is attempted.
+        self.write_refusal()?;
+        self.chmod_ino_in(&mut context, r.into(), mode)
     }
 
     fn chmod_bytes_in(
@@ -599,6 +606,8 @@ mod tests {
         let state = u16::from_le_bytes(bytes[1024 + 0x3a..1024 + 0x3c].try_into().unwrap());
         assert_ne!(state & crate::superblock::EXT4_VALID_FS, 0);
     }
+
+    mod public_calls;
 }
 
 #[cfg(test)]

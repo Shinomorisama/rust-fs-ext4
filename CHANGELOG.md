@@ -13,11 +13,15 @@
 
 ### Added
 
+- Public Rust and C chmod dispatch now shares one mount guard, refuses overlap
+  before callbacks or generic inode conversion, and preserves sticky failure
+  handling. Other operation families still need caller serialization; public
+  casefold writes remain blocked.
 - Private mount-bound path-byte/inode chmod adapters reuse one nonblocking
   context and retain existing mode, timestamp, checksum and write refusals.
   A sticky mount failure bridge covers marker/commit errors and unwinds, blocks
   subsequent writes/flushes and prevents a faulted close from claiming clean.
-  Public delegates remain externally serialized and casefold writes blocked.
+  Other operation families remain externally serialized and casefold writes blocked.
 - A private operation-control primitive refuses overlapping/reentrant entry,
   invalidates freshness before effects and faults reuse after uncertainty,
   poison or version exhaustion. It creates no ownership readiness or public

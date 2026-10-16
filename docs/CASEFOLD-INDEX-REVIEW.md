@@ -69,6 +69,58 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public chmod dispatch implementation checkpoint — 2026-10-16
+
+The reviewed private family now owns public Rust string/byte/inode chmod and
+the existing C path/inode delegates. Public signatures and production C ABI
+code are unchanged. Generic inode dispatch enters and checks volume verdicts
+before invoking `Into<InodeRef>`; conversion is planning before marker I/O.
+Path-to-inode helpers reuse one context, with no recursive public entry.
+Missing/stale refusals now precede marker writes. Shared metadata semantics,
+all write gates and the sticky marker/commit/unwind failure bridge remain.
+
+Three actual public-entry controls first failed with public writes/conversion
+accepted while a context was held; the same controls now pass. Expanded Rust/C
+controls cover conversion ordering/unwind, callback-worker reentry, byte paths,
+generation and metadata, pre-I/O refusal, every observed direct/journal marker/
+commit write and flush, caught Rust panics inside the C boundary, error reporting
+and subsequent refusal. Initial expanded C test inputs incorrectly used zero
+as an any-generation sentinel; they now use unchanged `FS_EXT4_GEN_ANY`, while
+strong-generation/stale checks remain. Full counts and validation are recorded
+in the matching `extprogress.md` checkpoint.
+The exported C unmount is exercised after a successful write and a caught Rust
+planning panic, with the dirty marker owed and ordinary commit flags healthy:
+no callback or clean restoration occurs. Test-only handle helpers add no ABI.
+There are eighteen new public controls, retaining all eighteen private controls;
+the complete baseline and final occurrence comparison is in `extprogress.md`.
+Full local units pass 1,012, zero failed/ignored, retaining every one of 994
+baseline occurrences as a Counter multiset and adding exactly those eighteen.
+The log is 1,260 lines / 82,671 bytes under unchanged caps. Fresh lint, locked
+release CLI build/install and saved insertion-red patch applicability pass.
+
+New exact oracle
+`fs::guarded_chmod::needs_host::linux_checks_public_chmod_metadata` covers eight
+Linux-populated checksummed images: public Rust/C separately, 1 KiB/4 KiB,
+journal/no-journal. Held-gate refusals preserve bytes, public path/inode success
+advances the expected effect versions, and judged e2fsck/debugfs/Linux check the
+emitted modes/types/generations/times/checksums/data. The old private oracle and
+all existing focused steps/floors remain. New artifacts retain all eight images,
+sixteen debugfs reports, eight Linux reports and the exact log. VM execution is
+pending; local compilation alone does not qualify this migration.
+
+**Next: standalone public migration/evidence review before another family.**
+Inspect exact-commit full/focused logs and every new image/report, retain private
+evidence and resolve failures first. Review conversion/callback ordering, one
+context per call, Rust panic retirement before the C catcher returns and the
+unchanged C caller ownership/lifetime obligations. Other operations/readers/
+repair/replay/refresh/raw fields/devices remain externally serialized. No owner
+cache/readiness, builder invocation, buffer seal, admission or whole-API
+concurrency is established. The ignored deep fuzz gate, three insertion aliases,
+dependencies/overlays/seals/publication and mapping/collision/growth remain open;
+every public casefold write gate stays blocked.
+Refusing generic conversion does not suppress destruction of caller-owned Rust
+arguments; caller destructors/raw access remain outside the ordering claim.
+
 ### Private mount chmod implementation/evidence review — 2026-10-16
 
 Reviewed `3ee3aa440a962e517092f0935bfe20fed3a068f0`, equal to fetched

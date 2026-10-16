@@ -329,6 +329,27 @@ pub struct fs_ext4_fs_t {
     fs: Filesystem,
 }
 
+/// Keep a test handle alive while exercising the real exported shared calls.
+/// The closure must not unmount it or retain its pointer. No ABI is added.
+#[cfg(test)]
+pub(crate) fn with_test_mount(
+    fs: Filesystem,
+    run: impl FnOnce(*mut fs_ext4_fs_t, &Filesystem),
+) -> Filesystem {
+    let mut handle = Box::new(fs_ext4_fs_t { fs });
+    let pointer = std::ptr::from_mut(handle.as_mut());
+    run(pointer, &handle.fs);
+    handle.fs
+}
+
+/// Exercise the exported close with an owned test mount and no live borrows.
+#[cfg(test)]
+pub(crate) fn unmount_test_mount(fs: Filesystem) {
+    let handle = Box::into_raw(Box::new(fs_ext4_fs_t { fs }));
+    // The fresh handle is owned here, and the exported close consumes it once.
+    unsafe { fs_ext4_umount(handle) };
+}
+
 /// Opaque directory iterator handle. The caller treats this as `fs_ext4_dir_iter_t*`.
 pub struct fs_ext4_dir_iter_t {
     /// Pre-collected entries (Phase 1 simplicity — streaming can come later).
