@@ -69,6 +69,116 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Complete ownership implementation/evidence review — 2026-10-16
+
+Reviewed `772981a50a4624b878c4ccd0ea36df5b2fec0233`, equal to the fetched
+remote tip with a clean tree. Its exact-commit [focused VM workflow](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38849841814)
+passed. Downloaded the actual artifact and inspected all six owner images,
+inventory/owner commands and reports, fixed reports and summaries. The exact
+whole-result test executed once, zero failed/ignored (53 lines / 6,627 bytes),
+with six kernel populations and six judged non-repairing e2fsck checks. All
+seven existing focused fixture/insertion/component logs also pass, one test
+each with zero failures/ignored. Source [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38849841824)
+is still pending; do not treat focused evidence as its conclusion.
+
+| Block size / descriptor / journal | Allocated IDs | Fixed / data / map claims | Total claims | Allocated blocks | Charged reads / tree records |
+|---|---|---|---|---|---|
+| 1 KiB / 32 / no | 37 | 11 / 24 / 1 | 36 | 10,299 | 48 / 25 |
+| 1 KiB / 64 / no | 37 | 11 / 24 / 1 | 36 | 10,299 | 48 / 25 |
+| 1 KiB / 64 / yes | 37 | 11 / 25 / 1 | 37 | 11,323 | 48 / 26 |
+| 4 KiB / 32 / no | 37 | 10 / 24 / 1 | 35 | 2,599 | 48 / 25 |
+| 4 KiB / 64 / no | 37 | 10 / 24 / 1 | 35 | 2,599 | 48 / 25 |
+| 4 KiB / 64 / yes | 37 | 10 / 25 / 1 | 36 | 3,623 | 48 / 26 |
+
+The 16 MiB images have two initialized groups, 64 inode slots, 256-byte bodies
+and one primary descriptor block. Each has 20 empty files, one inode with two
+hard links, three directories, two symlinks (one fast, one extent-backed), one
+FIFO and one depth-one file with an external map and unwritten beyond-EOF
+storage. No-journal images have nine inactive reserved slots and 22 regular
+files; journal images have eight inactive reserved slots and 23 regular files,
+including inode 8's depth-zero 1,024-block journal. Other extent roots are depth
+zero. The three 1 KiB typed boot claims are outside the bitmap domain; 4 KiB
+primary block zero is inside it and set. No journal descriptor-32 combination
+or depth-two map is claimed by this six-profile matrix.
+
+A read-only public-format byte audit independently matched every saved `testi`
+answer to the inode bitmap, every identity/type/generation/size/link/sector value
+and complete data/map interval to inode/tree bytes, and every fixed range to
+primary geometry/descriptor addresses. It checked all **222 allocated records**,
+**215 claims** (63 fixed, 146 data, six mapping), sector totals and 40,742 used
+blocks. Across all twelve groups, the claim union equals the set allocation bits
+and the complement of the saved complete free lists; group/global free counts
+agree. All 245,376 inode-padding and 184,323 block-padding bits are set. Both
+groups in every image have ITABLE_ZEROED only. Audit scripts/results/image hashes
+are ignored local evidence under `tmp/casefold-owner-review`; this audit neither
+executes a host oracle nor replaces the CI test's independent tool verdicts.
+
+**Implementation decision:** no blocker found within the standalone read-only
+constructor's trusted mounted geometry and coherent stable device/buffer view.
+Current fixed-layout/inventory checks precede body interpretation; every allocated
+ID is read once, even without names, positive links or storage. Role/depth
+restrictions and inode/node checksums precede tree claims. Generation, data/map
+roles and sector accounting are retained; global sorting rejects all overlaps
+before one allocation check. Staged full nodes have exact size/bounds checked
+before copy and bypass failing device reads. Failure drops the whole local
+result and neither edits caller/device bytes nor publishes reusable proof.
+
+Budget review checked fixed/inventory/allocation group reservations of `3G` and
+metadata read reservations of `3(1+D)+2G`, where `D` is primary descriptor
+blocks. Body reads debit the actual census and tree calls receive only remaining
+reads/records/global claims, with a separate transient claim ceiling. Successful
+usage is subtracted before the next inode; a failed call aborts instead of
+resetting allowances. In the matrix, `G=2`, `D=1`, so metadata reserves ten reads,
+37 bodies consume 37 and one map consumes one: 48 is a conservative logical
+fetch charge, not a measured syscall count. Record totals match all declared
+root/child entries, including empty roots that contribute zero entries.
+
+Requested-byte review checked `8 * block_size + 256` scratch/checksum bytes,
+inventory and retained inode capacities, fixed/global/allocation-conversion
+capacities and one transient tree capacity. The sum conservatively includes
+phases that do not coexist. Checked arithmetic and fallible exact reservations
+precede filling; global pushes are claim-bounded, tree capacity is dropped per
+inode and sort is in-place. These bounds do not include allocator overhead,
+other scalar stack or shared cache/pinned replay memory. No actual-card RSS,
+latency or production defaults are established.
+
+The joined Linux evidence is an initialized ordinary, non-casefold, non-FLEX,
+non-sparse layout matrix without attributes. Existing component evidence and
+synthetic controls cover other narrow feature/current-view cases; this review
+does not newly qualify every allowed feature combination. Staged corruption,
+zero-link ordinary records, conflicts and exhaustion remain synthetic controls.
+Unclaimed allocation is never permission to acquire storage, even though these
+clean images happen to account for every used bit. The constructor carries no
+epoch or dependency closure and cannot satisfy its stable-view precondition
+against concurrent callers or retained external device handles by itself.
+
+The eighteen constructor controls refuse the known shapes, but all three saved
+insertion-level aliases remain unresolved because admission is disconnected.
+Keep public casefold writes, deeper insertion, collisions, splits/growth and
+index dropping blocked. Source/test/workflow hashes are unchanged by this
+review. No real card, Windows or SteamOS qualification follows.
+
+Fresh local full units pass 961, zero failed/ignored, retaining the exact baseline
+Counter multiset with no additions/losses (1,208 lines / 77,820 bytes under
+unchanged caps). Lint, provenance/shared instructions, whitespace and saved
+ownership-patch applicability pass. No source, tests or workflow changed; the
+source's release CLI build remains prior evidence, with no new local VM run.
+Sibling checkouts remain clean. The existing handoff records the continuation.
+
+**Next bounded checkpoint:** first resolve outstanding exact-commit full CI,
+then audit operation serialization and mutation/invalidation paths before adding
+the guard or publishing an epoch. Produce a concrete call-path/lock-order plan
+for path and inode entry points, direct writes, raw buffer edits, replay/recovery,
+refresh, callbacks/reentry and failed commits. Identify guarded internal helpers
+so wrappers do not relock; acquire the operation guard before path resolution
+and all allocation/cache/journal locks, hold it through durable publication, and
+invalidate before bypass/raw mutation. Define stale epoch/buffer revision and
+poison/failure refusal rules. Add no mounted-only cache, per-insertion full scan
+or insertion admission while the mutation audit/lifecycle is incomplete. The
+earlier transaction-current design below remains the contract; this checkpoint
+is its concrete serialization/invalidation audit, not permission to skip overlays,
+reverse dependencies, final sealing or failure qualification.
+
 ### Private complete current-view ownership implementation — 2026-10-15
 
 The bounded constructor in `src/ownership.rs` joins the reviewed fixed layout,
