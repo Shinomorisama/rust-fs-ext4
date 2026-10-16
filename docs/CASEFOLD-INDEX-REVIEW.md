@@ -69,6 +69,77 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private mount chmod implementation/evidence review — 2026-10-16
+
+Reviewed `3ee3aa440a962e517092f0935bfe20fed3a068f0`, equal to fetched
+remote tip with a clean tree. Exact-commit [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38950053488)
+and [focused Linux evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38950053446)
+passed. Actual downloaded standalone/x86/aarch64 unit artifacts each execute
+all eighteen private controls among 994 passed, zero failed/ignored. Their
+complete name-occurrence multisets match the fresh local baseline. The compiled
+guest library executes the same eighteen plus the exact new oracle among 689
+passed, zero failed/ignored. The focused oracle executes one test over all four
+1 KiB/4 KiB journal/no-journal profiles, zero failed/ignored, at 49 lines /
+4,960 bytes with 24 tool and eight kernel markers.
+
+The whole guest suite is separately scoped: 1,817 passed, zero failed, **one
+ignored**, at 3,370 lines / 177,796 bytes. The existing slow
+`fuzz_smoke::deep_walk_byte_flip_fuzz_never_panics` remains a broader
+qualification gate; it is not waived or hidden by the workflow's success.
+
+Audited every new image, all eight debugfs reports and all four Linux reports.
+Linux/e2fsck/debugfs agree on emitted modes/types, inode identity/generation,
+exact post-2038 ctime, preserved input times and file data. A separate byte
+audit verifies final superblock, descriptor and inode checksums, clean state,
+allocation bits, all eight emitted records, ctime epoch bits, mtime and payload.
+Saved debugfs reports precede Linux's final data read; the latter may update
+file atime/checksum. That expected difference is accounted for. No host oracle
+or mount was used. See `extprogress.md` for the complete evidence table.
+
+**Decision: no blocker within the private contract.** Borrowed mount identity
+and nonblocking entry precede callbacks/lookup, nested helpers share a context,
+planning refusals precede marker effects, both marker and complete commit stay
+inside uncertainty, and unwind/poison/failure cannot restore mount health.
+Common write/flush/Drop refusal precedes callbacks after a private fault. No
+ownership readiness, builder/cache, buffer seal or admission is established.
+External exclusive access remains required across all public operations,
+readers, maintenance, raw device/field escapes and C ABI handle lifetimes.
+The guard does not repair unsafe reference aliasing or swallowed callback errors.
+
+**Next bounded implementation: public chmod dispatch only.**
+
+1. Route `apply_chmod`, byte-path chmod and public inode chmod through this
+   reviewed private family. Existing C path/inode delegates should reach it
+   without a second guard. Preserve public signatures and C error/panic handling;
+   no C ABI reference/lifetime redesign or other operation migration is included.
+2. Enter before **arbitrary generic inode conversion** (`Into<InodeRef>`) and
+   filesystem/runtime callbacks. A contended public entry must refuse before
+   invoking conversion, lookup, generation checks, marker or other callbacks.
+   Check verdict-only volume refusals before conversion; conversion must not
+   itself be preceded by a marker write.
+   Keep nested path/inode helpers on the same context; never make guarded path
+   dispatch call a separately guarded public inode method.
+3. Retain byte names, generation/mode/type/time/checksum semantics, all volume
+   write refusals and the sticky failure bridge. The private path's pre-marker
+   planning ordering now becomes public; retain refusal-byte/flag controls.
+   No owner build/readiness/cache, buffer seal or casefold admission is added.
+4. Add controls over actual public Rust/C dispatch for overlap, callback-worker
+   reentry, generic conversion ordering/unwind, stale generation, marker/commit
+   faults, caught ABI panic/error reporting and subsequent write/flush/close
+   refusal. Retain all eighteen private and complete baseline occurrences.
+   Add exact public-dispatch Linux/e2fsck/debugfs evidence; old public tests or
+   the private oracle alone cannot prove the new public routing executed.
+5. Review this migration before another family. Other operations, reads,
+   repair/replay/refresh, raw handles/fields and unsafe caller aliasing remain
+   externally serialized. This limited public guard does not establish whole-
+   API concurrency or transaction-current ownership. Keep the ignored fuzz gate,
+   three insertion aliases, dependency/overlay/seal/publication and complete
+   mapping/collision/growth work open. Every casefold write gate remains blocked.
+
+This review changes only the existing review/handoff documents. Fresh units,
+lint and source hashes are recorded in `extprogress.md`; no release rebuild,
+local VM run, sibling/pin/lock or environment configuration change is claimed.
+
 ### Private mount chmod implementation checkpoint — 2026-10-16
 
 The preceding gate review's bounded integration is implemented: one private
