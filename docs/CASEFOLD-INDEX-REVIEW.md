@@ -69,6 +69,122 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Operation-control implementation/evidence review — 2026-10-16
+
+Reviewed `b6e89b0a8e17d6ece855e61eb44ff47ea52f5f9d`, equal to fetched
+remote tip with a clean tree. Its exact-commit [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38865265666)
+and [focused Linux workflow](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38865265682)
+succeeded. The preceding audit's full CI also succeeded. Downloaded actual full
+CI unit, x86, aarch64 and compiled-guest artifacts and compared all operation
+test names as Counters with the fresh local baseline.
+
+| Evidence | Gate controls executed | Enclosing result | Lines / bytes |
+|---|---|---|---|
+| Standalone unit job | 15 | 976 passed, zero failed/ignored | 1,232 / 79,626 |
+| x86 host unit tier | 15 | 976 passed, zero failed/ignored | 1,226 / 79,189 |
+| aarch64 unit tier | 15 | 976 passed, zero failed/ignored | 1,226 / 79,189 |
+| Compiled guest library | 15 | 670 passed, zero failed/ignored | Within the guest log below |
+
+These are the same fifteen controls executed in four contexts, not sixty
+distinct tests. The whole guest artifact is 3,353 lines / 176,086 bytes and
+reports **1,798 passed, zero failed, one ignored**. The pre-existing slow
+`fuzz_smoke::deep_walk_byte_flip_fuzz_never_panics` did not execute. This is
+already described in the earlier kernel-budget handoff; the workflow's success
+does not turn it into a zero-ignored or exhaustive suite. It remains a broader
+qualification gate, not a waived test. None of the gate controls were ignored;
+the guest library containing them has zero ignored. No unrelated unbounded fuzz
+sweep, ignore removal or output-budget change is introduced by this review.
+
+**Decision:** no blocker found in the disconnected gate under its stated
+caller obligations. Private state is behind one mutex; `try_lock` refuses
+overlap rather than queueing, and unhealthy/poisoned entries are not recovered.
+`Operation` owns the non-Send mutex guard and borrows its control. Every mutable
+status method requires the exclusive context, while copied status is diagnostic
+only. Nested helpers can borrow that context without relocking. A callback can
+wait for a competing worker's prompt refusal while the outer guard stays held.
+There is no fairness, throughput or callback-duration guarantee and no hidden
+retry loop; a caller that never returns can retain the gate indefinitely.
+
+Borrowed stamp identity cannot outlive its control or permit its address to be
+reused while the stamp is subsequently checked. Identity is checked along with
+both counters, so equal versions on different controls refuse. This is control
+identity only, not an existing association with a filesystem, device or buffer.
+Neither fresh stamps nor healthy status imply owner coverage/readiness: the
+validity enum has no Ready state and no owner result is stored or published.
+
+Checked counter computation precedes assignment, including the last usable
+versions. Overflow invalidates/faults without wrapping or partial counter
+advance. `effect` invalidates and marks uncertainty before external work; an
+error latches fault and successful return leaves the view invalid. Unwinding
+with the guard faults/poisons it. An effect panic caught while the guard remains
+alive leaves uncertainty even without mutex poison; health checks refuse reuse,
+and normal guard drop faults it. Pure untouched planning abort preserves versions;
+a later abort after an earlier effect cannot restore the operation-entry state.
+
+The caller must keep every write/flush and completion check inside the effect,
+propagate failures and never swallow a panic/error into success. Deferred work
+returned for later execution is outside that contract. Rust panic controls do
+not legalize foreign unwinds, C ABI aliasing, freed handles or raw device escape.
+There are no explicit heap reservations, growing containers, filesystem reads
+or callbacks inside entry itself; platform mutex internals and caller-owned Arc/
+effect allocations remain outside that fixed-state observation. No actual-card
+memory/latency or Windows behavior is measured here.
+
+**Integration boundary:** the gate currently has no `Filesystem` binding.
+Existing `write_refusal`, `flush` and `Drop` consult direct-commit/journal health,
+not this control. Simply wrapping chmod would leave an early marker I/O failure
+recorded only in the gate while other legacy methods/close could still proceed.
+Bridge uncertain/poison/panic health into sticky mount-level write/flush/clean-
+release refusal before using a private adapter for real writes. A newly allocated
+control must not reset that mount failure. This is an integration prerequisite,
+not a defect in the reviewed standalone component or a public fix by this review.
+
+**Next bounded implementation: mount-bound private chmod adapters.**
+
+1. Give each mounted filesystem one private control and a mount-borrowing
+   context. Context construction enters before device/runtime callbacks, lookup,
+   generation checks or marker writes. Reject a context from another mount
+   before any such access. Reuse that context in private path/inode helpers;
+   do not reacquire inside inode or commit helpers. Own/borrow the control safely;
+   add no self-referential guard, unsafe lifetime extension or global registry.
+2. Add crate-private guarded path-byte and inode chmod dispatch only, sharing
+   existing mode/type/ctime/checksum semantics. Preserve existing public Rust/C
+   delegates as legacy, unguarded paths at this checkpoint. The private entry
+   must retain all read-only/casefold/unsupported-feature and stale-generation
+   refusals, acquire before resolution and cover the early clean marker as well
+   as the entire commit. Do not call a marker-writing `refuse_write` outside an
+   effect; verdict-only checks and raw I/O must be distinguished. Planning
+   refusals outside an effect need not become uncertain-write faults.
+3. Connect a sticky mount failure latch to uncertain effect/poison/unwind and
+   existing write, flush and clean-release refusals. Cover marker failure before
+   ordinary commit failure flags are set; refresh/new control cannot heal it.
+   A private context must latch on unwind before existing ABI panic handling can
+   return. No owner cache, Ready state or automatic builder invocation is added.
+4. Test actual private adapters on scratch mounts: overlap/foreign context
+   refuses before any read/write/runtime callback; path and generation checks,
+   mode/type/checksum/ctime preservation, callback-worker reentry, marker and
+   commit write/flush failures, caught unwind, legacy write/flush refusal and no
+   clean marking on faulted drop. Preserve dirty/device bytes for pre-I/O refusals.
+   Add exact private-adapter Linux/e2fsck/debugfs evidence for emitted chmod
+   metadata before qualifying it; older public chmod tests alone are insufficient.
+
+This is a limited private integration step, not public concurrency support.
+Other mutators, reads, repair/replay/refresh, C ABI reference creation and handle
+lifetime remain unguarded and must remain externally serialized. Keep raw public
+fields/device handles outside any proof claim. Review this family before public
+wrapper migration; all families and maintenance/bypass paths need coverage before
+the gate can justify transaction-current ownership. The ignored deep fuzz case
+also remains unresolved broader qualification. The three saved insertion aliases,
+dependencies/overlays, buffer seals, durable owner publication and complete map/
+collision/growth qualification stay open; every public casefold write gate stays.
+
+Fresh local full units pass 976, zero failed/ignored; baseline/final Counter
+multisets are identical (1,223 lines / 79,083 bytes, unchanged caps). Lint,
+provenance/shared instructions, whitespace and saved ownership-patch applicability
+pass. Source/test/workflow hashes and sibling checkouts remain unchanged; no
+source fix is required by this review. Ignored evidence is under
+`tmp/casefold-gate-review`. No fresh release CLI build or local VM run is claimed.
+
 ### Private operation-control implementation — 2026-10-16
 
 Implemented `src/operation.rs` after the concrete audit, starting from
