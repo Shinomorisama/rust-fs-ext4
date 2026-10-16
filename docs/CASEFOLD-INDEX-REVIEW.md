@@ -69,6 +69,46 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private mount chmod implementation checkpoint — 2026-10-16
+
+The preceding gate review's bounded integration is implemented: one private
+control per mount, a mount-borrowing context checked before any callback, private
+path-byte/inode entries reusing that context, shared chmod metadata planning and
+separate early-marker/whole-commit effects. Public Rust/C delegates retain legacy
+unguarded ordering. The private path does verdict/lookup/generation/raw-block
+planning before its marker, so those errors do not become uncertain writes.
+The mount failure latch covers effect errors and unwind (including a caught
+panic with a still-live context), unhealthy/poisoned entry and context unwind.
+Common write verdicts/flush/Drop refuse before callbacks after failure; refresh
+or replacing the control cannot recover the mount.
+
+An executed first-marker-flush regression failed with a later legacy write
+accepted; the same check is now green. Eighteen focused controls pass on actual
+formatted mounts, covering identity/overlap before callbacks, byte paths,
+generation/mode/type/checksum/ctime, callback-worker reentry, every observed
+direct/journal marker/commit write and flush, caught/uncaught panic, sticky
+legacy refusal and no clean restoration on faulted drop. See the matching
+`extprogress.md` checkpoint for full scope. Fresh local units pass 994, retaining
+all 976 baseline occurrences and adding exactly these 18; zero failed/ignored.
+The log is 1,242 lines / 80,883 bytes under unchanged caps. Lint, the locked
+release CLI build/install and saved insertion-red patch applicability pass.
+
+New exact test
+`fs::guarded_chmod::needs_host::linux_checks_private_chmod_metadata` is compiled
+and added to focused CI with a one-test floor and artifact retention. It covers
+four Linux-created/populated checksummed 1 KiB/4 KiB journal/no-journal images,
+both private entries, judged e2fsck, eight debugfs metadata reports and Linux
+mode/type/exact-ctime/preserved-times/data checks. VM execution is pending;
+older public chmod evidence does not qualify the new private path.
+
+**Next: standalone family/evidence review before public wiring.** Inspect actual
+exact-commit full/focused logs, every new image/report and native/guest control
+execution, diagnose failures and keep broader qualification gated. No owner
+readiness/cache, builder invocation, buffer seal or transaction admission is
+added. Other operations/readers/maintenance/raw fields and device handles/C ABI
+aliasing and lifetime still need caller exclusion. All casefold write gates,
+the three insertion aliases and the ignored slow-fuzz qualification remain.
+
 ### Operation-control implementation/evidence review — 2026-10-16
 
 Reviewed `b6e89b0a8e17d6ece855e61eb44ff47ea52f5f9d`, equal to fetched

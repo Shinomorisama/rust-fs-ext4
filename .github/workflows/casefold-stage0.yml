@@ -7,6 +7,8 @@ on:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
       - src/fs.rs
+      - src/fs/**
+      - src/operation.rs
       - src/extent.rs
       - src/extent/**
       - src/inode_inventory.rs
@@ -105,6 +107,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:ownership casefold-ownership 1050 65000 -- scripts/test.sh --locked --release --lib ownership::needs_host::linux_complete_ownership_matches_all_inode_and_fixed_storage_reports -- --exact --show-output
           bash scripts/core.sh test-floor casefold-ownership 1
+      - name: Check private mount chmod metadata with Linux and e2fsprogs
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/private-chmod
+        run: |
+          scripts/tier.sh casefold:private-chmod casefold-private-chmod 1050 65000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::linux_checks_private_chmod_metadata -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-private-chmod 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,5 +135,7 @@ jobs:
             tmp/block-allocation/
             tmp/logs/casefold-ownership.log
             tmp/ownership/
+            tmp/logs/casefold-private-chmod.log
+            tmp/private-chmod/
           if-no-files-found: error
           retention-days: 30

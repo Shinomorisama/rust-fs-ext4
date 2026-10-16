@@ -13,10 +13,15 @@
 
 ### Added
 
+- Private mount-bound path-byte/inode chmod adapters reuse one nonblocking
+  context and retain existing mode, timestamp, checksum and write refusals.
+  A sticky mount failure bridge covers marker/commit errors and unwinds, blocks
+  subsequent writes/flushes and prevents a faulted close from claiming clean.
+  Public delegates remain externally serialized and casefold writes blocked.
 - A private operation-control primitive refuses overlapping/reentrant entry,
   invalidates freshness before effects and faults reuse after uncertainty,
-  poison or version exhaustion. It creates no ownership readiness and remains
-  disconnected from filesystem methods and public casefold writes.
+  poison or version exhaustion. It creates no ownership readiness or public
+  casefold write admission.
 - A private bounded builder joins the complete allocated-inode census, typed
   fixed/inode storage and current allocation checks under shared resource
   limits. Conflicts discard the result; transaction integration and public

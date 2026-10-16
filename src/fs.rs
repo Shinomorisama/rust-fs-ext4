@@ -11,6 +11,8 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
+mod guarded_chmod;
+
 /// In-memory accumulator for journaled multi-block writes. Each helper
 /// mutation reads the latest version of a block (from this buffer if
 /// already touched, else from disk via the live `Filesystem`) and writes
@@ -525,6 +527,11 @@ pub(crate) enum DirBlockRole {
 }
 
 pub struct Filesystem {
+    /// Used only by the private chmod family; legacy access needs exclusion
+    /// supplied by the caller. No ownership readiness is published here.
+    operation: crate::operation::Control,
+    /// Sticky across refresh/control replacement, including early marker faults.
+    operation_failed: std::sync::atomic::AtomicBool,
     runtime: Arc<dyn crate::runtime::Runtime>,
     managed_recovery: bool,
     /// The buffer cache `dev` routes through, kept typed for its statistics.
@@ -592,6 +599,12 @@ pub struct Filesystem {
 /// write leaves the volume marked not clean, which errs the safe way.
 impl Drop for Filesystem {
     fn drop(&mut self) {
+        if self
+            .operation_failed
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return;
+        }
         // A journal whose commit failed mid-write leaves the device to the
         // next owner's replay: nothing more is written through this handle.
         let journal_failed = self
@@ -731,6 +744,14 @@ impl Filesystem {
     /// transaction another thread is committing either finishes first or
     /// starts after: the check never sees one half-done.
     pub fn flush(&self) -> Result<()> {
+        if self
+            .operation_failed
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(Error::Corrupt(
+                "private operation failed; reopen for recovery",
+            ));
+        }
         if self
             .direct_commit_failed
             .load(std::sync::atomic::Ordering::SeqCst)
@@ -920,6 +941,8 @@ impl Filesystem {
         ));
         let dev: Arc<dyn BlockDevice> = cache.clone();
         let mut fs = Self {
+            operation: crate::operation::Control::new(),
+            operation_failed: std::sync::atomic::AtomicBool::new(false),
             runtime,
             managed_recovery: false,
             cache,
@@ -1098,6 +1121,12 @@ impl Filesystem {
     /// not clean: for the mount path, which asks whether it could write
     /// before it knows whether it will.
     fn write_refusal(&self) -> Result<()> {
+        if self
+            .operation_failed
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(Error::ReadOnly);
+        }
         if !self.dev.is_writable() {
             return Err(Error::ReadOnly);
         }
@@ -3105,6 +3134,14 @@ impl Filesystem {
         self.refuse_write()?;
         let r = r.into();
         let ino = r.ino;
+        let raw = self.plan_chmod(r, mode)?;
+        self.commit_inode_write(ino, &raw)
+    }
+
+    /// Shared metadata semantics for legacy and private guarded chmod.
+    /// Reads/callbacks only; callers decide when to mark and commit.
+    fn plan_chmod(&self, r: InodeRef, mode: u16) -> Result<Vec<u8>> {
+        let ino = r.ino;
         let (inode, mut raw) = self.live_inode(r)?;
 
         // Preserve file-type bits (high 4 bits of i_mode); only the low 12
@@ -3118,7 +3155,7 @@ impl Filesystem {
         set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-        self.commit_inode_write(ino, &raw)
+        Ok(raw)
     }
 
     /// Write a single mutated inode back, routing through the journal

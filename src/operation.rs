@@ -1,4 +1,4 @@
-//! Private operation exclusion and invalidation, disconnected from Filesystem.
+//! Private operation exclusion and invalidation, used by private mount adapters.
 //! Contract: docs/CASEFOLD-INDEX-REVIEW.md, concrete serialization audit.
 //! No ownership proof, buffer seal, readiness or durable publication is provided.
 
@@ -31,7 +31,7 @@ pub(crate) struct Status {
     pub health: Health,
 }
 
-/// One control per future owned mount/session. No explicit heap reservation or
+/// One control per owned mount/session. No explicit heap reservation or
 /// filesystem I/O; synchronization internals depend on the target platform.
 /// Callers may independently own it in an Arc during mutable maintenance; merely
 /// constructing/sharing it establishes neither device exclusivity nor readiness.
