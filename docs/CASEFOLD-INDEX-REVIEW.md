@@ -69,7 +69,119 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Allocation verifier implementation and evidence review — 2026-10-15
+
+Reviewed `72b6911d4d265ce1339c56caac1f9330a62099ef`, including the production
+verifier, twenty storage controls, two report-reader controls and repaired VM
+oracle. Exact-commit [focused VM evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38795846343)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38795846219)
+passed. Downloaded the actual artifact and inspected all four allocation images,
+command/bit/free-list reports and summaries, plus current insertion, FIEMAP,
+inventory, role and fixed-metadata logs. The allocation test executed once,
+zero failed/ignored (37 lines / 3,890 bytes). The production verifier remains
+byte-identical to `1fcb361`; no source/test/workflow fix is needed by this review.
+
+| Block size / descriptor | Domain `[first, end)` | Allocated / free | Last group's valid blocks | Allocated runs |
+|---|---|---|---|---|
+| 1 KiB / 32 | `[1, 2044)` | 1,573 / 470 | 1,019 | 2 |
+| 1 KiB / 64 | `[1, 2044)` | 1,573 / 470 | 1,019 | 2 |
+| 4 KiB / 32 | `[0, 511)` | 401 / 110 | 255 | 2 |
+| 4 KiB / 64 | `[0, 511)` | 401 / 110 | 255 | 2 |
+
+These are **5,108 complete domain classifications across eight groups**.
+All 5,106 supported nonzero `debugfs testb` answers match complete `dumpe2fs`
+free lists; the two 4 KiB zero classifications come from those complete,
+count-checked lists. Both zero bits are actually set, and the verifier checks
+them normally. Each singleton and all allocated runs together agree; free-range
+and 1 KiB boot-domain refusals remain. The raw public-format audit additionally
+matched every saved bit/list answer to image bitmap bytes and checked all 158,732
+padding bits. Both bitmap groups have ITABLE_ZEROED only in every profile.
+Each image has 32 allocated IDs, 256-byte inodes, nine zero-mode reserved records,
+two directories and 21 regular files; all 23 extent headers are depth zero.
+Those are candidate initialized fixtures for a joined builder, not independent
+qualification of the inventory/role/tree join on these images.
+
+**Decision:** no blocker found within the standalone verifier's narrow profile
+and trusted coherent stable-view/fixed-layout preconditions. Bounds and geometry
+precede interval arithmetic/slicing; ordered disjoint ranges make group progress
+monotonic. Partial-byte masks check exactly the proposed bits, including zero.
+Current superblock/descriptor identity and checksums, stable pointers, staged
+sizes/precedence, known/pending flags and initialized bitmap requirements are
+enforced. CRC coverage/width and full-block padding agree with the independent
+matrix, including non-byte-aligned final group ends. One shared set of limits
+charges groups, fetches and bitmap work before access. Two fallibly reserved
+blocks are reused; no payload-block output or growing bitmap cache is produced.
+Errors preserve buffered/device bytes and publish no partial proof.
+
+Scope remains important: the independent positive matrix has two groups and two
+separate allocated runs each; a single allocated interval crossing a group
+boundary remains synthetic (the 69-group control). Staged corruption, exhaustion,
+unknown/uninitialized flags and malformed inputs also remain synthetic controls.
+Two-block scratch bounds the verifier's own requested allocation, not allocator
+overhead, shared device-cache allocations/pinned replay bytes, other components
+or card-wide RSS. The qualified fixed layout must come from the same coherent
+view; this function does not re-prove every fixed-role conflict. A successful
+empty input proves no coverage. Allocation bits establish no exclusive owner,
+snapshot epoch, transaction lifecycle or public-write readiness. The three saved
+other-inode aliases remain unresolved.
+
+#### Next bounded implementation: complete private current-view ownership builder
+
+Join the already implemented prerequisites into one read-only, bounded complete
+owner result, disconnected from admission, caching and public writes. Require a
+trusted coherent stable device/buffer view; the later operation guard/epoch/
+overlay/invalidation design remains mandatory before any result authorizes writes.
+
+- Enforce the intersection of qualified component profiles: current fixed layout,
+  initialized inode and touched block bitmaps, 256-byte Linux inode bodies,
+  supported reserved/ordinary roles and qualified extent depths zero/one (journal
+  depth zero). RESIZE_INODE, unknown storage/attribute/legacy profiles and deeper
+  maps refuse. Run a complete current inventory; visit every allocated ID once,
+  including reserved and zero-link records, and require the root/declared journal
+  outcomes. Names and link counts never substitute for that census.
+- Keep fixed roles and every inode/generation/storage role explicit. Collect each
+  whole extent tree, including mapping nodes and unwritten/beyond-EOF storage;
+  check sector totals under the supported non-HUGE inode profile. Fast symlinks,
+  inactive reserved slots and FIFO/no-storage roles contribute no block claims
+  only after their role checks. Hard links never duplicate an inode's ownership.
+  Sort one bounded physical claim arena and reject every forbidden overlap,
+  including different roles of one inode and conflicts with fixed/journal roles.
+- Verify all claimed intervals against current allocation in one shared bounded
+  invocation after separation. Keep only the 1 KiB typed boot reservation outside
+  that domain; 4 KiB primary block zero must pass the normal bit check. Unclaimed
+  allocated blocks are never proof of free space or permission to acquire storage.
+  Any unknown owner, missing coverage, malformed body/tree, allocation conflict,
+  I/O failure or resource exhaustion discards the entire local result.
+- Share budgets across the entire build. The role reader already shares limits
+  across records; extent collection currently resets private read/record counters
+  per call and does not return usage. Add the minimal private accounting needed
+  to debit successful walks from shared remaining budgets; bound each call by
+  remaining limits and abort the whole build on failure. Never silently reset a
+  full per-tree allowance for every inode. Keep any explicit per-inode ceiling
+  separately documented, conservative and tested.
+- Charge retained inventory/fixed/owner capacities, transient tree capacity,
+  any allocation-input conversion vector and reused role/extent/allocation
+  scratch at their peak coexistence. The extent
+  collector reserves its full claim cap; copy into the bounded global arena and
+  discard transient capacity before the next inode, or account for every retained
+  capacity explicitly. Use checked arithmetic/fallible reservations and bound
+  global sort/overlap work. Requested-byte limits exclude allocator/device-cache
+  overhead; do not present them as measured card defaults or an RSS bound.
+- Prove the private builder rejects the three known owner-alias shapes plus
+  fixed/journal/same-inode conflicts, including staged-only ownership changes;
+  preserve a disjoint control, zero-link/reserved/empty-file coverage, staged
+  bitmap/map/body changes and exact/exhausted cumulative limits. These constructor
+  checks do not fix the still-disconnected insertion path's saved failures.
+  Require independent whole-result evidence on initialized Linux fixtures,
+  comparing complete owner ranges/identities/storage accounting, not only total
+  used bits or this driver's own lookups. Then review the builder before any
+  operation guard, dependencies, overlay, sealing, publication or commit-failure
+  integration. No whole-card scan per insertion or mounted-only owner cache.
+
 ### Allocation-oracle block-zero repair — 2026-10-15
+
+Follow-up: repair `72b6911` passed focused VM and full CI. The review above
+supersedes the pending repair validation and selects the private joined builder.
 
 At source `1fcb361`, focused CI and both full library executions failed at
 `debugfs testb 0`: the tool refuses zero even when it belongs to the filesystem's

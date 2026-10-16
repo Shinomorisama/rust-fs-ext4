@@ -56,20 +56,29 @@ permission to relax write gates, modify siblings or push to `main`.
 ## Current checkpoint
 
 - Repository: [Shinomorisama/rust-fs-ext4](https://github.com/Shinomorisama/rust-fs-ext4), branch `casefold-rw`.
+- Latest allocation review: `72b6911` passed exact-commit focused VM and full CI.
+  Inspected all four allocation images/reports: 5,108 complete domain answers
+  across eight initialized groups, including both 4 KiB block-zero bits, agree
+  with the bit/free-list reports and raw public-format audit. No blocker found
+  within the standalone verifier's narrow coherent-view/fixed-layout contract.
+  This documentation review selects a complete bounded private current-view
+  ownership builder, with shared accounting and whole-result Linux evidence,
+  before lifecycle/admission integration. It changes no source/test/workflow or
+  gate; the three saved other-inode aliases remain unresolved.
 - Latest allocation-oracle repair: `1fcb361` failed focused/full CI because
   `debugfs testb` rejects block zero on a 4 KiB filesystem. The test-only repair
   uses complete count-checked `dumpe2fs` free-block lists for the whole domain and
   retains explicit `debugfs` cross-checks for every nonzero block. Two local
   report-reader controls cover zero and incomplete reports. The production
-  verifier, insertion helper and gates are unchanged. New VM/full CI remains
-  pending; its complete evidence/implementation review is still the next task.
+  verifier, insertion helper and gates are unchanged. Repair `72b6911` passed
+  VM/full CI; its evidence/implementation review is recorded above and below.
 - Latest allocation-interval checkpoint: a private bounded checker now verifies
   physically sorted ranges against current initialized block bitmaps, including
   staged allocation/freeing, checksums, full padding and explicit shared caps.
   It expands no data run into owner entries and keeps two reusable scratch blocks.
   Local validation is recorded below. Its initial independent CI failed on an
-  invalid block-zero oracle query; the test-only repair below awaits fresh CI.
-  Review its exact-commit evidence and contract before the complete owner join.
+  invalid block-zero oracle query; the test-only repair passed VM/full CI and
+  the standalone evidence/contract review is complete within its stated scope.
   Admission and public casefold writes remain disconnected/blocked; the three
   saved other-inode aliases remain unresolved.
 - Latest fixed-metadata review: `95cb218` passed exact-commit focused VM location
@@ -178,11 +187,12 @@ permission to relax write gates, modify siblings or push to `main`.
   independent CI is separate from those preceding successful runs.
 - Mapping fix: `6402d5d82dcf5768105964b985cb1d914d351d80`. Previous checkpoint: `a7db0769d85a1cbea189a860d9a46fa1d293d3d9` (focused Linux insertion CI). The original insertion primitive landed in `248e879636c4e03f476a440dac48d316b42c0fe8`; this checkpoint hardens its mapping admission.
 - Original baseline: `v0.8.0`, commit `204d8f6518ca5d66de07ab8e84c81501909b5d09`.
-- Current local units: **943 pass**, zero failed/ignored, retaining all 941 fresh
-  repair-baseline occurrences and adding exactly two oracle-reader controls
-  (multiset comparison). The implementation's twenty allocation controls remain
-  retained. Current lint and repair checks are recorded below; the preceding
-  locked release CLI build and CI CLI job passed. Repaired VM/full CI is pending.
+- Current local review: **943 units pass**, zero failed/ignored, with identical
+  fresh baseline/final occurrence multisets and no additions/losses. The twenty
+  allocation and two oracle-reader controls remain retained. Fresh lint and
+  documentation checks pass. Source `72b6911` passed focused VM/full CI and its
+  standalone review is complete; this review changes only documentation.
+  The preceding locked release CLI build and CI CLI job passed.
 - Previous local validation: the fixed-metadata documentation review passed **921 unit tests**,
   with identical baseline/final test-occurrence multisets, zero failed/ignored
   and no additions or losses. Fresh lint and documentation checks pass.
@@ -313,7 +323,94 @@ permission to relax write gates, modify siblings or push to `main`.
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
 
+## Allocation verifier implementation/evidence review checkpoint — 2026-10-15
+
+Reviewed `72b6911d4d265ce1339c56caac1f9330a62099ef`, equal to the fetched
+remote tip with a clean tree. Its [focused VM evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38795846343)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38795846219)
+passed, including both full VM suites and the aggregate gate. Existing Git/API
+pull/push, logs and actual artifact downloads work. Reused the tested onboarding
+setup without a draft/publication, credentials, sibling or dependency/pin/lock
+change. No source/test/workflow fix or gate change is justified by this review.
+
+Downloaded the actual focused artifact and inspected all four allocation images,
+commands, complete nonzero bit answers, free-block lists and summaries. The
+allocation oracle executed once, zero failed/ignored (37 lines / 3,890 bytes).
+Each 1 KiB/32- or 64-byte descriptor profile has domain `[1, 2044)`, 1,573 used
+and 470 free blocks, two allocated runs and 1,019 valid blocks in its last group.
+Each 4 KiB/32- or 64-byte profile has `[0, 511)`, 401 used/110 free, two runs and
+255 valid last-group blocks. Across eight groups there are **5,108 complete
+domain classifications**: 5,106 explicit nonzero `debugfs` answers cross-checked
+against complete `dumpe2fs` free lists, plus the two zero classifications from
+those count-checked lists. Both 4 KiB zero bits are set and checked normally.
+The 1 KiB boot block remains outside the allocation domain, separately protected.
+
+A raw public-format audit matched every reported answer to current image bitmap
+bytes and all 158,732 padding bits are set. Both groups in every profile have only
+ITABLE_ZEROED, with no block/inode uninitialized flags. Raw inode observations
+show 32 allocated IDs each: nine zero-mode reserved slots, two directories and
+21 regular files, with 256-byte records and 23 depth-zero extent headers. These
+are candidate initialized builder fixtures; these observations do not qualify
+the complete inventory/role/tree ownership join on those images.
+
+Existing focused tests each executed once, zero failed/ignored: fixed metadata
+across 14 profiles (59 lines / 7,385 bytes), roles across six (41 / 4,671), inventory
+across four (33 / 3,357), insertion across four (133 / 7,954), FIEMAP across both
+block sizes (23 / 1,601). These results qualify their scoped existing behavior,
+not a complete owner snapshot or public writes.
+
+The implementation/resource review in `docs/CASEFOLD-INDEX-REVIEW.md` checked
+pre-slice geometry/coverage, interval bounds/order, group progress, byte masks,
+current CRC/identity/pointer/flag/size checks, staged precedence, full padding,
+fallible two-block scratch reuse and shared error-inclusive caps. **No blocker
+found within the standalone verifier's narrow profile and trusted coherent
+stable-view/fixed-layout preconditions.** The production verifier is unchanged
+from `1fcb361`. The independent matrix covers every bit and multiple groups, but
+one allocated interval spanning a group boundary remains a synthetic control,
+as do staged corruption, uninitialized/unknown profiles and limit refusals.
+
+The scratch limit bounds this component's own requested bytes, not allocator
+overhead, shared cache/pinned replay memory or other live components. It proves
+neither exclusive ownership nor complete census, epoch or transaction lifecycle;
+empty proposed input proves no coverage. No card-scale RSS/performance bound,
+real-card/Windows/SteamOS qualification or write activation follows from this
+review. The three saved other-inode aliases remain unresolved.
+
+Fresh full units pass **943**, zero failed/ignored, with identical baseline/final
+test-occurrence multisets and no additions/losses. The final log is 1,190 lines /
+76,251 bytes, within unchanged caps. Lint, provenance/shared instructions, diff
+whitespace and saved ownership patch applicability checks pass. Exact source,
+test and workflow hashes remain unchanged and the sibling stays clean.
+Ignored evidence is under `tmp/casefold-allocation-review` and
+`tmp/casefold-allocation-review-baseline`, including actual downloaded reports/
+images, complete raw audit, unit logs/comparison and exact source hashes. The
+source's locked release CLI build/CI CLI job already passed; no fresh CLI rebuild
+or new local VM run is claimed for this documentation-only review.
+
+**Next bounded implementation:** a private complete current-view ownership builder
+joining fixed roles, the current allocated-inode census, every typed inode's
+complete tree and verified current allocation. Follow the detailed contract in
+the review: supported-profile intersection, root/declared-journal coverage,
+unwritten/beyond-EOF and mapping storage, sector accounting, all cross-owner/
+fixed/journal conflicts, one bounded typed arena and shared whole-build budgets.
+The extent collector currently hides per-call read/record usage; add minimal
+private consumption accounting as needed, never reset a full per-inode budget.
+Charge retained/transient capacities and scratch at their peak coexistence;
+abort the entire result on unsupported state, missing coverage or any failure.
+Require the three alias shapes and disjoint control in builder tests, plus
+independent whole-result Linux evidence. Keep this constructor disconnected from
+admission/cache/epoch publication. Review it before later guard/dependency/overlay/
+sealing/invalidation/commit-failure integration; no per-insertion full scan.
+Preserve all baseline occurrences, sibling pins and every write gate.
+
+Stage 5 completion is **not yet quantified**. Casefold writes, deeper insertion,
+collisions, splitting/growth and index dropping remain blocked; full namespace,
+recovery and Windows/SteamOS/card qualification remain later work.
+
 ## Allocation-oracle block-zero repair checkpoint — 2026-10-15
+
+Follow-up: `72b6911` passed exact-commit focused VM and full CI; the complete
+standalone allocation evidence/implementation review is recorded above.
 
 Started at `1fcb3610b5c00e09511648827d62fd2e9ca8268f`, equal to the fetched
 remote tip with a clean tree. The fresh baseline passes **941 unit tests**,
@@ -2331,13 +2428,13 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit VM location/insertion/inventory/role/FIEMAP/full CI; its implementation/evidence review found no blocker within the standalone scope. The private bounded current block-allocation interval verifier is implemented with 20 focused controls, padding/current-view checks and shared resource caps. Initial independent CI failed on an unsupported block-zero oracle query; a test-only repair adds complete free-list coverage and two local reader controls, with fresh VM/full CI pending. Its complete evidence/implementation review precedes ownership construction; admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit VM location/insertion/inventory/role/FIEMAP/full CI; its implementation/evidence review found no blocker within the standalone scope. The private bounded current block-allocation interval verifier is implemented with 20 focused controls, padding/current-view checks and shared resource caps. Initial independent CI hit an unsupported block-zero oracle query; repair `72b6911` passed exact-commit focused VM/full CI. Its complete standalone allocation review found no blocker within the stated scope. A private complete current-view ownership builder with shared accounting and whole-result Linux evidence is next; admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. Inspect the block-zero oracle repair's exact-commit focused/full CI and complete four-profile allocation/free-list reports/images, resolve any failure, then finish the allocation verifier's current-view, bit/padding, profile and resource review before complete ownership construction. The fixed-metadata source and review passed full CI. Shared peak budgets and lifecycle/admission integration remain separate. The journal guard already passed exact-commit focused Linux and full CI. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
+1. Implement the private complete current-view ownership builder under the latest allocation review's contract, including minimal extent-consumption accounting for shared budgets and independent whole-result Linux evidence. The allocation oracle repair passed focused VM/full CI and its standalone implementation review is complete. The fixed-metadata source and review passed full CI. Shared peak budgets and lifecycle/admission integration remain separate. The journal guard already passed exact-commit focused Linux and full CI. Root-only insertion and explicit fallback refusals are in place; complete ownership, mapping-shape and collision/growth qualification remain.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
@@ -2433,7 +2530,7 @@ The `src/fs.rs::tests::needs_host::casefold_inplace_index_insert_is_readable_by_
 
 The preceding routing checkpoint's full CI **38100380202** and Stage 0 **38100380219** both passed at `e4c3e85`. Its 52 direct selected-leaf probes across eight saved Linux images remain useful evidence for root-only and one-intermediate-level reads, distinct from qualification of the new insertion writes.
 
-**Next bounded task:** use the latest 2026-10-15 allocation-oracle repair checkpoint above.
+**Next bounded task:** use the latest 2026-10-15 allocation-verifier review checkpoint above.
 The journal guard's exact-commit focused Linux and full CI passed. The bounded
 transaction-current ownership design review and first private complete collector
 are recorded above. The collector's exact-commit insertion/FIEMAP and full CI
@@ -2442,9 +2539,10 @@ allocated-inode inventory passed focused Linux/full CI and its implementation
 review above. The private role reader passed exact-commit Linux/full CI and its
 implementation review. The private fixed-metadata interval component is now
 implemented and passed focused VM/Linux/full CI and review. The bounded current
-allocation interval verifier is implemented; its initial CI hit an unsupported
-block-zero oracle query. Inspect the repair's exact-commit CI and full evidence,
-then review its contract before a complete owner snapshot. Keep it disconnected from
+allocation interval verifier and block-zero oracle repair passed exact-commit
+VM/full CI, and the standalone implementation review is complete. Implement the
+private complete current-view ownership builder under its aggregate-budget and
+whole-result evidence contract. Keep it disconnected from
 insertion admission and retain all baseline occurrences/unchanged-state checks.
 The three other-inode aliases and disjoint control remain in the saved patch,
 unresolved. Complete directory mapping shape, snapshot/overlay integration,
@@ -2479,6 +2577,6 @@ Committed documentation: `docs/CASEFOLD-BEHAVIOR.md`, `docs/CASEFOLD-STAGE0.md`,
 
 The original detailed plan is `/workspace/casefold-implementation-plan.md`, outside the repository. Its baseline findings and future-tense descriptions are historical; use this note and verified code/CI state for current progress. In particular, do not infer a safe malformed-name fallback from that old plan: later observations led to the current refusal policy. This note contains the continuation essentials even if that original file is unavailable.
 
-Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion and full CI; the allocation review at `065f9a8` passed full CI. The current-allocation guard at `96b3b72` passed focused Linux and full CI; its insertion log was inspected. The ownership review retains three unresolved other-inode aliases in a self-contained patch. The scoped journal guard at `f9a0df0` passed exact-commit focused Linux/full CI; its actual insertion log was inspected. The owner-design review reran the three other-inode failures. The subsequent private bounded complete extent-ownership collector at `7bdfe0c` passed exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review records the independent depth-zero/one matrix and aggregate-budget/capacity requirements. The private inode inventory at `4309ed1` adds 15 local controls without admission integration and passed exact-commit focused Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private role reader at `ef1ca24` has 17 focused controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete within the narrow profile. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit focused VM location and existing Linux/full CI; its implementation review and documentation review full CI are complete. The private bounded current allocation interval verifier adds 20 focused controls. Initial CI failed on an unsupported block-zero oracle query; the test-only repair adds complete free-list coverage and two local reader controls, with fresh VM/full CI pending. Its complete evidence/contract review precedes a complete snapshot and lifecycle integration. No claim is made here that a separate coverage workflow ran at the latest commit.
+Some saved Linux images and local logs live under the checkout's ignored `tmp/` directory. They are useful when present but are not guaranteed in a fresh cloud environment; use committed tests and CI artifacts to reproduce or retrieve evidence. The previous index-routing/refusal checkpoint passed full CI and fresh Stage 0 evidence; the subsequent root-only insertion passed focused Linux evidence at `a7db076`, with full CI also passed. The early mapping fix had successful focused evidence but hit the measured unit output budget in full CI. The repairs and later full CI at `3be872e` and `8f94cf8` passed; the mapping-metadata checkpoint at `986808c` also passed. The staged-descriptor checkpoint at `1a6e8d1` also passed. The staged-superblock checkpoint at `b7b0325` passed focused Linux insertion and full CI; the allocation review at `065f9a8` passed full CI. The current-allocation guard at `96b3b72` passed focused Linux and full CI; its insertion log was inspected. The ownership review retains three unresolved other-inode aliases in a self-contained patch. The scoped journal guard at `f9a0df0` passed exact-commit focused Linux/full CI; its actual insertion log was inspected. The owner-design review reran the three other-inode failures. The subsequent private bounded complete extent-ownership collector at `7bdfe0c` passed exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review records the independent depth-zero/one matrix and aggregate-budget/capacity requirements. The private inode inventory at `4309ed1` adds 15 local controls without admission integration and passed exact-commit focused Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private role reader at `ef1ca24` has 17 focused controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete within the narrow profile. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit focused VM location and existing Linux/full CI; its implementation review and documentation review full CI are complete. The private bounded current allocation interval verifier adds 20 focused controls. Initial CI failed on an unsupported block-zero oracle query; repair `72b6911` passed exact-commit focused VM/full CI and its standalone implementation review is complete. A private complete current-view owner builder with shared accounting and independent whole-result evidence is next before lifecycle/admission integration. No claim is made here that a separate coverage workflow ran at the latest commit.
 
 This note is committed as `docs/extprogress.md` on `casefold-rw`. A new Codex session should open that branch, read this file, and verify the actual checkout and CI before continuing. Verify the selected commit against its own CI; earlier successful runs are evidence for those earlier checkpoints. Update this handoff as implementation checkpoints are completed.
