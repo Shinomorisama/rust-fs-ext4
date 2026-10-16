@@ -69,6 +69,93 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private operation-control implementation — 2026-10-16
+
+Implemented `src/operation.rs` after the concrete audit, starting from
+`c57f0d8fdb5ee1161200121719cc0ea1857b9a72`. Builder source `772981a` and its
+review `c3557f5` passed full CI; the audit's full CI was still running at entry.
+The primitive is a crate-private prerequisite only: no `Filesystem` field,
+public Rust/C ABI wrapper, device adapter, buffer, owner builder or commit path
+uses it. It does not fix or reproduce public concurrent-operation gaps. No
+public error/flush behavior, write gate or ownership profile changed.
+
+`Control` holds one mutex over fixed scalar status. `try_enter` uses `try_lock`
+and returns the existing `Unsupported` error on overlap/reentry, including a
+callback waiting for a worker on another thread. Poison and unhealthy state
+return corruption errors without recovery/unwrapping the poisoned lock. An
+`Operation` borrows its control and owns a non-Send guard; nested helpers take
+that context. Independent ownership via `Arc` is a caller choice, not an
+allocation or lifetime cache built by this module. No explicit heap reservations,
+device I/O, retries, sleeps or growing work/output structures are introduced;
+standard synchronization internals remain platform-dependent.
+
+Status separates view validity (`Unbuilt`/`Invalid`) from health (`Healthy`,
+`Uncertain`, `Faulted`). There is deliberately **no Ready state or proof
+publication API**. A borrowed `Stamp` compares control identity plus epoch and
+revision; matching counters from another control refuse. The borrow keeps its
+owner alive, preventing address reuse while a stamp exists. It is only a
+freshness marker, never ownership/admission evidence. Entry, status access and
+an untouched guard drop do not change versions or confer readiness.
+
+`revise` invalidates and advances the control-local revision; `invalidate`
+invalidates and advances both epoch and revision. This revision is **not yet a
+BlockBuffer revision or seal**. Arithmetic is checked as a pair before counters
+are assigned: exhaustion invalidates and faults health without partial advance
+or wrapping. Previously issued stamps cannot regain validity. There is no
+fault/poison reset API and no connection that clears existing filesystem health
+flags or replay refusals. Constructing a different control cannot recover an
+existing failed filesystem or grant permission to reuse it.
+
+`effect` invalidates and sets `Uncertain` before invoking external work. The
+closure must encompass the complete effect/write/flush attempt and propagate
+failures. `Ok` restores healthy control state while leaving validity invalid;
+it proves neither physical durability nor storage ownership. Every `Err`
+conservatively faults reuse, even if the callback reports failure before a known
+physical write. On unwind, guard drop faults and the mutex poisons. A panic
+caught while the guard itself remains alive does not poison the mutex; health
+stays uncertain and all freshness/change/effect methods refuse. Later normal
+drop changes that uncertainty to faulted, so catching the panic cannot heal it.
+A later planning refusal after an earlier successful effect cannot restore the
+old view; returning an error never rolls status back to its operation-entry value.
+
+Fifteen native controls exercise untouched release without readiness, prompt
+same-thread reentry refusal, a callback synchronously waiting for its worker,
+eight simultaneous contenders with exactly one held winner/effect, borrowed
+nested helpers, matching-version foreign-control refusal, stale stamps across
+entry and revision-only changes, invalidation/uncertainty before side effects,
+sticky effect failure, caught-panic-with-live-guard, mutex poison, exact last
+versions/exhaustion without partial advance or extra effects, and a later
+planning refusal after an earlier effect. Channels and barriers coordinate the
+actual threads; five-second receive bounds report blocking regressions rather
+than relying on scheduling sleeps. These are native synchronization/state
+controls, not a Linux filesystem or public concurrent-write qualification.
+
+Fresh full local units pass **976**, zero failed/ignored. Counter multisets
+retain all **961** baseline occurrences with exactly 15 operation additions.
+The log measures **1,224 lines / 79,142 bytes**, inside unchanged caps. The
+focused run also passes 15, zero failed/ignored (54 lines / 3,268 bytes).
+Lint passes, including formatting, Clippy with warnings denied, Unicode checks
+and provenance. The implementation hashes are retained with logs under
+`tmp/casefold-operation-gate`; exact-commit CI and implementation review remain
+pending. No fresh independent Linux or Windows concurrency run is claimed.
+Locked release CLI installation, shared instructions, whitespace and saved
+insertion-red patch applicability also pass. Implementation hashes remain
+unchanged after validation; dependency pins/locks and sibling checkouts remain
+unchanged. No environment draft or publication change was needed.
+
+**Next bounded checkpoint:** inspect exact-commit full/focused CI, then review
+the primitive's identity/lifetimes, exclusion/reentry, panic/error transitions,
+checked counters and caller obligations before wrapper migration. The audit's
+C ABI aliasing/handle-lifetime constraints, raw-field/device escape paths and
+concurrent-flush compatibility remain unresolved. Then choose one explicitly
+bounded migration family with context-taking helpers; do not add locks to every
+public method or put a second lock around existing ABI delegates. Owner epochs,
+transaction-private buffer binding, dependencies/overlays, final seals, durable
+publication and commit-failure integration still need implementation/review.
+The three saved insertion aliases remain unresolved; public writes, deeper
+insertion, collisions, splits/growth and index dropping remain blocked. No
+card/Windows/SteamOS or transparent concurrent-access readiness follows.
+
 ### Concrete operation serialization/invalidation audit — 2026-10-16
 
 Audited `c3557f57088f73bffb18c33f1ccb009235ace4f7`, equal to the fetched

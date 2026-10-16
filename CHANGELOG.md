@@ -13,6 +13,10 @@
 
 ### Added
 
+- A private operation-control primitive refuses overlapping/reentrant entry,
+  invalidates freshness before effects and faults reuse after uncertainty,
+  poison or version exhaustion. It creates no ownership readiness and remains
+  disconnected from filesystem methods and public casefold writes.
 - A private bounded builder joins the complete allocated-inode census, typed
   fixed/inode storage and current allocation checks under shared resource
   limits. Conflicts discard the result; transaction integration and public
