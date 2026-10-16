@@ -69,6 +69,134 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Concrete operation serialization/invalidation audit — 2026-10-16
+
+Audited `c3557f57088f73bffb18c33f1ccb009235ace4f7`, equal to the fetched
+remote tip with a clean tree. Builder source `772981a` now passed both
+[focused VM evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38849841814)
+and [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38849841824).
+The [review commit's full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38853268523)
+also passed; downloaded its actual unit artifact and confirmed 961 executed,
+zero failed/ignored. The six-image review below remains applicable. This is a
+source/design audit, not an executed concurrency reproduction or a guard fix.
+
+#### Concrete boundaries and bypasses
+
+| Existing path | Observed boundary | Required change before owner proof can authorize writes |
+|---|---|---|
+| `apply_*_bytes` to `resolve`/parent lookup to public `apply_*_at` or `apply_*_ino` | Resolution, duplicate checks, `live_inode` generation checks and allocation precede `commit_block_buffer`'s journal lock. No journal means no such lock. | Acquire once before the first filesystem read/verdict/marker write; delegate to private helpers carrying the same mount-bound operation context. A commit-only lock is insufficient. |
+| `apply_truncate_ino` to grow/shrink; `apply_pwrite_ino` to itself for chunks; zero-range to punch then keep-size | Nested public mutators and several commits in one public operation. | Replace internal public calls with context-taking helpers. Keep one outer guard across every chunk/commit, including failure between zero-range's two transactions; do not imply whole-call crash atomicity. |
+| C ABI `fs_ext4_truncate`, `fs_ext4_fallocate`, `fs_ext4_write_file` | Truncate/fallocate resolve in the ABI before inode mutation; write-file resolves/type-checks before the filesystem path method resolves again. | Put all state-dependent resolution/type checks under the same operation as mutation. Add guarded path-level dispatch or an internal context-taking bridge; retain ABI errno/type/name behavior. C pointer/length checks may precede entry. |
+| Other C ABI path mutators and `ino_call` delegates | Most directly call filesystem APIs; the opaque handle itself has no operation mutex. | Use the same filesystem boundary as Rust callers; do not independently lock the ABI and then call a locking public method. Preserve generation checks inside the operation. |
+| `refuse_write` to `mark_not_clean_once` to `write_superblock_state` | A normal write refusal check can already write/flush the primary superblock before planning. Rename uses a verdict-only check to preserve its no-op behavior. | Cover marker I/O and errors, not only final dirty-buffer commits; retain successful no-op rename semantics. |
+| `commit_block_buffer`, `commit_inode_write`, `write_direct`, `AllocationState::publish` | Journal lock starts after planning; allocation clears publish after durable commit while journal remains locked. Hash-map publication can allocate. | Require the operation context, preflight controlled publication capacity, then publish ownership/allocation state only after durability. A post-write error/panic must leave proof unusable. |
+| `BlockBuffer::dirty`, `get_mut`, `put`, direct table/bitmap/node edits | A mutable vector reference permits later edits without a typed inode writer; cloned/raw buffers have no epoch, mount identity or revision. | Keep staging transaction-private. Invalidate the final seal on every mutable exposure; later final validation must derive dependencies from final bytes, including shared inode-table blocks and external maps changed without inode edits. Do not accept a caller-supplied numeric revision as a seal. |
+| `write_inode_raw`, `patch_bgd_counters`, `patch_sb_counters`; `fsck::audit_with_repair` | Raw inode/descriptor writes bypass the main buffer; repair scans, calls user callbacks and commits several buffers. | Guard the whole repair scan/repair/recheck or refuse it in a proof-owning session. Invalidate before raw writes; no retained proof afterward without explicit rebuild. A nominal read-only fsck C call can request replay first. |
+| `journal_apply::{apply,replay_if_dirty,replay_into_cache}`, public journal writer | Public lower-level routines can apply disk changes or pin a new logical view without normal mutators. | Separate public invalidating wrappers from private context-taking replay/writer helpers. Internal commit must not reacquire its own guard. Cache replay also invalidates; a clean-log path can still write recovery markers/counters. |
+| mount/recovering mount, orphan recovery, `reload_geometry`, `refresh_metadata`, `fresh_read` | Mount may replay/reclaim before returning; refresh changes metadata/allocation overrides; fresh-read flushes/unpins/invalidates. Orphan recovery commits once per member. | Start unbuilt; build only after all recovery/refresh. Invalidate before maintenance/cache changes, retain the guard across multi-commit recovery and require explicit rebuild after success. Never reset sticky failure merely by refreshing/reopening a writer. |
+| label updates, `flush`, `finish`, `Drop` | Label commits primary/backups then changes mounted bytes; flush may fail; finish/drop write clean/recovery state. | Include label and release paths. Revoke proof before close; never clean a faulted mount. Preserve current concurrent-flush and exclusive refresh/unmount contracts until public wiring is separately qualified. |
+| Public `dev`, `journal`, `sb`, `groups`, `csum`, `flavor`; retained device handles, adapters and formatting | Callers can bypass an internal mutex, directly alter metadata with an exclusive Rust borrow, drive a journal or write through another handle. | No transparent lifetime cache is justified. A future proof-owning session must control filesystem access and discard proof before returning mutable access; external device exclusivity remains a caller prerequisite. Preserve existing APIs without pretending they enforce this capability. Formatting/standalone device APIs must never run against a live proof-owning device. |
+
+The same coverage is needed for chmod/chown/utimens/flags/xattrs, create/mkdir/
+mknod/symlink/link/unlink/rmdir/rename, replacement/truncate/preallocation and
+ordinary-volume mutations: changing an inode checksum or unsupported storage
+role can stale the proof even without changing a namespace. Read consistency is
+a separate obligation. High-level lookup/stat/read/directory/xattr/fsck scans
+must join the session boundary or remain externally serialized; raw read helpers
+are not a coherent snapshot API. An iterator's collected entries do not remain
+live ownership/admission evidence.
+
+C ABI lifetime/aliasing is an additional boundary: replay, fresh-read, label and
+fsck wrappers construct mutable filesystem references; unmount frees the handle.
+A mutex acquired inside a filesystem method cannot legalize references that
+already overlap, nor keep a freed handle alive. Preserve the caller's exclusive
+maintenance/unmount contract. Any future handle-level concurrency support must
+enter its admission/lifetime control before creating filesystem references and
+drain users before destruction; it cannot be inferred from the private gate.
+Callback reentry refusal must also happen before conflicting reference creation.
+
+#### Lock and callback decisions
+
+Current edges include journal-to-allocation-state during publication, aligned
+device write-lock-to-inner-device during read/modify/write, and cache-state-to-
+inner-device during invalidation. Normal cache misses release the state lock
+before inner I/O; do not generalize that to every cache method. Runtime clock/
+generation providers, device read/write/flush/size/writability methods, C device
+callbacks and fsck progress/finding callbacks are externally supplied code.
+`ffi_guard` catches Rust unwinds but neither serializes operations nor repairs
+an uncertain disk/proof; a panic crossing a C callback is not made safe by it.
+
+For the **first disconnected private gate**, choose nonblocking `try_lock`:
+overlap/reentry returns an explicit existing `Unsupported` error before any
+filesystem access; poison returns an error and permanently refuses proof/write
+reuse. This bounds contention and prevents a callback that synchronously waits
+for same-mount work on another thread from blocking behind itself. Thread-local
+same-thread detection alone would not cover that case. This is a private
+prototype decision, not a change to public concurrent-flush behavior, a new ABI
+errno promise or a retry loop. Public wrapper migration must review those
+compatibility details and callback tests before connecting the gate.
+
+Use a private mount-bound operation context with one owner; nested helpers take
+that context rather than acquiring again. A private independently owned control
+handle can keep the guard alive without borrowing fields across `&mut self`
+refresh/replay; do not work around Rust aliasing with raw pointers. Use checked
+mount epoch/revision advancement; overflow, foreign tokens and stale revisions
+refuse. No recursive mutex, lock release around callbacks or hidden bootstrap
+scan is allowed. Proposed order is operation gate outermost, journal next when
+needed, allocation-state/cache/device locks innermost with their existing edges.
+Do not hold allocation-state across journal acquisition. None of these locks
+may call a public operation that acquires the gate again. Qualify reader behavior
+and cross-mount callback ownership separately; raw external access is unsupported.
+
+#### Invalidation, failure and implementation sequence
+
+Keep proof validity separate from write health. Start unbuilt. Under the gate,
+an explicit bounded build may eventually establish a ready epoch. Before any
+raw write, replay, recovery, cache/geometry refresh or uncontrolled mutable
+exposure, revoke ready status and advance the checked epoch. Success leaves
+that proof invalid until explicit rebuild; failure/poison with uncertain I/O
+also latches faulted health. Existing `direct_commit_failed`, journal health and
+`replay_pending` remain authoritative refusals; new state cannot clear them.
+All callback-backed write/flush attempts, including the early clean marker,
+must enter the uncertainty boundary before invoking external code.
+
+A pure planning refusal before view/device changes drops local work without
+publishing. After a successful earlier chunk, a later planning refusal cannot
+restore the operation's original proof: retain the last durably published epoch
+only if its complete overlay was already validated, otherwise stay invalid.
+I/O/flush failure after an attempted write, or unwind after device changes,
+discards proof and refuses writes until recovery/remount. A guard's successful
+drop is not evidence of durable commit. For future overlays, prepare owner,
+reverse-dependency and allocation-publication capacities before device writes;
+hold the guard through final seal, durability and publication. Acquire/restore
+no proof after failure by rolling back only an in-memory owner map.
+
+**Next bounded implementation:** a private operation-control/gate primitive and
+tests only, disconnected from public methods, owner caching and admission.
+Prove at-most-one entry, prompt same-thread and callback-worker overlap refusal,
+release after untouched abort, mount identity, checked epoch/revision limits,
+invalidation before an injected side effect and sticky poison/uncertain-failure
+refusal. Use deterministic barriers/channels and bounded waits, not timing-only
+race tests. It must confer no ownership token or readiness on construction.
+Then review it before migrating wrapper families and maintenance/raw paths under
+the table above. Required later integration controls include pre-resolution
+serialization, nested chunk/zero-range calls without relocking, C ABI stale
+lookup, shared inode-table/raw-node edits, concurrent read/flush, callback
+reentry, repair/replay/refresh, partial commits and publication faults.
+
+No production/test/workflow changed in this audit. Current concurrency gaps
+above are source observations/design constraints, not newly executed failing
+reproductions. The three saved insertion aliases remain unresolved. Public
+casefold writes, deeper insertion, collisions, splitting/growth and index
+dropping remain blocked; no Windows/SteamOS/card or concurrency readiness claim.
+
+Fresh baseline/final full units pass 961, zero failed/ignored, with identical
+test-occurrence Counter multisets (1,208 lines / 77,820 bytes, unchanged caps).
+Lint, provenance/shared instructions, whitespace and saved ownership-patch
+applicability pass. Source/test/header/workflow hashes and sibling checkouts are
+unchanged. Ignored call inventories, CI evidence and verification logs are under
+`tmp/casefold-lifecycle-audit`; the existing handoff records this checkpoint.
+
 ### Complete ownership implementation/evidence review — 2026-10-16
 
 Reviewed `772981a50a4624b878c4ccd0ea36df5b2fec0233`, equal to the fetched
