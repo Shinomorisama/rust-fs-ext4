@@ -69,6 +69,98 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Private complete current-view ownership implementation — 2026-10-15
+
+The bounded constructor in `src/ownership.rs` joins the reviewed fixed layout,
+current allocated-inode inventory, strict inode-role reader, complete extent
+collector and one final current-allocation verification. It requires one trusted,
+coherent stable device/buffer view throughout the call. It returns a complete
+local result or an error; it publishes no cache, epoch, dependencies, transaction
+overlay or write admission. Retained external device handles are outside Rust's
+borrow guarantee, so this precondition still needs the later operation guard.
+
+Every allocated ID is visited once, including inactive reserved, empty and
+zero-link records. The result retains inode/generation, role, storage form,
+size, sector total and link count. Hard links do not duplicate ownership. Root
+and the declared journal must be allocated and classified correctly. The common
+profile requires metadata checksums, 1/4 KiB blocks, 32/64-byte descriptors,
+256-byte Linux inode bodies, initialized inode and touched block bitmaps, and
+extent depths zero/one (journal zero). Unknown flags, attributes, legacy maps,
+RESIZE_INODE, unsupported roles/depths and malformed current metadata refuse.
+
+Claims distinguish fixed role/group from inode/generation/role and data versus
+mapping storage. Whole trees retain unwritten and beyond-EOF allocation. The sum
+of data and mapping blocks must match the inode's sector count under the
+non-HUGE profile. One in-place global sort rejects every overlap, including
+fixed/journal and same-inode data/map conflicts. One allocation check covers all
+claims except the typed 1 KiB boot reservation; 4 KiB block zero is checked
+normally. Unclaimed allocated bits do not establish free space or authorize
+acquisition. The aligned external-node adapter checks filesystem bounds and
+exact staged length before copying; staged nodes bypass underlying disk reads.
+
+Shared limits cover three conservative group-phase reservations, full inode
+bitmap probes, allocated IDs, global claims, total tree records, metadata/node
+reads, allocation bitmap work and requested memory. Metadata phases reserve
+their conservative read maxima up front; body reads debit the actual census
+length. The extent collector now exposes successful read/record consumption,
+and each next tree receives only the remaining global allowance plus a separate
+per-inode transient claim ceiling. Any failure aborts the entire invocation;
+there is no retry with a fresh per-inode allowance.
+
+Checked requested-byte accounting sums inventory, retained inode identities,
+fixed ranges, global claims, allocation-input conversion, one transient tree
+and all component scratch (including the explicit inode checksum stack copy).
+This deliberately conservative sum even includes nonoverlapping phases. All
+direct vector reservations are fallible and fixed; each transient tree is
+consumed/dropped before the next inode. This is not measured RSS or a card-size
+default: allocator overhead, other scalar stack use, shared cache and pinned
+replay allocations remain outside the bound. Global sorting is bounded by the
+explicit claim count; runs are never expanded into per-block owner entries.
+
+Four initial constructor controls used a baseline adapter that collected each
+inode separately without global conflict checking: the three known cross-owner
+shapes failed on acceptance, while the disjoint control passed. Through the
+builder all four pass. Eighteen expanded controls cover complete typed output,
+exact/exhausted shared budgets and overflow, zero-link/empty/reserved IDs,
+hard-link identity, fixed/same-inode/journal conflicts, missing root/journal,
+sector totals, staged child relocation/conflict, allocation/uninitialized flags,
+unsupported bodies, malformed staged blocks/checksums, generation and unwritten
+beyond-EOF storage, device failure and staged precedence over a failed read.
+The first red attempt had a compile-only test helper typo; the recorded red
+result is the subsequent executed run, not that compile error.
+
+The final full local tier passes **961**, zero failed/ignored; a Counter multiset
+retains all **943** baseline occurrences with exactly 18 builder additions.
+The log measures 1,209 lines / 77,879 bytes under unchanged caps. Lint, locked
+release CLI installation, provenance/shared instructions, whitespace and saved
+insertion-level red patch applicability checks pass. Validated source/guest/
+workflow hashes remain unchanged and core/Windows siblings remain clean.
+
+A new VM-only whole-result oracle creates six initialized Linux profiles:
+1/4 KiB times 32-byte/no-journal, 64-byte/no-journal and 64-byte/journal. It
+populates both groups and includes empty files, a hard link, directories, short
+and long symlinks, FIFO, external maps and unwritten beyond-EOF storage. Judged
+e2fsck must be clean. Complete independent `debugfs testi` answers determine the
+census; `stat` determines each identity/type/size/link/sector value and every
+data/map range; `dumpe2fs` determines typed fixed ranges and used-block totals.
+The entire sorted owner vector and every allocated inode record are compared,
+not merely aggregate bits or our own logical lookup. Missing/duplicate report
+answers fail. CI requires exactly this test with an executed-test floor of one
+and retains images, commands, raw reports and summaries. It compiles locally;
+execution/evidence review is pending the exact new commit's CI. No local VM or
+host oracle execution is claimed.
+
+**Next bounded checkpoint:** inspect that exact-commit focused/full CI, diagnose
+any failures, download all six owner fixtures/reports and review complete output,
+resource accounting and the constructor contract. The allocation source's
+`72b6911` focused/full CI passed; this does not qualify the new joined builder.
+Only after this review should operation guard, epoch/dependencies, overlay,
+sealing/invalidation, publication and commit-failure integration be attempted.
+The three saved insertion-level cross-inode failures remain unresolved because
+this constructor is disconnected. Public casefold writes, deeper insertion,
+collisions, splitting/growth and index dropping remain blocked. No real card,
+Windows or SteamOS qualification follows from these constructor controls.
+
 ### Allocation verifier implementation and evidence review — 2026-10-15
 
 Reviewed `72b6911d4d265ce1339c56caac1f9330a62099ef`, including the production

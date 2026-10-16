@@ -13,9 +13,11 @@ on:
       - src/inode_roles.rs
       - src/fixed_metadata.rs
       - src/block_allocation.rs
+      - src/ownership.rs
       - src/lib.rs
       - tests/inode_inventory_guest.py
       - tests/block_allocation_guest.py
+      - tests/ownership_guest.py
       - tests/inode_roles_guest.py
       - tests/extent_ownership_guest.py
       - src/path.rs
@@ -97,6 +99,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:block-allocation casefold-block-allocation 1050 65000 -- scripts/test.sh --locked --release --lib block_allocation::needs_host::linux_allocation_intervals_match_every_debugfs_block_bit -- --exact --show-output
           bash scripts/core.sh test-floor casefold-block-allocation 1
+      - name: Compare complete current ownership with Linux reports
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/ownership
+        run: |
+          scripts/tier.sh casefold:ownership casefold-ownership 1050 65000 -- scripts/test.sh --locked --release --lib ownership::needs_host::linux_complete_ownership_matches_all_inode_and_fixed_storage_reports -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-ownership 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -117,5 +125,7 @@ jobs:
             tmp/fixed-metadata/
             tmp/logs/casefold-block-allocation.log
             tmp/block-allocation/
+            tmp/logs/casefold-ownership.log
+            tmp/ownership/
           if-no-files-found: error
           retention-days: 30

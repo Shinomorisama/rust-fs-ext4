@@ -10060,6 +10060,498 @@ mod tests {
         ));
     }
 
+    fn owner_fixture() -> (std::sync::Arc<MemDev>, Filesystem, BlockBuffer) {
+        let (dev, fs, mut buf) = allocation_fixture();
+        for ino in (1..11).filter(|ino| *ino != 2) {
+            stage_role_body(&fs, &mut buf, ino, |raw| raw.fill(0));
+        }
+        (dev, fs, buf)
+    }
+
+    fn owner_file(
+        fs: &Filesystem,
+        buf: &mut BlockBuffer,
+        ino: u32,
+        physical: u64,
+        directory: bool,
+    ) {
+        stage_role_body(fs, buf, ino, |raw| {
+            if directory {
+                raw[..2].copy_from_slice(&0x41c0u16.to_le_bytes());
+            }
+            raw[4..8].copy_from_slice(&BS.to_le_bytes());
+            raw[28..32].copy_from_slice(&(BS / 512).to_le_bytes());
+            raw[40..100].fill(0);
+            raw[40..42].copy_from_slice(&crate::extent::EXT4_EXT_MAGIC.to_le_bytes());
+            raw[42..44].copy_from_slice(&1u16.to_le_bytes());
+            raw[44..46].copy_from_slice(&4u16.to_le_bytes());
+            raw[56..58].copy_from_slice(&1u16.to_le_bytes());
+            raw[58..60].copy_from_slice(&((physical >> 32) as u16).to_le_bytes());
+            raw[60..64].copy_from_slice(&(physical as u32).to_le_bytes());
+        });
+    }
+
+    fn owner_map_fixture(
+        staged_alias: bool,
+        alias: bool,
+    ) -> (std::sync::Arc<MemDev>, Filesystem, BlockBuffer) {
+        let (dev, fs, mut buf) = owner_fixture();
+        owner_file(&fs, &mut buf, 42, 900, false);
+        let (_, mut raw) = fs.buffered_inode_verified(&buf, 42).unwrap();
+        let mut node = vec![0; BS as usize];
+        node[..24].copy_from_slice(&raw[40..64]);
+        node[4..6].copy_from_slice(&(((BS - 16) / 12) as u16).to_le_bytes());
+        let generation = Inode::parse(&raw).unwrap().generation;
+        fs.csum.patch_extent_tail(42, generation, &mut node);
+        buf.put(800, node);
+        raw[46..48].copy_from_slice(&1u16.to_le_bytes());
+        raw[52..64].fill(0);
+        raw[56..60].copy_from_slice(&800u32.to_le_bytes());
+        raw[28..32].copy_from_slice(&(2 * BS / 512).to_le_bytes());
+        fs.csum.patch_inode_checksum(42, generation, &mut raw);
+        fs.buffer_write_inode(&mut buf, 42, &raw).unwrap();
+        let file = if alias && !staged_alias { 800 } else { 1000 };
+        owner_file(&fs, &mut buf, 43, file, false);
+        stage_casefold_planner_blocks(&fs, &mut buf, [800, 900, 1000]);
+        // Persist a complete synthetic view; the staged case then changes only
+        // inode 43's current owner map, leaving its device map disjoint.
+        for (&block, bytes) in &buf.dirty {
+            dev.write_at(block * u64::from(BS), bytes).unwrap();
+        }
+        fs.dev.invalidate_cache().unwrap();
+        let mut buf = BlockBuffer::new(BS);
+        if staged_alias && alias {
+            owner_file(&fs, &mut buf, 43, 800, false);
+        }
+        (dev, fs, buf)
+    }
+
+    fn owner_probe(fs: &Filesystem, buf: &BlockBuffer) -> Result<()> {
+        crate::ownership::build(fs, buf, owner_limits(fs)).map(|_| ())
+    }
+
+    fn owner_limits(fs: &Filesystem) -> crate::ownership::Limits {
+        crate::ownership::Limits {
+            groups: 3 * fs.groups.len() as u64,
+            inode_bits: fs.groups.len() as u64 * u64::from(fs.sb.block_size()) * 8,
+            inodes: 64,
+            claims: 1024,
+            tree_claims: 128,
+            reads: 4096,
+            tree_records: 4096,
+            bitmap_bytes: 128 * u64::from(fs.sb.block_size()),
+            memory_bytes: 1024 * 1024,
+        }
+    }
+
+    #[test]
+    fn owner_builder_refuses_directory_data_owned_by_another_directory() {
+        let (_, fs, mut buf) = owner_fixture();
+        let (lf, _) = fs.read_inode_verified(11).unwrap();
+        let physical = fs.map_inode_logical(&lf, 0).unwrap().unwrap();
+        owner_file(&fs, &mut buf, 42, physical, true);
+        assert!(owner_probe(&fs, &buf).is_err());
+    }
+
+    #[test]
+    fn owner_builder_refuses_a_map_node_owned_by_another_file() {
+        let (_, fs, buf) = owner_map_fixture(false, true);
+        assert!(owner_probe(&fs, &buf).is_err());
+    }
+
+    #[test]
+    fn owner_builder_refuses_a_map_node_owned_only_in_the_current_buffer() {
+        let (_, fs, buf) = owner_map_fixture(true, true);
+        assert!(owner_probe(&fs, &buf).is_err());
+    }
+
+    #[test]
+    fn owner_builder_accepts_disjoint_complete_trees() {
+        let (_, fs, buf) = owner_map_fixture(false, false);
+        owner_probe(&fs, &buf).unwrap();
+    }
+
+    fn owner_edit(fs: &Filesystem, buf: &mut BlockBuffer, ino: u32, edit: impl FnOnce(&mut [u8])) {
+        let (_, mut raw) = fs.buffered_inode_verified(buf, ino).unwrap();
+        edit(&mut raw);
+        let generation = Inode::parse(&raw).unwrap().generation;
+        fs.csum.patch_inode_checksum(ino, generation, &mut raw);
+        fs.buffer_write_inode(buf, ino, &raw).unwrap();
+    }
+
+    fn owner_unchanged(
+        dev: &MemDev,
+        fs: &Filesystem,
+        buf: &BlockBuffer,
+        limits: crate::ownership::Limits,
+    ) -> Result<crate::ownership::Ownership> {
+        let dirty = buf.dirty.clone();
+        let flags = buf.uninit_cleared.clone();
+        let bytes = dev.bytes.lock().unwrap().clone();
+        let result = crate::ownership::build(fs, buf, limits);
+        assert_eq!(buf.dirty, dirty);
+        assert_eq!(buf.uninit_cleared, flags);
+        assert_eq!(*dev.bytes.lock().unwrap(), bytes);
+        result
+    }
+
+    #[test]
+    fn owner_builder_returns_every_identity_and_typed_disjoint_storage() {
+        use crate::ownership::Owner;
+        let (dev, fs, buf) = owner_map_fixture(false, false);
+        let got = owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).unwrap();
+        assert_eq!(
+            got.inodes.iter().map(|r| r.ino).collect::<Vec<_>>(),
+            (1..=11).chain([42, 43]).collect::<Vec<_>>()
+        );
+        assert!(got.claims.windows(2).all(|p| p[0].end <= p[1].start));
+        assert!(got.claims.iter().any(|c| c.start == 800
+            && matches!(
+                c.owner,
+                Owner::Inode {
+                    ino: 42,
+                    storage: crate::extent::ownership::Role::Mapping,
+                    ..
+                }
+            )));
+        assert!(got.claims.iter().any(|c| c.start == 900
+            && matches!(
+                c.owner,
+                Owner::Inode {
+                    ino: 42,
+                    storage: crate::extent::ownership::Role::Data {
+                        logical: 0,
+                        unwritten: false
+                    },
+                    ..
+                }
+            )));
+        assert!(got.claims.iter().any(|c| c.start == 0
+            && matches!(
+                c.owner,
+                Owner::Fixed {
+                    role: crate::fixed_metadata::Role::Superblock,
+                    ..
+                }
+            )));
+        assert_eq!(got.tree_records, 5);
+        assert_eq!(got.charged_reads, 22);
+    }
+
+    #[test]
+    fn owner_builder_enforces_exact_and_exhausted_cumulative_limits() {
+        use crate::ownership::Limits;
+        let (dev, fs, buf) = owner_map_fixture(false, false);
+        let got = owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).unwrap();
+        let mut exact = Limits {
+            inodes: got.inodes.len(),
+            claims: got.claims.len(),
+            tree_claims: 2,
+            reads: got.charged_reads,
+            tree_records: got.tree_records,
+            bitmap_bytes: 2 * u64::from(BS)
+                + got
+                    .claims
+                    .iter()
+                    .map(|c| c.end.div_ceil(8) - c.start / 8)
+                    .sum::<u64>(),
+            ..owner_limits(&fs)
+        };
+        exact.memory_bytes = exact.requested_bytes(BS as usize).unwrap();
+        owner_unchanged(&dev, &fs, &buf, exact).unwrap();
+        for small in [
+            Limits {
+                groups: exact.groups - 1,
+                ..exact
+            },
+            Limits {
+                inode_bits: exact.inode_bits - 1,
+                ..exact
+            },
+            Limits {
+                inodes: exact.inodes - 1,
+                ..exact
+            },
+            Limits {
+                claims: exact.claims - 1,
+                ..exact
+            },
+            Limits {
+                tree_claims: 1,
+                ..exact
+            },
+            Limits {
+                reads: exact.reads - 1,
+                ..exact
+            },
+            Limits { reads: 0, ..exact },
+            Limits {
+                tree_records: exact.tree_records - 1,
+                ..exact
+            },
+            Limits {
+                bitmap_bytes: exact.bitmap_bytes - 1,
+                ..exact
+            },
+            Limits {
+                memory_bytes: exact.memory_bytes - 1,
+                ..exact
+            },
+            Limits {
+                claims: usize::MAX,
+                ..exact
+            },
+            Limits {
+                inodes: usize::MAX,
+                ..exact
+            },
+        ] {
+            assert!(owner_unchanged(&dev, &fs, &buf, small).is_err());
+        }
+    }
+
+    #[test]
+    fn owner_builder_keeps_zero_link_and_empty_allocated_records() {
+        let (dev, fs, mut buf) = owner_fixture();
+        stage_role_body(&fs, &mut buf, 42, |raw| raw[26..28].fill(0));
+        let got = owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).unwrap();
+        let record = got.inodes.iter().find(|r| r.ino == 42).unwrap();
+        assert_eq!((record.links, record.size, record.sectors), (0, 0, 0));
+        assert!(got
+            .inodes
+            .iter()
+            .any(|r| r.ino == 3 && r.role == crate::inode_roles::Role::InactiveReserved));
+        assert!(!got
+            .claims
+            .iter()
+            .any(|c| matches!(c.owner, crate::ownership::Owner::Inode { ino: 42, .. })));
+    }
+
+    #[test]
+    fn owner_builder_hardlink_counts_do_not_duplicate_storage_identity() {
+        let (_, fs, mut buf) = owner_map_fixture(false, false);
+        owner_edit(&fs, &mut buf, 43, |raw| {
+            raw[26..28].copy_from_slice(&2u16.to_le_bytes())
+        });
+        let got = crate::ownership::build(&fs, &buf, owner_limits(&fs)).unwrap();
+        assert_eq!(got.inodes.iter().filter(|r| r.ino == 43).count(), 1);
+        assert_eq!(
+            got.claims
+                .iter()
+                .filter(|c| matches!(c.owner, crate::ownership::Owner::Inode { ino: 43, .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn owner_builder_refuses_fixed_and_same_inode_role_conflicts() {
+        let (dev, fs, mut buf) = owner_fixture();
+        owner_file(&fs, &mut buf, 42, fs.groups[0].block_bitmap, false);
+        assert!(matches!(
+            owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+            Err(Error::Corrupt("ownership physical conflict"))
+        ));
+        let (dev, fs, mut buf) = owner_map_fixture(false, false);
+        let generation = fs.buffered_inode_verified(&buf, 42).unwrap().0.generation;
+        let node = buf.get_mut(&fs, 800).unwrap();
+        node[20..24].copy_from_slice(&800u32.to_le_bytes());
+        fs.csum.patch_extent_tail(42, generation, node);
+        assert!(matches!(
+            owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+            Err(Error::CorruptExtentTree(
+                "extent ownership physical overlap"
+            ))
+        ));
+    }
+
+    #[test]
+    fn owner_builder_keeps_declared_journal_storage_typed_and_disjoint() {
+        let (dev, mut fs, mut buf) = owner_fixture();
+        fixed_edit_sb(&mut fs, &mut buf, |raw| {
+            let flags = u32::from_le_bytes(raw[0x5c..0x60].try_into().unwrap());
+            raw[0x5c..0x60]
+                .copy_from_slice(&(flags | features::Compat::HAS_JOURNAL.bits()).to_le_bytes());
+            raw[0xe0..0xe4].copy_from_slice(&8u32.to_le_bytes());
+        });
+        owner_file(&fs, &mut buf, 8, 1000, false);
+        stage_casefold_planner_blocks(&fs, &mut buf, [1000]);
+        let got = owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).unwrap();
+        assert!(got.claims.iter().any(|c| matches!(
+            c.owner,
+            crate::ownership::Owner::Inode {
+                ino: 8,
+                role: crate::inode_roles::Role::Journal,
+                ..
+            }
+        )));
+        owner_file(&fs, &mut buf, 42, 1000, false);
+        assert!(matches!(
+            owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+            Err(Error::Corrupt("ownership physical conflict"))
+        ));
+    }
+
+    #[test]
+    fn owner_builder_refuses_missing_root_and_declared_journal_allocation() {
+        for ino in [2, 8] {
+            let (dev, mut fs, mut buf) = owner_fixture();
+            if ino == 8 {
+                fixed_edit_sb(&mut fs, &mut buf, |raw| {
+                    let flags = u32::from_le_bytes(raw[0x5c..0x60].try_into().unwrap());
+                    raw[0x5c..0x60].copy_from_slice(
+                        &(flags | features::Compat::HAS_JOURNAL.bits()).to_le_bytes(),
+                    );
+                    raw[0xe0..0xe4].copy_from_slice(&8u32.to_le_bytes());
+                });
+            }
+            buf.get_mut(&fs, fs.groups[0].inode_bitmap).unwrap()[0] &= !(1 << (ino - 1));
+            fs.buffer_refresh_bitmap_csum(&mut buf, 0, true).unwrap();
+            assert!(matches!(
+                owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+                Err(Error::Corrupt("ownership missing root/journal allocation"))
+            ));
+        }
+    }
+
+    #[test]
+    fn owner_builder_refuses_incorrect_full_tree_sector_accounting() {
+        let (dev, fs, mut buf) = owner_map_fixture(false, false);
+        owner_edit(&fs, &mut buf, 42, |raw| {
+            raw[28..32].copy_from_slice(&(BS / 512).to_le_bytes())
+        });
+        assert!(matches!(
+            owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+            Err(Error::Corrupt("ownership inode sector count"))
+        ));
+    }
+
+    #[test]
+    fn owner_builder_uses_current_external_children_for_conflicts_and_relocations() {
+        for (physical, refused) in [(1000u32, true), (1200, false)] {
+            let (dev, fs, mut buf) = owner_map_fixture(false, false);
+            let generation = fs.buffered_inode_verified(&buf, 42).unwrap().0.generation;
+            let node = buf.get_mut(&fs, 800).unwrap();
+            node[20..24].copy_from_slice(&physical.to_le_bytes());
+            fs.csum.patch_extent_tail(42, generation, node);
+            stage_casefold_planner_blocks(&fs, &mut buf, [u64::from(physical)]);
+            let result = owner_unchanged(&dev, &fs, &buf, owner_limits(&fs));
+            if refused {
+                assert!(matches!(
+                    result,
+                    Err(Error::Corrupt("ownership physical conflict"))
+                ));
+            } else {
+                let got = result.unwrap();
+                assert!(got.claims.iter().any(|c| c.start == 1200));
+                assert!(!got.claims.iter().any(|c| c.start == 900));
+            }
+        }
+    }
+
+    #[test]
+    fn owner_builder_refuses_current_free_claims_and_uninitialized_bitmaps() {
+        for kind in 0..3 {
+            let (dev, fs, mut buf) = owner_map_fixture(false, false);
+            if kind == 0 {
+                buf.get_mut(&fs, fs.groups[0].block_bitmap).unwrap()[900 / 8] &= !(1 << (900 % 8));
+                fs.buffer_refresh_bitmap_csum(&mut buf, 0, false).unwrap();
+            } else {
+                let (block, at) = fs.sb.descriptor_location(0);
+                buf.get_mut(&fs, block).unwrap()[at + 0x12] |= if kind == 1 { 1 } else { 2 };
+                fs.buffer_patch_bgd_counters(&mut buf, 0, 0, 0, 0).unwrap();
+            }
+            assert!(owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).is_err());
+        }
+    }
+
+    #[test]
+    fn owner_builder_refuses_unknown_and_deeper_inode_profiles_without_partial_proof() {
+        for kind in 0..5 {
+            let (dev, fs, mut buf) = owner_map_fixture(false, false);
+            owner_edit(&fs, &mut buf, 43, |raw| match kind {
+                0 => raw[..2].copy_from_slice(&0xc180u16.to_le_bytes()),
+                1 => raw[0x68..0x6c].copy_from_slice(&1000u32.to_le_bytes()),
+                2 => raw[46..48].copy_from_slice(&2u16.to_le_bytes()),
+                3 => raw[0x22] |= 4,
+                _ => raw[0x23] |= 0x80,
+            });
+            assert!(owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).is_err());
+        }
+    }
+
+    #[test]
+    fn owner_builder_refuses_malformed_staged_metadata_and_corrupt_maps() {
+        for kind in 0..5 {
+            let (dev, fs, mut buf) = owner_map_fixture(false, false);
+            let block = match kind {
+                0 => 0,
+                1 => fs.sb.descriptor_location(0).0,
+                2 => fs.groups[0].inode_table,
+                3 => fs.groups[0].block_bitmap,
+                _ => 800,
+            };
+            buf.put(block, vec![0; BS as usize - 1]);
+            assert!(owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).is_err());
+        }
+        let (dev, fs, mut buf) = owner_map_fixture(false, false);
+        buf.get_mut(&fs, 800).unwrap()[100] ^= 1;
+        assert!(matches!(
+            owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+            Err(Error::BadChecksum {
+                what: "extent block"
+            })
+        ));
+    }
+
+    #[test]
+    fn owner_builder_preserves_identity_generation_and_unwritten_beyond_eof_claims() {
+        let (dev, fs, mut buf) = owner_map_fixture(false, false);
+        owner_edit(&fs, &mut buf, 43, |raw| {
+            raw[52..56].copy_from_slice(&1024u32.to_le_bytes());
+            raw[56..58].copy_from_slice(&0x8001u16.to_le_bytes());
+            raw[0x64..0x68].copy_from_slice(&1234u32.to_le_bytes());
+        });
+        let got = owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).unwrap();
+        assert!(got.claims.iter().any(|c| matches!(
+            c.owner,
+            crate::ownership::Owner::Inode {
+                ino: 43,
+                generation: 1234,
+                storage: crate::extent::ownership::Role::Data {
+                    logical: 1024,
+                    unwritten: true
+                },
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn owner_builder_staged_node_precedence_avoids_a_failed_device_read() {
+        struct FailNode(std::sync::Arc<MemDev>);
+        impl crate::block_io::BlockDevice for FailNode {
+            fn read_at(&self, at: u64, out: &mut [u8]) -> Result<()> {
+                if at == 800 * u64::from(BS) {
+                    return Err(std::io::Error::other("injected owner node fault").into());
+                }
+                self.0.read_at(at, out)
+            }
+            fn size_bytes(&self) -> u64 {
+                VOL
+            }
+        }
+        let (dev, mut fs, mut buf) = owner_map_fixture(false, false);
+        let node = fs.read_block(800).unwrap();
+        fs.dev = std::sync::Arc::new(FailNode(dev.clone()));
+        assert!(matches!(
+            owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)),
+            Err(Error::Io(_))
+        ));
+        buf.put(800, node);
+        owner_unchanged(&dev, &fs, &buf, owner_limits(&fs)).unwrap();
+    }
+
     fn fixed_edit_sb(fs: &mut Filesystem, buf: &mut BlockBuffer, edit: impl FnOnce(&mut [u8])) {
         let mut raw = fs.sb.raw.clone();
         edit(&mut raw);

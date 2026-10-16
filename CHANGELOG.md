@@ -13,6 +13,10 @@
 
 ### Added
 
+- A private bounded builder joins the complete allocated-inode census, typed
+  fixed/inode storage and current allocation checks under shared resource
+  limits. Conflicts discard the result; transaction integration and public
+  casefold write admission remain separate and blocked.
 - A private bounded interval verifier checks current initialized block allocation
   with staged precedence, checksums, full bitmap padding and shared resource
   limits. Complete ownership and public casefold write admission remain separate.

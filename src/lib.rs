@@ -63,6 +63,9 @@ pub mod journal;
 pub mod journal_apply;
 pub mod journal_writer;
 pub mod mkfs;
+// Private complete current-view proof; no write admission or epoch publication.
+#[allow(dead_code)]
+pub(crate) mod ownership;
 pub mod path;
 pub mod runtime;
 pub mod superblock;

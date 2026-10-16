@@ -43,6 +43,14 @@ pub(crate) struct Tree {
     pub generation: u32,
     /// Sorted by physical address; no two claims overlap.
     pub claims: Vec<Claim>,
+    /// Successful traversal consumption, for a caller's aggregate budget.
+    pub usage: Usage,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Usage {
+    pub node_reads: usize,
+    pub records: usize,
 }
 
 const LIMIT: Error = Error::Unsupported("extent ownership resource limit");
@@ -131,6 +139,10 @@ pub(crate) fn collect(
     Ok(Tree {
         ino: ctx.ino,
         generation: ctx.generation,
+        usage: Usage {
+            node_reads: walker.reads,
+            records: walker.records,
+        },
         claims: walker.claims,
     })
 }
