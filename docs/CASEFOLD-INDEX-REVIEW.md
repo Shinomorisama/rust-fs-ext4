@@ -69,6 +69,94 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public chmod implementation/evidence review — 2026-10-16
+
+Reviewed `c47b328381ea67dceca26fc33c796bd241c7fbac`, equal to fetched
+remote tip with a clean tree. Exact-commit [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38983322842)
+and [focused Linux evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/38983322854)
+passed. Downloaded actual artifacts: all eighteen public and eighteen retained
+private controls execute in standalone/x86/aarch64 unit contexts (each 1,012
+passed, zero failed/ignored, full multisets matching the fresh baseline) and
+the compiled guest library (708 passed, zero failed/ignored).
+
+Both exact metadata tests execute in guest and focused steps. The public
+Rust/C test covers eight profiles, one passed/zero failed/ignored, 81 lines /
+9,553 bytes, with 48 tool and sixteen kernel markers. The retained private test
+covers four profiles, one passed/zero failed/ignored, 49 lines / 4,960 bytes,
+with 24 tool and eight kernel markers. The whole guest suite separately reports
+1,836 passed, zero failed, **one ignored**, at 3,391 lines / 179,772 bytes. The
+existing slow `fuzz_smoke::deep_walk_byte_flip_fuzz_never_panics` stays an
+unresolved broader qualification gate; no family control or exact oracle was
+ignored and workflow success does not waive the missing evidence.
+
+Audited all twelve current images, 24 debugfs reports and twelve Linux reports,
+including all eight new public images. All 24 emitted inode records agree on
+mode/type, generation/identity, exact extended ctime and preserved input times/
+payload. Judged e2fsck accepts input/emitted close/readback. A separate format-
+byte audit verifies clean superblocks, descriptor/inode checksums, allocation
+bits, ctime epochs, mtime, directory atime and every file payload. The final
+Linux data read can update file atime/checksum after the saved debugfs report;
+this expected difference is accounted for. No host oracle/mount or forbidden
+implementation source was used. The full table/audit scope is in `extprogress.md`.
+
+**Decision: no blocker within the public chmod caller contract.** Entry precedes
+conversion and filesystem/runtime callbacks; verdict-only checks precede inode
+conversion, planning precedes the marker, and path dispatch reuses its context.
+Both effects retain invalidation/error propagation and sticky failure. Rust
+panics retire before C error return; ordinary C errors/success clearing and
+the any-generation sentinel are preserved. The exported-close control leaves
+a prior dirty marker unchanged after a caught planning panic with ordinary
+commit flags healthy. Test-only helpers add no ABI; successful worker controls
+join before handle release.
+
+This is a bounded public family, not whole-API concurrency or ownership proof.
+Other operations/readers/maintenance/raw fields/devices and C handle lifetime/
+aliasing remain externally coordinated. Caller argument destruction, swallowed
+errors, foreign unwind and callback duration remain outside the ordering claim.
+No owner builder/cache, Ready state, buffer seal or casefold admission is added.
+
+**Next bounded implementation: guarded chown family only.**
+
+1. Route public Rust string/byte/inode file owner/group changes and existing
+   C chown delegates through the **same** mount control, borrowed context and
+   sticky failure bridge as chmod. Do not add another per-family lock. Adapt
+   private helper names/visibility only as needed, retaining all current test
+   name occurrences and public signatures/error handling. No other family or
+   C ABI reference/lifetime redesign is included.
+2. Enter before generic inode conversion and filesystem/runtime callbacks.
+   Verdict-only volume refusals precede conversion; lookup/generation/raw-inode/
+   block planning precedes marker I/O. Path/inode helpers reuse one context.
+   Keep the whole early marker and complete direct/journal commit inside effects;
+   errors/unwind cannot heal common write/flush/clean-close health.
+3. Share the existing chown planner: full 32-bit uid/gid low/high halves, each
+   `u32::MAX` leave-unchanged sentinel (including both together), current mode/
+   type/ctime/checksum behavior and supported inode sizes. Preserve byte names,
+   stale generations, read-only/casefold/unsupported/journal refusals and the
+   distinct C `FS_EXT4_GEN_ANY` generation convention. No permission-policy or
+   new filesystem-feature expansion is part of this checkpoint.
+4. First execute red controls showing unguarded chown bypassing held chmod
+   and generic-conversion ordering, then green actual public Rust/C controls.
+   Cover both directions of cross-family overlap, callback-worker reentry,
+   conversion/unwind, full-width IDs/sentinels, missing/stale pre-I/O refusal,
+   marker/commit write/flush faults, caught Rust panic/C errors, subsequent
+   cross-family write/flush refusal and exported close without clean restoration.
+   Workers must remain joined/owned before handles can be released, including
+   timeout/error paths; do not unwind through non-unwinding extern C callbacks.
+5. Add a new exact public Rust/C Linux/e2fsck/debugfs oracle over currently
+   supported inode layouts, including 128-/256-byte owner fields, high IDs and
+   sentinel updates. Check full emitted owner IDs, unchanged mode/type and other
+   times, ctime/checksums, generation and payload. Retain both chmod exact VM
+   tests, all baseline occurrences, focused floors/artifacts and gates. Review
+   this family before another migration. File owner IDs grant no physical
+   storage-ownership readiness, cache publication, builder invocation or seal.
+
+The ignored fuzz qualification, three insertion aliases, other families and
+transaction dependencies/overlays/seals/publication/map/collision/growth remain
+open. All public casefold writes stay blocked; whole-API and actual-card/Windows/
+SteamOS qualification remain later. This review changes only the existing
+review/handoff documents; fresh validation and unchanged source hashes are in
+`extprogress.md`, with no new release build, local VM or environment change.
+
 ### Public chmod dispatch implementation checkpoint — 2026-10-16
 
 The reviewed private family now owns public Rust string/byte/inode chmod and
