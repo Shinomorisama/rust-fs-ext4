@@ -69,6 +69,31 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public chown oracle report repair — 2026-10-17
+
+Initial implementation `2cedf28` failed exact full/focused CI in its new oracle:
+debugfs printed group `0x87654321` as `-2023406815`, rejected by unsigned parsing.
+All three failed contexts stop there on the first profile; later profiles and
+Linux readback were not qualified. A read-only audit of that saved image agrees
+with its full stored IDs, mode, generation, ctime and payload; this does not
+replace independent qualification. The actual reports/runs are in `extprogress.md`.
+
+A new native captured-report control executed red before the test-only parser
+correction and now passes. Owner displays accept checked u32 or i32 decimal,
+preserving exactly 32 bits; malformed/overflow controls pass and generation
+remains unsigned. Production mutation code, public/C ABI, all sixteen profiles,
+exact oracles/floors and write gates are unchanged. The unit byte budget grows
+only for two added native controls, with the actual prior CI measurement recorded
+in `chores.yml`; the line cap and all other budgets remain. This is an oracle
+repair awaiting corrected exact full/focused CI and standalone family review.
+
+The older `ab8129a` guest rerun passed at the same SHA; its complete artifact
+retains one pre-existing ignored deep-fuzz test. Neither that ignored qualification
+nor the cause of its original VM loss is resolved by the passing retry. Check
+the corrected owner evidence and complete family review before another migration.
+Casefold writes, owner publication and whole-API/actual-card/Windows/SteamOS
+qualification remain gated; Stage 5 is not yet quantified.
+
 ### Public chown shared-guard implementation — 2026-10-16
 
 Public Rust string/byte/inode chown and its existing C delegates now use chmod's

@@ -280,15 +280,21 @@ TIMES_PY
             mode
         );
         for (label, expected) in [("User:", uid), ("Group:", gid), ("Generation:", generation)] {
-            let found = report
+            let value = report
                 .split(label)
                 .nth(1)
                 .unwrap()
                 .split_whitespace()
                 .next()
-                .unwrap()
-                .parse::<u32>()
                 .unwrap();
+            let found = if label == "Generation:" {
+                value.parse::<u32>()
+            } else {
+                super::super::owner_report::owner_id(value)
+            }
+            .unwrap_or_else(|error| {
+                panic!("invalid debugfs {label} value {value:?}: {error}\n{report}")
+            });
             assert_eq!(found, expected, "{report}");
         }
         let wanted_time = if inode_size == 128 {

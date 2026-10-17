@@ -88,6 +88,17 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     unit      1,284 /  84,911    1,400 /  90,000   Re-measured at 2cedf28,
+#                                                    CI run 39002666402,
+#                                                    tier-logs-unit: 1,028
+#                                                    passed, none failed or
+#                                                    ignored. Only 89 bytes
+#                                                    remained under 85,000;
+#                                                    two new owner-report
+#                                                    controls add output.
+#                                                    Keep the line cap and
+#                                                    restore ~6% byte room.
+#   Historical unit measurement and then-current budget:
 #     unit      1,052 /  64,504    1,400 /  85,000   ~33% / ~32%: tests get
 #                                                    added, and this is the
 #                                                    tier every one of them
@@ -466,7 +477,7 @@ tasks:
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1400 85000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1400 90000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

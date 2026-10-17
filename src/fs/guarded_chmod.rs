@@ -664,3 +664,6 @@ mod tests {
 
 #[cfg(test)]
 mod needs_host;
+
+#[cfg(test)]
+mod owner_report;
