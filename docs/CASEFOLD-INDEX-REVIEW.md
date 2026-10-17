@@ -69,6 +69,83 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public chown implementation/evidence review — 2026-10-17
+
+Reviewed `198baba2e7b31bdac28e3e814812040f2ced5d5d`, equal to clean fetched
+remote tip. Exact-commit [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39005643503)
+and [focused Linux evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39005643486)
+passed. Downloaded the actual artifacts and verified the focused SHA-256.
+All sixteen chown, two parser and 36 retained chmod controls execute in native
+standalone/x86/aarch64 contexts (each 1,030 passed, zero failed/ignored, full
+Counter multisets matching the fresh baseline) and the compiled guest library
+(727 passed, zero failed/ignored). The whole guest suite reports 1,855 passed,
+zero failed, one existing ignored deep-fuzz case at 3,408 lines / 181,700 bytes;
+that broader qualification gate remains open. These are 54 distinct controls,
+not 216 tests. No family control or exact metadata oracle was ignored.
+
+The public chown oracle passes all sixteen profiles (145 lines / 18,870 bytes,
+96 tool and 32 kernel markers); retained public/private chmod pass eight/four
+profiles at 81/49 lines. All execute as exact one-test focused steps and in the
+guest. Audited all 28 images, 56 debugfs and 28 Linux reports. Full IDs, mode/type,
+generation, exact ctime, preserved input times and payload agree. All 32 signed
+group displays preserve the stored owner bits. Judged e2fsck accepts every input,
+emitted close and Linux readback. The read-only byte audit verifies clean state,
+allocation, payload, timestamp fields and 20 superblock/30 descriptor/40 inode
+checksums where enabled. Legacy 128-byte profiles are not checksummed; the
+Linux final file-read atime/checksum update is accounted for. No host oracle,
+mount or forbidden source was used. Full scope/evidence is in `extprogress.md`.
+
+**Decision: no blocker within the public chown caller contract.** Entry precedes
+lookup/device/runtime callbacks, and verdict-only volume checks precede arbitrary
+inode conversion. Shared inode planning precedes guarded marker and complete commit. Full owner halves and each/both
+leave-unchanged sentinels preserve current ctime/checksum semantics. Refusals,
+sticky uncertainty, Rust panic handling, C error/success clearing and strong/any
+generations remain. Actual C close preserves clean/dirty state after caught
+planning panics. New worker handles are owned/joined before release, with timeout
+checked after outer guard release; successful workers execute and cleanup is
+inspected. Arbitrary callback termination is not guaranteed.
+
+Public/C signatures and reference creation are unchanged. Other operations,
+readers/maintenance/raw handles and C lifetime/aliasing remain externally
+coordinated. Argument destruction, swallowed callback errors, foreign unwind/
+panic-abort and fairness/duration remain outside this ordering claim. No owner
+readiness/cache, builder publication, buffer seal, transaction admission or
+casefold-write enablement is added. Stage 5 remains not yet quantified.
+
+**Next bounded implementation: public timestamp updates (`utimens`) only.**
+
+1. Reuse the same mount control/context/failure bridge for public Rust string,
+   byte and generic inode timestamp entries and existing C path/inode delegates.
+   No second family lock, ABI/reference/lifetime redesign or unrelated migration.
+   Enter before device/runtime callbacks, lookup or arbitrary conversion; check
+   volume and explicit time verdicts before conversion. Reuse the context from
+   path to inode planning, without calling another public entry recursively.
+2. Share existing `TimeUpdate`/raw-inode planning, preserving `TIME_OMIT` and
+   nanosecond `UTIME_OMIT`/`UTIME_NOW` precedence, signed seconds, range/nanosecond
+   checks, single clock value for NOW/ctime, and current extra-field precision/
+   refusal behavior on supported 128-/256-byte and short-extra layouts. Preserve
+   invalid-time-before-missing-path priority. Document the intentional pre-marker
+   refusal ordering; do not introduce timestamp format or permission policy.
+3. Both omitted times still validate the volume and live inode/generation, keep
+   inode/ctime unchanged and return a no-effect plan: no marker/commit/version
+   advance. Other successful plans prepare the full buffer before guarded marker
+   and complete commit, retaining cross-family sticky refusal on uncertainty.
+4. Execute public overlap/conversion controls red before routing. Require green
+   Rust/C cross-family controls in both directions with chmod/chown, byte paths,
+   generation/volume/invalid-time ordering, explicit/sentinel/mixed/both-omit
+   behavior, pre-1970 and post-2038 boundaries, nanoseconds and short-extra
+   layouts. Exercise actual callback workers, every observed marker/commit write
+   and flush fault, Rust planning/effect panics and C errors, later cross-family
+   write/flush refusal and exported C close. Retain/join worker handles on every
+   timeout/error path before C handle release; no foreign C callback unwind.
+5. Add a new exact public Rust/C Linux/e2fsck/debugfs timestamp oracle over the
+   supported inode layouts, including no-op/sentinel updates, seconds/precision
+   boundaries and untouched mode/owner/generation/data. Retain all three exact
+   current metadata oracles, controls, baseline occurrences, floors/artifacts and
+   write gates. Review this family before another migration. Actual-card/Windows/
+   SteamOS, the ignored fuzz qualification, insertion aliases and full mapping/
+   collision/growth/recovery/admission dependencies remain separate.
+
 ### Public chown oracle report repair — 2026-10-17
 
 Initial implementation `2cedf28` failed exact full/focused CI in its new oracle:
