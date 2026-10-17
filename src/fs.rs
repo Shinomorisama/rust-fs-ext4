@@ -4958,13 +4958,7 @@ impl Filesystem {
         mtime_sec: i64,
         mtime_nsec: u32,
     ) -> Result<()> {
-        self.refuse_write()?;
-        // Before resolving, so an unstorable time or nanosecond count is
-        // refused as EINVAL whether or not the path exists.
-        TimeUpdate::check(atime_sec, atime_nsec)?;
-        TimeUpdate::check(mtime_sec, mtime_nsec)?;
-        let ino = self.resolve(path)?;
-        self.apply_utimens_ino(ino, atime_sec, atime_nsec, mtime_sec, mtime_nsec)
+        self.guarded_utimens_bytes(path, [(atime_sec, atime_nsec), (mtime_sec, mtime_nsec)])
     }
 
     /// [`apply_utimens`](Self::apply_utimens) on the inode `r` names.
@@ -4976,17 +4970,20 @@ impl Filesystem {
         mtime_sec: i64,
         mtime_nsec: u32,
     ) -> Result<()> {
-        self.refuse_write()?;
+        self.guarded_utimens_from(r, [(atime_sec, atime_nsec), (mtime_sec, mtime_nsec)])
+    }
+
+    fn plan_utimens(&self, r: InodeRef, times: [(i64, u32); 2]) -> Result<Option<Vec<u8>>> {
+        let [(atime_sec, atime_nsec), (mtime_sec, mtime_nsec)] = times;
         // One reading of the clock serves UTIME_NOW and the ctime bump.
         let now = self.runtime.now_unix_seconds();
         let atime = TimeUpdate::resolve(atime_sec, atime_nsec, now)?;
         let mtime = TimeUpdate::resolve(mtime_sec, mtime_nsec, now)?;
-        let r = r.into();
         let ino = r.ino;
         let (inode, mut raw) = self.live_inode(r)?;
 
         if let (TimeUpdate::Omit, TimeUpdate::Omit) = (atime, mtime) {
-            return Ok(());
+            return Ok(None);
         }
 
         // Extra-isize region carries the nsec fields AND the epoch bits.
@@ -5038,7 +5035,7 @@ impl Filesystem {
         set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-        self.commit_inode_write(ino, &raw)
+        Ok(Some(raw))
     }
 
     /// Unlink a regular file / symlink / special file at `path`.

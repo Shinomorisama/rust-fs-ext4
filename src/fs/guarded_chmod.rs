@@ -1,4 +1,4 @@
-//! Shared mount-bound chmod/chown dispatch; other families need caller serialization.
+//! Shared chmod/chown/utimens dispatch; other families need caller serialization.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -170,6 +170,59 @@ impl Filesystem {
         }
         context.effect(|| self.commit_block_buffer(buf))
     }
+
+    pub(super) fn guarded_utimens_bytes(&self, path: &[u8], times: [(i64, u32); 2]) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.utimens_bytes_in(&mut context, path, times)
+    }
+
+    pub(super) fn guarded_utimens_from(
+        &self,
+        r: impl Into<InodeRef>,
+        times: [(i64, u32); 2],
+    ) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.write_refusal()?;
+        check_times(times)?; // Pure verdict before arbitrary conversion or clock.
+        self.utimens_ino_in(&mut context, r.into(), times)
+    }
+
+    fn utimens_bytes_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        path: &[u8],
+        times: [(i64, u32); 2],
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        // An invalid time remains EINVAL even when the path does not exist.
+        check_times(times)?;
+        let ino = self.resolve(path)?;
+        self.utimens_ino_in(context, ino.into(), times)
+    }
+
+    fn utimens_ino_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        r: InodeRef,
+        times: [(i64, u32); 2],
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        check_times(times)?;
+        let Some(raw) = self.plan_utimens(r, times)? else {
+            // Both omitted fields still validated the live target and volume.
+            return Ok(());
+        };
+        self.commit_metadata_in(context, r.ino, &raw)
+    }
+}
+
+fn check_times(times: [(i64, u32); 2]) -> Result<()> {
+    for (sec, nsec) in times {
+        TimeUpdate::check(sec, nsec)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -660,6 +713,7 @@ mod tests {
 
     mod chown_calls;
     mod public_calls;
+    mod utimens_calls;
 }
 
 #[cfg(test)]

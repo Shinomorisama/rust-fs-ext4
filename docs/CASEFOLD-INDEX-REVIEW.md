@@ -69,6 +69,41 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public timestamp shared-guard implementation — 2026-10-17
+
+Public Rust string/byte/inode `utimens` and existing C path/inode delegates now
+share the same mount control/context/failure bridge as reviewed chmod/chown.
+Entry precedes lookup/device/runtime callbacks and conversion; volume and pure
+time verdicts precede arbitrary conversion. The shared raw planner retains
+sentinel precedence, signed seconds, nanosecond/range checks, one clock value,
+current extra-field precision/refusals and ctime packing. Paths keep invalid-
+time-before-missing-path priority. Validated both-omitted plans perform no marker,
+buffered commit or version advance and preserve inode/clean/dirty state. Other
+plans prepare the full buffer before guarded marker and complete commit effects.
+Pre-marker refusal/conversion ordering is intentional; no ABI/reference creation,
+timestamp format, permission policy, other family or casefold write gate changed.
+
+Four actual bypass/conversion/no-op-marker controls executed red and now pass.
+Nineteen new controls retain all 52 prior family and two parser controls; the
+expanded 71-control mount group passes locally. Controls cover supported time
+and inode-layout boundaries, Rust/C sentinel/no-op/error ordering, cross-family
+callbacks in both directions, every observed direct/journal marker/commit write
+and flush fault, Rust planning/effect panics, subsequent write/flush refusal and
+exported C close with both clean/dirty state. Worker handles remain owned/joined
+before C release, with timeout assertions deferred until outer guard release.
+
+The new exact public Rust/C timestamp oracle plans 24 profiles across block
+sizes, legacy/normal/short-extra inode layouts and journal/direct writes, saving
+intermediate explicit/sentinel debugfs reports and final Linux metadata/data
+checks. All three existing exact metadata oracles, floors/artifacts and gates
+remain. This is an implementation checkpoint awaiting exact-commit full/focused
+CI and standalone family/evidence review; it does not qualify writes or whole-API
+concurrency. Other operations/raw handles and C lifetime/aliasing remain externally
+coordinated. No owner readiness/cache, builder publication, seal or transaction
+admission is added. The ignored fuzz qualification, insertion aliases and full
+mapping/collision/growth/recovery/admission work remain open. Stage 5 stays not
+yet quantified; casefold writes and actual-card/Windows/SteamOS remain gated.
+
 ### Public chown implementation/evidence review — 2026-10-17
 
 Reviewed `198baba2e7b31bdac28e3e814812040f2ced5d5d`, equal to clean fetched
