@@ -69,6 +69,37 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public chown shared-guard implementation — 2026-10-16
+
+Public Rust string/byte/inode chown and its existing C delegates now use chmod's
+mount context and sticky failure bridge, with no second gate or C ABI change.
+Acquisition and verdict-only volume checks precede arbitrary inode conversion;
+lookup/inode planning reuses the context before marker and complete-commit
+effects. The existing high/low owner fields, each/both unchanged sentinels,
+mode/type/ctime/checksum semantics and all casefold write refusals remain.
+
+Three executed-red public bypass/conversion controls now pass. Sixteen new
+controls plus all 36 retained chmod controls pass locally, covering supported
+inode layouts, Rust/C cross-family callback workers in both directions, volume/
+planning refusals, full marker/commit write/flush faults, caught Rust panics and
+subsequent cross-family write/flush/close refusal. New worker handles remain
+owned and joined, including timeout/error cleanup before C handle release.
+The new exact public Rust/C Linux/e2fsck/debugfs test covers sixteen supported
+layout/block-size/journal profiles and all owner sentinel updates; both exact
+chmod tests, every existing floor/artifact and write gate are retained.
+
+This is an implementation checkpoint awaiting exact-commit full/focused CI and
+standalone emitted-metadata/family review, not a completed migration review.
+The preceding documentation HEAD `ab8129a` also needs its failed guest-job rerun:
+original run 38991380517 ended on VM/SSH loss, exit 255, with no completed suite
+or established cause. Its local 1,012 units and separate x86 oracle suite passed;
+the actual logs and current retry status are recorded in `extprogress.md`.
+Do not claim the transport interruption fixed, relax a budget or skip a test.
+Check both sets of independent evidence before another family. Other API paths,
+caller-owned C lifetimes, physical-owner readiness, builder/cache publication,
+dependencies/overlays/seals and complete mapping/collision/growth remain open.
+Casefold writes stay blocked; Stage 5 remains not yet quantified.
+
 ### Public chmod implementation/evidence review — 2026-10-16
 
 Reviewed `c47b328381ea67dceca26fc33c796bd241c7fbac`, equal to fetched

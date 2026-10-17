@@ -4417,15 +4417,15 @@ impl Filesystem {
 
     /// [`apply_chown`](Self::apply_chown) of a path given as bytes, never decoded.
     pub(crate) fn apply_chown_bytes(&self, path: &[u8], uid: u32, gid: u32) -> Result<()> {
-        self.refuse_write()?;
-        let ino = self.resolve(path)?;
-        self.apply_chown_ino(ino, uid, gid)
+        self.guarded_chown_bytes(path, uid, gid)
     }
 
     /// [`apply_chown`](Self::apply_chown) on the inode `r` names.
     pub fn apply_chown_ino(&self, r: impl Into<InodeRef>, uid: u32, gid: u32) -> Result<()> {
-        self.refuse_write()?;
-        let r = r.into();
+        self.guarded_chown_from(r, uid, gid)
+    }
+
+    fn plan_chown(&self, r: InodeRef, uid: u32, gid: u32) -> Result<Vec<u8>> {
         let ino = r.ino;
         let (inode, mut raw) = self.live_inode(r)?;
 
@@ -4446,7 +4446,7 @@ impl Filesystem {
         set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-        self.commit_inode_write(ino, &raw)
+        Ok(raw)
     }
 
     /// Set the `i_flags` field (FS_IOC_SETFLAGS) for the inode at `path`.

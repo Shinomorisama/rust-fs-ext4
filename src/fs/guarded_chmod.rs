@@ -1,4 +1,4 @@
-//! Mount-bound chmod dispatch; other families still need caller serialization.
+//! Shared mount-bound chmod/chown dispatch; other families need caller serialization.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -110,8 +110,59 @@ impl Filesystem {
         self.check_chmod_context(context)?;
         self.write_refusal()?;
         let raw = self.plan_chmod(r, mode)?;
+        self.commit_metadata_in(context, r.ino, &raw)
+    }
+
+    pub(super) fn guarded_chown_bytes(&self, path: &[u8], uid: u32, gid: u32) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.chown_bytes_in(&mut context, path, uid, gid)
+    }
+
+    pub(super) fn guarded_chown_from(
+        &self,
+        r: impl Into<InodeRef>,
+        uid: u32,
+        gid: u32,
+    ) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.write_refusal()?;
+        self.chown_ino_in(&mut context, r.into(), uid, gid)
+    }
+
+    fn chown_bytes_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        path: &[u8],
+        uid: u32,
+        gid: u32,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        let ino = self.resolve(path)?;
+        self.chown_ino_in(context, ino.into(), uid, gid)
+    }
+
+    fn chown_ino_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        r: InodeRef,
+        uid: u32,
+        gid: u32,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        let raw = self.plan_chown(r, uid, gid)?;
+        self.commit_metadata_in(context, r.ino, &raw)
+    }
+
+    fn commit_metadata_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        ino: u32,
+        raw: &[u8],
+    ) -> Result<()> {
         let mut buf = BlockBuffer::new(self.sb.block_size());
-        self.buffer_write_inode(&mut buf, r.ino, &raw)?;
+        self.buffer_write_inode(&mut buf, ino, raw)?;
         // Planning refusals above have no uncertain-write effect. Both actual
         // mutation phases include all callbacks, flushes and completion checks.
         if !self.marked_not_clean.load(Ordering::SeqCst) {
@@ -607,6 +658,7 @@ mod tests {
         assert_ne!(state & crate::superblock::EXT4_VALID_FS, 0);
     }
 
+    mod chown_calls;
     mod public_calls;
 }
 

@@ -1,4 +1,5 @@
-//! Independent emitted-metadata evidence for private and public chmod dispatch.
+//! Independent emitted-metadata evidence for private/public chmod and public chown.
+mod chown;
 use super::*;
 use crate::block_io::FileDevice;
 use fs_ext4_test_support::{assert_e2fsck_clean, guest_kernel_write, oracle};
