@@ -69,6 +69,130 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public inode-flag implementation/evidence review — 2026-10-18
+
+Reviewed clean fetched `4d4df814316c1aeae804c23408d0cf2866081d0d`.
+Exact [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39099985737)
+and [focused Linux evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39099985843)
+passed. Downloaded and SHA-256-verified the actual focused artifact and standalone,
+x86, aarch64 and guest tier artifacts; this review uses this source commit's
+results, not an earlier family's CI.
+
+**Executed controls.** All sixteen flag, 71 retained mount-family, five report-
+parser and fifteen operation controls execute in standalone/x86/aarch64 units
+and both full-suite library contexts: **107 distinct controls verified in five
+contexts**. Each native CI unit Counter equals the fresh local **1,068**-occurrence
+baseline, including repeated names and expected panics, with zero failed/ignored.
+Both compiled full-suite libraries pass **767**, zero failed/ignored. Complete
+x86 and guest suites each pass **1,895**, zero failed, **one existing ignored**
+slow deep-fuzz test. That ignored case remains a broader qualification gate.
+The guest log is 3,448 lines / 186,153 bytes. Cold standalone unit output is
+1,324 lines / 89,387 bytes, within unchanged 1,400 / 90,000 caps.
+
+The exact flag oracle executes all **16 profiles** (Rust/C × 1 KiB/4 KiB ×
+128-/256-byte inodes × direct/journal) at **306 lines / 36,281 bytes**, with
+224 tool and 64 kernel markers. All four retained exact metadata oracles pass:
+24 timestamps, sixteen chown, eight public chmod and four private chmod profiles.
+No family control or exact metadata oracle is ignored.
+
+Audited **68 actual emitted images**, **248 debugfs reports** and **124 Linux
+reports**. The new sixteen flag profiles supply 96 phase/inode records in each
+independent report stream across set/same/restore. Full flag words, identity,
+mode/type, owner IDs, unchanged access/modification times and exact ctime agree.
+Repeated same-flags calls advance ctime in both legacy and extended layouts;
+restores retain the original managed bits. Debugfs verifies generation throughout;
+Linux independently observes flags through its public GETFLAGS ioctl and checks
+metadata and payload. The asserted 64-bit ioctl ABI is the harness VM's scope.
+NODUMP/NOATIME are the successful Linux flag matrix; broader flag-feature semantics
+and caller privilege/permission policy remain separate obligations.
+
+The read-only public-format byte audit checks all **136 final inode records**,
+allocation and payload, including the 32 new restored flag inodes. All current
+and retained checksummed profiles pass **44 superblock / 66 descriptor / 88 inode
+checksum** checks. Flag/timestamp O_NOATIME reads preserve exact final times and
+checksums; the retained older chmod/chown file-read atime change is accounted
+for. Timestamp short-extra-12 layouts and their full Linux values remain covered.
+Judged e2fsck accepts inputs, emitted phases and Linux readback closes. No host
+oracle, mount, or forbidden implementation source was used.
+
+**Decision: no blocker within the existing public flag caller contract.** Rust
+string/byte and existing C path dispatch share the reviewed mount context with
+chmod/chown/utimens, before lookup and device/runtime callbacks. One context spans
+verified-inode policy/planning, full buffer preparation, guarded clean-marker and
+complete commit effects. The exact changed-bit mask permits already-set managed
+bits unchanged and refuses managed changes, including CASEFOLD/INDEX/EXTENTS.
+Missing-path priority, same-flags ctime/commit, mode/IDs/generation/data, precision
+and checksums remain. Planning refusals preserve bytes, marker and versions on
+clean and prior-dirty mounts. The corrected NOATIME C comment matches the public
+header; public signatures and flag constants/policy are unchanged.
+
+Every reached direct/journal marker/commit write/flush failure and Rust planning/
+effect unwind conservatively retires later write/flush/drop reuse. Cross-family
+Rust/C callback workers refuse before effects in both directions, own/join handles
+before C release and defer timeout assertions until outer guard release. Actual
+exported C close preserves clean/owed-dirty state after caught planning panics,
+without relying on a pre-existing direct-commit failure or unhealthy journal.
+C errors and successful error clearing pass. No foreign C callback unwinds;
+arbitrary callback termination is not promised.
+
+C reference creation and caller-owned lifetime/aliasing contracts are unchanged.
+Other operations/readers/maintenance/raw handles remain externally coordinated;
+argument destruction, swallowed callback errors, foreign unwind/panic-abort and
+fairness/duration are outside this ordering claim. No whole-API concurrency,
+owner readiness/cache/publication, buffer seal or transaction admission is added.
+The ignored fuzz case, insertion aliases, complete mapping/collision/growth and
+recovery/admission dependencies stay open. Stage 5 is **not yet quantified**;
+casefold writes and real-card/Windows/SteamOS qualification remain gated.
+
+**Next bounded task: multi-block xattr-removal staging/marker design audit and
+executed red preparation, before migrating public removal dispatch.**
+
+The existing removal path is larger than the reviewed inode-only families:
+`apply_removexattr_bytes` can edit both inline and external copies, copy a shared
+external block, decrement a shared reference, or free the last block. Allocation/
+free branches stage bitmap, descriptor and primary-superblock counters alongside
+the inode; allocation-uninit state publishes inside `commit_block_buffer` after
+commit. `buffer_unshare_xattr_block`, `buffer_release_xattr_block` and their
+allocation/counter helpers stage into the same private BlockBuffer.
+
+A concrete ordering dependency must be resolved first: the current public path
+marks dirty **before** planning, so its buffered primary superblock includes the
+dirty state. Moving the marker after preparation can leave a clean-state copy
+in that buffer; committing that copy would overwrite the new dirty marker.
+`BlockBuffer::get_mut`, `buffer_patch_sb_counters` and `commit_block_buffer` do
+not automatically reconcile that state. The flag family's inode-only buffer does
+not stage this counter block. This is a dependency of the proposed migration;
+no current xattr migration or marker fix is claimed by this review.
+
+1. Audit concrete inline/external/duplicate-copy/shared-copy/shared-release/last-
+   block-free paths through all staged counters, checksums, `i_file_acl`, `i_blocks`
+   and uninit publication, including errors and callbacks. Record existing
+   namespace/missing/error ordering, zero-extra/128-byte behavior and unsupported
+   EA-inode/corrupt external-block refusals. Keep setxattr unchanged and external
+   caller coordination explicit; correct stale removal-scope comments when that
+   family is actually migrated, without changing behavior or ABI.
+2. Execute current public held-context and refused-plan marker controls red, and
+   a controlled scratch-buffer reproduction of stale clean-state overwrite using
+   existing private marker/commit routines. Preserve actual red evidence in an
+   ignored log plus a self-contained saved patch in the existing documentation
+   area; do not leave failing tests active in the normal suite. Label a constructed
+   pre-marker buffer reproduction as such, without claiming the current legacy
+   public path uses that proposed ordering. Existing controls must remain green.
+3. Review a private whole-buffer commit boundary that acquires once before reads,
+   keeps all planning private, preserves the dirty marker in final staged primary
+   superblock bytes/checksum and never loses planned allocation/counter updates.
+   Specify complete marker/commit/publication effects, sticky failure and clean/
+   prior-dirty/refused paths. Do not generalize the inode-only adapter by dropping
+   its context or clearing state after a commit. No new lock, seal, Ready state,
+   owner cache/publication or casefold admission is introduced.
+4. Record the bounded follow-on implementation/test contract: existing Rust string/
+   byte and C path removexattr only, no new inode API; five-family callback and
+   failure/panic/close controls; exact independent Linux/e2fsck/debugfs removal
+   evidence for inline, external, shared, duplicate and last-block cases, with
+   allocation/counter/refcount and payload preservation. Retain all five existing
+   exact metadata oracles/floors/caps/artifacts. Complete this focused crash/
+   staging design review before changing public dispatch, and keep every gate.
+
 ### Public inode-flag shared-guard implementation — 2026-10-18
 
 Existing Rust string/byte flag updates and the C path delegate now share the
