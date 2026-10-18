@@ -1,4 +1,5 @@
 //! Independent public timestamp metadata, including partial extra fields.
+use super::super::timestamp_report::{debugfs_time, displayed_time};
 use super::*;
 use std::sync::atomic::{AtomicI64, Ordering};
 
@@ -61,29 +62,13 @@ fn update(
             .unwrap();
     }
 }
-fn debugfs_time(report: &str, label: &str) -> Time {
-    let prefix = format!("{label}:");
-    let line = report
-        .lines()
-        .find(|line| line.trim_start().starts_with(&prefix))
-        .unwrap();
-    let encoded = line.split_whitespace().nth(1).unwrap();
-    let (base, extra) = encoded
-        .split_once(':')
-        .map_or((encoded, "0"), |(base, extra)| (base, extra));
-    let base = u32::from_str_radix(base.trim_start_matches("0x"), 16).unwrap();
-    let extra = u32::from_str_radix(extra, 16).unwrap();
-    (
-        i64::from(base as i32) + (i64::from(extra & 3) << 32),
-        extra >> 2,
-    )
-}
 fn reports(
     image: &std::path::Path,
     base: &std::path::Path,
     phase: &str,
     targets: &[Target; 2],
     wanted: &[[Time; 3]; 2],
+    extra: u16,
 ) {
     for (target, times) in targets.iter().zip(wanted) {
         let out = oracle("debugfs")
@@ -130,7 +115,7 @@ fn reports(
                 debugfs_time(&report, "mtime"),
                 debugfs_time(&report, "ctime")
             ],
-            *times,
+            times.map(|time| displayed_time(time, extra)),
             "{report}"
         );
     }
@@ -294,7 +279,11 @@ INPUT_PY
     });
     fs.finish().unwrap();
     assert_e2fsck_clean(image_str, "explicit public timestamp output");
-    reports(&image, &base, "explicit", &targets, &wanted_a);
+    reports(&image, &base, "explicit", &targets, &wanted_a, extra);
+    // debugfs omits extra words for extra-isize 12; Linux checks all fields
+    // before the later sentinel updates can overwrite them. No writer is live.
+    linux_report(&image, &base, "explicit", &targets, &wanted_a);
+    assert_e2fsck_clean(image_str, "Linux explicit timestamp readback");
     let now = if has_a { NOW + 200 } else { 1_700_000_200 };
     clock.0.store(now, Ordering::SeqCst);
     let fs = mounted(&image, &clock);
@@ -314,7 +303,7 @@ INPUT_PY
     });
     fs.finish().unwrap();
     assert_e2fsck_clean(image_str, "sentinel public timestamp output");
-    reports(&image, &base, "sentinel", &targets, &wanted_b);
+    reports(&image, &base, "sentinel", &targets, &wanted_b, extra);
     clock.0.store(NOW + 400, Ordering::SeqCst);
     let fs = mounted(&image, &clock);
     let before = std::fs::read(&image).unwrap();
@@ -334,14 +323,24 @@ INPUT_PY
         assert!(!fs.marked_not_clean.load(Ordering::SeqCst));
     });
     fs.finish().unwrap();
+    linux_report(&image, &base, "final", &targets, &wanted_b);
+    assert_e2fsck_clean(image_str, "Linux readback after public timestamps");
+}
+fn linux_report(
+    image: &std::path::Path,
+    base: &std::path::Path,
+    phase: &str,
+    targets: &[Target; 2],
+    wanted: &[[Time; 3]; 2],
+) {
     let nanos = |t: Time| i128::from(t.0) * 1_000_000_000 + i128::from(t.1);
-    let [file_times, dir_times] = wanted_b;
+    let [file_times, dir_times] = *wanted;
     let checked = guest_kernel_write(
-        image_str,
+        image.to_str().unwrap(),
         &format!(
             r#"
 python3 - "$MNT" <<'TIMESTAMP_PY'
-import os, stat, sys
+import os, sys
 root=sys.argv[1]
 for name,ino,generation,mode,uid,gid,a,m,c in [
     ('target',{file_ino},{file_gen},{file_mode},1001,1002,{file_a},{file_m},{file_c}),
@@ -379,6 +378,10 @@ TIMESTAMP_PY
         "{}",
         String::from_utf8_lossy(&checked.stderr)
     );
-    std::fs::write(base.with_extension("linux.txt"), &checked.stdout).unwrap();
-    assert_e2fsck_clean(image_str, "Linux readback after public timestamps");
+    let extension = if phase == "final" {
+        "linux.txt".to_string()
+    } else {
+        format!("{phase}.linux.txt")
+    };
+    std::fs::write(base.with_extension(extension), &checked.stdout).unwrap();
 }

@@ -69,6 +69,35 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Timestamp oracle display repair — 2026-10-17
+
+Initial timestamp source `5dd65f9` failed exact full/focused CI at the same
+extra-isize-12 debugfs report assertion. The two full-suite library contexts
+reported 746 passed / one failed and did not finish the suite; timestamp
+qualification is incomplete. Verified downloaded artifact digests and inspected
+the actual report/image: debugfs omitted timestamp extra words despite the
+emitted inode containing the requested full mtime/ctime. The prior `719f66c`
+documentation checkpoint now passed full CI.
+
+A captured-report native control executed red before the test-only correction
+and now passes. Only the observed short-extra-12 report is compared as legacy
+seconds; normal-extra timestamps remain exact. Two further controls reject
+missing normal extra data and incorrect legacy/short seconds. Linux now checks
+unprojected full timestamps immediately after explicit updates and again after
+sentinel/no-op updates, with metadata/data checks and O_NOATIME. The extra phase
+closes the coverage gap where a later update could overwrite values hidden by
+the short debugfs display. All 24 profiles, 96 debugfs reports, existing final
+Linux reports, generation/metadata/no-op/exclusion/e2fsck checks and prior oracles
+remain; 24 explicit-phase Linux reports are added under existing artifact paths.
+No production write, dependency, workflow cap/floor or gate changed.
+
+Fresh local results are recorded in the matching extprogress checkpoint.
+Repaired exact full/focused CI, all-profile artifact audit and standalone family
+review remain required before another migration. No local VM, Windows, SteamOS
+or card qualification is claimed. Stage 5 stays not yet quantified; casefold
+writes, the ignored fuzz qualification, insertion aliases and lifecycle/admission/
+mapping/collision/growth/recovery work remain gated/open.
+
 ### Public timestamp shared-guard implementation — 2026-10-17
 
 Public Rust string/byte/inode `utimens` and existing C path/inode delegates now
