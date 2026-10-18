@@ -1,4 +1,4 @@
-//! Shared chmod/chown/utimens dispatch; other families need caller serialization.
+//! Shared chmod/chown/utimens/flags dispatch; other families need caller serialization.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -169,6 +169,26 @@ impl Filesystem {
             context.effect(|| self.mark_not_clean_once())?;
         }
         context.effect(|| self.commit_block_buffer(buf))
+    }
+
+    pub(super) fn guarded_flags_bytes(&self, path: &[u8], flags: u32) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.flags_bytes_in(&mut context, path, flags)
+    }
+
+    fn flags_bytes_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        path: &[u8],
+        flags: u32,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        // The inode's current flags are needed for policy; missing path still
+        // wins over a requested managed-bit change. Neither refusal marks disk.
+        let ino = self.resolve(path)?;
+        let raw = self.plan_set_flags(ino, flags)?;
+        self.commit_metadata_in(context, ino, &raw)
     }
 
     pub(super) fn guarded_utimens_bytes(&self, path: &[u8], times: [(i64, u32); 2]) -> Result<()> {
@@ -712,6 +732,7 @@ mod tests {
     }
 
     mod chown_calls;
+    mod flags_calls;
     mod public_calls;
     mod utimens_calls;
 }

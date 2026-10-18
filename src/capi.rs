@@ -2350,7 +2350,7 @@ pub unsafe extern "C" fn fs_ext4_mknod(
 ///   0x00000010  EXT4_IMMUTABLE_FL (cannot modify / rename / delete)
 ///   0x00000020  EXT4_APPEND_FL    (append-only)
 ///   0x00000040  EXT4_NODUMP_FL    (excluded from `dump`)
-///   0x00000200  EXT4_NOATIME_FL   (no atime updates on read)
+///   0x00000080  EXT4_NOATIME_FL   (no atime updates on read)
 ///
 /// Bumps i_ctime. Returns 0 on success, -1 on failure.
 #[no_mangle]

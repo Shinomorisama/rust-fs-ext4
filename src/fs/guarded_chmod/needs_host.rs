@@ -1,5 +1,6 @@
 //! Independent emitted-metadata evidence for private/public chmod and public chown.
 mod chown;
+mod flags;
 mod utimens;
 use super::*;
 use crate::block_io::FileDevice;

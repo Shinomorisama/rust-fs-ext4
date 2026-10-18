@@ -4464,9 +4464,11 @@ impl Filesystem {
 
     /// [`apply_set_flags`](Self::apply_set_flags) of a path given as bytes, never decoded.
     pub(crate) fn apply_set_flags_bytes(&self, path: &[u8], flags: u32) -> Result<()> {
+        self.guarded_flags_bytes(path, flags)
+    }
+
+    fn plan_set_flags(&self, ino: u32, flags: u32) -> Result<Vec<u8>> {
         use crate::inode::{OFF_FLAGS, USER_MODIFIABLE_FLAGS};
-        self.refuse_write()?;
-        let ino = self.resolve(path)?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
 
         if (flags ^ inode.flags) & !USER_MODIFIABLE_FLAGS != 0 {
@@ -4482,7 +4484,7 @@ impl Filesystem {
         set_inode_time(&mut raw, InodeTime::Ctime, now);
 
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-        self.commit_inode_write(ino, &raw)
+        Ok(raw)
     }
 
     /// Remove the extended attribute named `name` from the inode at `path`.

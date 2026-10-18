@@ -69,6 +69,44 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public inode-flag shared-guard implementation — 2026-10-18
+
+Existing Rust string/byte flag updates and the C path delegate now share the
+reviewed chmod/chown/utimens mount context, before lookup/device/runtime callbacks.
+The existing verified-inode planner retains the exact user-modifiable changed-bit
+policy, already-set managed bits, missing-path priority, ctime/checksum and metadata
+semantics. Same-flags calls still perform a ctime update/commit. Planning refusals
+now precede clean-marker writes. Prepared buffers use guarded marker and complete
+commit effects with the same sticky failure bridge. No new inode API, lock, ABI,
+C reference/lifetime rule, owner readiness/cache/publication, builder or seal is
+introduced. Other operations/readers/maintenance/raw handles stay externally
+coordinated; this is not whole-API concurrency or transaction admission.
+
+Four actual public bypass/refused-marker controls executed red and now pass.
+Sixteen new controls retain all 71 prior mount controls; the expanded group passes
+87 with zero failed/ignored. Coverage includes same-flags ctime/versions, all
+managed-bit refusals, volume/missing priority, foreign context, clean/prior-dirty
+untouched refusals, Rust/C worker overlap in all four families/both directions,
+every reached direct/journal marker/commit write/flush failure, Rust planning/
+effect panics, later sticky refusals and actual exported C close. Workers remain
+owned/joined before C release, with timeout assertions after outer guard release.
+No foreign C callback unwinds. An incorrect new positive fixture flag was caught
+and corrected to declared constants; an existing C comment now states the correct
+NOATIME value, with flag policy and public signatures unchanged.
+
+The new exact sixteen-profile public Rust/C oracle checks set/same/restore phases
+across block/inode sizes and direct/journal writes, with 96 debugfs and 48 Linux
+reports planned. Debugfs checks full flags, generation, metadata and times; Linux
+independently checks full flags through public GETFLAGS, identity, mode/IDs, all
+times and payload, using O_NOATIME. Every mount is finished before external access
+and judged e2fsck checks each phase. All four prior exact metadata steps, floors,
+caps and artifact entries remain byte-identical. Fresh local validation is in
+extprogress; no local VM run is claimed. Exact source full/focused CI, artifact
+audit and standalone family review remain pending before another migration.
+Stage 5 stays not yet quantified. Every casefold gate, ignored fuzz qualification,
+insertion alias and lifecycle/ownership/admission/seal/mapping/growth/recovery
+dependency remains open; no real-card/Windows/SteamOS qualification is claimed.
+
 ### Public timestamp implementation/evidence review — 2026-10-17
 
 Reviewed clean fetched `f8649b7df1f1f5f677519e12163e3c2d9ca27204`.
