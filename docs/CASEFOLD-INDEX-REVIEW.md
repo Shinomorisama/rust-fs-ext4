@@ -69,6 +69,104 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public timestamp implementation/evidence review — 2026-10-17
+
+Reviewed clean fetched `f8649b7df1f1f5f677519e12163e3c2d9ca27204`.
+Exact [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39085491295)
+and [focused Linux evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39085491294)
+passed. The earlier `5dd65f9` short-extra report failure is retained in the repair
+checkpoint; this review uses repaired-commit artifacts, not the failing run.
+
+**Executed evidence.** All nineteen timestamp controls, three timestamp-report
+controls, sixteen chown/two owner-report controls, 36 chmod controls and fifteen
+operation controls execute in standalone/x86/aarch64 units and both full-suite
+library contexts: **91 distinct controls verified in five contexts**. All three
+native CI unit Counters equal the fresh 1,052-occurrence local baseline, with
+zero failures/ignored tests. The guest library passes 750 with zero ignored;
+the complete x86/guest suites each pass 1,878 with zero failures and **one existing
+ignored** slow deep-fuzz test. The guest log is 3,432 lines / 184,381 bytes.
+That ignored case remains a broader qualification gate. Cold standalone unit
+output is 1,308 lines / 87,590 bytes within unchanged 1,400 / 90,000 caps.
+
+The exact timestamp test passes all **24 profiles**: Rust/C, 1 KiB/4 KiB,
+128-byte legacy / 256-byte extra-isize-12 / 256-byte extra-isize-32, direct/journal.
+Its log is 338 lines / 42,417 bytes with 248 tool and 72 kernel markers. The
+three prior exact metadata steps also pass unchanged: 16 chown, eight public
+chmod and four private chmod profiles. No exact step or family control is ignored.
+
+Downloaded and SHA-256-verified the actual focused artifact and all four relevant
+full-CI tier artifacts. Audited **52 emitted images**, 152 debugfs reports and
+76 Linux reports: the 24 timestamp profiles add 96 intermediate inode reports
+and 48 Linux reports to the 28 retained metadata profiles. All 96 timestamp
+phase/inode Linux answers match complete signed seconds and nanoseconds,
+identity, mode/type and IDs. Debugfs matches generation and full reported time
+words; only extra-isize 12 uses its observed legacy display. Linux still verifies
+the full values hidden by that display immediately after explicit updates and
+again after sentinel/no-op updates. The read-only public-format audit checks all
+104 final inode records, allocation, payload and supported fields, plus **36
+superblock / 54 descriptor / 72 inode checksums** where enabled. Timestamp
+O_NOATIME reads preserve exact final times/checksums; the retained older chmod/
+chown file-read atime update is accounted for. All final short-extra inodes still
+have extra-isize 12. Judged e2fsck checks inputs, emitted phases and Linux closes.
+No host oracle/mount or forbidden implementation source was used.
+
+**Decision: no blocker within the public timestamp caller contract.** All public
+Rust string/byte/inode and existing C path/inode delegates use the same mount
+context as chmod/chown. Entry precedes lookup/device/runtime callbacks and
+arbitrary inode conversion; volume and pure explicit-time verdicts precede
+conversion. Path dispatch retains invalid-time-before-missing-path priority and
+never reacquires. Current live/generation checks, single-clock planning, sentinel
+precedence, signed explicit range/nanosecond checks, precision/refusals and ctime/
+checksum packing remain. This is not a redesign of out-of-range runtime-clock
+behavior; independent clock values cover the stated supported profiles.
+
+Both-omitted plans validate volume/identity and preserve bytes, marker and operation
+versions on clean/prior-dirty mounts, without a commit. Other plans finish buffer
+preparation before guarded marker and complete commit effects. Every propagated
+effect error or Rust unwind conservatively retires write/flush/drop reuse, including
+caught planning panics on an otherwise clean mount. Cross-family Rust/C worker
+callbacks refuse before effects in both directions; handles are owned and joined
+before C release and timeout assertions follow outer guard release. C errors and
+success clearing, actual exported close and retained guard/failure controls pass.
+No foreign C callback unwinds; arbitrary callback termination is not promised.
+
+Public signatures, C reference creation and caller-owned lifetime/aliasing rules
+are unchanged. Other operations/readers/maintenance/raw handles remain externally
+coordinated. Argument destruction, swallowed callback failures, foreign unwind/
+panic-abort and fairness/duration are outside this ordering claim. There is no
+whole-API concurrency, owner readiness/cache, builder publication, buffer seal,
+transaction admission or casefold write enablement. Stage 5 is not yet quantified;
+real-card/Windows/SteamOS and exhaustive recovery qualification remain open.
+
+**Next bounded implementation: existing public inode-flag updates only.**
+
+1. Migrate Rust string/byte `apply_set_flags` and existing C path `fs_ext4_set_flags`
+   into the same mount context/failure bridge, before lookup/device/runtime
+   callbacks. Reuse one context and the shared metadata commit helper; no second
+   lock, new inode API, ABI/lifetime change or unrelated family migration.
+2. Extract the current verified-inode planner. Preserve the exact changed-bit
+   test against `USER_MODIFIABLE_FLAGS`: managed bits already set may be passed
+   back unchanged; INDEX/EXTENTS/INLINE_DATA/CASEFOLD and other managed changes
+   stay refused. Preserve missing-path/error order, ctime/checksum semantics,
+   mode/IDs/generation/data, and same-flags calls still performing their existing
+   ctime update/commit. Only planning refusals move before marker effects.
+3. Execute actual public held-context and refused-plan marker controls red before
+   routing, then green. Extend all four families' Rust/C callback-worker exclusion,
+   direct/journal marker/commit write/flush error and Rust panic controls, untouched
+   refusals, sticky later refusal and exported C close. Retain invalid-UTF8 byte
+   paths and all prior controls. Join workers before releasing borrowed C handles;
+   never allow a foreign C callback to unwind.
+4. Add a new exact Rust/C Linux/e2fsck/debugfs flag oracle with metadata, full
+   flags, generation and payload evidence over supported block/inode and direct/
+   journal layouts. Linux must independently observe emitted flag bits and
+   metadata. Include refused managed-bit changes and same-flags ctime behavior;
+   retain all four existing exact metadata tests, floors, caps and artifact paths.
+5. Preserve the complete native baseline as Counter multisets, lint and appropriate
+   build checks; inspect exact-commit full/focused CI and actual artifacts before
+   the next standalone family review. Keep all casefold gates, ignored fuzz,
+   insertion aliases, owner/lifecycle/admission/seal dependencies and complete
+   mapping/collision/growth/recovery work open. No index admission is connected.
+
 ### Timestamp oracle display repair — 2026-10-17
 
 Initial timestamp source `5dd65f9` failed exact full/focused CI at the same
