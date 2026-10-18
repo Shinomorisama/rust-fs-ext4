@@ -69,6 +69,149 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Xattr-removal staging and recovery-marker audit — 2026-10-18
+
+Audited clean fetched `a387b90340f3edfeb80ed8d7e9f3be022276008d`, whose
+[full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39119479035)
+passed. This checkpoint changes documentation and saves an executable red patch;
+production, active tests, workflows, dependency pins/locks and every write gate
+are restored byte-for-byte. No xattr public dispatch is migrated here.
+
+**Executed evidence:** [CASEFOLD-XATTR-REMOVAL-RED.patch](CASEFOLD-XATTR-REMOVAL-RED.patch)
+adds ten temporary native controls. The final actual run reports **one passed,
+nine failed, zero ignored**. Five failures cover current public behavior: Rust
+string/byte and C path removals bypass a held metadata context; Rust/C absent-
+attribute calls return their expected NotFound/ENOENT but still write and flush
+one clean-mount marker. Four separate constructed cases (1 KiB/4 KiB, direct
+checksummed ext4/journaled legacy ext3) snapshot a clean primary superblock,
+stage a synthetic free-count decrement, then execute existing marker and raw
+commit routines under the private context. Each first clears the on-disk clean
+bit, commits the planned counter edit, then exposes state **1** with marker still
+owed. The direct profiles' superblock checksums remain valid. This is a controlled
+ordering reproduction, not a complete valid allocation transaction, an oracle
+verdict, or the current public planning order.
+
+The passing control executes all four profiles through the current public
+last-external-block removal. It frees the block, clears the inode pointer,
+reduces sector accounting, credits the free count and keeps the marker dirty
+before close. Current public removal marks before planning. Initial 32 MiB
+1 KiB fixtures hit the project's multi-group mkfs restriction; the corrected
+fixtures use one-group 8 MiB at 1 KiB and 32 MiB at 4 KiB. The final report above
+contains no setup failures. No host oracle or mount was used.
+
+The saved patch is self-contained and includes apply/run/reverse commands plus
+these scope limits. It was reversed after execution; all source hashes match
+the starting commit and the dormant patch passes `git apply --check`. There are
+no active failing/ignored tests added. The five public failures should become
+green in the next migration. The four raw-buffer diagnostics must be promoted
+into green tests of the **new private guarded whole-buffer boundary**, retaining
+their original diagnostic meaning. Do not globally alter raw commit semantics
+solely to make this constructed call order pass.
+
+#### Concrete current path
+
+Rust string calls the byte path. C performs pointer/path/name conversion and
+then calls that same byte path; C reference creation and caller lifetime rules
+remain external prerequisites. The byte path currently runs `refuse_write`
+(verdict plus marker), resolves, reads/checksums the inode, plans inline removal,
+plans external removal even if inline succeeded, stamps ctime, stages the inode,
+and commits one BlockBuffer. An error after inline planning drops its local raw
+image; a later bad external block never justifies committing the inline edit.
+
+| Removal branch | Staged result before commit | Accounting/publication |
+|---|---|---|
+| Inline only, or inline copy plus external name absent | Re-encoded inode; existing external block is still checked when referenced | ctime/inode checksum; no external allocation change |
+| Unique external block retains other attributes | Re-encoded external block and inode | Block-number-based xattr checksum; pointer and sector count unchanged |
+| Shared external block retains other attributes | New private block, old block refcount decremented, inode points to new block | Allocation bitmap/BGD/SB free count decrease; new and old xattr checksums; sectors unchanged |
+| Unique external block becomes empty | Inode pointer cleared; bitmap bit freed | Bitmap/BGD/SB checksums and free counts increase; sectors decrease by block-size/512 |
+| Shared external block becomes empty for this inode | Old block retained with one fewer reference; target inode pointer cleared | No physical free; sectors decrease; SB counter helper still stages primary superblock with delta zero |
+| Same name in both locations | Both copies removed in this same local plan | External branch above decides copy/free/refcount changes; no stale copy is left to reappear |
+
+`buffer_read_xattr_block` checks magic, one-block layout and checksum before
+editing. The decoders refuse EA-inode-backed entries, including unrelated ones;
+retain that supported subset. `i_extra_isize == 0` and 128-byte inodes have no
+inline area for removal; removal does not initialize one. Prefix validation is
+currently reached through a planner, after resolution: a missing path wins over
+an invalid namespace. With neither inline area nor external block, even an
+unknown namespace yields NotFound; on legacy external-only layouts the external
+block check can fail before prefix validation. C invalid name encoding/null
+arguments retain their existing early EINVAL behavior. Do not silently hoist a
+new universal namespace check or change these priorities during routing.
+
+Allocation planning reads the current staged bitmap and staged uninit flags.
+`clear_bgd_uninit_flag_if_set` records prospective clears in the buffer only;
+bitmap, descriptor and superblock helpers edit local owned vectors. The mount's
+allocation-clear map publishes inside `commit_block_buffer`, after direct flushes
+or journal checkpoint success. Publication can allocate/lock/panic, so it belongs
+inside the entire guarded commit effect. `allocation_groups` may memoize a view
+of already-committed clears during planning; that is not publication of proposed
+clears. Refusal checks must preserve logical clear state and disk bytes, without
+promising unchanged read-cache residency or memoization identity.
+
+#### Reviewed whole-buffer boundary for the next migration
+
+1. Existing Rust string/byte and C path **removexattr only** enter the same mount
+   context before volume/device/runtime callbacks or resolution. Reuse that
+   context for all helpers. Keep setxattr, shared helper semantics, C reference/
+   lifetime rules and every other unguarded operation externally coordinated.
+   No new public inode API or family lock is needed.
+2. Extract the existing full removal planner into a private prepared BlockBuffer:
+   preserve inline/external duplicates, shared/nonshared branches, errors and
+   ctime/pointer/sector/checksum semantics. Finish all fallible planning and local
+   preparation before marker effects. Drop refused plans without physical writes
+   or logical allocation publication, on clean and prior-dirty mounts.
+3. A private context-checked whole-buffer commit boundary must normalize the
+   **already-staged primary superblock**, when present, before any effects.
+   Its block is `1024 / block_size`, region offset `1024 % block_size`. Validate
+   the prepared block/region shape and magic, clear only `EXT4_VALID_FS` in its
+   staged state, then restamp its superblock checksum when enabled. Preserve
+   every planned counter, feature, orphan and unrelated byte, including other
+   state bits and bytes outside the 1024-byte region. Do not replace it with a
+   fresh device read or mounted snapshot, which would lose planned edits. Do
+   not stage a primary superblock just to normalize an inode-only buffer.
+4. Retain the marker-once effect, then a second effect covering **all** of the
+   existing commit, flush/checkpoint and allocation publication. If marker is
+   already owed, only the commit effect advances versions. Any error/unwind
+   conservatively retires later write/flush/clean-close reuse. The journal writer
+   independently patches RECOVER and its checksum in transaction superblocks;
+   that handling does not clear VALID_FS. Keep both protocols and their ordering.
+   Do not clear the recovery marker after commit to repair a stale staged image.
+5. Keep raw `commit_block_buffer` and unrelated callers' semantics unchanged.
+   The new boundary consumes only this operation's private plan under its same
+   mount context; ordinary BlockBuffer ownership, counters and pointer identity
+   are not a seal or owner proof. No Ready state, owner cache/publication,
+   transaction admission or casefold write enablement is introduced. Future
+   refactoring of the four reviewed inode-only families must retain their exact
+   existing controls and callback/failure behavior.
+
+**Next bounded implementation and evidence:** apply/promote the five public red
+controls, implement the private full removal planner and whole-buffer boundary
+above, and add green controls for the constructed ordering under that boundary.
+Cover clean/prior-dirty normalization, 1 KiB/4 KiB offsets, checksums, preserved
+counter edits/other state bits, marker absent/already owed, foreign context and
+malformed prepared regions. Exercise all five guarded families' Rust/C worker
+reentry, every observed direct/journal marker/commit write/flush fault, planning/
+effect/publication unwind and actual C close, with joined worker ownership and
+no foreign C callback unwind. Preserve invalid UTF-8 path and C error clearing.
+
+Add an exact independent public Rust/C Linux/e2fsck/debugfs removal oracle with
+an explicit supported matrix covering inline, unique external, shared COW,
+shared release, duplicate-copy and final-block-free branches. Verify both target
+and unaffected sharing inode values/refcounts, allocation bits and free counts,
+`i_file_acl`/sector accounting, ctime/generation/metadata/data, dirty state before
+release and clean close/reopen. Include legacy/zero-extra and corrupted/unsupported
+refusals without broadening formats or permissions. Keep all five existing exact
+metadata oracles, floors/caps/artifacts and complete baseline retention; use
+measured evidence for any later legitimate output-budget change. Inspect exact
+source full/focused CI and actual artifacts, then perform a standalone removal-
+family review before another migration. Shared and duplicate cases above are
+source-audited here; this checkpoint adds no new independent Linux qualification.
+
+Stage 5 is **not yet quantified**. The pre-existing ignored slow fuzz case,
+three insertion aliases, complete mapping/collision/growth and ownership/
+lifecycle/seal/admission/recovery work remain open. All casefold write gates and
+real-card/Windows/SteamOS qualification remain unchanged.
+
 ### Public inode-flag implementation/evidence review — 2026-10-18
 
 Reviewed clean fetched `4d4df814316c1aeae804c23408d0cf2866081d0d`.

@@ -1,0 +1,260 @@
+Saved xattr-removal audit controls at a387b90340f3edfeb80ed8d7e9f3be022276008d.
+Apply: git apply docs/CASEFOLD-XATTR-REMOVAL-RED.patch
+Run: cargo test --locked --lib fs::guarded_chmod::tests::xattr_removal_red -- --show-output
+Expected on this source: 1 passed, 9 failed, 0 ignored.
+Remove: git apply --reverse docs/CASEFOLD-XATTR-REMOVAL-RED.patch
+
+Five failures exercise current public dispatch/marker behavior. Four diagnostic
+failures deliberately stage a synthetic free-count decrement in a clean primary
+superblock before marker/commit effects; this is not a complete valid allocation
+transaction, an independent oracle result, or the current legacy public order.
+The positive control covers existing last-external-block removal in all four
+profiles and preserves its dirty marker. Initial 1 KiB fixture size was corrected
+to one-group 8 MiB; 4 KiB fixtures remain 32 MiB. No host oracle or mount is used.
+
+For the later migration, retain the public controls and promote the constructed
+cases to green tests of the NEW private guarded whole-buffer boundary. Raw
+commit_block_buffer remains an unguarded primitive with its existing callers;
+do not globally change it just to make the diagnostic ordering pass.
+
+diff --git a/src/fs/guarded_chmod.rs b/src/fs/guarded_chmod.rs
+--- a/src/fs/guarded_chmod.rs
++++ b/src/fs/guarded_chmod.rs
+@@ -735,4 +735,5 @@
+     mod flags_calls;
+     mod public_calls;
+     mod utimens_calls;
++    mod xattr_removal_red;
+ }
+diff --git a/src/fs/guarded_chmod/tests/xattr_removal_red.rs b/src/fs/guarded_chmod/tests/xattr_removal_red.rs
+new file mode 100644
+--- /dev/null
++++ b/src/fs/guarded_chmod/tests/xattr_removal_red.rs
+@@ -0,0 +1,227 @@
++//! Dormant audit controls: public removal bypasses and a constructed buffer order.
++//! No oracle qualification or current public pre-marker planning is implied.
++use super::*;
++use crate::capi::*;
++use std::ffi::CString;
++
++const NAME: &str = "user.audit";
++fn specimen(
++    flavor: features::FsFlavor,
++    bs: u32,
++    external: bool,
++) -> (Arc<Device>, Filesystem, u32, Arc<Clock>) {
++    let size = if bs == 1024 {
++        8 * 1024 * 1024
++    } else {
++        32 * 1024 * 1024
++    };
++    let dev = Arc::new(Device {
++        bytes: Mutex::new(vec![0; size]),
++        calls: std::array::from_fn(|_| AtomicUsize::new(0)),
++        fail_write: AtomicUsize::new(0),
++        fail_flush: AtomicUsize::new(0),
++        panic_flush: AtomicUsize::new(0),
++        writable: AtomicBool::new(true),
++    });
++    crate::mkfs::format_filesystem_with_flavor(
++        dev.as_ref(),
++        None,
++        Some([29; 16]),
++        size as u64,
++        bs,
++        flavor,
++    )
++    .unwrap();
++    let clock = Arc::new(Clock {
++        calls: AtomicUsize::new(0),
++        now: std::sync::atomic::AtomicI64::new(1_700_000_000),
++        hook: Mutex::new(None),
++    });
++    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
++    let ino = fs.apply_create_bytes(b"/f\xff", 0o640).unwrap();
++    let value = vec![b'v'; if external { 600 } else { 1 }];
++    fs.apply_setxattr_bytes(b"/f\xff", NAME, &value).unwrap();
++    fs.apply_setxattr("/", NAME, b"root").unwrap();
++    if external {
++        assert_ne!(fs.read_inode_verified(ino).unwrap().0.file_acl, 0);
++    }
++    drop(fs);
++    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
++    dev.reset();
++    clock.calls.store(0, Ordering::SeqCst);
++    assert_ne!(state(&dev) & crate::superblock::EXT4_VALID_FS, 0);
++    (dev, fs, ino, clock)
++}
++fn state(dev: &Device) -> u16 {
++    let b = dev.bytes();
++    u16::from_le_bytes(b[1082..1084].try_into().unwrap())
++}
++fn free_blocks(dev: &Device) -> u64 {
++    let b = dev.bytes();
++    u64::from(u32::from_le_bytes(b[1036..1040].try_into().unwrap()))
++        | (u64::from(u32::from_le_bytes(b[1368..1372].try_into().unwrap())) << 32)
++}
++fn c_remove(handle: *mut fs_ext4_fs_t, name: &str) -> i32 {
++    let path = CString::new(b"/f\xff".as_slice()).unwrap();
++    let name = CString::new(name).unwrap();
++    unsafe { fs_ext4_removexattr(handle, path.as_ptr(), name.as_ptr()) }
++}
++#[test]
++fn rust_string_removal_must_refuse_held_context_before_callbacks() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096, false);
++    let held = fs.chmod_operation().unwrap();
++    assert!(
++        matches!(fs.apply_removexattr("/", NAME), Err(Error::Unsupported(_))),
++        "public string removal bypassed held context"
++    );
++    assert_eq!(dev.counts(), [0; 4]);
++    assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++    drop(held);
++}
++#[test]
++fn rust_byte_removal_must_refuse_held_context_before_callbacks() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096, false);
++    let held = fs.chmod_operation().unwrap();
++    assert!(
++        matches!(
++            fs.apply_removexattr_bytes(b"/f\xff", NAME),
++            Err(Error::Unsupported(_))
++        ),
++        "public byte removal bypassed held context"
++    );
++    assert_eq!(dev.counts(), [0; 4]);
++    assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++    drop(held);
++}
++#[test]
++fn capi_removal_must_refuse_held_context_before_callbacks() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096, false);
++    let _fs = with_test_mount(fs, |handle, fs| {
++        let held = fs.chmod_operation().unwrap();
++        assert_eq!(
++            c_remove(handle, NAME),
++            -1,
++            "C removal bypassed held context"
++        );
++        assert_eq!(fs_ext4_last_errno(), crate::error::errno::ENOTSUP);
++        assert_eq!(dev.counts(), [0; 4]);
++        assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++        drop(held);
++    });
++}
++#[test]
++fn rust_missing_attribute_must_leave_clean_marker_and_bytes_untouched() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096, false);
++    let before = dev.bytes();
++    assert!(matches!(
++        fs.apply_removexattr_bytes(b"/f\xff", "user.absent"),
++        Err(Error::NotFound)
++    ));
++    assert_eq!(
++        &dev.counts()[1..3],
++        &[0, 0],
++        "missing attribute wrote/flushed recovery marker"
++    );
++    assert!(dev.bytes() == before);
++    assert!(!fs.marked_not_clean.load(Ordering::SeqCst));
++    assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++}
++#[test]
++fn capi_missing_attribute_must_leave_clean_marker_and_bytes_untouched() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096, false);
++    let before = dev.bytes();
++    let _fs = with_test_mount(fs, |handle, fs| {
++        assert_eq!(c_remove(handle, "user.absent"), -1);
++        assert_eq!(fs_ext4_last_errno(), crate::error::errno::ENOENT);
++        assert_eq!(
++            &dev.counts()[1..3],
++            &[0, 0],
++            "C missing attribute wrote/flushed recovery marker"
++        );
++        assert!(dev.bytes() == before);
++        assert!(!fs.marked_not_clean.load(Ordering::SeqCst));
++        assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++    });
++}
++fn constructed_order(flavor: features::FsFlavor, bs: u32) {
++    let (dev, fs, _, _) = specimen(flavor, bs, false);
++    let mut context = fs.chmod_operation().unwrap();
++    let mut buf = BlockBuffer::new(bs);
++    let free = free_blocks(&dev);
++    // Controlled synthetic counter edit only, not a complete xattr transaction.
++    // It deliberately snapshots a clean primary SB BEFORE the marker effect.
++    fs.buffer_patch_sb_counters(&mut buf, -1, 0).unwrap();
++    let block = 1024 / u64::from(bs);
++    let offset = (1024 % u64::from(bs)) as usize;
++    assert_ne!(
++        u16::from_le_bytes(
++            buf.dirty[&block][offset + 58..offset + 60]
++                .try_into()
++                .unwrap()
++        ) & crate::superblock::EXT4_VALID_FS,
++        0
++    );
++    context.effect(|| fs.mark_not_clean_once()).unwrap();
++    assert_eq!(
++        state(&dev) & crate::superblock::EXT4_VALID_FS,
++        0,
++        "marker did not clear clean state"
++    );
++    context.effect(|| fs.commit_block_buffer(buf)).unwrap();
++    let final_state = state(&dev);
++    let final_free = free_blocks(&dev);
++    let bytes = dev.bytes();
++    if fs.csum.enabled {
++        assert_eq!(
++            u32::from_le_bytes(bytes[2044..2048].try_into().unwrap()),
++            crate::checksum::linux_crc32c(!0, &bytes[1024..2044])
++        );
++    }
++    assert_eq!(
++        final_free,
++        free - 1,
++        "the planned counter edit was not committed"
++    );
++    assert!(fs.marked_not_clean.load(Ordering::SeqCst));
++    assert_eq!(context.operation.status().epoch, 2);
++    eprintln!("constructed pre-marker buffer: bs={bs} journal={} state={final_state} planned_counter_preserved=true marker_owed=true checksummed={}",fs.journal.is_some(),fs.csum.enabled);
++    assert_eq!(
++        final_state & crate::superblock::EXT4_VALID_FS,
++        0,
++        "constructed clean SB overwrote the recovery marker"
++    );
++}
++#[test]
++fn constructed_direct_1k_buffer_must_preserve_dirty_marker() {
++    constructed_order(features::FsFlavor::Ext4, 1024);
++}
++#[test]
++fn constructed_direct_4k_buffer_must_preserve_dirty_marker() {
++    constructed_order(features::FsFlavor::Ext4, 4096);
++}
++#[test]
++fn constructed_journal_1k_buffer_must_preserve_dirty_marker() {
++    constructed_order(features::FsFlavor::Ext3, 1024);
++}
++#[test]
++fn constructed_journal_4k_buffer_must_preserve_dirty_marker() {
++    constructed_order(features::FsFlavor::Ext3, 4096);
++}
++
++#[test]
++fn legacy_public_external_removal_retains_dirty_marker_in_all_four_profiles() {
++    for flavor in [features::FsFlavor::Ext4, features::FsFlavor::Ext3] {
++        for bs in [1024, 4096] {
++            let (dev, fs, ino, _) = specimen(flavor, bs, true);
++            let before = fs.read_inode_verified(ino).unwrap().0;
++            let free = free_blocks(&dev);
++            fs.apply_removexattr_bytes(b"/f\xff", NAME).unwrap();
++            let after = fs.read_inode_verified(ino).unwrap().0;
++            assert_eq!(after.file_acl, 0);
++            assert_eq!(after.blocks, before.blocks - u64::from(bs) / 512);
++            assert_eq!(free_blocks(&dev), free + 1);
++            assert_eq!(state(&dev) & crate::superblock::EXT4_VALID_FS, 0);
++            eprintln!("legacy public removal: bs={bs} journal={} marker remains dirty, external block freed",fs.journal.is_some());
++        }
++    }
++}
