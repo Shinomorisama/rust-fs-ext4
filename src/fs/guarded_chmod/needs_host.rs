@@ -1,6 +1,7 @@
-//! Independent emitted-metadata evidence for private/public chmod and public chown.
+//! Independent emitted-metadata evidence for the guarded metadata families.
 mod chown;
 mod flags;
+mod removexattr;
 mod utimens;
 use super::*;
 use crate::block_io::FileDevice;

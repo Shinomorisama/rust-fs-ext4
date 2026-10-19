@@ -4490,14 +4490,9 @@ impl Filesystem {
     /// Remove the extended attribute named `name` from the inode at `path`.
     /// `name` must carry a known namespace prefix (e.g. `"user.color"`).
     ///
-    /// v1 scope: **in-inode xattrs only.** The in-inode region (bytes
-    /// between `128 + i_extra_isize` and the end of the on-disk inode)
-    /// is decoded, the matching entry is dropped, and the region is
-    /// re-encoded in place. External xattr blocks (pointed at by
-    /// Search the in-inode region first, then the external xattr block. If
-    /// the external block becomes empty after removal, free it and zero
-    /// `i_file_acl` (matches kernel behavior — empty xattr blocks are
-    /// reaped on the spot rather than left dangling).
+    /// Removes all copies from the in-inode region and supported external
+    /// block in one prepared buffer. An empty external block is released;
+    /// shared blocks retain the other inodes' attributes and references.
     ///
     /// Returns:
     /// - `Ok(())` on success.
@@ -4509,7 +4504,11 @@ impl Filesystem {
 
     /// [`apply_removexattr`](Self::apply_removexattr) of a path given as bytes, never decoded.
     pub(crate) fn apply_removexattr_bytes(&self, path: &[u8], name: &str) -> Result<()> {
-        self.refuse_write()?;
+        self.guarded_removexattr_bytes(path, name)
+    }
+
+    /// Prepare the entire removal without physical writes or allocation publication.
+    fn plan_removexattr(&self, path: &[u8], name: &str) -> Result<BlockBuffer> {
         let ino = self.resolve(path)?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
 
@@ -4552,7 +4551,7 @@ impl Filesystem {
         set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.buffer_write_inode(&mut buf, ino, &raw)?;
-        self.commit_block_buffer(buf)
+        Ok(buf)
     }
 
     /// Remove `name` from `ino`'s external xattr block, staged in `buf`.

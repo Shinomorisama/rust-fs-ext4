@@ -69,6 +69,35 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public removal implementation status — 2026-10-18
+
+The bounded migration specified below is implemented locally from `65d99d7`.
+Existing Rust string/byte and C path removal now enter the shared metadata
+context, prepare the full old removal plan, normalize any already-staged primary
+SB's clean bit/checksum without replacing planned bytes, and guard marker plus
+complete commit/checkpoint/flush/publication effects. Global raw commit, setxattr,
+C lifetimes and casefold gates remain unchanged. Context identity and prepared SB
+shape/magic are checked before effects; inode-only plans add no SB block.
+
+The saved five public failures were rerun and promoted unchanged; the four
+constructed diagnostics now exercise the new boundary. Native controls add
+five-family Rust/C worker exclusion, allocation/refcount/counter preservation,
+all observed write/flush faults, planning/effect/publication panics, refusal
+priorities and C close. See the latest implementation checkpoint in
+[extprogress](extprogress.md) for exact fresh counts and measurements.
+
+**Independent qualification remains pending.** The new sixteen-profile exact
+Linux/e2fsprogs removal test and its CI floor/artifacts are added and compile,
+but cannot execute here without the harness VM. Git/helper reads verify the
+remote audit tip and an explicit Bearer header restores the existing API binding;
+its full CI passes. No new access or secret is needed. See the handoff for exact
+fresh validation and publication status. No standalone qualified removal-family
+review is claimed: publish without forcing, inspect exact full/focused CI and
+actual images/reports, and resolve findings before reviewing this family or
+migrating another one.
+All ownership/lifecycle/seal/admission, ignored-fuzz, index-growth and write gates
+listed below remain open.
+
 ### Xattr-removal staging and recovery-marker audit — 2026-10-18
 
 Audited clean fetched `a387b90340f3edfeb80ed8d7e9f3be022276008d`, whose

@@ -2488,13 +2488,13 @@ pub unsafe extern "C" fn fs_ext4_symlink(
 
 /// Remove the extended attribute `name` from the inode at `path`. `name`
 /// must be fully-qualified (carry a known namespace prefix like `"user."`
-/// or `"security."`). v1 scope: in-inode xattrs only; external-block
-/// removal surfaces EINVAL until the slow path lands.
+/// or `"security."`). Removes copies from the in-inode area and supported
+/// external block, preserving other shared references.
 ///
 /// Returns 0 on success, -1 on failure with details in
 /// `fs_ext4_last_error`. `fs_ext4_last_errno` codes: ENOENT if the name
-/// isn't present, EINVAL on unknown prefix or external-block-only entry,
-/// EROFS on a read-only mount.
+/// isn't present, EINVAL on namespace-prefix issues, EROFS on a read-only
+/// mount, and ENOTSUP when the shared metadata operation context is held.
 #[no_mangle]
 pub unsafe extern "C" fn fs_ext4_removexattr(
     fs: *mut fs_ext4_fs_t,

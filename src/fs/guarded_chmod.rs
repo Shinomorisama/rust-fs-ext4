@@ -1,4 +1,4 @@
-//! Shared chmod/chown/utimens/flags dispatch; other families need caller serialization.
+//! Shared chmod/chown/utimens/flags/removexattr dispatch; other families need caller serialization.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -169,6 +169,66 @@ impl Filesystem {
             context.effect(|| self.mark_not_clean_once())?;
         }
         context.effect(|| self.commit_block_buffer(buf))
+    }
+
+    pub(super) fn guarded_removexattr_bytes(&self, path: &[u8], name: &str) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.removexattr_bytes_in(&mut context, path, name)
+    }
+
+    fn removexattr_bytes_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        path: &[u8],
+        name: &str,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        let buf = self.plan_removexattr(path, name)?;
+        self.commit_removexattr_in(context, buf)
+    }
+
+    /// Only the removal planner calls this whole-buffer boundary. This is not
+    /// transaction admission, a sealed plan, or a change to raw commit semantics.
+    fn commit_removexattr_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        mut buf: BlockBuffer,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.prepare_removexattr_buffer(&mut buf)?;
+        if !self.marked_not_clean.load(Ordering::SeqCst) {
+            context.effect(|| self.mark_not_clean_once())?;
+        }
+        // Include checkpoint/flush and post-durability allocation publication;
+        // even a publication unwind must retire later writes and clean close.
+        context.effect(|| self.commit_block_buffer(buf))
+    }
+
+    /// The planner may have read the primary superblock while still clean.
+    /// Normalize that owned image, preserving its planned counters and all
+    /// unrelated bytes. Never replace it with a fresh disk or mount snapshot.
+    fn prepare_removexattr_buffer(&self, buf: &mut BlockBuffer) -> Result<()> {
+        let bs = u64::from(self.sb.block_size());
+        let offset = crate::superblock::SUPERBLOCK_OFFSET;
+        let Some(block) = buf.dirty.get_mut(&(offset / bs)) else {
+            return Ok(()); // Inode-only plans need no superblock write.
+        };
+        let start = (offset % bs) as usize;
+        if block.len() != bs as usize || start + 1024 > block.len() {
+            return Err(Error::Corrupt("removexattr prepared superblock shape"));
+        }
+        let sb = &mut block[start..start + 1024];
+        if u16::from_le_bytes(sb[0x38..0x3a].try_into().unwrap()) != crate::superblock::EXT4_MAGIC {
+            return Err(Error::Corrupt("removexattr prepared superblock magic"));
+        }
+        let state = u16::from_le_bytes(sb[0x3a..0x3c].try_into().unwrap());
+        sb[0x3a..0x3c].copy_from_slice(&(state & !crate::superblock::EXT4_VALID_FS).to_le_bytes());
+        if self.csum.enabled {
+            let checksum = crate::checksum::linux_crc32c(!0, &sb[..0x3fc]);
+            sb[0x3fc..].copy_from_slice(&checksum.to_le_bytes());
+        }
+        Ok(())
     }
 
     pub(super) fn guarded_flags_bytes(&self, path: &[u8], flags: u32) -> Result<()> {
@@ -734,6 +794,7 @@ mod tests {
     mod chown_calls;
     mod flags_calls;
     mod public_calls;
+    mod removexattr_calls;
     mod utimens_calls;
 }
 
