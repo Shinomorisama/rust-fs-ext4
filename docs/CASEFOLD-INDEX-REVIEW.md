@@ -69,7 +69,59 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public removal family review closure — 2026-10-18
+
+Repaired source `396488818d774de1852b8872cce5ea0350ec5122` now passes
+[exact full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39192028328)
+and [exact focused Linux CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39192028338).
+The standalone removal-family implementation/evidence review is **complete, with
+no blocker within the existing caller-exclusion contract**. This closes the
+pending full-suite review below, not the broader ownership/write qualification.
+The reviewed `dbfb9f4` checkout differs from repaired source only in these two
+handoff/review documents; no production, active test, workflow, pin or cap changes.
+
+SHA-256-verified whole-guest and x86_64 artifacts each report **1,923 passed,
+zero failed, one pre-existing ignored fuzz test**. Counter comparison retains all
+1,895 preceding qualified whole-suite occurrences, including duplicates and
+expected panics, and adds exactly the 25 removal controls, two fixture controls
+and one removal Linux oracle. All **134** guard/family/parser/fixture controls
+execute in five CI contexts: standalone native, aarch64 and x86_64 debug units,
+x86_64 release and whole guest. Native unit Counters match at 1,095. Actual whole
+suite logs measure 3,313 lines / 180,692 bytes (x86_64) and
+3,477 lines / 189,631 bytes (guest),
+inside unchanged limits. Separate oracle/kernel/lwext4 tiers pass 225/28/9 tests;
+installed CLI and script checks pass. The existing ignored slow corrupt-input
+fuzz case remains a broader qualification gate; it is not credited as passed.
+
+The complete repaired focused image/report audit is recorded immediately below:
+sixteen removal profiles / 112 mutations / 144 Linux and debugfs final answers
+per stream, plus all 68 retained metadata profiles / 136 final inode records.
+Source review confirms pre-callback entry, fallible whole-plan preparation,
+planned-byte-preserving SB dirty normalization and complete failure-latching
+commit/checkpoint/flush/allocation-publication effects. Counter-order and
+publication-poison diagnostics remain synthetic. No new implementation fix or
+active test is needed for this closure. The unrepaired parent's full suites
+failed the same fixture comparison and aborted later targets; its partial runs
+are not whole-suite approval.
+
+The mixed zero-extra/nonzero-extension layout stays unqualified. Other readers,
+writers, flush/maintenance/raw handles and C lifetimes need caller coordination.
+Buffer/context ownership is not a seal, whole-filesystem ownership proof,
+Ready state or admission. Keep ignored fuzz, insertion aliases, complete mapping/
+ownership/lifecycle/seal/admission/collision/growth/recovery and casefold-write
+gates open. No real-card, Windows, SteamOS or new power-loss claim follows.
+
+**Next:** a bounded public setxattr staging/marker/feature-counter design audit
+and actual red preparation, before dispatch migration. Trace inline grow/shrink
+and duplicate moves, shared/unshared external updates/allocation, zero-extra
+initialization and feature/counter publication. Retain all six exact metadata
+oracles and prior controls. Its distinct whole-plan requirements must be reviewed
+before generalizing this removal-specific commit boundary.
+
 ### Repaired removal independent-evidence review — 2026-10-18
+
+Follow-up: the closure above records passing exact full CI and complete whole-
+suite artifact/control review, superseding this earlier checkpoint's pending status.
 
 Reviewed clean fetched `396488818d774de1852b8872cce5ea0350ec5122`.
 Its [exact focused Linux CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39192028338)
