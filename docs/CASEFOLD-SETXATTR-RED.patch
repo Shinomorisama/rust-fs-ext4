@@ -1,0 +1,353 @@
+Saved setxattr audit controls at b6190fdb29fdada30b86507bf4f6a90f471a54ae.
+Apply: git apply docs/CASEFOLD-SETXATTR-RED.patch
+Run: scripts/tier.sh setxattr:audit setxattr-audit 800 65000 -- scripts/test.sh --locked --lib fs::guarded_chmod::tests::setxattr_audit_red -- --show-output
+Expected on this source: 1 passed, 14 failed, 0 ignored (command exit 101).
+Remove: git apply --reverse docs/CASEFOLD-SETXATTR-RED.patch
+
+Ten failures exercise current public behavior: three Rust/C guard bypasses,
+four Rust/C marker writes on missing-path/invalid-prefix refusals, missing
+C-caught planning-panic failure latching, and inline-only ctime/EXT_ATTR
+publication gaps. The inline emission findings are native desired-contract
+controls; no new independent Linux/e2fsprogs corruption or compatibility verdict
+is claimed. Qualify their intended emitted metadata independently before closure.
+
+Four constructed failures prepare feature-bit and synthetic free-count edits
+in a clean primary SB BEFORE marker/commit effects. Current public setxattr
+marks before planning. These are future-boundary ordering diagnostics, not
+complete valid allocations, current public clean-bit regressions or independent
+oracle results. Promote them against the NEW private whole-buffer boundary;
+do not globally change raw commit semantics to make these constructed cases pass.
+
+One positive control covers actual external create and rewrite through both
+Rust/C paths, 1/4 KiB blocks and direct/journal profiles (eight combinations,
+sixteen successful sets), preserving feature/counter/sector/dirty/ctime/value
+behavior and close/reopen. All fixtures are memory-backed; no host oracle or
+mount is used. Rust Runtime supplies the panic injection; no foreign callback
+unwinds. No production fix or qualification is included in this patch.
+
+diff --git a/src/fs/guarded_chmod.rs b/src/fs/guarded_chmod.rs
+index 520fc3e..d6148b9 100644
+--- a/src/fs/guarded_chmod.rs
++++ b/src/fs/guarded_chmod.rs
+@@ -795,5 +795,6 @@ mod tests {
+     mod flags_calls;
+     mod public_calls;
+     mod removexattr_calls;
++    mod setxattr_audit_red;
+     mod utimens_calls;
+ }
+diff --git a/src/fs/guarded_chmod/tests/setxattr_audit_red.rs b/src/fs/guarded_chmod/tests/setxattr_audit_red.rs
+new file mode 100644
+--- /dev/null
++++ b/src/fs/guarded_chmod/tests/setxattr_audit_red.rs
+@@ -0,0 +1,310 @@
++//! Dormant native audit controls, not independent Linux qualification.
++//! Four constructed SB cases are ordering diagnostics, not valid allocations.
++use super::*;
++use crate::capi::*;
++use std::ffi::CString;
++
++const NAME: &str = "user.audit";
++const STAMP: i64 = 1_700_000_100;
++
++fn specimen(flavor: features::FsFlavor, bs: u32) -> (Arc<Device>, Filesystem, u32, Arc<Clock>) {
++    let size = if bs == 1024 {
++        8 * 1024 * 1024
++    } else {
++        32 * 1024 * 1024
++    };
++    let dev = Arc::new(Device {
++        bytes: Mutex::new(vec![0; size]),
++        calls: std::array::from_fn(|_| AtomicUsize::new(0)),
++        fail_write: AtomicUsize::new(0),
++        fail_flush: AtomicUsize::new(0),
++        panic_flush: AtomicUsize::new(0),
++        writable: AtomicBool::new(true),
++    });
++    crate::mkfs::format_filesystem_with_flavor(
++        dev.as_ref(),
++        None,
++        Some([31; 16]),
++        size as u64,
++        bs,
++        flavor,
++    )
++    .unwrap();
++    let clock = Arc::new(Clock {
++        calls: AtomicUsize::new(0),
++        now: std::sync::atomic::AtomicI64::new(1_700_000_000),
++        hook: Mutex::new(None),
++    });
++    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
++    let ino = fs.apply_create_bytes(b"/f\xff", 0o640).unwrap();
++    drop(fs);
++    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
++    dev.reset();
++    clock.calls.store(0, Ordering::SeqCst);
++    assert_ne!(state(&dev) & crate::superblock::EXT4_VALID_FS, 0);
++    assert_eq!(compat(&dev) & features::Compat::EXT_ATTR.bits(), 0);
++    (dev, fs, ino, clock)
++}
++fn state(dev: &Device) -> u16 {
++    u16::from_le_bytes(dev.bytes()[1082..1084].try_into().unwrap())
++}
++fn compat(dev: &Device) -> u32 {
++    u32::from_le_bytes(dev.bytes()[1116..1120].try_into().unwrap())
++}
++fn free(dev: &Device) -> u64 {
++    let b = dev.bytes();
++    u64::from(u32::from_le_bytes(b[1036..1040].try_into().unwrap()))
++        | (u64::from(u32::from_le_bytes(b[1368..1372].try_into().unwrap())) << 32)
++}
++fn c_set(handle: *mut fs_ext4_fs_t, path: &[u8], name: &str, value: &[u8]) -> i32 {
++    let path = CString::new(path).unwrap();
++    let name = CString::new(name).unwrap();
++    unsafe {
++        fs_ext4_setxattr(
++            handle,
++            path.as_ptr(),
++            name.as_ptr(),
++            value.as_ptr().cast(),
++            value.len(),
++        )
++    }
++}
++
++#[test]
++fn rust_string_set_must_refuse_held_context_before_callbacks() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    let _held = fs.chmod_operation().unwrap();
++    let result = fs.apply_setxattr("/", NAME, b"x");
++    eprintln!("string set result={result:?} callbacks={:?}", dev.counts());
++    assert!(
++        matches!(result, Err(Error::Unsupported(_))),
++        "string set bypassed held context"
++    );
++    assert_eq!(dev.counts(), [0; 4]);
++    assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++}
++#[test]
++fn rust_byte_set_must_refuse_held_context_before_callbacks() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    let _held = fs.chmod_operation().unwrap();
++    let result = fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x");
++    eprintln!("byte set result={result:?} callbacks={:?}", dev.counts());
++    assert!(
++        matches!(result, Err(Error::Unsupported(_))),
++        "byte set bypassed held context"
++    );
++    assert_eq!(dev.counts(), [0; 4]);
++    assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++}
++#[test]
++fn capi_set_must_refuse_held_context_before_callbacks() {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    let _fs = with_test_mount(fs, |handle, fs| {
++        let _held = fs.chmod_operation().unwrap();
++        let result = c_set(handle, b"/f\xff", NAME, b"x");
++        eprintln!(
++            "C set result={result} errno={} callbacks={:?}",
++            fs_ext4_last_errno(),
++            dev.counts()
++        );
++        assert_eq!(result, -1, "C set bypassed held context");
++        assert_eq!(fs_ext4_last_errno(), crate::error::errno::ENOTSUP);
++        assert_eq!(dev.counts(), [0; 4]);
++        assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++    });
++}
++
++fn refusal(capi: bool, missing: bool) {
++    let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    let before = dev.bytes();
++    let path: &[u8] = if missing { b"/missing" } else { b"/f\xff" };
++    let name = if missing { NAME } else { "no.prefix" };
++    let _fs = with_test_mount(fs, |handle, fs| {
++        if capi {
++            assert_eq!(c_set(handle, path, name, b"x"), -1);
++            assert_eq!(
++                fs_ext4_last_errno(),
++                if missing {
++                    crate::error::errno::ENOENT
++                } else {
++                    crate::error::errno::EINVAL
++                }
++            );
++        } else {
++            let result = fs.apply_setxattr_bytes(path, name, b"x");
++            assert!(if missing {
++                matches!(result, Err(Error::NotFound))
++            } else {
++                matches!(result, Err(Error::InvalidArgument(_)))
++            });
++        }
++        eprintln!(
++            "refused set: capi={capi} missing={missing} callbacks={:?}",
++            dev.counts()
++        );
++        assert_eq!(
++            &dev.counts()[1..3],
++            &[0, 0],
++            "planning refusal wrote/flushed marker"
++        );
++        assert!(dev.bytes() == before);
++        assert!(!fs.marked_not_clean.load(Ordering::SeqCst));
++        assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
++    });
++}
++#[test]
++fn rust_missing_path_must_leave_marker_and_bytes_untouched() {
++    refusal(false, true);
++}
++#[test]
++fn capi_missing_path_must_leave_marker_and_bytes_untouched() {
++    refusal(true, true);
++}
++#[test]
++fn rust_invalid_prefix_must_leave_marker_and_bytes_untouched() {
++    refusal(false, false);
++}
++#[test]
++fn capi_invalid_prefix_must_leave_marker_and_bytes_untouched() {
++    refusal(true, false);
++}
++
++fn constructed(flavor: features::FsFlavor, bs: u32) {
++    let (dev, fs, _, _) = specimen(flavor, bs);
++    let mut context = fs.chmod_operation().unwrap();
++    let before = free(&dev);
++    let mut buf = BlockBuffer::new(bs);
++    // Synthetic feature + counter edits before a marker. No bitmap/inode
++    // allocation is represented; current public set marks BEFORE it plans.
++    fs.buffer_patch_sb_compat(&mut buf, features::Compat::EXT_ATTR.bits())
++        .unwrap();
++    fs.buffer_patch_sb_counters(&mut buf, -1, 0).unwrap();
++    context.effect(|| fs.mark_not_clean_once()).unwrap();
++    context.effect(|| fs.commit_block_buffer(buf)).unwrap();
++    assert_ne!(compat(&dev) & features::Compat::EXT_ATTR.bits(), 0);
++    assert_eq!(free(&dev), before - 1);
++    let bytes = dev.bytes();
++    if fs.csum.enabled {
++        assert_eq!(
++            u32::from_le_bytes(bytes[2044..2048].try_into().unwrap()),
++            crate::checksum::linux_crc32c(!0, &bytes[1024..2044])
++        );
++    }
++    eprintln!(
++        "constructed set buffer: bs={bs} journal={} feature/counter/checksum retained; state={}",
++        fs.journal.is_some(),
++        state(&dev)
++    );
++    assert_eq!(
++        state(&dev) & crate::superblock::EXT4_VALID_FS,
++        0,
++        "constructed clean SB overwrote dirty marker"
++    );
++}
++#[test]
++fn constructed_direct_1k_feature_counter_buffer_must_preserve_dirty_marker() {
++    constructed(features::FsFlavor::Ext4, 1024);
++}
++#[test]
++fn constructed_direct_4k_feature_counter_buffer_must_preserve_dirty_marker() {
++    constructed(features::FsFlavor::Ext4, 4096);
++}
++#[test]
++fn constructed_journal_1k_feature_counter_buffer_must_preserve_dirty_marker() {
++    constructed(features::FsFlavor::Ext3, 1024);
++}
++#[test]
++fn constructed_journal_4k_feature_counter_buffer_must_preserve_dirty_marker() {
++    constructed(features::FsFlavor::Ext3, 4096);
++}
++
++#[test]
++fn existing_external_create_and_replace_retain_feature_counters_and_dirty_marker() {
++    for flavor in [features::FsFlavor::Ext4, features::FsFlavor::Ext3] {
++        for bs in [1024, 4096] {
++            for capi in [false, true] {
++                let (dev, fs, ino, clock) = specimen(flavor, bs);
++                let initial = free(&dev);
++                let fs = with_test_mount(fs, |handle, fs| {
++                    let mut acl = 0;
++                    for (length, stamp) in [(600, STAMP), (700, STAMP + 100)] {
++                        clock.now.store(stamp, Ordering::SeqCst);
++                        let value = vec![b'v'; length];
++                        if capi {
++                            assert_eq!(c_set(handle, b"/f\xff", NAME, &value), 0);
++                        } else {
++                            fs.apply_setxattr_bytes(b"/f\xff", NAME, &value).unwrap();
++                        }
++                        let (inode, raw) = fs.read_inode_verified(ino).unwrap();
++                        assert_ne!(inode.file_acl, 0);
++                        if acl != 0 {
++                            assert_eq!(inode.file_acl, acl);
++                        }
++                        acl = inode.file_acl;
++                        assert_eq!(
++                            crate::xattr::get_resolved(fs, &inode, &raw, NAME).unwrap(),
++                            Some(value)
++                        );
++                        assert_eq!(inode.blocks, u64::from(bs) / 512);
++                        assert_eq!((inode.ctime, inode.ctime_nsec), (stamp, 0));
++                        assert_eq!(free(&dev), initial - 1);
++                        assert_ne!(compat(&dev) & features::Compat::EXT_ATTR.bits(), 0);
++                        assert_eq!(state(&dev) & crate::superblock::EXT4_VALID_FS, 0);
++                    }
++                });
++                drop(fs);
++                assert_ne!(state(&dev) & crate::superblock::EXT4_VALID_FS, 0);
++                let fs = Filesystem::mount(dev).unwrap();
++                let (inode, raw) = fs.read_inode_verified(ino).unwrap();
++                assert_eq!(
++                    crate::xattr::get_resolved(&fs, &inode, &raw, NAME).unwrap(),
++                    Some(vec![b'v'; 700])
++                );
++            }
++        }
++    }
++}
++
++#[test]
++fn inline_only_set_must_stamp_change_time() {
++    let (_, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    clock.now.store(STAMP, Ordering::SeqCst);
++    fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x").unwrap();
++    let inode = fs.read_inode_verified(ino).unwrap().0;
++    assert_eq!(inode.file_acl, 0);
++    assert_eq!(
++        (inode.ctime, inode.ctime_nsec),
++        (STAMP, 0),
++        "inline-only set omitted change time"
++    );
++}
++#[test]
++fn first_inline_attribute_must_publish_ext_attr_feature() {
++    let (dev, fs, ino, _) = specimen(features::FsFlavor::Ext4, 4096);
++    fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x").unwrap();
++    let (inode, raw) = fs.read_inode_verified(ino).unwrap();
++    assert_eq!(inode.file_acl, 0);
++    assert_eq!(
++        crate::xattr::get_resolved(&fs, &inode, &raw, NAME).unwrap(),
++        Some(b"x".to_vec())
++    );
++    assert_ne!(
++        compat(&dev) & features::Compat::EXT_ATTR.bits(),
++        0,
++        "inline-only set omitted feature publication"
++    );
++}
++#[test]
++fn capi_external_planning_panic_must_latch_mount_failure() {
++    let (_, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    let _fs = with_test_mount(fs, |handle, fs| {
++        *clock.hook.lock().unwrap() = Some(Arc::new(|| panic!("set planning panic")));
++        assert_eq!(c_set(handle, b"/f\xff", NAME, &[b'v'; 600]), -1);
++        assert_eq!(fs_ext4_last_errno(), crate::error::errno::EIO);
++        *clock.hook.lock().unwrap() = None;
++        assert!(
++            fs.operation_failed.load(Ordering::SeqCst),
++            "planning unwind did not latch mount failure"
++        );
++    });
++}

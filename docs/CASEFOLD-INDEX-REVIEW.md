@@ -69,6 +69,120 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public setxattr staging and marker audit — 2026-10-19
+
+Audited clean fetched `b6190fdb29fdada30b86507bf4f6a90f471a54ae`, whose
+[exact full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39196911445)
+passes. This checkpoint saves an executed dormant red patch and a design contract;
+production, active tests, workflows, pins/locks and write gates are restored
+byte-for-byte. No setter dispatch migration or new emitted-format qualification.
+
+**Executed evidence:** [CASEFOLD-SETXATTR-RED.patch](CASEFOLD-SETXATTR-RED.patch)
+was saved, applied afresh, actually rerun and reversed. Both runs report **one
+passed / fourteen failed / zero ignored**, exit 101, with the same fifteen test
+names. All fixtures reached the intended assertions. The final audit tier is
+155 lines / 10,568 bytes inside its isolated 800-line / 65,000-byte cap; existing
+tier caps/floors/filters are unchanged. Ten failures exercise real public calls:
+
+- Rust string/byte and C calls succeed and write despite a held shared context;
+  they should refuse before device/runtime callbacks under the proposed contract.
+- Rust/C missing-path and invalid-prefix calls return the existing correct error
+  but each performs one marker write and flush before refusal.
+- A Rust Runtime panic during external-set planning is caught by the existing C
+  boundary as EIO, but does not latch `operation_failed`. No foreign callback
+  unwinds; this demonstrates the missing shared-context failure bridge.
+- An actual inline-only creation leaves ctime at 1,700,000,000 instead of the
+  injected 1,700,000,100 and leaves EXT_ATTR clear although the value is present.
+  These are **native emission/desired-contract findings**, not new independent
+  Linux corruption or compatibility verdicts. Qualify the intended behavior
+  independently, including same-value and empty-value semantics, before closure.
+
+Four other failures deliberately snapshot a clean primary SB, stage EXT_ATTR and
+an artificial free-count decrement, then run guarded marker plus raw commit.
+Feature/counter/checksum survive, but VALID_FS becomes set in all 1/4 KiB direct/
+journal profiles. **These are constructed future-boundary ordering diagnostics,
+not complete valid allocations or current public clean-bit regressions.** Current
+public set marks before it plans. One passing control retains real external first
+allocation and rewrite through Rust/C in all four profiles: eight combinations,
+sixteen sets, exact values/ctime/sectors/free counts/feature/dirty state and close/
+reopen. It is self-consistency evidence, not a new Linux fixture qualification.
+
+**Current flow and owned changes.** `apply_setxattr_bytes` calls marker-writing
+`refuse_write` before resolve and verified-inode reads. It initializes a supported
+zero-extra inode's first 32 extra bytes in owned raw storage, tries the inline
+layout, and removes any stale copy from the other region in that same operation.
+An inline success owns one buffer and commits directly. On overflow the private
+`apply_setxattr_external_block` creates its own buffer and has two terminal raw
+commit sites, existing-block and first allocation. It has exactly one caller.
+There is no whole-operation context around these three terminal commit sites.
+
+| Prepared branch | Owned metadata that must stay together |
+|---|---|
+| Inline insert/replace | Raw inode, possible zero-extra initialization, ctime; first-attribute feature publication is an open native finding. |
+| Growth into external storage | Removed inline copy plus external update/allocation, ACL pointer, sectors, counters and feature bit. |
+| Shrink with an unshared external remainder | New inline value, external rewrite with the old copy removed, inode and checksum. |
+| Shrink freeing the last unshared block | Inline value, bitmap/BGD/SB credit, cleared pointer and reduced sectors. |
+| Shrink with a shared remainder | Inline value, allocated private remainder, old reference decrement, bitmaps/counters/pointer; sectors stay constant. |
+| Shrink releasing the last shared attribute | Inline value, old reference decrement, cleared pointer/reduced sectors; no free-count credit. |
+| Existing unshared external rewrite | External block plus inode/ctime; the immutable mount feature snapshot can request an already-set EXT_ATTR OR again. |
+| Existing shared external rewrite | New private block, old reference decrement, allocation bitmap/BGD/SB debit, pointer; sectors stay constant. |
+| First external allocation | Full new block, bitmap/BGD/SB debit, EXT_ATTR OR, pointer and added sectors. |
+
+The inline encoder checks fit before re-encoding, so NoSpace leaves that region
+unchanged. Local raw/owned-buffer edits are discarded on later failure; this does
+not promise unchanged cache residency or memoized committed allocation views.
+Checked external reads retain magic/shape/checksum and EA-inode refusals, even
+when an inline edit was locally possible. Shared helpers remain unchanged.
+Existing independent one-copy, shared-block, checked-block and zero-extra tests
+supply earlier limited evidence; none covers this new guard/first-inline metadata
+contract. The removal mixed zero-extra/nonzero-extension shape stays unqualified.
+
+**Reviewed next boundary.** Enter the same mount context before any filesystem
+lookup/device/runtime callback; retain verdict-only volume refusal and current
+error priorities. Prepare exactly one owned BlockBuffer for the whole setter.
+Convert the single-caller external helper into staging over that buffer, without
+an internal commit. Finish pointer/sector/layout edits, resolve successful-change
+ctime and first-attribute feature publication, then checksum/stage the inode.
+The inline ctime/feature red findings must be addressed explicitly and measured
+with Linux, rather than silently inherited or described as qualified fixes here.
+
+Validate context identity and any staged primary-SB whole-block shape/magic
+before effects. Normalize only its VALID_FS bit and checksum while preserving
+planned feature ORs, counter deltas, other state and bytes outside the SB region.
+Keep inode-only plans inode-only when no feature change is required. Marker-once
+and complete raw commit/checkpoint/flush/post-durability allocation publication
+must stay inside failure-latching effects. The raw primitive is unchanged; adapt
+the four constructed cases to the new private family boundary, not a global raw
+commit fix or routing setters through a removal-named public adapter. Ordinary
+buffers/context identity establish neither seals nor ownership/admission/Ready.
+Promote the ten public controls without weakening their assertions, retain the
+eight-combination legacy positive control, and adapt only the four constructed
+cases to the new family boundary. Inline findings still need independent Linux
+reference/emission evidence before being called qualified fixes.
+
+Preserve volume-before-lookup and path-before-name behavior. On legacy inodes
+without an inline area, first allocation can currently fail before namespace
+validation; checked external-block refusal can also precede name validation.
+Do not silently move these priorities while extracting the planner. C retains
+its existing null/name/value validation, 64 KiB input ceiling, byte paths, errno/
+error clearing and caller-owned handle lifetime contract; its external-support
+comments are stale and should be corrected with migration.
+
+**Independent/failure qualification still required.** Retain all six exact
+metadata oracles and all 134 existing controls. Add real six-family Rust/C worker
+exclusion in both directions, actual layout/counter/refcount branches, clean/prior-
+dirty refusals, observed write/flush faults and planning/effect/publication unwind
+retirement including C close. Preserve the whole baseline occurrence multiset.
+A Linux matrix needs legacy128/checksummed256, 1/4 KiB, Rust/C, direct/journal,
+inline/grow/shrink/shared/duplicate/external/zero-extra cases and untouched peers.
+Use **separate fresh-image first-attribute cases**: existing input attributes
+already set the global EXT_ATTR bit and cannot expose this gap. Record independent
+Linux first-inline metadata behavior, raw dirty feature/counter/checksum state,
+judged e2fsck and exact debugfs/Linux values/data/times before qualification.
+No host oracle/mount was run. The full-source ignored fuzz gate, ownership/
+lifecycle/seal/admission/mapping/collision/growth/recovery and every casefold-write
+gate remain open. This audit does not qualify Windows, SteamOS or the real card.
+
 ### Public removal family review closure — 2026-10-18
 
 Repaired source `396488818d774de1852b8872cce5ea0350ec5122` now passes
