@@ -807,7 +807,7 @@ fn branch_specimen(
             let start = 128 + u16::from_le_bytes(raw[128..130].try_into().unwrap()) as usize;
             crate::xattr::plan_set_in_inode_region(&mut raw[start..], NAME, b"duplicate").unwrap();
         } else {
-            raw[128..130].fill(0);
+            super::super::zero_extra_fixture::prepare(&mut raw).unwrap();
         }
         fs.finalize_inode_raw(ino, inode.generation, &mut raw)
             .unwrap();

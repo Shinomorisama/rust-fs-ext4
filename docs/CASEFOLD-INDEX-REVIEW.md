@@ -69,6 +69,35 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Removal Linux fixture mismatch and repair — 2026-10-18
+
+Source `499c1b4`'s exact focused workflow failed; full CI was still running at
+investigation. Its first two legacy profiles completed Linux/e2fsck checking.
+The third, Rust 1 KiB/checksummed256/direct, passed emitted metadata/e2fsck/debugfs
+checks and failed the exact Linux timestamp tuple on `/zero`. Changing only
+`extra_isize` to zero left old extension words in the saved inode. The ordinary
+stat failure representation omitted the differing nanoseconds, so the exact
+kernel tuple is unknown. The captured input words execute red under the old
+fixture constructor; the new cfg(test)-only constructor clears unused storage
+while preserving the base inode and refuses erasing inline attributes.
+
+Both native and VM zero-extra fixtures now use that coherent construction, with
+normal checksum restamping and independent input checking. All sixteen profiles,
+strict exact timestamp/value/data checks, filters, floors, caps and artifacts
+remain in place. Failed Linux checks now save partial stdout/stderr and name the
+actual/expected timestamp tuples. No production removal or timestamp semantics
+change. **The mixed zero-extra/nonzero-extension layout remains unqualified**;
+its Linux interpretation requires separate black-box investigation, not a claim
+that the narrowed profile repairs or qualifies arbitrary such inodes.
+
+The native/source review found no blocker within the recorded caller-exclusion
+contract, and the saved artifact audit verifies all 68 retained metadata profiles
+plus partial removal bytes/reports. Independent removal qualification and the
+standalone family review **remain open** until repaired exact full/focused CI and
+all sixteen profiles/artifacts are reviewed. See the latest
+[handoff checkpoint](extprogress.md) for the actual red, repair, fresh validation,
+partial evidence and unchanged ownership/lifecycle/admission/write gates.
+
 ### Public removal implementation status — 2026-10-18
 
 The bounded migration specified below is implemented locally from `65d99d7`.

@@ -248,15 +248,16 @@ REMOVE_INPUT_PY
     assert_eq!(fs.journal.is_some(), journal);
     share(&fs, "/cow", "/cow-peer");
     share(&fs, "/release", "/release-peer");
-    fs.finish().unwrap();
     if size == 256 {
-        oracle("debugfs")
-            .args(["-w", "-f", "-"])
-            .arg(&image)
-            .stdin("sif /zero extra_isize 0\n")
-            .judged()
-            .clean("construct zero-extra removal input");
+        let (ino, inode) = lookup(&fs, "/zero");
+        assert_ne!(inode.file_acl, 0);
+        let (_, mut raw) = fs.read_inode_verified(ino).unwrap();
+        super::super::zero_extra_fixture::prepare(&mut raw).unwrap();
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
     }
+    fs.finish().unwrap();
     assert_e2fsck_clean(
         image_str,
         "shared removal input before legacy duplicate seed",
@@ -522,7 +523,8 @@ for name,ino,mode,uid,gid,blocks,atime,mtime,ctime,attrs in [
     path=root+'/'+name
     info=os.stat(path)
     assert (info.st_ino,info.st_mode,info.st_uid,info.st_gid,info.st_blocks)==(ino,mode,uid,gid,blocks),info
-    assert (info.st_atime_ns,info.st_mtime_ns,info.st_ctime_ns)==(atime,mtime,ctime),info
+    actual_times=(info.st_atime_ns,info.st_mtime_ns,info.st_ctime_ns)
+    assert actual_times==(atime,mtime,ctime),(name,'timestamps',actual_times,(atime,mtime,ctime))
     assert set(os.listxattr(path))==set(attrs),(name,os.listxattr(path),attrs)
     for key,value in attrs.items(): assert os.getxattr(path,key)==value,(name,key)
     fd=os.open(path,os.O_RDONLY|os.O_NOATIME)
@@ -533,12 +535,14 @@ REMOVE_READ_PY
 "#
         ),
     );
+    // Keep partial observations and the exact mismatch even on failed readback.
+    std::fs::write(base.with_extension("linux.txt"), &checked.stdout).unwrap();
+    std::fs::write(base.with_extension("linux.stderr.txt"), &checked.stderr).unwrap();
     assert!(
         checked.status.success(),
         "{}",
         String::from_utf8_lossy(&checked.stderr)
     );
-    std::fs::write(base.with_extension("linux.txt"), &checked.stdout).unwrap();
     assert_e2fsck_clean(image_str, "Linux public removal readback");
     let fs = mount(&image);
     if size == 256 {

@@ -806,3 +806,6 @@ mod owner_report;
 
 #[cfg(test)]
 mod timestamp_report;
+
+#[cfg(test)]
+mod zero_extra_fixture;
