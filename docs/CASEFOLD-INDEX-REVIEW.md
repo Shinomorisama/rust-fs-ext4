@@ -69,6 +69,52 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Repaired removal independent-evidence review — 2026-10-18
+
+Reviewed clean fetched `396488818d774de1852b8872cce5ea0350ec5122`.
+Its [exact focused Linux CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39192028338)
+passes; its [full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39192028328)
+still has x86_64 and whole-guest suites running. The eight other full-CI jobs
+pass. **Standalone removal-family review remains open pending those suites and
+actual whole-suite artifact/control review.** Do not migrate another family on
+the strength of focused success alone.
+
+The actual SHA-256-verified focused artifact covers all sixteen removal profiles,
+64 four-phase images, 112 mutations and 144 final inode answers in each independent
+Linux/debugfs stream. Read-only raw bytes agree on data, attribute values/names,
+IDs/mode/timestamps, pointer/sector/refcounts, allocation/free counters and dirty/
+closed state. Checks include 32 superblock, 80 descriptor, 288 inode and 128
+external-xattr checksum observations. All sixteen Linux stderr reports are empty.
+The coherent zero-extra fixture passes and stays zero-extra after kernel readback;
+the original mixed layout remains unqualified. Deliberately seeded duplicates
+are not ordinary Linux-created valid-input claims. The allocator's later COW
+reuse of an earlier freed block is accounted to the new owner.
+
+All five retained exact metadata oracles pass, and their 68 profiles / 136 final
+inode records agree, including 96 timestamp and 96 flag phase answers per stream.
+All preceding exact insertion/inventory/role/FIEMAP/fixed/allocation/ownership
+filters pass. The removal test executes one pass, zero failures/ignored, with
+401 lines / 52,394 bytes inside unchanged limits/floor. Full local/native-CI/
+aarch64-CI unit Counters match at 1,095 occurrences, including all 134 retained
+guard/family/parser/fixture controls. Full guest controls remain unverified.
+
+The source review finds no blocker **within the current caller-exclusion
+contract**: entry precedes callbacks; whole-plan refusals are untouched; prepared
+SB normalization preserves planned counters/unrelated bytes; full commit,
+checkpoint, flush and allocation publication stay inside failure-latching effects.
+The four constructed counter diagnostics and publication-poison control remain
+synthetic ordering/containment evidence. Raw commit/shared helpers and production
+timestamp behavior are unchanged by the fixture repair. Ordinary buffers and
+context identity do not prove ownership, seals, readiness or admission; other
+readers/writers/flush/maintenance/raw handles and C lifetimes need coordination.
+No power-loss, arbitrary-map, casefold-write or real-card qualification is added.
+
+See the [independent-evidence checkpoint](extprogress.md) for measurements and
+retained gates. Finish exact full-CI/artifact review next, resolving failures,
+then close this family review before auditing setxattr's distinct whole-plan,
+feature-bit/counter and marker requirements. Keep the existing ignored fuzz,
+ownership/lifecycle/seal/admission/mapping/collision/growth/recovery gates open.
+
 ### Removal Linux fixture mismatch and repair — 2026-10-18
 
 Source `499c1b4`'s exact focused workflow failed; full CI was still running at
