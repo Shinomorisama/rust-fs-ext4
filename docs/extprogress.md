@@ -55,6 +55,20 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- Upstream compatibility backports: `4122d20` reserves the symlink target's
+  terminating byte (upstream `45bed01` / #561); `d38cb90` follows intermediate
+  and parent-directory symlinks while retaining this branch's frozen casefold
+  matcher (upstream `4db7413` / #558). CI chore downloads now retry transient
+  failures with the existing checksum verification (upstream `7bb33f6` / #500).
+  Native validation passes 1,129 tests, retaining all 1,122 preceding occurrences
+  and all 161 guard controls, with seven added tests and zero failed/ignored.
+  Full lint passes. Five new independent Linux reference tests compile but have
+  not executed on this no-KVM host; fresh exact-source full/focused CI is pending.
+  This supports Stages 3–4 and shared Stage 4–5 prerequisites; it does not qualify
+  new casefold writes or close the setter-family review. See the backport section
+  below before continuing. Dependency pins, siblings, locks and write gates stay
+  unchanged. Next: inspect fresh CI and actual budgets, then resume the outstanding
+  setter Linux image/metadata-policy audit and standalone review.
 - Setter CI budget repair: actual SHA-256-verified source/baseline artifacts
   retain all 1,923 preceding full-suite occurrences and add 28 in both native
   and guest suites (1,951 passed / zero failed / one existing ignored). Three
@@ -592,6 +606,103 @@ permission to relax write gates, modify siblings or push to `main`.
   immutable pinned archive through the documented source view; its actual
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
+
+## Upstream symlink compatibility and CI-download backports — 2026-10-20
+
+Reviewed original `antimatter-studios/rust-fs-ext4` through
+`4169ccd0b812c42ff59246951425bd4dd1d54e24`. There were nineteen commits since
+the recovery recount fix previously imported here. The user authorized the two
+identified library fixes and the older missed CI-download retry improvement.
+The original's larger CLI/dependency/CI-policy upgrades were not part of this
+backport. Work started from current clean `1057c06`, preserving newer source.
+
+**Target boundary (`4122d20`, upstream `45bed01` / #561):** both path and inode
+creation APIs now reserve a terminating byte within the single data block and
+4,096-byte path bound. The native regression actually failed on a 1,024-byte
+target before the fix, then passed accepted/refused boundaries on 1/2/4 KiB
+filesystems. The complete inode API binary passed 12 tests at that first commit.
+The upstream Linux syscall comparison is adapted to the library APIs here;
+the original test's newer CLI `ln` command is not present in this branch.
+Its two 1/4 KiB tests compile for CI, compare Linux's own syscall boundary,
+retain both library entry points and verify e2fsck/kernel readback.
+
+**Path traversal (`d38cb90`, upstream `4db7413` / #558):** intermediate links
+expand from the root for absolute targets and the link's parent for relative
+targets. Operation-parent resolution follows its own final link too; an
+operation's final name remains the actual entry. Lookup follows at most forty
+links in total and returns `SymlinkLoop` with C ABI `ELOOP` (62, consistent with
+this ABI's existing macOS POSIX numbering). Expanded components continue through
+our existing checksum-validating, casefold-aware `find_entry`; no upstream
+byte-only name matcher replaces the frozen Unicode path.
+
+Four native controls actually failed with `NotADirectory` before that change.
+The promoted controls now pass absolute, relative, chained and non-UTF-8 targets;
+namespace operations through parent links; 40/41-link, self and two-link loops;
+and all six guarded metadata families through a directory link. Added C ABI
+coverage checks byte paths, final-link identity, loop errno and later success
+clearing the previous error. A native read-only fixture additionally checks
+Unicode casefold comparisons, literal dot traversal, stored spelling, malformed
+name refusal and retained writable-mount refusal after link expansion.
+
+The retained randomized inode/path comparison initially exposed that its old
+inode walker still treated intermediate links as non-directories. The upstream
+inode-walk twin was imported too: it uses `lookup_at`/`read_link`, not the new
+path method, to express the updated semantics. Existing seeds, operation
+sequences, outcome checks and byte-for-byte assertions are unchanged; the full
+17-test inode API binary now passes. No test was dropped or weakened.
+
+The adapted three-test Linux path oracle compares successful Rust/C unlink and
+rmdir results with a Linux-mutated copy, then e2fsck and complete tree readback.
+It also compares the 40/41/self/two-link lookup results with Linux and checks
+casefold reads through links on a Linux-created UTF-8 12.1 strict volume, including
+refused Rust/C writable mounts. Loop no-write assertions use read-only lookups;
+legacy namespace wrappers still mark write intent before planning and have not
+been migrated to the shared operation guard. Do not infer first-refusal atomicity,
+reader synchronization or lifecycle/ownership qualification from this backport.
+
+There are five additional kernel tests in total. The kernel floor is raised
+from 3 to **33**, retaining the measured preceding 28 plus all five new tests.
+Both files are selected by the existing automatic tier classifier. Existing
+kernel/native/guest output limits and every other floor/filter remain unchanged;
+new CI must provide actual measurements before any further cap adjustment.
+In particular the preceding guest log had only 94 bytes of remaining headroom.
+
+**CI download retry (upstream `7bb33f6` / #500):** both pinned chore-release
+downloads use `--retry 5 --retry-all-errors --retry-delay 2`; TLS and SHA-256
+verification remain intact. An actual pinned release download using those options
+passed the published checksum. No dependency, lockfile, release packaging,
+quick-profile policy or shared-agent upgrade was imported.
+
+Fresh final native evidence is **1,129 passed / zero failed / zero ignored** in
+1,376 lines / 95,679 bytes under unchanged 1,400 / 100,000. The required Counter
+comparison retains all 1,122 preceding occurrences and adds exactly seven; every
+one of the 161 guard/operation/parser/fixture controls remains. Full lint passes
+(fmt, clippy, CI/provenance and pinned Unicode checks). Both Linux binaries compile;
+the native output-budget shell guard, aggregate gate and whitespace checks pass.
+The budget shell guard exposed a SIGPIPE false failure in its `printf | grep -q`
+pipeline under PRoot: the consumer found the budget and closed the pipe before
+the producer finished. Its input is now supplied with a here-string, retaining
+the exact same regex/assertion. Both native and PRoot executions pass; no guard
+or assertion was disabled.
+
+Local logs and native occurrence comparisons are under ignored
+`tmp/upstream-backports`; the earlier review probe is in `tmp/upstream-oct20-review`.
+This host has no KVM, so **none of the five new Linux reference tests has executed
+locally**. Fresh full and focused CI for the final backport source must be checked,
+including actual kernel execution and complete-suite retention. The preceding
+budget-only CI `39384659463` was still running at the last check; it is not proof
+for the later backports. Casefold writes, deeper insertion/collisions/growth and
+all existing qualification limits stay closed. Stage 4 and Stage 5 are not yet
+quantified; this checkpoint does not complete either stage.
+
+**Next bounded task:** inspect exact final-source full/focused CI, reproduce any
+actual failure (including output-budget failures) and make only a measured repair.
+Verify the new kernel tests actually ran before crediting independent symlink
+qualification. Once prerequisites pass, resume the sixteen setter layouts, eight
+fresh first-attribute reference/emission profiles, retained metadata images and
+first/same/empty-value Linux policy audit, followed by standalone setter-family
+review. Keep mixed zero-extra, ignored fuzz, insertion aliases, complete mapping/
+ownership/lifecycle/seal/admission and full collision/growth/recovery open.
 
 ## Setter native-suite budget repair and retained CI evidence — 2026-10-20
 
@@ -5003,15 +5114,15 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **0 — Establish Linux reference behavior** | Build Linux-created images, record encoding/settings, measure uncertain behavior, and validate with Linux and e2fsprogs. | Established for the current test profiles; extend the matrix when new write behavior needs qualification. |
 | **1 — Recognize and validate casefold policy** | Read filesystem encoding and directory flags; reject unknown or inconsistent settings. | Implemented. Write restrictions remain in place. |
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
-| **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
-| **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
+| **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Intermediate/parent symlink traversal is now backported and natively tested; its fresh independent Linux evidence is pending. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
+| **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Parent-symlink traversal is now locally checked across namespace operations; its independent Linux qualification is pending. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
 | **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit VM location/insertion/inventory/role/FIEMAP/full CI; its implementation/evidence review found no blocker within the standalone scope. The private bounded current block-allocation interval verifier is implemented with 20 focused controls, padding/current-view checks and shared resource caps. Initial independent CI hit an unsupported block-zero oracle query; repair `72b6911` passed exact-commit focused VM/full CI. Its complete standalone allocation review found no blocker within the stated scope. A private complete current-view ownership builder is implemented with shared accounting and 18 focused controls; 961 local units pass, retaining all 943 baseline occurrences. Its six-profile whole-result Linux oracle passed exact-commit focused VM evidence; all 222 allocated records and 215 claims were audited with no blocker within the standalone stable-view contract. Source and review full CI now pass. The concrete operation serialization/mutation/invalidation audit is complete. A disconnected private gate is now implemented with 15 native exclusion/freshness/failure controls; 976 full local units and lint pass, retaining all 961 baseline occurrences. Exact-commit full/focused CI and standalone primitive review are complete; all 15 controls executed in four native/guest contexts. The whole guest suite still has one pre-existing ignored slow fuzz test, an unresolved broader qualification gate. Mount-bound private path/inode chmod adapters and sticky mount-failure bridging now pass exact-commit full/focused CI and standalone family/evidence review, including all four images and reports. Public chmod dispatch now passes exact-commit full/focused CI and standalone migration/evidence review, including all eight public and four retained private Linux profiles. Guarded file owner/group changes (chown), including its signed-report parser repair, now pass exact full/focused CI and standalone implementation/evidence review. All sixteen owner profiles and twelve retained chmod profiles were audited. Guarded timestamp updates (utimens), including the short-extra report repair, now pass exact full/focused CI and standalone implementation/evidence review; all 24 timestamp and 28 retained metadata profiles were audited, with 91 guard/family/parser controls executed. Existing public inode-flag updates now pass exact full/focused CI and standalone implementation/evidence review; all sixteen flag and 52 retained metadata profiles were audited. The multi-block xattr-removal staging/marker design audit is complete with nine executed red controls and one passing four-profile legacy control saved in a dormant patch. Existing public removal is now implemented locally under that contract with native controls and a new sixteen-profile independent matrix; its first focused Linux run failed the mixed zero-extra fixture timestamp comparison. The cfg(test)-only coherent fixture repair now passes exact focused Linux CI; all sixteen removal and 68 retained profiles were audited. Exact full/focused CI and the standalone removal-family implementation/evidence review now pass within the existing caller-exclusion contract. Both full suites retain all preceding test occurrences; all 134 controls execute across five CI contexts. The ignored slow fuzz case remains a broader qualification gate. The public setxattr staging/marker audit and executed red preparation are complete. The saved one-pass/fourteen-failure patch was rerun, and the guarded public setter whole-plan migration now passes 27 added native controls while preserving all 1,095 baseline occurrences. Six-family exclusion/failure retirement and a new exact Linux matrix with separate fresh-image first-inline reference/emission cases are committed. Exact focused Linux CI reports success. Actual SHA-256-verified full-CI artifacts now retain all 1,923 baseline occurrences and add 28 in both full suites, with 1,951 passed / zero failed / one existing ignored. All 161 guard/operation/parser/fixture controls execute in five contexts. The measured 183,600-byte native log reproduces output-budget exit 65 at 183,000; the same complete log passes the native-only 186,000-byte repair with floors, filters and output retained. Fresh full CI for that configuration repair remains pending. Actual Linux image and first/same/empty metadata-policy audit and standalone setter-family review remain open; test execution alone does not close them. Git/API access works. Other families and lifecycle remain unguarded. Stage progress remains not yet quantified. Admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. In a new chat complete the two-message access/permission preflight in `CLOUD-STARTUP.md`, then wait for implementation confirmation. The next project task is to inspect fresh full CI for the measured native output-budget repair; reproduce any actual failure before changing another cap. Both preceding full-suite occurrence comparisons and the five-context 161-control execution audit are complete. Finish the sixteen setter layout profiles, eight fresh first-attribute reference/emission profiles, shared peers, retained metadata profiles and Linux first/same/empty policy review before standalone setter-family closure or another migration. Keep mixed zero-extra layout, ignored fuzz, insertion aliases, ownership/lifecycle/seal/admission and full mapping/collision/growth/recovery open. All casefold write gates remain closed.
+1. In a new chat complete the two-message access/permission preflight in `CLOUD-STARTUP.md`, then wait for implementation confirmation. Next inspect exact final-source full/focused CI for the upstream symlink/retry backports, verify all five new Linux tests executed and compare complete-suite occurrences. Reproduce any actual failure before changing a cap. The native 1,129-test backport baseline retains all preceding 1,122 occurrences and all 161 controls. After the CI prerequisite, finish the sixteen setter layout profiles, eight fresh first-attribute reference/emission profiles, shared peers, retained metadata profiles and Linux first/same/empty policy review before standalone setter-family closure or another migration. Keep mixed zero-extra layout, ignored fuzz, insertion aliases, ownership/lifecycle/seal/admission and full mapping/collision/growth/recovery open. All casefold write gates remain closed.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

@@ -45,7 +45,9 @@ for tier in test:unit test:images test:oracle test:kernel test:lwext4 test:wasm 
     # tier.sh LABEL LOG MAX-LINES MAX-BYTES: a zero in either position is
     # "no budget" to output-budget.sh, which is the shape this test exists
     # to refuse.
-    if ! printf '%s\n' "$block" | grep -Eq "scripts/tier\.sh +[^ ]+ +[^ ]+ +[1-9][0-9]* +[1-9][0-9]*"; then
+    # grep -q can close a producer pipe early; with pipefail, printf's SIGPIPE
+    # then turns a found valid budget into a false violation (observed in PRoot).
+    if ! grep -Eq "scripts/tier\.sh +[^ ]+ +[^ ]+ +[1-9][0-9]* +[1-9][0-9]*" <<< "$block"; then
         note "$tier calls tier.sh without two non-zero budgets (lines and bytes)"
     fi
 done

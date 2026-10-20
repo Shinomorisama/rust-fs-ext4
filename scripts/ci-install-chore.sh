@@ -17,8 +17,10 @@ tarball="chore-${CHORE_VERSION}-linux-${arch}.tar.gz"
 base="https://github.com/antimatter-studios/chore/releases/download/v${CHORE_VERSION}"
 dir="${RUNNER_TEMP:-$(mktemp -d)}/chore"
 mkdir -p "$dir"
-curl -fsSL -o "$dir/$tarball" "$base/$tarball"
-curl -fsSL -o "$dir/checksums.txt" "$base/checksums.txt"
+# Backported from upstream 7bb33f6 (#500): retry transient release errors;
+# the unchanged checksum check below still verifies the downloaded archive.
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$dir/$tarball" "$base/$tarball"
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$dir/checksums.txt" "$base/checksums.txt"
 (cd "$dir" && grep " ${tarball}\$" checksums.txt | sha256sum -c -)
 tar -xzf "$dir/$tarball" -C "$dir"
 bin="$(find "$dir" -type f -name chore -perm -u+x | head -1)"
