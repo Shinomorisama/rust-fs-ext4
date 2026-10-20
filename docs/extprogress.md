@@ -55,6 +55,16 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- The preceding native-budget repair's exact full run `39384659463` now
+  completes: x86_64 passes, and all 1,951 guest tests pass with the one existing
+  ignored fuzz gate, but its wrapper fails at 193,017 bytes against 193,000.
+  SHA-256-verified native/guest archives retain all 1,951 preceding occurrences.
+  Replaying the unchanged 3,507-line guest log reproduces exit 65 at 193,000 and
+  passes at the measured 196,500-byte repair. The 3,500-byte increase tracks
+  3,381 bytes of growth from the pre-setter baseline, restoring 3,483 bytes of
+  headroom (baseline: 3,364). Line cap, command, 1,060 floor, filters and full
+  output remain unchanged. This replay is not fresh Linux execution; later
+  backport/policy source needs its own results and budget measurements.
 - The initial reference-only job at `290d6db` failed before recording policy:
   Linux naturally deduplicated three identical external values, while the
   retained explicit-share constructor requires an exclusive source (actual

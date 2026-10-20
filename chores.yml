@@ -247,7 +247,18 @@ chore_min_version: 0.6.0
 #                                                    bytes in CI (PR #312: 113
 #                                                    lines), whose longer paths
 #                                                    and colour codes cost more
-#     vm        2,972 / 148,017    3,900 / 193,000   ~31% / ~30%. RE-MEASURED
+#     vm        3,507 / 193,017    3,900 / 196,500   MEASURED at 1057c06, run
+#                                                    39384659463: all 1,951
+#                                                    passed, one existing ignored.
+#                                                    Original 193,000 fails by
+#                                                    17 bytes. Growth of 3,381
+#                                                    from the 537821f baseline
+#                                                    justifies +3,500, restoring
+#                                                    3,483 bytes of headroom
+#                                                    (baseline had 3,364).
+#                                                    Archived-log replay retains
+#                                                    every byte, floor and filter.
+#                                                    Historical: 2,972 / 148,017;
 #                                                    for #443 (suite-in-vm, run
 #                                                    36692879573), 17 bytes
 #                                                    over 148,000: the whole
@@ -670,7 +681,7 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        scripts/tier.sh test:vm vm 3900 193000 -- \
+        scripts/tier.sh test:vm vm 3900 196500 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 
