@@ -55,6 +55,13 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- The initial reference-only job at `290d6db` failed before recording policy:
+  Linux naturally deduplicated three identical external values, while the
+  retained explicit-share constructor requires an exclusive source (actual
+  refcount 3, expected 1). The new shared-source value is distinct from the
+  other inputs, retaining that strict constructor and every validation check.
+  Fresh reference execution remains required; no policy answer is inferred
+  from the failed fixture setup.
 - Same-value policy reference extension is prepared independently of production
   repair. A dedicated focused Linux job records eight block-size/inode-size/
   journal profiles for inline, empty, external and shared values, plus four

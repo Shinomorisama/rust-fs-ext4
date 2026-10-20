@@ -27,7 +27,7 @@ for name in ['inline','empty','external','shared','shared-peer','duplicate']:
     p=root+'/'+name
     with open(p,'wb') as f:f.write(('data:'+name).encode())
     os.chmod(p,0o640)
-    if name!='shared-peer':os.setxattr(p,'user.audit',b'' if name=='empty' else b'n'*(600 if name in ['external','shared','duplicate'] else 1))
+    if name!='shared-peer':os.setxattr(p,'user.audit',b's'*600 if name=='shared' else b'' if name=='empty' else b'n'*(600 if name in ['external','duplicate'] else 1))
 POLICY_INPUT
 "#,
     );
