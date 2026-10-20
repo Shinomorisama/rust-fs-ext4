@@ -55,6 +55,16 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- Setter CI budget repair: actual SHA-256-verified source/baseline artifacts
+  retain all 1,923 preceding full-suite occurrences and add 28 in both native
+  and guest suites (1,951 passed / zero failed / one existing ignored). Three
+  unit contexts retain all 1,095 and add 27; all 161 guard/operation/parser/
+  fixture controls execute in all five contexts. The exact native log reproduces
+  exit 65 at 183,600 bytes under 183,000 and passes unchanged under the measured
+  186,000-byte repair. Line cap, floor, filters, application/tests/pins/locks and
+  write gates are unchanged. Fresh full CI for the repair is pending; Linux
+  image/metadata-policy audit and standalone setter-family closure remain open.
+  See the repair/evidence section below. Stage 5 stays not yet quantified.
 - Cloud startup/access follow-up: the user reports three consecutive regular
   chats receiving `403 Cloudflare egress requires HTTP inspection` while using
   this selected environment. The editor runtime can download SHA-256-verified
@@ -72,8 +82,9 @@ permission to relax write gates, modify siblings or push to `main`.
   in the first setup; the second message rechecks it, with no known access deferred
   to a later stage. This documents requirements; it does not repair the cloud proxy.
   The downloaded x86_64 log measures the existing full-CI failure at 183,600
-  bytes against a 183,000-byte native-suite budget; no budget or source repair
-  is made here. Complete evidence/multiset/policy review remains open.
+  bytes against a 183,000-byte native-suite budget; that access follow-up made
+  no repair. The budget repair above now completes both occurrence comparisons;
+  complete image/metadata-policy and family review remain open.
   The new repeatable setup script passes locked CLI build and the existing
   1,122-test unit tier at source `eafd3b1` (1,370 lines / 95,221 bytes), with
   provenance/shared-agent/whitespace checks passing. This validates the editor's
@@ -83,8 +94,9 @@ permission to relax write gates, modify siblings or push to `main`.
   `39348758499`, but full CI `39348758428` failed in x86_64 `chore test` with
   an actual exit-65 annotation. The whole-guest suite and other jobs passed.
   Actual logs/artifacts were denied in that investigation; the editor follow-up
-  above now measures its failing tier. No image/multiset audit or family closure
-  is credited. No cap or
+  above now measures its failing tier; the budget repair completes both full-suite
+  occurrence comparisons. No image/policy audit or family closure is credited.
+  At that investigation no cap or
   implementation was changed without the missing evidence. Establish access in
   the current chat using the preflight above, then make only a demonstrated repair.
   See the investigation section below. Stage 5 remains not yet quantified and
@@ -580,6 +592,82 @@ permission to relax write gates, modify siblings or push to `main`.
   immutable pinned archive through the documented source view; its actual
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
+
+## Setter native-suite budget repair and retained CI evidence — 2026-10-20
+
+This bounded checkpoint repairs the measured output wrapper failure. It does
+not migrate another operation, qualify directory-index writes, or close the
+setter implementation/evidence review. The user authorized proceeding after the
+startup-instruction work. Fetched `casefold-rw` remained current at `92d6cca`.
+Git/API and actual redirected artifact reads work in this editor runtime; that
+does not establish recovery in the three reported failing regular chats.
+
+Downloaded and SHA-256-verified all four tier archives (x86_64, whole guest,
+standalone unit and aarch64) for both exact runs:
+
+- Baseline `537821fb748395be308a0937bafac236bf8d4302`, successful
+  [full CI 39203196663](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39203196663).
+- Setter source `9035b80616c5bdb37940960e27883463752098d3`, failed
+  [full CI 39348758428](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39348758428).
+
+Run metadata ties every archive to its exact commit. The current application,
+tests, header, dependency/toolchain pins, runner scripts and full-CI workflow
+match the setter source; subsequent changes before this repair were startup docs
+and a separate cloud-setup helper. Local metadata, archives and JSON comparisons
+are under ignored `tmp/casefold-setter-ci-budget`; later machines should refetch
+the named runs rather than assume that cache exists.
+
+Occurrence comparisons use the required successful-test-name Counter, not only
+totals. Every baseline occurrence remains; both full suites add the same 28 names
+(27 native setter controls and the independent Linux setter test):
+
+| Context | Baseline passed | Setter passed | Missing | Added | Failed / ignored at setter source |
+|---|---:|---:|---:|---:|---|
+| Whole native suite | 1,923 | 1,951 | 0 | 28 | 0 / 1 existing slow fuzz |
+| Whole guest suite | 1,923 | 1,951 | 0 | 28 | 0 / 1 existing slow fuzz |
+| Standalone unit | 1,095 | 1,122 | 0 | 27 | 0 / 0 |
+| x86_64 unit | 1,095 | 1,122 | 0 | 27 | 0 / 0 |
+| aarch64 unit | 1,095 | 1,122 | 0 | 27 | 0 / 0 |
+
+All 161 guard/operation/report-parser/fixture controls execute exactly once in
+each of those five contexts. The ignored test in both full suites is unchanged:
+`deep_walk_byte_flip_fuzz_never_panics`. No broader qualification is credited
+from its default ignored result. Successful-name counts also match the sums of
+the harness result summaries, with zero failed tests in all inspected logs.
+
+The native `suite.log` grew from **3,313 lines / 180,692 bytes** to **3,339 /
+183,600**: 2,908 additional bytes, 600 beyond the old 183,000 limit. Its actual
+job log explicitly reports a passed command followed by output-budget exit 65.
+Replaying the complete archive log through this checkout's existing `tier.sh`
+reproduces exit 65 at 3,700 / 183,000. Raising only the native byte cap to
+**186,000** makes the same replay pass; `cmp` proves both saved outputs are
+identical, and the unchanged 1,060 floor counts all 1,951 occurrences.
+
+The 3,000-byte increase tracks the 2,908-byte growth and restores 2,400 bytes of
+headroom, compared with 2,308 at the preceding baseline. The 3,700-line cap,
+test command, filters, floor and all output remain intact. The budget table is
+updated with this exact measurement and source run. No other cap changes.
+The guest log measures 3,506 / 192,906 under its unchanged 3,900 / 193,000 cap;
+its small remaining byte margin must be watched in fresh CI, not called a failure
+or silently widened here.
+
+Fresh local checks pass: existing output-budget regression script, aggregate CI
+gate, chore task parsing, shared-agent integrity, provenance and whitespace.
+The replay is **not a fresh execution of the Linux suite**. No host oracle tools
+or mounts were used, and no new native unit run is claimed for this configuration
+change. Fresh exact-repair full CI remains pending push/execution; report
+its actual run/status at handoff rather than reuse an older green verdict.
+
+**Next bounded task:** inspect the repair's full CI and any actual failure. Once
+that prerequisite passes, audit the exact setter/retained Linux images and reports:
+sixteen setter layouts, eight fresh first-attribute reference/emission profiles,
+shared peers, and first/same/empty-value metadata policy. Only then perform
+standalone setter-family closure before another migration. The complete full-suite
+occurrence and 161-control audits above need not be repeated for unchanged source,
+but fresh repair CI must still be checked. Mixed zero-extra layout, ignored fuzz,
+insertion aliases, complete ownership/mapping/lifecycle/seal/admission/collision/
+growth/recovery remain open. Stage 5 is not yet quantified; every casefold write
+gate stays closed, with no real-card, Windows or SteamOS qualification.
 
 ## Setter CI investigation and download-access block — 2026-10-19
 
@@ -4917,13 +5005,13 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. |
 | **4 — Implement namespace mutations** | Make create, mkdir, links, symlinks, unlink, rmdir, and rename obey casefold identity and inheritance. Preserve transaction safety. | **Current stage: partially implemented.** Removal and rename retain/recheck matched entries. Duplicate checks use shared comparison. New-directory inode construction now inherits casefold correctly. Actual casefold writes remain blocked. |
-| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit VM location/insertion/inventory/role/FIEMAP/full CI; its implementation/evidence review found no blocker within the standalone scope. The private bounded current block-allocation interval verifier is implemented with 20 focused controls, padding/current-view checks and shared resource caps. Initial independent CI hit an unsupported block-zero oracle query; repair `72b6911` passed exact-commit focused VM/full CI. Its complete standalone allocation review found no blocker within the stated scope. A private complete current-view ownership builder is implemented with shared accounting and 18 focused controls; 961 local units pass, retaining all 943 baseline occurrences. Its six-profile whole-result Linux oracle passed exact-commit focused VM evidence; all 222 allocated records and 215 claims were audited with no blocker within the standalone stable-view contract. Source and review full CI now pass. The concrete operation serialization/mutation/invalidation audit is complete. A disconnected private gate is now implemented with 15 native exclusion/freshness/failure controls; 976 full local units and lint pass, retaining all 961 baseline occurrences. Exact-commit full/focused CI and standalone primitive review are complete; all 15 controls executed in four native/guest contexts. The whole guest suite still has one pre-existing ignored slow fuzz test, an unresolved broader qualification gate. Mount-bound private path/inode chmod adapters and sticky mount-failure bridging now pass exact-commit full/focused CI and standalone family/evidence review, including all four images and reports. Public chmod dispatch now passes exact-commit full/focused CI and standalone migration/evidence review, including all eight public and four retained private Linux profiles. Guarded file owner/group changes (chown), including its signed-report parser repair, now pass exact full/focused CI and standalone implementation/evidence review. All sixteen owner profiles and twelve retained chmod profiles were audited. Guarded timestamp updates (utimens), including the short-extra report repair, now pass exact full/focused CI and standalone implementation/evidence review; all 24 timestamp and 28 retained metadata profiles were audited, with 91 guard/family/parser controls executed. Existing public inode-flag updates now pass exact full/focused CI and standalone implementation/evidence review; all sixteen flag and 52 retained metadata profiles were audited. The multi-block xattr-removal staging/marker design audit is complete with nine executed red controls and one passing four-profile legacy control saved in a dormant patch. Existing public removal is now implemented locally under that contract with native controls and a new sixteen-profile independent matrix; its first focused Linux run failed the mixed zero-extra fixture timestamp comparison. The cfg(test)-only coherent fixture repair now passes exact focused Linux CI; all sixteen removal and 68 retained profiles were audited. Exact full/focused CI and the standalone removal-family implementation/evidence review now pass within the existing caller-exclusion contract. Both full suites retain all preceding test occurrences; all 134 controls execute across five CI contexts. The ignored slow fuzz case remains a broader qualification gate. The public setxattr staging/marker audit and executed red preparation are complete. The saved one-pass/fourteen-failure patch was rerun, and the guarded public setter whole-plan migration now passes 27 added native controls while preserving all 1,095 baseline occurrences. Six-family exclusion/failure retirement and a new exact Linux matrix with separate fresh-image first-inline reference/emission cases are committed. Exact focused Linux CI now reports success, while full CI failed in the x86_64 chore test step with exit 65. Actual artifact downloads and failure measurement remain blocked; no cap was changed without its log. Actual image/multiset and first/same/empty metadata-policy audit and standalone setter-family review remain open; no independent qualification is inferred from workflow status alone. Git/API access works. Other families and lifecycle remain unguarded. Stage progress remains not yet quantified. Admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
+| **5 — Implement and qualify directory-index writes** | Use frozen Unicode keys for hashing, insertion, collisions, leaf splits, and growth. Preserve Linux-visible routing. | **Hashing foundation, sampled read routing, and root-only in-place insertion implemented behind the volume write gate.** The new insertion primitive validates all referenced entries before changing one leaf. The preceding insertion/mapping source passed independent Linux and full CI. Preceding admission checkpoints through `1a6e8d1` passed exact-commit focused Linux and full CI. The staged superblock contract and allocation-review checkpoints passed full CI; focused Linux insertion passed at `b7b0325`. The current-allocation guard at `96b3b72` passed 839 local units, lint, the CLI build, focused Linux insertion and full CI. The scoped journal guard at `f9a0df0` refuses all three reproduced journal aliases and passed 852 local units, lint, the CLI build and exact-commit focused Linux/full CI. The private bounded complete extent-ownership collector at `7bdfe0c` passes 872 local units and exact-commit Linux FIEMAP/insertion/full CI. Its implementation/resource review found no blocker within the standalone scope and records aggregate-budget, capacity and depth-matrix requirements. The private current inode inventory at `4309ed1` has 15 local controls and passed exact-commit Linux allocation/insertion/FIEMAP/full CI; its implementation review is complete. The private current inode-role reader at `ef1ca24` has 17 controls and passed exact-commit Linux role/inventory/insertion/FIEMAP/full CI; its implementation review is complete. The private fixed-metadata collector at `95cb218` adds 17 controls and passed exact-commit VM location/insertion/inventory/role/FIEMAP/full CI; its implementation/evidence review found no blocker within the standalone scope. The private bounded current block-allocation interval verifier is implemented with 20 focused controls, padding/current-view checks and shared resource caps. Initial independent CI hit an unsupported block-zero oracle query; repair `72b6911` passed exact-commit focused VM/full CI. Its complete standalone allocation review found no blocker within the stated scope. A private complete current-view ownership builder is implemented with shared accounting and 18 focused controls; 961 local units pass, retaining all 943 baseline occurrences. Its six-profile whole-result Linux oracle passed exact-commit focused VM evidence; all 222 allocated records and 215 claims were audited with no blocker within the standalone stable-view contract. Source and review full CI now pass. The concrete operation serialization/mutation/invalidation audit is complete. A disconnected private gate is now implemented with 15 native exclusion/freshness/failure controls; 976 full local units and lint pass, retaining all 961 baseline occurrences. Exact-commit full/focused CI and standalone primitive review are complete; all 15 controls executed in four native/guest contexts. The whole guest suite still has one pre-existing ignored slow fuzz test, an unresolved broader qualification gate. Mount-bound private path/inode chmod adapters and sticky mount-failure bridging now pass exact-commit full/focused CI and standalone family/evidence review, including all four images and reports. Public chmod dispatch now passes exact-commit full/focused CI and standalone migration/evidence review, including all eight public and four retained private Linux profiles. Guarded file owner/group changes (chown), including its signed-report parser repair, now pass exact full/focused CI and standalone implementation/evidence review. All sixteen owner profiles and twelve retained chmod profiles were audited. Guarded timestamp updates (utimens), including the short-extra report repair, now pass exact full/focused CI and standalone implementation/evidence review; all 24 timestamp and 28 retained metadata profiles were audited, with 91 guard/family/parser controls executed. Existing public inode-flag updates now pass exact full/focused CI and standalone implementation/evidence review; all sixteen flag and 52 retained metadata profiles were audited. The multi-block xattr-removal staging/marker design audit is complete with nine executed red controls and one passing four-profile legacy control saved in a dormant patch. Existing public removal is now implemented locally under that contract with native controls and a new sixteen-profile independent matrix; its first focused Linux run failed the mixed zero-extra fixture timestamp comparison. The cfg(test)-only coherent fixture repair now passes exact focused Linux CI; all sixteen removal and 68 retained profiles were audited. Exact full/focused CI and the standalone removal-family implementation/evidence review now pass within the existing caller-exclusion contract. Both full suites retain all preceding test occurrences; all 134 controls execute across five CI contexts. The ignored slow fuzz case remains a broader qualification gate. The public setxattr staging/marker audit and executed red preparation are complete. The saved one-pass/fourteen-failure patch was rerun, and the guarded public setter whole-plan migration now passes 27 added native controls while preserving all 1,095 baseline occurrences. Six-family exclusion/failure retirement and a new exact Linux matrix with separate fresh-image first-inline reference/emission cases are committed. Exact focused Linux CI reports success. Actual SHA-256-verified full-CI artifacts now retain all 1,923 baseline occurrences and add 28 in both full suites, with 1,951 passed / zero failed / one existing ignored. All 161 guard/operation/parser/fixture controls execute in five contexts. The measured 183,600-byte native log reproduces output-budget exit 65 at 183,000; the same complete log passes the native-only 186,000-byte repair with floors, filters and output retained. Fresh full CI for that configuration repair remains pending. Actual Linux image and first/same/empty metadata-policy audit and standalone setter-family review remain open; test execution alone does not close them. Git/API access works. Other families and lifecycle remain unguarded. Stage progress remains not yet quantified. Admission remains disconnected. The three other-inode ownership aliases were rerun and remain unresolved. Exclusive ownership and complete mapping shape remain open. Intermediate-level insertion, collisions, splitting/growth, and complete write qualification remain required; index dropping stays refused. |
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 ## What comes next
 
-1. Complete the current chat's two-message access/permission preflight in `CLOUD-STARTUP.md`; do not infer regular-chat readiness from editor downloads or assume another hostname addition fixes the inspection 403. After the user confirms the reported next step, use the actual exact-source/baseline archives and measured x86_64 native-suite output (183,600 bytes against 183,000) to make only a demonstrated repair. Preserve output, floors and filters. Finish both full-suite occurrence comparisons, all sixteen setter layout profiles, eight fresh first-attribute reference/emission profiles, shared peers, retained metadata profiles and Linux first/same/empty policy review before standalone setter-family closure or another migration. Keep mixed zero-extra layout, ignored fuzz, insertion aliases, ownership/lifecycle/seal/admission and full mapping/collision/growth/recovery open. All casefold write gates remain closed.
+1. In a new chat complete the two-message access/permission preflight in `CLOUD-STARTUP.md`, then wait for implementation confirmation. The next project task is to inspect fresh full CI for the measured native output-budget repair; reproduce any actual failure before changing another cap. Both preceding full-suite occurrence comparisons and the five-context 161-control execution audit are complete. Finish the sixteen setter layout profiles, eight fresh first-attribute reference/emission profiles, shared peers, retained metadata profiles and Linux first/same/empty policy review before standalone setter-family closure or another migration. Keep mixed zero-extra layout, ignored fuzz, insertion aliases, ownership/lifecycle/seal/admission and full mapping/collision/growth/recovery open. All casefold write gates remain closed.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

@@ -226,15 +226,17 @@ chore_min_version: 0.6.0
 #                                                    lines, so one more
 #                                                    compared fixture is a
 #                                                    visible step
-#     suite     2,827 / 140,724    3,700 / 183,000   ~31% / ~30%: the whole
-#                                                    native suite, so every
-#                                                    tier above it grows this
-#                                                    one too. RE-MEASURED for
-#                                                    #443 on the x86_64 CI job
-#                                                    of run 36701295909 (its
-#                                                    suite.log artifact), 724
-#                                                    bytes over 140,000.
-#                                                    Was 2,220 / 107,754
+#     suite     3,339 / 183,600    3,700 / 186,000   Measured at 9035b80, CI
+#                                                    39348758428: all 1,951
+#                                                    pass; one existing ignored.
+#                                                    Retains all 1,923 baseline
+#                                                    occurrences and adds 28.
+#                                                    Log grew 2,908 bytes from
+#                                                    537821f; +3,000 restores
+#                                                    2,400 bytes of headroom.
+#                                                    Old 183,000 returns 65.
+#                                                    Lines, floor, filters and
+#                                                    full output unchanged.
 #     scripts      28 /   1,427       50 /   3,000   ~75%: three tests
 #     wasm        127 /   5,302      170 /   8,000   ~25% / ~34%. Lines measured
 #                                                    cold on arm64 macOS (no
@@ -707,7 +709,7 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 183000 -- scripts/test.sh --locked --release'
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 186000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
