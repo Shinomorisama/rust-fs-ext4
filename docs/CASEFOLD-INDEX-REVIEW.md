@@ -69,6 +69,27 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Current-source focused metadata follow-up — 2026-10-20
+
+Exact refusal-order implementation `4079f36` now passes both jobs in focused
+[run 39458800523](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39458800523).
+The downloaded main archive matches GitHub's SHA-256 and passes ZIP integrity.
+All fifteen named main-job oracles execute once with zero failures/ignored and
+complete output within unchanged budgets. Read-only saved-image/report audits
+pass all sixteen setter layouts, eight first-attribute profiles and 84 retained
+metadata profiles: 192 setter calls (including no-effect calls), 64 preserved
+peer records, 280 emitted Linux records and 304 debugfs records. The retained
+removal audit also passes 112 calls and 144 Linux/debugfs records. Separate
+policy/symlink evidence at this same source was already verified.
+
+This completes the current-source focused evidence prerequisite. Exact full run
+39458801198 still executes both complete suites, so complete retention, the
+five-context 171-control check and standalone setter-family closure remain
+pending. The scoped source-review conclusion and caller-exclusion assumptions
+below remain unchanged. No implementation or output budget changes here;
+healthy-image evidence does not qualify ownership, faults or recovery, and
+casefold writes stay blocked.
+
 ### Complete baseline and current-source review follow-up — 2026-10-20
 
 Exact `25a039e` full run
