@@ -248,10 +248,13 @@ mkdir Fold
 chattr +F Fold
 mkdir Fold/Child
 printf data > Fold/Child/ReadMe
-ln -s /Fold/CHILD Alias
+ln -s Fold/CHILD Alias
 ln -s ../CHILD Fold/Child/back
 sync
-printf 'inode|%s\n' "$(stat -c %i Alias/back/readme)"
+python3 - <<'SYMLINK_INODE'
+import os
+print('inode|' + str(os.stat('Alias/back/readme').st_ino))
+SYMLINK_INODE
 "#;
     let out = guest_kernel_write(&img, fill);
     assert!(

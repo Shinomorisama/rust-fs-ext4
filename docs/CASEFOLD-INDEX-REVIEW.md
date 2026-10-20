@@ -71,6 +71,16 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ### Same-value setter repair; independent emission review pending — 2026-10-20
 
+Follow-up: exact repaired-source `01f96c8` now passes focused workflow
+39391995739. Both SHA-256-verified artifacts pass all sixteen/eight setter
+layout/first-attribute and 84 retained-profile audits, plus sixteen byte-identical
+policy-emission images. Three CI unit contexts retain every baseline occurrence
+and execute all 169 controls. Full run 39391995709 instead fails a separate
+casefold-symlink fixture's escaped absolute target and masked guest lookup error.
+The relative-target/status-propagation fixture correction and focused five-test
+evidence step now need fresh CI. Full-suite retention and standalone family
+closure remain pending; earlier repaired-driver emission status below is historical.
+
 The timestamp blocker below now has an implemented repair. The saved two probes
 were rerun red, and all eight promoted policy controls now pass: five actual
 failures become green while three validation/gate/cleanup controls stay green.

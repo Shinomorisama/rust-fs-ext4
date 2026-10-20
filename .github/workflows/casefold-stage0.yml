@@ -64,6 +64,22 @@ jobs:
         run: |
           scripts/tier.sh casefold:setxattr-policy casefold-setxattr-policy 3200 200000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::setxattr_policy::linux_records_same_value_setxattr_policy -- --exact --show-output
           bash scripts/core.sh test-floor casefold-setxattr-policy 1
+      - name: Check symlink limits and traversal with Linux
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/symlink-backports
+        run: |
+          scripts/tier.sh casefold:symlink-kernel casefold-symlink-kernel 620 55000 -- scripts/test.sh --locked --release --test symlink_path_kernel --test symlink_target_kernel -- --show-output
+          bash scripts/core.sh test-floor casefold-symlink-kernel 5
+      - name: Keep symlink evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: symlink-backport-evidence
+          path: |
+            tmp/symlink-backports/
+            tmp/logs/casefold-symlink-kernel.log
+          if-no-files-found: error
+          retention-days: 30
       - name: Keep policy reference images and reports
         if: always()
         uses: actions/upload-artifact@v4
