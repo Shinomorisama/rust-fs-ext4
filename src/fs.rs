@@ -4725,12 +4725,18 @@ impl Filesystem {
         let inline_capable = i_extra_isize != 0 && region_start + 8 <= region_end;
 
         if initialized_layout {
+            let inline = inline_capable.then(|| &raw[region_start..region_end]);
+            if inline_capable {
+                // Preserve the inline planner's name/EA-inode refusal order
+                // before external I/O. Its match verdict alone is insufficient:
+                // both locations must still be checked for an unchanged value.
+                crate::xattr::set_value_is_unchanged(inline, None, name, value)?;
+            }
             let external = if inode.file_acl != 0 {
                 Some(self.buffer_read_xattr_block(&mut buf, inode.file_acl)?)
             } else {
                 None
             };
-            let inline = inline_capable.then(|| &raw[region_start..region_end]);
             if crate::xattr::set_value_is_unchanged(inline, external.as_deref(), name, value)? {
                 // The mount snapshot can predate the first feature publication.
                 // Check current bytes, so a missing EXT_ATTR is still repaired.

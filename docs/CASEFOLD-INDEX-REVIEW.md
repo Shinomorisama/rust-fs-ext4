@@ -69,6 +69,33 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Setter refusal-order follow-up — 2026-10-20
+
+Exact source `25a039e` passes focused Linux run 39452506142. Its verified actual
+artifacts cover all five symlink tests, sixteen setter layouts, eight fresh
+first-attribute profiles, sixteen byte-identical policy-emission images and all
+84 retained metadata profiles. Saved symlink bytes independently confirm the
+1/4 KiB limits, matching Linux/Rust/C namespace trees and the relative casefold
+chain. Full run 39452506096 remains in progress; complete-suite retention is
+not inferred from those results.
+
+The source walk found a refusal-order regression in the no-effect candidate:
+external validation preceded inline name and EA-inode checks. Two controls were
+actually red, returning external magic corruption where the inline-capable path
+previously returned invalid-name/NameTooLong or Unsupported. Legacy external-only
+layouts retain their external-error priority. A complete inline preflight now
+restores that ordering before external I/O; its match verdict is ignored until
+both locations are checked. No new success bypass, write boundary or disk-format
+change is introduced. Rust/C controls cover invalid namespace, empty/long suffix,
+inline EA-inode refusal, legacy precedence and byte/clock/write preservation.
+
+Both controls pass after repair; all 1,137 prior native successful occurrences
+remain with two additions (1,139 passed, zero failed/ignored, 171 controls).
+Lint and repository checks pass. Fresh repaired-source CI, complete native/guest
+retention and standalone family closure remain pending. The broader ownership,
+lifecycle, raw handles/C lifetimes, mixed zero-extra, ignored-fuzz, admission,
+index-growth and recovery limitations remain open; casefold writes stay blocked.
+
 ### Same-value setter repair; independent emission review pending — 2026-10-20
 
 Follow-up: exact repaired-source `01f96c8` now passes focused workflow

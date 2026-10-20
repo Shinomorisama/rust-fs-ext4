@@ -1087,3 +1087,88 @@ fn same_value_policy_preserves_valid_noncanonical_inline_storage() {
     assert_eq!(&dev.counts()[1..3], &[0, 0]);
     assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
 }
+
+#[test]
+fn same_value_policy_preserves_name_and_external_error_order() {
+    for flavor in [features::FsFlavor::Ext4, features::FsFlavor::Ext3] {
+        for bs in [1024, 4096] {
+            let (dev, fs, ino, clock, _) = branch_specimen(flavor, bs, 3);
+            let inode = fs.read_inode_verified(ino).unwrap().0;
+            let mut block = fs.read_block(inode.file_acl).unwrap();
+            block[0] ^= 1;
+            fs.dev
+                .write_at(inode.file_acl * u64::from(bs), &block)
+                .unwrap();
+            drop(fs);
+            let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+            let before = dev.bytes();
+            dev.reset();
+            clock.calls.store(0, Ordering::SeqCst);
+            let _fs = with_test_mount(fs, |handle, fs| {
+                for name in [
+                    "no.prefix".to_owned(),
+                    "user.".to_owned(),
+                    format!("user.{}", "x".repeat(256)),
+                ] {
+                    let result = fs.apply_setxattr_bytes(b"/f\xff", &name, b"x");
+                    let expected = if matches!(flavor, features::FsFlavor::Ext4) {
+                        if name.len() > 255 {
+                            assert!(matches!(result, Err(Error::NameTooLong)), "inline name validation must precede the corrupt external block: {result:?}");
+                            crate::error::errno::ENAMETOOLONG
+                        } else {
+                            assert!(matches!(result, Err(Error::InvalidArgument(_))), "inline name validation must precede the corrupt external block: {result:?}");
+                            crate::error::errno::EINVAL
+                        }
+                    } else {
+                        assert!(
+                            matches!(result, Err(Error::Corrupt(_))),
+                            "legacy external validation must retain priority: {result:?}"
+                        );
+                        crate::error::errno::EIO
+                    };
+                    assert_eq!(c_set(handle, b"/f\xff", &name, b"x"), -1);
+                    assert_eq!(fs_ext4_last_errno(), expected);
+                }
+                assert!(dev.bytes() == before);
+                assert_eq!(&dev.counts()[1..3], &[0, 0]);
+                assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+            });
+        }
+    }
+}
+
+#[test]
+fn same_value_policy_preserves_inline_ea_inode_refusal_priority() {
+    for bs in [1024, 4096] {
+        let (dev, fs, ino, clock, _) = branch_specimen(features::FsFlavor::Ext4, bs, 3);
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        let start = 128 + u16::from_le_bytes(raw[128..130].try_into().unwrap()) as usize;
+        crate::xattr::plan_set_in_inode_region(&mut raw[start..], "user.keep", b"n").unwrap();
+        raw[start + 8..start + 12].copy_from_slice(&ino.to_le_bytes());
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
+        let mut block = fs.read_block(inode.file_acl).unwrap();
+        block[0] ^= 1;
+        fs.dev
+            .write_at(inode.file_acl * u64::from(bs), &block)
+            .unwrap();
+        drop(fs);
+        let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+        let before = dev.bytes();
+        dev.reset();
+        clock.calls.store(0, Ordering::SeqCst);
+        let _fs = with_test_mount(fs, |handle, fs| {
+            let result = fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x");
+            assert!(
+                matches!(result, Err(Error::Unsupported(_))),
+                "inline EA-inode refusal must precede external corruption: {result:?}"
+            );
+            assert_eq!(c_set(handle, b"/f\xff", NAME, b"x"), -1);
+            assert_eq!(fs_ext4_last_errno(), crate::error::errno::ENOTSUP);
+            assert!(dev.bytes() == before);
+            assert_eq!(&dev.counts()[1..3], &[0, 0]);
+            assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+        });
+    }
+}
