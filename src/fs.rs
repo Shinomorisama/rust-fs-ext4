@@ -661,6 +661,10 @@ const PWRITE_CHUNK_MAX_BYTES: u64 = 32 * 1024 * 1024;
 /// 16 bytes of `s_volume_name`.
 pub const VOLUME_LABEL_MAX: usize = 16;
 
+/// Maximum symbolic links followed by one path lookup, matching the Linux
+/// reference behavior. The next link is [`Error::SymlinkLoop`].
+pub const MAX_SYMLINKS: u32 = 40;
+
 /// Clean blocks the buffer cache of a [`Filesystem::mount`] keeps: about
 /// 1 MiB at 4 KiB blocks. `docs/read-path-cost.md` records what it buys on a
 /// measured tree (#68).
@@ -1878,25 +1882,82 @@ impl Filesystem {
     /// malformed names and normalized dot aliases. A missing supported name is
     /// [`Error::NotFound`]. Every path-addressed `apply_*` resolves through
     /// here; each `&str` form is its byte form with `str::as_bytes` (#418).
+    ///
+    /// Intermediate symbolic links are followed from the root for absolute
+    /// targets and from the link's parent for relative targets. The final
+    /// component remains the link itself. More than [`MAX_SYMLINKS`] links
+    /// in one lookup returns [`Error::SymlinkLoop`]. Each expanded component
+    /// still uses this branch's verified, casefold-aware entry lookup.
     pub fn lookup_path_bytes(&self, path: &[u8]) -> Result<u32> {
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        crate::path::lookup_bytes_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            path,
-            &self.csum,
-        )
+        self.walk_path(path, false)
+    }
+
+    /// Resolve an operation's parent path, following its final symlink too.
+    /// The operation's own final name is not followed by this method.
+    pub fn lookup_dir_path_bytes(&self, path: &[u8]) -> Result<u32> {
+        self.walk_path(path, true)
+    }
+
+    // Adapted from upstream 4db7413 (#558); find_entry retains this branch's
+    // frozen Unicode policy, checksum validation and indexed casefold refusals.
+    fn walk_path(&self, path: &[u8], follow_last: bool) -> Result<u32> {
+        let mut pending: Vec<Vec<u8>> = Vec::new();
+        let push = |pending: &mut Vec<Vec<u8>>, p: &[u8]| {
+            let parts = p.split(|&b| b == b'/').filter(|c| !c.is_empty());
+            pending.extend(parts.rev().map(<[u8]>::to_vec));
+        };
+        push(&mut pending, path);
+
+        let mut current = crate::path::EXT4_ROOT_INODE;
+        let mut followed = 0;
+        while let Some(name) = pending.pop() {
+            let (dir, _) = self.read_inode_verified(current)?;
+            if !dir.is_dir() {
+                return Err(Error::NotADirectory);
+            }
+            let child = crate::path::find_entry(
+                self.dev.as_ref(),
+                &self.sb,
+                current,
+                &dir,
+                &name,
+                &self.csum,
+            )?;
+            if pending.is_empty() && !follow_last {
+                return Ok(child);
+            }
+            if !self.read_inode_verified(child)?.0.is_symlink() {
+                current = child;
+                continue;
+            }
+            followed += 1;
+            if followed > MAX_SYMLINKS {
+                return Err(Error::SymlinkLoop);
+            }
+            let target = self.read_link(child)?;
+            if target.is_empty() {
+                return Err(Error::NotFound);
+            }
+            if target[0] == b'/' {
+                current = crate::path::EXT4_ROOT_INODE;
+            }
+            push(&mut pending, &target);
+        }
+        Ok(current)
     }
 
     fn resolve(&self, path: &[u8]) -> Result<u32> {
         self.lookup_path_bytes(path)
     }
 
+    fn resolve_dir(&self, path: &[u8]) -> Result<u32> {
+        self.lookup_dir_path_bytes(path)
+    }
+
     /// Resolve the parent of `path`, for an operation on its final name.
     fn resolve_parent<'p>(&self, path: &'p [u8]) -> Result<(u32, &'p [u8])> {
         let (parent, base) = split_parent_and_base(path)?;
-        Ok((self.resolve(parent)?, base))
+        Ok((self.resolve_dir(parent)?, base))
     }
 
     /// [`resolve_parent`](Self::resolve_parent) for an operation that files
@@ -1907,7 +1968,7 @@ impl Filesystem {
         if base.len() > 255 {
             return Err(Error::NameTooLong);
         }
-        Ok((self.resolve(parent)?, base))
+        Ok((self.resolve_dir(parent)?, base))
     }
 
     /// Read the inode `r` names, refusing a handle that no longer names a
@@ -5062,7 +5123,7 @@ impl Filesystem {
         // so snapshot the flag first.
         let trailing_slash = path.len() > 1 && path.ends_with(b"/");
         let (parent_path, base_name) = split_parent_and_base(path)?;
-        let parent_ino = self.resolve(parent_path)?;
+        let parent_ino = self.resolve_dir(parent_path)?;
         if trailing_slash {
             // The call fails either way; only the errno depends on what the
             // name is: a directory is EISDIR, as unlink(2) says of any
@@ -7076,7 +7137,7 @@ impl Filesystem {
         if self.live_inode(src_ino.into())?.0.is_dir() {
             return Err(Error::IsADirectory);
         }
-        let dst_parent = self.resolve(dst_parent_path)?;
+        let dst_parent = self.resolve_dir(dst_parent_path)?;
         self.apply_link_at(src_ino, dst_parent, dst_name)
     }
 
@@ -7190,8 +7251,8 @@ impl Filesystem {
         if dst_name.len() > 255 {
             return Err(Error::NameTooLong);
         }
-        let src_parent = self.resolve(src_parent_path)?;
-        let dst_parent = self.resolve(dst_parent_path)?;
+        let src_parent = self.resolve_dir(src_parent_path)?;
+        let dst_parent = self.resolve_dir(dst_parent_path)?;
         self.apply_rename_at(
             src_parent,
             src_name,
@@ -15862,6 +15923,56 @@ mod tests {
             ),
             other => panic!("expected UnsupportedIncompat, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn symlink_walk_preserves_frozen_casefold_lookup_and_write_refusal() {
+        let dev = formatted();
+        let (file, alias, child) = {
+            let fs = mount(&dev);
+            let folded = fs.apply_mkdir("/Café", 0o755).unwrap();
+            let child = fs.apply_mkdir("/Café/Child", 0o755).unwrap();
+            let file = fs.apply_create("/Café/Child/ReadMe", 0o644).unwrap();
+            let alias = fs.apply_symlink("CAFÉ/CHILD", "/Alias").unwrap();
+            fs.apply_symlink("../CHILD", "/Café/Child/back").unwrap();
+            for ino in [crate::path::EXT4_ROOT_INODE, folded, child] {
+                let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+                raw[0x20..0x24].copy_from_slice(&(inode.flags | EXT4_CASEFOLD_FL).to_le_bytes());
+                fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+                    .unwrap();
+                fs.write_inode_raw(ino, &raw).unwrap();
+            }
+            (file, alias, child)
+        };
+        set_incompat_bit(&dev, crate::features::Incompat::CASEFOLD.bits());
+        assert!(matches!(Filesystem::mount(dev.clone()),
+            Err(Error::UnsupportedIncompat(bits)) if bits & crate::features::Incompat::CASEFOLD.bits() != 0));
+        let fs = Filesystem::mount(std::sync::Arc::new(RoDev(dev.clone()))).unwrap();
+        let before = dev.bytes.lock().unwrap().clone();
+        for path in [
+            "/alias/readme",
+            "/ALIAS/back/README",
+            "/alias/./ReadMe",
+            "/alias/../child/readme",
+        ] {
+            assert_eq!(
+                fs.lookup_path_bytes(path.as_bytes()).unwrap(),
+                file,
+                "{path}"
+            );
+        }
+        assert_eq!(fs.lookup_path_bytes(b"/alias").unwrap(), alias);
+        assert_eq!(fs.lookup_dir_path_bytes(b"/ALIAS").unwrap(), child);
+        assert!(fs
+            .read_dir_ino(child)
+            .unwrap()
+            .iter()
+            .any(|e| e.name == b"ReadMe"));
+        let malformed = fs.lookup_path_bytes(b"/alias/bad\xff").unwrap_err();
+        assert!(!matches!(malformed, Error::NotFound));
+        assert!(fs.apply_create("/alias/New", 0o644).is_err());
+        assert!(fs.apply_chmod("/alias/readme", 0o600).is_err());
+        assert_eq!(*dev.bytes.lock().unwrap(), before);
     }
 
     /// And it must still be READABLE, which is the whole reason the

@@ -104,12 +104,44 @@ fn mount(bytes: Vec<u8>) -> (Arc<MemDev>, Filesystem) {
     (dev, fs)
 }
 
+// Inode-walk twin updated with upstream 4db7413; existing random seeds and
+// byte-for-byte outcome assertions are unchanged.
 /// Resolve `path` through `lookup_at` alone, one component at a time, the
-/// way a handle-based host walks.
+/// way a handle-based host walks: a symlink before the final component is
+/// read with `read_link` and its target walked in its place, as the
+/// kernel's own walk does (#531).
 fn walk(fs: &Filesystem, path: &str) -> Result<u32> {
-    let mut ino = ROOT;
-    for name in path.split('/').filter(|c| !c.is_empty()) {
-        ino = fs.lookup_at(ino, name.as_bytes())?;
+    walk_following(fs, path, false)
+}
+
+/// [`walk`], following a symlink as the final component too when
+/// `follow_last` is set, as the kernel walks a name's parent (#564).
+fn walk_following(fs: &Filesystem, path: &str, follow_last: bool) -> Result<u32> {
+    let push = |pending: &mut Vec<Vec<u8>>, p: &[u8]| {
+        let parts = p.split(|&b| b == b'/').filter(|c| !c.is_empty());
+        pending.extend(parts.rev().map(<[u8]>::to_vec));
+    };
+    let mut pending = Vec::new();
+    push(&mut pending, path.as_bytes());
+    let (mut ino, mut followed) = (ROOT, 0);
+    while let Some(name) = pending.pop() {
+        let child = fs.lookup_at(ino, &name)?;
+        if (pending.is_empty() && !follow_last) || !fs.stat_ino(child)?.is_symlink() {
+            ino = child;
+            continue;
+        }
+        followed += 1;
+        if followed > fs_ext4::fs::MAX_SYMLINKS {
+            return Err(Error::SymlinkLoop);
+        }
+        let target = fs.read_link(child)?;
+        if target.is_empty() {
+            return Err(Error::NotFound);
+        }
+        if target[0] == b'/' {
+            ino = ROOT;
+        }
+        push(&mut pending, &target);
     }
     Ok(ino)
 }
@@ -117,7 +149,10 @@ fn walk(fs: &Filesystem, path: &str) -> Result<u32> {
 /// `(parent inode, final name)` for `path`, resolved by inode.
 fn walk_parent<'a>(fs: &Filesystem, path: &'a str) -> Result<(u32, &'a [u8])> {
     let cut = path.rfind('/').unwrap();
-    Ok((walk(fs, &path[..cut])?, &path.as_bytes()[cut + 1..]))
+    Ok((
+        walk_following(fs, &path[..cut], true)?,
+        &path.as_bytes()[cut + 1..],
+    ))
 }
 
 #[derive(Clone, Debug)]
@@ -725,4 +760,171 @@ fn truncate_by_inode_refuses_what_truncate_by_path_refuses() {
     assert_eq!(fs.stat_ino(f).unwrap().size, 100);
     fs.apply_truncate_ino(f, 9000).unwrap();
     assert_eq!(fs.stat_ino(f).unwrap().size, 9000);
+}
+
+// Upstream 4db7413 (#558), adapted to this branch's existing library entry points.
+#[test]
+fn symlink_paths_follow_absolute_relative_chained_and_byte_targets() {
+    let (_dev, fs) = mount(formatted(FsFlavor::Ext4));
+    let dir = fs.apply_mkdir("/full", 0o755).unwrap();
+    fs.apply_mkdir("/elsewhere", 0o755).unwrap();
+    let file = fs.apply_create("/full/x", 0o644).unwrap();
+    let absolute = fs.apply_symlink("/full", "/absolute").unwrap();
+    fs.apply_symlink("full", "/relative").unwrap();
+    fs.apply_symlink("../full", "/elsewhere/up").unwrap();
+    fs.apply_symlink("/relative", "/chain").unwrap();
+    for path in ["/absolute/x", "/relative/x", "/chain/x", "/elsewhere/up/x"] {
+        assert_eq!(
+            fs.lookup_path_bytes(path.as_bytes()).unwrap(),
+            file,
+            "{path}"
+        );
+    }
+    assert_eq!(fs.lookup_path_bytes(b"/absolute").unwrap(), absolute);
+    let odd = fs.apply_mkdir_at(dir, b"d\xff", 0o755).unwrap();
+    let child = fs.apply_create_at(odd, b"f\xfe", 0o644).unwrap();
+    fs.apply_symlink_at(ROOT, b"byte-link", b"full/d\xff")
+        .unwrap();
+    assert_eq!(fs.lookup_path_bytes(b"/byte-link/f\xfe").unwrap(), child);
+}
+
+#[test]
+fn symlink_paths_follow_the_parent_for_namespace_operations() {
+    let (_dev, fs) = mount(formatted(FsFlavor::Ext4));
+    fs.apply_mkdir("/full", 0o755).unwrap();
+    fs.apply_create("/full/x", 0o644).unwrap();
+    let y = fs.apply_create("/full/y", 0o644).unwrap();
+    fs.apply_symlink("full", "/dirlink").unwrap();
+    fs.apply_symlink("/dirlink", "/chain").unwrap();
+    fs.apply_symlink("y", "/full/ylink").unwrap();
+    fs.apply_unlink("/dirlink/x").unwrap();
+    assert!(matches!(
+        fs.lookup_path_bytes(b"/full/x"),
+        Err(Error::NotFound)
+    ));
+    let new = fs.apply_create("/dirlink/new", 0o644).unwrap();
+    fs.apply_mkdir("/chain/sub", 0o755).unwrap();
+    fs.apply_rmdir("/chain/sub").unwrap();
+    fs.apply_symlink("y", "/dirlink/new-link").unwrap();
+    assert_eq!(
+        fs.read_link(
+            fs.lookup_at(walk(&fs, "/full").unwrap(), b"new-link")
+                .unwrap()
+        )
+        .unwrap(),
+        b"y"
+    );
+    fs.apply_link("/dirlink/y", "/chain/y-hard").unwrap();
+    assert_eq!(fs.lookup_path_bytes(b"/full/y-hard").unwrap(), y);
+    fs.apply_rename("/chain/new", "/dirlink/renamed", false)
+        .unwrap();
+    assert_eq!(fs.lookup_path_bytes(b"/full/renamed").unwrap(), new);
+    fs.apply_unlink("/chain/ylink").unwrap();
+    assert_eq!(fs.lookup_path_bytes(b"/full/y").unwrap(), y);
+    assert!(matches!(
+        fs.lookup_path_bytes(b"/full/ylink"),
+        Err(Error::NotFound)
+    ));
+}
+
+#[test]
+fn symlink_paths_enforce_the_40_link_limit_and_preserve_final_links() {
+    let (dev, fs) = mount(formatted(FsFlavor::Ext4));
+    fs.apply_mkdir("/full", 0o755).unwrap();
+    let file = fs.apply_create("/full/x", 0o644).unwrap();
+    let self_link = fs.apply_symlink("self", "/self").unwrap();
+    fs.apply_symlink("b", "/a").unwrap();
+    fs.apply_symlink("a", "/b").unwrap();
+    fs.apply_symlink("full", "/l0").unwrap();
+    for i in 1..=40 {
+        fs.apply_symlink(&format!("l{}", i - 1), &format!("/l{i}"))
+            .unwrap();
+    }
+    assert_eq!(fs.lookup_path_bytes(b"/l39/x").unwrap(), file);
+    assert_eq!(fs.lookup_path_bytes(b"/self").unwrap(), self_link);
+    let before = dev.snapshot();
+    for path in ["/self/x", "/a/x", "/l40/x"] {
+        let err = fs.lookup_path_bytes(path.as_bytes()).unwrap_err();
+        assert_eq!(err.to_string(), "too many levels of symbolic links");
+        assert_eq!(
+            err.to_errno(),
+            62,
+            "the existing C ABI uses macOS POSIX errno values"
+        );
+        assert_eq!(fs.apply_unlink(path).unwrap_err().to_errno(), 62);
+        assert_eq!(dev.snapshot(), before, "a refused loop changed bytes");
+    }
+}
+
+#[test]
+fn symlink_paths_guarded_metadata_share_the_resolved_inode() {
+    let (_dev, fs) = mount(formatted(FsFlavor::Ext4));
+    fs.apply_mkdir("/full", 0o755).unwrap();
+    let file = fs.apply_create("/full/f", 0o644).unwrap();
+    fs.apply_symlink("/full", "/alias").unwrap();
+    fs.apply_chmod("/alias/f", 0o600).unwrap();
+    fs.apply_chown("/alias/f", 123, 456).unwrap();
+    fs.apply_utimens("/alias/f", 1_700_000_001, 5, 1_700_000_002, 7)
+        .unwrap();
+    let flags = fs.stat_ino(file).unwrap().flags;
+    fs.apply_set_flags("/alias/f", flags | 0x40).unwrap();
+    fs.apply_setxattr("/alias/f", "user.path", b"value")
+        .unwrap();
+    let (inode, raw) = fs.read_inode_verified(file).unwrap();
+    assert_eq!(
+        fs_ext4::xattr::get_resolved(&fs, &inode, &raw, "user.path").unwrap(),
+        Some(b"value".to_vec())
+    );
+    fs.apply_removexattr("/alias/f", "user.path").unwrap();
+    let stat = fs.stat_ino(file).unwrap();
+    assert_eq!(stat.mode & 0o777, 0o600);
+    assert_eq!((stat.uid, stat.gid), (123, 456));
+}
+
+#[test]
+fn symlink_paths_capi_resolves_bytes_reports_loops_and_clears_errno() {
+    use fs_ext4::capi::*;
+    use std::ffi::CString;
+    use std::mem::MaybeUninit;
+    let (dev, fs) = mount(formatted(FsFlavor::Ext4));
+    let dir = fs.apply_mkdir("/full", 0o755).unwrap();
+    let file = fs.apply_create_at(dir, b"f\xff", 0o644).unwrap();
+    let alias = fs.apply_symlink("full", "/alias").unwrap();
+    fs.apply_symlink("self", "/self").unwrap();
+    drop(fs);
+    let image = fs_ext4_test_support::temp_path!("symlink-capi-{}.img", std::process::id());
+    std::fs::write(&image, dev.snapshot()).unwrap();
+    let path = CString::new(image.clone()).unwrap();
+    let handle = unsafe { fs_ext4_mount(path.as_ptr()) };
+    assert!(!handle.is_null());
+    struct Mount(*mut fs_ext4_fs_t);
+    impl Drop for Mount {
+        fn drop(&mut self) {
+            unsafe { fs_ext4_umount(self.0) };
+        }
+    }
+    let handle = Mount(handle);
+    let mut attr = MaybeUninit::<fs_ext4_attr_t>::uninit();
+    let loop_path = CString::new("/self/f").unwrap();
+    let before = std::fs::read(&image).unwrap();
+    assert_eq!(
+        unsafe { fs_ext4_stat(handle.0, loop_path.as_ptr(), attr.as_mut_ptr()) },
+        -1
+    );
+    assert_eq!(fs_ext4_last_errno(), 62);
+    assert_eq!(std::fs::read(&image).unwrap(), before);
+    for (path, ino) in [
+        (b"/alias/f\xff".as_slice(), file),
+        (b"/alias".as_slice(), alias),
+    ] {
+        let path = CString::new(path).unwrap();
+        assert_eq!(
+            unsafe { fs_ext4_stat(handle.0, path.as_ptr(), attr.as_mut_ptr()) },
+            0
+        );
+        assert_eq!(unsafe { attr.assume_init_ref() }.inode, ino);
+        assert_eq!(fs_ext4_last_errno(), 0);
+    }
+    drop(handle);
+    std::fs::remove_file(&image).unwrap();
 }

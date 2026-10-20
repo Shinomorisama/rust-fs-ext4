@@ -574,7 +574,10 @@ tasks:
     # that must fail.
     cmds:
       - 'scripts/tier.sh test:kernel kernel 620 55000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
-      - 'bash scripts/core.sh test-floor kernel 3'
+      # Retain the measured 28-test kernel baseline and all five added
+      # symlink boundary/path/casefold regressions. Budgets stay measured;
+      # fresh CI must supply any evidence needed for another cap change.
+      - 'bash scripts/core.sh test-floor kernel 33'
 
   test:lwext4:
     desc: 'CROSS-VALIDATION: lwext4 — a third implementation, built in the guest — reads what we wrote, and we read what it wrote'
