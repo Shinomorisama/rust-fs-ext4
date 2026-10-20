@@ -12,6 +12,24 @@ than duplicating them:
 
 ## Casefold handoff and initial access checks
 
+**Required two-message startup:** follow [the cloud startup/access checklist](docs/CLOUD-STARTUP.md)
+in that chat's own runtime. The user prefers a separate editable environment for
+each new chat after repeated failures with the shared environment. First read
+the applicable agent guide, immediately identify/request required missing access,
+then read the latest active-branch progress and next steps. Reuse existing grants.
+On the user's second message asking to double-check, actually verify all access
+needed for the next task, report ready only if those checks pass, explain the
+next bounded step and **wait for explicit confirmation before implementation**.
+A repository link, access approval or double-check request is not that confirmation.
+If this chat cannot create/edit its environment, say so; this file cannot grant
+that product capability. Do not substitute editor-side checks for this workflow.
+An environment-editor check does not verify a regular chat. If the sandbox
+blocks a required request, perform the session's supported permission retry;
+a persistent `Cloudflare egress requires HTTP inspection` 403 remains a cloud
+access blocker, not proof that another GitHub token or publication is needed.
+The checklist also links the reproducible pinned tool/source-view setup, so a
+fresh chat need not rely on helper files surviving from another machine.
+
 For the ongoing casefold work, use **`casefold-rw`** in
 **`Shinomorisama/rust-fs-ext4`**. Before continuing, fetch its latest remote tip
 and read the committed [docs/extprogress.md](docs/extprogress.md) on that branch.

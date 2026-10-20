@@ -55,13 +55,33 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- Cloud startup/access follow-up: the user reports three consecutive regular
+  chats receiving `403 Cloudflare egress requires HTTP inspection` while using
+  this selected environment. The editor runtime can download SHA-256-verified
+  artifacts from the three reported storage hosts and individual Actions logs;
+  **regular-chat recovery is not verified**. `AGENTS.md` now requires each chat's
+  own two-message access/permission preflight and links [CLOUD-STARTUP.md](CLOUD-STARTUP.md)
+  plus a reproducible pinned setup script. Editor access is not a repair claim.
+  The first message requests missing access and reads the current handoff; the
+  user's second message triggers fresh verification, a readiness/next-step report
+  and a wait for explicit implementation confirmation. The user prefers a
+  separate editable environment per chat; unavailable editing must be reported.
+  The downloaded x86_64 log measures the existing full-CI failure at 183,600
+  bytes against a 183,000-byte native-suite budget; no budget or source repair
+  is made here. Complete evidence/multiset/policy review remains open.
+  The new repeatable setup script passes locked CLI build and the existing
+  1,122-test unit tier at source `eafd3b1` (1,370 lines / 95,221 bytes), with
+  provenance/shared-agent/whitespace checks passing. This validates the editor's
+  local setup, not regular-chat access, a fresh snapshot restore or setter-family
+  qualification. Application source, dependencies, locks and write gates are unchanged.
 - Latest setter CI investigation: source `9035b80` passed focused Linux CI
   `39348758499`, but full CI `39348758428` failed in x86_64 `chore test` with
   an actual exit-65 annotation. The whole-guest suite and other jobs passed.
-  Actual logs/artifacts remain denied at the current download hosts; no tier
-  measurement, image/multiset audit or family closure is credited. No cap or
-  implementation was changed without the missing evidence. Apply the requested
-  routes, inspect and measure the failure, then make only a demonstrated repair.
+  Actual logs/artifacts were denied in that investigation; the editor follow-up
+  above now measures its failing tier. No image/multiset audit or family closure
+  is credited. No cap or
+  implementation was changed without the missing evidence. Establish access in
+  the current chat using the preflight above, then make only a demonstrated repair.
   See the investigation section below. Stage 5 remains not yet quantified and
   all casefold write gates remain closed.
 - Latest guarded public setter implementation: the saved patch was actually
@@ -4898,7 +4918,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Apply the missing log/artifact destinations recorded in the latest setter CI investigation, download and SHA-256-check the actual source/baseline archives, then inspect and measure the x86_64 exit-65 failure before changing any cap. Preserve output, floors and filters and make only a demonstrated repair. Finish both full-suite occurrence comparisons, all sixteen setter layout profiles, eight fresh first-attribute reference/emission profiles, shared peers, retained metadata profiles and Linux first/same/empty policy review before standalone setter-family closure or another migration. Keep mixed zero-extra layout, ignored fuzz, insertion aliases, ownership/lifecycle/seal/admission and full mapping/collision/growth/recovery open. All casefold write gates remain closed.
+1. Complete the current chat's two-message access/permission preflight in `CLOUD-STARTUP.md`; do not infer regular-chat readiness from editor downloads or assume another hostname addition fixes the inspection 403. After the user confirms the reported next step, use the actual exact-source/baseline archives and measured x86_64 native-suite output (183,600 bytes against 183,000) to make only a demonstrated repair. Preserve output, floors and filters. Finish both full-suite occurrence comparisons, all sixteen setter layout profiles, eight fresh first-attribute reference/emission profiles, shared peers, retained metadata profiles and Linux first/same/empty policy review before standalone setter-family closure or another migration. Keep mixed zero-extra layout, ignored fuzz, insertion aliases, ownership/lifecycle/seal/admission and full mapping/collision/growth/recovery open. All casefold write gates remain closed.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
