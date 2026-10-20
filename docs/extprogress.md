@@ -55,6 +55,16 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- Same-value policy reference extension is prepared independently of production
+  repair. A dedicated focused Linux job records eight block-size/inode-size/
+  journal profiles for inline, empty, external and shared values, plus four
+  explicitly constructed duplicate-name diagnostics. It saves images, reports
+  and the tier log in `setxattr-policy-reference`, using the existing setter
+  output envelope and an unchanged test floor of one. The reference test compiles
+  locally; this host cannot execute its Linux VM. Actual answers and the measured
+  output must be inspected before extending the repair beyond the already
+  reproduced inline case. No production setter change or family closure is
+  credited at this reference-only checkpoint; all write gates remain closed.
 - Setter evidence follow-up at `b6ccad6`: the SHA-256-verified focused artifact
   for earlier setter source `9035b80` passes read-only audits of sixteen setter
   layouts, eight fresh first-attribute profiles and all 84 retained metadata

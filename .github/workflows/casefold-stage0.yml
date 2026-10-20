@@ -47,6 +47,33 @@ env:
   CARGO_BUILD_JOBS: "4"
 
 jobs:
+  setxattr-policy-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Record independent Linux same-value attribute policy
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/setxattr-policy
+        run: |
+          scripts/tier.sh casefold:setxattr-policy casefold-setxattr-policy 3200 200000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::setxattr_policy::linux_records_same_value_setxattr_policy -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-setxattr-policy 1
+      - name: Keep policy reference images and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: setxattr-policy-reference
+          path: |
+            tmp/setxattr-policy/
+            tmp/logs/casefold-setxattr-policy.log
+          if-no-files-found: error
+          retention-days: 30
   fixtures:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

@@ -15,7 +15,7 @@ impl crate::runtime::Runtime for SetterClock {
         17
     }
 }
-fn mount(image: &Path) -> Filesystem {
+pub(super) fn mount(image: &Path) -> Filesystem {
     Filesystem::mount_with_runtime(
         Arc::new(FileDevice::open_rw(image.to_str().unwrap()).unwrap()),
         Arc::new(SetterClock),
@@ -46,7 +46,7 @@ struct Target {
     raw: Vec<u8>,
     attrs: Vec<(&'static str, u8, usize)>,
 }
-fn lookup(fs: &Filesystem, path: &str) -> (u32, Inode) {
+pub(super) fn lookup(fs: &Filesystem, path: &str) -> (u32, Inode) {
     let ino = fs.lookup_path_bytes(path.as_bytes()).unwrap();
     (ino, fs.read_inode_verified(ino).unwrap().0)
 }
@@ -77,7 +77,7 @@ fn set(
         fs.apply_setxattr(path, NAME, value).unwrap();
     }
 }
-fn make(image: &Path, bs: u32, size: u16, journal: bool) {
+pub(super) fn make(image: &Path, bs: u32, size: u16, journal: bool) {
     std::fs::File::create(image)
         .unwrap()
         .set_len(32 * 1024 * 1024)
