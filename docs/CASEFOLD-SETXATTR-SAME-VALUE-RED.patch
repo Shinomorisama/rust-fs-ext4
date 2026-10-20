@@ -1,0 +1,47 @@
+Saved same-value ctime probes at b6ccad602cd71f6a6ca96c6d55585982b6bbece6.
+Apply: git apply docs/CASEFOLD-SETXATTR-SAME-VALUE-RED.patch
+Run: scripts/tier.sh setter:policy-probe setter-policy-probe 400 30000 -- scripts/test.sh --locked --lib same_value_policy_probe -- --show-output
+Observed: zero passed / two failed / zero ignored; exit 101.
+Both Rust and C return success and retain the requested value, but advance ctime
+from 1700000100 to 1700000110. All eight saved independent Linux first-attribute
+profiles at source 9035b80 keep ctime unchanged on an identical inline value.
+These are audit probes, not an implemented repair or external/shared/duplicate
+same-value policy qualification. No production source change is included.
+
+diff --git a/src/fs/guarded_chmod/tests/setxattr_calls.rs b/src/fs/guarded_chmod/tests/setxattr_calls.rs
+index 5dc31c0..65c900c 100644
+--- a/src/fs/guarded_chmod/tests/setxattr_calls.rs
++++ b/src/fs/guarded_chmod/tests/setxattr_calls.rs
+@@ -795,3 +795,32 @@ fn setter_corrupt_and_ea_inode_blocks_discard_local_inline_changes() {
+         }
+     }
+ }
++
++// Audit probe derived from all eight saved Linux same-value observations.
++fn same_value_policy_probe(capi: bool) {
++    let (_dev, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096);
++    let _fs = with_test_mount(fs, |handle, fs| {
++        clock.now.store(STAMP, Ordering::SeqCst);
++        if capi {
++            assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), 0);
++        } else {
++            fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
++        }
++        let before = fs.read_inode_verified(ino).unwrap().0;
++        assert_eq!((before.ctime, before.ctime_nsec), (STAMP, 0));
++        clock.now.store(STAMP + 10, Ordering::SeqCst);
++        if capi {
++            assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), 0);
++            assert_eq!(fs_ext4_last_errno(), 0);
++        } else {
++            fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
++        }
++        let (after, raw) = fs.read_inode_verified(ino).unwrap();
++        assert_eq!(crate::xattr::get_resolved(fs, &after, &raw, NAME).unwrap(), Some(b"n".to_vec()));
++        assert_eq!((after.ctime, after.ctime_nsec), (before.ctime, before.ctime_nsec), "identical inline value must preserve ctime, as all eight Linux reference profiles do");
++    });
++}
++#[test]
++fn rust_same_value_policy_probe() { same_value_policy_probe(false); }
++#[test]
++fn capi_same_value_policy_probe() { same_value_policy_probe(true); }

@@ -69,6 +69,54 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Setter image audit and same-value policy blocker — 2026-10-20
+
+The actual `casefold-fixtures` archive from successful focused run
+[39348758499](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39348758499)
+was downloaded and its GitHub-advertised SHA-256 verified. Its exact source is
+`9035b80616c5bdb37940960e27883463752098d3`; this is earlier setter evidence,
+not qualification of the subsequent symlink backports at `b6ccad6`.
+
+Read-only audits of the saved bytes and independent reports cover all sixteen
+setter layout profiles and eight separate fresh first-attribute profiles.
+The sixteen layouts contain 192 setter operations and 64 preserved peer/untouched
+records. The first-attribute profiles contribute 24 emitted and 24 reference
+records: together, 280 emitted Linux records and 304 debugfs records agree with
+the saved final bytes. The audit checks inode identity, attributes and values,
+payload, metadata, allocation/counters, shared references, dirty/closed state,
+EXT_ATTR publication and applicable checksums. All 84 retained metadata profiles
+also pass the existing read-only audits: 68 chmod/chown/timestamp/flag profiles
+and sixteen removal profiles. These healthy-image results do not qualify faults,
+power loss, ownership aliases or the mixed zero-extra layout previously excluded.
+
+**Family closure is blocked by a reproduced same-value timestamp mismatch.**
+Every one of the eight Linux `first-*.reference.txt` reports records
+`same same_value_changed 0`, with identical before/after ctime for the second
+identical inline attribute set. First nonempty and first empty creation advance
+ctime in all eight profiles. The current planner always calls the clock and
+stamps ctime, including an unchanged value. The fixed `SetterClock` used by the
+emission matrix makes both sets appear to have the same timestamp and therefore
+does not establish semantic equivalence.
+
+Two temporary native probes advanced the clock by ten seconds between identical
+inline sets. Rust byte-path and C calls both returned success and retained the
+value, but changed ctime from `1700000100` to `1700000110`. Both tests failed
+their Linux-derived preservation assertion: zero passed / two failed / zero
+ignored, exit 101. The exact executed controls are saved in
+[CASEFOLD-SETXATTR-SAME-VALUE-RED.patch](CASEFOLD-SETXATTR-SAME-VALUE-RED.patch).
+Active test source was restored byte-for-byte; no failing test or production
+repair is active. The probes establish this ordinary inline case only; they do
+not establish external/shared/duplicate or repeated-empty policy.
+
+Next, qualify those policy branches independently and repair the demonstrated
+case without bypassing context/refusal checks, external validation, duplicate
+cleanup, feature publication or failure retirement. Promote the saved probes
+with an advancing-clock oracle, preserve all baseline tests, then inspect fresh
+exact-source CI and perform the remaining standalone review. Full/focused
+backport CI remains pending at this checkpoint; no output cap is changed based
+on a prediction. Stage 5 remains not yet quantified and casefold writes stay
+blocked.
+
 ### Setter CI evidence investigation — 2026-10-19
 
 Exact source `9035b80` passed focused Linux workflow
