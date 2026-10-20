@@ -69,6 +69,40 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Complete baseline and current-source review follow-up — 2026-10-20
+
+Exact `25a039e` full run
+[39452506096](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39452506096)
+now passes. SHA-256-verified archives show both whole suites retain all 1,951
+preceding successful occurrences and add exactly 21: **1,972 passed, zero failed,
+one unchanged ignored slow fuzz test**. All 169 controls execute once in each of
+five contexts. Native output is 3,372 lines / 185,898 bytes and guest output is
+3,540 / 195,346, within the existing caps. Native headroom is only 102 bytes;
+measure the current source's actual output before any budget adjustment.
+
+For refusal-order repair `4079f36`, verified standalone and aarch64 unit archives
+each retain all 1,137 previous occurrences and add exactly two (1,139 passed,
+171 controls). Its focused policy/symlink job passes: all five symlink tests,
+32 ordinary unchanged-ctime observations and sixteen byte-identical Rust/C
+policy-emission images were audited. Four duplicate diagnostics remain separate
+from healthy-image qualification. The main focused metadata job and exact full
+run 39458801198 remain in progress; 1,974 whole-suite passes are expected, not
+credited as executed. Prior image audits are not relabeled as current results.
+
+The completed scoped source walk found no further implementation blocker:
+Rust/C dispatch preserves pre-callback context/refusal checks; inline preflight
+preserves refusal priority without bypassing complete both-location validation;
+no-effect success avoids clock and device effects; real changes retain owned
+whole-plan staging, marker normalization, guarded durable effects and failure
+retirement. This conclusion assumes the existing caller-exclusion contract.
+Raw handles, unguarded operations, maintenance and C lifetimes still require
+caller coordination. Ownership/seal/admission, mixed zero-extra, insertion-alias,
+ignored-fuzz, mapping, index-growth and recovery gates remain open.
+
+Standalone setter-family closure still requires current-source main focused
+artifacts and full-suite retention, including all 171 controls in five contexts.
+This checkpoint changes review/progress records only; casefold writes stay blocked.
+
 ### Setter refusal-order follow-up — 2026-10-20
 
 Exact source `25a039e` passes focused Linux run 39452506142. Its verified actual
