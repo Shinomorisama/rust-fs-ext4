@@ -144,6 +144,12 @@ jobs:
         run: |
           scripts/tier.sh casefold:public-removexattr casefold-public-removexattr 2100 130000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::removexattr::linux_checks_public_removexattr_metadata -- --exact --show-output
           bash scripts/core.sh test-floor casefold-public-removexattr 1
+      - name: Check public Rust and C xattr setters and first-attribute references
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/public-setxattr
+        run: |
+          scripts/tier.sh casefold:public-setxattr casefold-public-setxattr 3200 200000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::setxattr::linux_checks_public_setxattr_metadata -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-public-setxattr 1
       - name: Keep completed fixtures and reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -178,5 +184,7 @@ jobs:
             tmp/public-flags/
             tmp/logs/casefold-public-removexattr.log
             tmp/public-removexattr/
+            tmp/logs/casefold-public-setxattr.log
+            tmp/public-setxattr/
           if-no-files-found: error
           retention-days: 30

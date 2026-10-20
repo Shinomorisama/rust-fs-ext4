@@ -58,7 +58,7 @@ fn lookup(fs: &Filesystem, path: &str) -> (u32, Inode) {
     let ino = fs.lookup_path_bytes(path.as_bytes()).unwrap();
     (ino, fs.read_inode_verified(ino).unwrap().0)
 }
-fn share(fs: &Filesystem, source: &str, peer: &str) {
+pub(super) fn share(fs: &Filesystem, source: &str, peer: &str) {
     let (_, source) = lookup(fs, source);
     assert_ne!(source.file_acl, 0);
     let (ino, inode) = lookup(fs, peer);
@@ -83,12 +83,12 @@ fn share(fs: &Filesystem, source: &str, peer: &str) {
         .unwrap();
     fs.write_inode_raw(ino, &raw).unwrap();
 }
-fn free_blocks(image: &Path) -> u64 {
+pub(super) fn free_blocks(image: &Path) -> u64 {
     let b = std::fs::read(image).unwrap();
     u64::from(u32::from_le_bytes(b[1036..1040].try_into().unwrap()))
         | (u64::from(u32::from_le_bytes(b[1368..1372].try_into().unwrap())) << 32)
 }
-fn allocated(fs: &Filesystem, block: u64) -> bool {
+pub(super) fn allocated(fs: &Filesystem, block: u64) -> bool {
     let relative = block - u64::from(fs.sb.first_data_block);
     let group = (relative / u64::from(fs.sb.blocks_per_group)) as usize;
     let bit = relative % u64::from(fs.sb.blocks_per_group);
@@ -97,7 +97,7 @@ fn allocated(fs: &Filesystem, block: u64) -> bool {
         .unwrap();
     bitmap[bit as usize / 8] & (1 << (bit % 8)) != 0
 }
-fn refs(fs: &Filesystem, block: u64) -> u32 {
+pub(super) fn refs(fs: &Filesystem, block: u64) -> u32 {
     let b = fs.read_block(block).unwrap();
     assert!(fs.csum.verify_xattr_block(block, &b));
     u32::from_le_bytes(b[4..8].try_into().unwrap())

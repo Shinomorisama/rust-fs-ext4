@@ -400,7 +400,7 @@ impl Drop for Workers {
 
 #[test]
 fn rust_workers_refuse_all_five_families_in_both_directions() {
-    for outer in 0..5 {
+    for outer in 0..6 {
         let (dev, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096, true);
         let flags = fs.read_inode_verified(ino).unwrap().0.flags;
         let fs = Arc::new(fs);
@@ -430,6 +430,8 @@ fn rust_workers_refuse_all_five_families_in_both_directions() {
                     fs.apply_set_flags_bytes(b"/f\xff", flags),
                     fs.apply_removexattr("/", NAME),
                     fs.apply_removexattr_bytes(b"/f\xff", NAME),
+                    fs.apply_setxattr("/", NAME, b"x"),
+                    fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x"),
                 ];
                 let ok = results
                     .into_iter()
@@ -447,7 +449,8 @@ fn rust_workers_refuse_all_five_families_in_both_directions() {
             1 => fs.apply_chown_ino(ino, 1, 2),
             2 => fs.apply_utimens_ino(ino, 5, 0, 6, 0),
             3 => fs.apply_set_flags_bytes(b"/f\xff", flags),
-            _ => fs.apply_removexattr_bytes(b"/f\xff", NAME),
+            4 => fs.apply_removexattr_bytes(b"/f\xff", NAME),
+            _ => fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x"),
         };
         *clock.hook.lock().unwrap() = None;
         workers.finish();
@@ -458,7 +461,7 @@ fn rust_workers_refuse_all_five_families_in_both_directions() {
 
 #[test]
 fn capi_workers_refuse_all_five_families_and_keep_thread_local_errors() {
-    for outer in 0..5 {
+    for outer in 0..6 {
         let (dev, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096, true);
         let flags = fs.read_inode_verified(ino).unwrap().0.flags;
         let _fs = with_test_mount(fs, |handle, _| {
@@ -476,7 +479,7 @@ fn capi_workers_refuse_all_five_families_and_keep_thread_local_errors() {
                     let handle = address as *mut fs_ext4_fs_t;
                     let path = CString::new(b"/f\xff".as_slice()).unwrap();
                     let mut ok = true;
-                    for entry in 0..8 {
+                    for entry in 0..9 {
                         let result = unsafe {
                             match entry {
                                 0 => fs_ext4_chmod(handle, path.as_ptr(), 0o777),
@@ -486,7 +489,8 @@ fn capi_workers_refuse_all_five_families_and_keep_thread_local_errors() {
                                 4 => fs_ext4_utimens(handle, path.as_ptr(), 5, 0, 6, 0),
                                 5 => fs_ext4_utimens_ino(handle, ino, FS_EXT4_GEN_ANY, 5, 0, 6, 0),
                                 6 => fs_ext4_set_flags(handle, path.as_ptr(), flags),
-                                _ => c_remove(handle, NAME),
+                                7 => c_remove(handle, NAME),
+                                _ => super::setxattr_calls::c_set(handle, b"/f\xff", NAME, b"x"),
                             }
                         };
                         ok &= result == -1 && fs_ext4_last_errno() == crate::error::errno::ENOTSUP;
@@ -509,7 +513,8 @@ fn capi_workers_refuse_all_five_families_and_keep_thread_local_errors() {
                         CString::new(b"/f\xff".as_slice()).unwrap().as_ptr(),
                         flags,
                     ),
-                    _ => c_remove(handle, NAME),
+                    4 => c_remove(handle, NAME),
+                    _ => super::setxattr_calls::c_set(handle, b"/f\xff", NAME, b"x"),
                 }
             };
             let error = fs_ext4_last_errno();
@@ -521,7 +526,7 @@ fn capi_workers_refuse_all_five_families_and_keep_thread_local_errors() {
     }
 }
 
-fn retired_five(dev: &Device, fs: Filesystem, ino: u32) {
+pub(super) fn retired_five(dev: &Device, fs: Filesystem, ino: u32) {
     assert!(fs.operation_failed.load(Ordering::SeqCst));
     dev.reset();
     let before = dev.bytes();
@@ -532,7 +537,9 @@ fn retired_five(dev: &Device, fs: Filesystem, ino: u32) {
         assert!(fs.apply_chown_ino(ino, 1, 2).is_err());
         assert!(fs.apply_utimens_ino(ino, 5, 0, 6, 0).is_err());
         assert!(fs.apply_set_flags("/", 0).is_err());
-        for family in 0..5 {
+        assert!(fs.apply_setxattr("/", NAME, b"x").is_err());
+        assert!(fs.apply_setxattr_bytes(b"/f\xff", NAME, b"x").is_err());
+        for family in 0..6 {
             let path = CString::new(b"/f\xff".as_slice()).unwrap();
             let result = unsafe {
                 match family {
@@ -540,7 +547,8 @@ fn retired_five(dev: &Device, fs: Filesystem, ino: u32) {
                     1 => fs_ext4_chown(handle, path.as_ptr(), 1, 2),
                     2 => fs_ext4_utimens(handle, path.as_ptr(), 5, 0, 6, 0),
                     3 => fs_ext4_set_flags(handle, path.as_ptr(), 0),
-                    _ => c_remove(handle, NAME),
+                    4 => c_remove(handle, NAME),
+                    _ => super::setxattr_calls::c_set(handle, b"/f\xff", NAME, b"x"),
                 }
             };
             assert_eq!(result, -1);
@@ -766,7 +774,7 @@ fn corrupt_and_ea_inode_external_blocks_refuse_without_partial_inline_commit() {
     }
 }
 
-fn branch_specimen(
+pub(super) fn branch_specimen(
     flavor: features::FsFlavor,
     bs: u32,
     branch: u8,

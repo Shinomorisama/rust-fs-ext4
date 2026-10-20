@@ -69,6 +69,53 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Guarded public setter implementation — 2026-10-19
+
+The reviewed whole-plan migration is now implemented; standalone family review
+and independent qualification are **pending**. The unchanged saved patch was
+actually rerun (one passed / fourteen failed), then its ten public controls and
+positive external control were promoted without weaker assertions. Only the four
+constructed SB-order diagnostics use the new private setter-specific boundary.
+Twenty-seven new native controls pass; the full native multiset retains every
+one of the preceding 1,095 occurrences and adds exactly 27. The existing Rust/C
+worker and failure-retirement controls now exercise all six metadata families.
+
+`apply_setxattr_bytes` enters the existing mount context before callbacks, uses
+verdict-only refusal and prepares exactly one owned buffer. Its single-caller
+external helper stages layout/alloc/ref edits without committing. The caller
+stamps ctime and stages the inode, including successful inline edits; first inline
+creation now includes EXT_ATTR publication. The separate setter boundary checks
+context identity and staged primary-SB shape/magic, normalizes only VALID_FS and
+its checksum, and guards marker plus whole commit/checkpoint/flush/allocation
+publication. The raw commit primitive, removal-specific boundary and shared
+xattr helpers remain unchanged. No seal, complete ownership proof or Ready state
+is added; the existing caller-exclusion and C-lifetime contract still applies.
+
+Native controls cover actual layout/counter/shared-peer branches, pre-effect
+refusals, observed write/flush faults, Rust planning/effect panics caught by C or
+Rust, publication poisoning with retained context, foreign contexts and exact
+planned-byte normalization. The legacy-grow native expectation was corrected
+because its small input already occupied an external block. That test failure
+required no production repair. Native runs do not qualify real-volume bytes or
+interrupted writes. The measured unit output-budget repair is in the handoff.
+
+The new exact Linux oracle keeps all six prior metadata oracles and adds sixteen
+legacy128/checksummed256, 1/4 KiB, Rust/C, direct/journal profiles plus eight
+separate first-attribute profiles whose input must have EXT_ATTR clear. It saves
+Linux first/same/empty reference observations independently of actual driver
+emission, full phase images and debugfs/Linux metadata/value/data reports. It
+compiles locally but requires exact CI execution and actual artifact/policy audit;
+same-value semantic equivalence cannot be inferred merely from Linux readback.
+All original and new CI outcomes must be checked at their own commits. No host
+oracle or mount is used. Full-suite budget growth must be measured before any
+further cap change; no existing full-suite cap/floor/filter was lifted here.
+
+Next: finish exact full/focused CI, artifact/multiset and standalone setter-family
+review, repairing actual failures first. Keep mixed zero-extra, ignored fuzz,
+insertion aliases, ownership/mapping/lifecycle/seal/admission/collision/growth/
+recovery and every casefold-write gate open. Stage 5 remains not yet quantified;
+no real-card, Windows or SteamOS readiness is claimed.
+
 ### Public setxattr staging and marker audit — 2026-10-19
 
 Audited clean fetched `b6190fdb29fdada30b86507bf4f6a90f471a54ae`, whose

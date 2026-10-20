@@ -2532,13 +2532,13 @@ pub unsafe extern "C" fn fs_ext4_removexattr(
 /// `value_len` bytes from `value`. `name` must be fully-qualified
 /// (carry a known namespace prefix like "user.").
 ///
-/// v1 scope: in-inode xattrs only. ENOSPC if the in-inode region is
-/// too small; external-block spill is not implemented.
+/// Uses the in-inode area when possible, otherwise a checked external block.
+/// Existing shared blocks are copied before mutation.
 ///
 /// Returns 0 on success, -1 on failure with details in
 /// `fs_ext4_last_error`. `fs_ext4_last_errno` codes: EINVAL on unknown
 /// prefix or null args, ENAMETOOLONG on >255-byte suffix, ENOSPC on
-/// in-inode overflow, EROFS on RO mount.
+/// exhausted attribute storage, EROFS on RO mount.
 #[no_mangle]
 pub unsafe extern "C" fn fs_ext4_setxattr(
     fs: *mut fs_ext4_fs_t,

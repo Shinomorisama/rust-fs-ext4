@@ -88,6 +88,17 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     unit      1,370 /  96,210    1,400 / 100,000   Guarded-setter local run,
+#                                                    2026-10-19, retained in
+#                                                    tmp/guarded-setxattr/
+#                                                    unit-over-budget.log:
+#                                                    1,122 passed, none failed
+#                                                    or ignored; all 1,095
+#                                                    baseline occurrences kept.
+#                                                    27 added controls exceeded
+#                                                    the 95,000-byte cap only.
+#                                                    Keep the line cap/floor.
+#   Historical unit measurement and then-current budget:
 #     unit      1,284 /  84,911    1,400 /  90,000   Re-measured at 2cedf28,
 #                                                    CI run 39002666402,
 #                                                    tier-logs-unit: 1,028
@@ -479,7 +490,7 @@ tasks:
     # Removal guard controls measured 1,340 lines / 91,776 bytes before the
     # final branch matrix control; retain line cap and allow measured growth.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1400 95000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1400 100000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

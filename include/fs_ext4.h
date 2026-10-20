@@ -692,9 +692,9 @@ uint32_t fs_ext4_symlink(fs_ext4_fs_t *fs, const char *target,
 
 /* Set (create or replace) the extended attribute `name` on `path` with
  * `value_len` bytes from `value`. `name` must be fully-qualified
- * (e.g. "user.com.apple.FinderInfo"). v1: in-inode xattrs only;
- * ENOSPC if the in-inode region is too small; external-block spill
- * not implemented. Returns 0 on success, -1 on failure. */
+ * (e.g. "user.com.apple.FinderInfo"). Uses the in-inode area when it fits,
+ * otherwise a checked external block; shared blocks are copied before editing.
+ * ENOSPC on exhausted attribute storage. Returns 0 on success, -1 on failure. */
 int fs_ext4_setxattr(fs_ext4_fs_t *fs, const char *path,
                      const char *name, const void *value,
                      size_t value_len);

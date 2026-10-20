@@ -4626,9 +4626,14 @@ impl Filesystem {
 
     /// [`apply_setxattr`](Self::apply_setxattr) of a path given as bytes, never decoded.
     pub(crate) fn apply_setxattr_bytes(&self, path: &[u8], name: &str, value: &[u8]) -> Result<()> {
-        self.refuse_write()?;
+        self.guarded_setxattr_bytes(path, name, value)
+    }
+
+    /// Prepare the complete setter transaction without marker or commit effects.
+    fn plan_setxattr(&self, path: &[u8], name: &str, value: &[u8]) -> Result<BlockBuffer> {
         let ino = self.resolve(path)?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
+        let mut buf = BlockBuffer::new(self.sb.block_size());
 
         let inode_size = self.sb.inode_size as usize;
         let mut i_extra_isize = if raw.len() >= 0x82 {
@@ -4672,27 +4677,30 @@ impl Filesystem {
         // or not -- and a remove brought the other back.
         match inline_result {
             Ok(_) => {
-                // In-inode rewrite already in `raw`.
-                let mut buf = BlockBuffer::new(self.sb.block_size());
-                if self.buffer_remove_from_external_block(&mut buf, ino, &inode, &mut raw, name)? {
-                    set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
-                }
-                self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
-                self.buffer_write_inode(&mut buf, ino, &raw)?;
-                self.commit_block_buffer(buf)
+                self.buffer_remove_from_external_block(&mut buf, ino, &inode, &mut raw, name)?;
             }
             Err(Error::NoSpaceLeftOnDevice) => {
-                // The set never re-encoded the region, so an old in-inode
-                // copy is still there; it goes before the block gets the
-                // new one, and `raw` carries that into the same commit.
+                // The failed inline encoder did not change the region. Remove
+                // its old copy only in this owned plan, before staging overflow.
                 if inline_capable {
-                    let region = &mut raw[region_start..region_end];
-                    crate::xattr::plan_remove_in_inode_region(region, name)?;
+                    crate::xattr::plan_remove_in_inode_region(
+                        &mut raw[region_start..region_end],
+                        name,
+                    )?;
                 }
-                self.apply_setxattr_external_block(ino, &inode, &mut raw, name, value)
+                self.buffer_setxattr_external_block(&mut buf, ino, &inode, &mut raw, name, value)?;
             }
-            Err(e) => Err(e),
+            Err(e) => return Err(e),
         }
+        // First inline attributes need the same feature publication as external
+        // ones. Keep this OR in the allocation/counter plan, not a separate write.
+        if self.sb.feature_compat & features::Compat::EXT_ATTR.bits() == 0 {
+            self.buffer_patch_sb_compat(&mut buf, features::Compat::EXT_ATTR.bits())?;
+        }
+        set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
+        self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
+        self.buffer_write_inode(&mut buf, ino, &raw)?;
+        Ok(buf)
     }
 
     /// Recompute the inode checksum (when enabled) and splice both halves
@@ -4712,8 +4720,9 @@ impl Filesystem {
     /// Helper: route a setxattr that overflowed the in-inode region to the
     /// external xattr block. Either rewrites the existing block (when
     /// `i_file_acl != 0`) or allocates a fresh one.
-    fn apply_setxattr_external_block(
+    fn buffer_setxattr_external_block(
         &self,
+        buf: &mut BlockBuffer,
         ino: u32,
         inode: &crate::inode::Inode,
         raw: &mut [u8],
@@ -4723,28 +4732,25 @@ impl Filesystem {
         let bs = self.sb.block_size();
         let bs_u64 = bs as u64;
 
-        // Multi-block transaction: xattr block bytes + (alloc-side bitmap +
-        // BGD + SB when fresh-block) + inode body. Atomic across the op.
-        let mut buf = BlockBuffer::new(bs);
         // An xattr block on a volume without COMPAT_EXT_ATTR is one e2fsck
         // ignores: it clears i_file_acl and frees the block. The kernel sets
         // the feature when it writes the first xattr; so does this, in the
         // same transaction (#88). This crate's
         // mkfs does not set it.
         if self.sb.feature_compat & features::Compat::EXT_ATTR.bits() == 0 {
-            self.buffer_patch_sb_compat(&mut buf, features::Compat::EXT_ATTR.bits())?;
+            self.buffer_patch_sb_compat(buf, features::Compat::EXT_ATTR.bits())?;
         }
 
         // Path A: existing external block — rewrite in-buffer, re-checksum.
         if inode.file_acl != 0 {
             let block_nr = inode.file_acl;
-            let mut block = self.buffer_read_xattr_block(&mut buf, block_nr)?;
+            let mut block = self.buffer_read_xattr_block(buf, block_nr)?;
             let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
             crate::xattr::plan_set_in_external_block(&mut block, name, value, 1)?;
             if refs > 1 {
                 // Shared: the edit is this inode's alone, so it gets its
                 // own block. One block before and after, so i_blocks holds.
-                let new_nr = self.buffer_unshare_xattr_block(&mut buf, ino, block_nr, block)?;
+                let new_nr = self.buffer_unshare_xattr_block(buf, ino, block_nr, block)?;
                 Self::write_file_acl(raw, new_nr)?;
             } else {
                 if self.csum.enabled {
@@ -4752,12 +4758,9 @@ impl Filesystem {
                 }
                 buf.put(block_nr, block);
             }
-            // i_blocks unchanged — only need to bump ctime.
-            let now = self.runtime.now_unix_seconds();
-            set_inode_time(raw, InodeTime::Ctime, now);
-            self.finalize_inode_raw(ino, inode.generation, raw)?;
-            self.buffer_write_inode(&mut buf, ino, raw)?;
-            return self.commit_block_buffer(buf);
+            // Pointer/layout staging only; the caller stamps and stages the
+            // inode once, then commits the whole plan under its mount context.
+            return Ok(());
         }
 
         // Path B: no external block yet — allocate, build, stage, then
@@ -4781,19 +4784,15 @@ impl Filesystem {
         buf.put(block_nr, block);
 
         // Stage allocator side-effects in the buffer.
-        self.buffer_mark_block_run_used(&mut buf, block_nr, 1)?;
+        self.buffer_mark_block_run_used(buf, block_nr, 1)?;
         self.buffer_patch_bgd_counters(
-            &mut buf,
+            buf,
             plan.bgd.group_idx as usize,
             plan.bgd.free_blocks_delta,
             plan.bgd.free_inodes_delta,
             plan.bgd.used_dirs_delta,
         )?;
-        self.buffer_patch_sb_counters(
-            &mut buf,
-            plan.sb.free_blocks_delta,
-            plan.sb.free_inodes_delta,
-        )?;
+        self.buffer_patch_sb_counters(buf, plan.sb.free_blocks_delta, plan.sb.free_inodes_delta)?;
 
         // Splice block_nr into the inode: i_file_acl_lo at 0x68..0x6C, hi at
         // 0x76..0x78. The comment here used to say 0x74, and so did the
@@ -4804,12 +4803,7 @@ impl Filesystem {
         let sectors_per_block = bs_u64 / 512;
         let new_blocks = inode.blocks.saturating_add(sectors_per_block);
         Self::patch_inode_size_and_blocks(raw, inode.size, new_blocks)?;
-        let now = self.runtime.now_unix_seconds();
-        set_inode_time(raw, InodeTime::Ctime, now);
-        self.finalize_inode_raw(ino, inode.generation, raw)?;
-        self.buffer_write_inode(&mut buf, ino, raw)?;
-
-        self.commit_block_buffer(buf)
+        Ok(())
     }
 
     /// Allocate one block near `ino`'s group, staged in `buf` with its

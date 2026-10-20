@@ -2,6 +2,7 @@
 mod chown;
 mod flags;
 mod removexattr;
+mod setxattr;
 mod utimens;
 use super::*;
 use crate::block_io::FileDevice;
