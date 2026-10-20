@@ -69,6 +69,65 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public setter family review closure — 2026-10-20
+
+**Decision: the standalone public setxattr migration, its same-value repair and
+refusal-order repair pass implementation/evidence review within the existing
+caller-exclusion and healthy-layout scope.** This does not enable casefold
+writes, establish ownership/admission readiness or complete Stage 5.
+
+Budget-repair source `2c6ece6f7789f5ae138d2773147c55b05810936c` passes every job
+and `ci-ok` in [full run 39505996964](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39505996964).
+All four actual tier archives match GitHub's advertised SHA-256. Complete native
+and guest successful-name Counters each retain all 1,974 preceding occurrences,
+with zero failed and the same one ignored `deep_walk_byte_flip_fuzz_never_panics`.
+All 171 controls execute once in five contexts; each unit context retains all
+1,139 occurrences. Actual native output is 3,377 lines / 186,486 bytes within
+3,700 / 189,000; guest is 3,541 / 195,440 within unchanged 3,900 / 196,500.
+Native trailing checks now actually execute: all twenty shell checks pass
+(40 lines / 2,213 bytes), including scratch cleanup, and all 159 CLI checks pass
+(29 / 1,097). The missing-fixture local attempt below remains a failed local
+attempt; the successful CI harness supplies its required execution evidence.
+
+The driver, tests and focused workflow are unchanged from `4079f36`; the diff
+to `2c6ece6` contains only the measured native byte-cap change and review records.
+Thus [focused run 39458800523](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39458800523)
+remains evidence for the exact unchanged implementation, not a new focused run
+at the budget commit. All fifteen named main-job oracles, sixteen setter layouts,
+eight first-attribute profiles and 84 retained metadata profiles were audited.
+Separate evidence covers 32 ordinary same-value observations, sixteen Rust/C
+emission images byte-identical to Linux input and all five symlink tests. Four
+duplicate diagnostics remain outside healthy-image qualification.
+
+The final source check found no further blocker in this scope. Public Rust/C
+dispatch enters one shared mount context before filesystem callbacks/planning;
+volume refusal remains pre-effect. Inline preflight restores name/EA-inode
+priority without accepting a match before complete both-location validation.
+Unchanged ordinary values avoid clock, marker, writes, flush and publication;
+initialization, feature publication, duplicate cleanup and real changes keep
+their mutation paths. One owned buffer retains the complete allocation/refcount/
+inode/superblock plan; external helpers stage only. The setter boundary checks
+context and staged SB shape/magic, clears only clean state and recomputes its
+checksum, preserving counters/features and unrelated bytes. Marker plus complete
+commit/checkpoint/flush/allocation publication remain guarded. Uncertain effects,
+unwinds and poisoned publication retire subsequent guarded mutations and clean
+close. The promoted fault, callback, C-error and priority controls are retained.
+
+Caller coordination is still required for other mutators, readers, raw handles,
+maintenance and C reference lifetimes. There is no sealed plan, complete owner
+proof, Ready state, general malformed-layout admission, concurrent-device safety
+or whole-operation crash atomicity. Mixed zero-extra, the ignored slow fuzz case,
+three insertion aliases, complete mapping, lifecycle/seal/admission, index
+collision/growth and recovery gates remain open. No host oracle/mount, forbidden
+implementation source, real card or Windows/SteamOS qualification was used.
+
+**Next bounded task:** audit existing public unlink path/byte/parent-inode and C
+dispatch from entry through matched-entry planning and complete durable effects.
+Specify a shared-context, marker/whole-buffer and error-priority contract before
+implementing that migration; identify concrete red controls and the independent
+Linux evidence needed. This advances the namespace-safety prerequisite for
+Stages 4–5, not indexed insertion or public casefold-write admission.
+
 ### Complete retention and measured native-budget repair — 2026-10-20
 
 Exact `4079f36` full run
