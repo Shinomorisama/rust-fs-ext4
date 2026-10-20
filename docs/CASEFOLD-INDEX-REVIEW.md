@@ -69,6 +69,34 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Setter CI evidence investigation — 2026-10-19
+
+Exact source `9035b80` passed focused Linux workflow
+[39348758499](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39348758499),
+including API-reported success for the setter/first-attribute step and all retained
+metadata steps. Full workflow
+[39348758428](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39348758428)
+failed in x86_64 `chore test` with an actual exit-65 check annotation. Whole-guest
+and the other jobs passed. These statuses do not identify the failing tier or
+supply its measured log size, complete test counts or saved image/policy answers.
+
+Actual download attempts remain denied at the log destination and current blob
+hosts. The applied policy still lacks the requested exact destinations despite
+its configured blob wildcard. `extprogress.md` records the current artifact IDs,
+hosts and authenticated metadata/digest checks. No archive was downloaded or
+hash-verified; no numeric cap was raised or output suppressed. Actual image,
+multiset, 161-control and standalone family/evidence review remain **blocked**.
+The partial source walk reconfirmed private whole-plan staging, pre-callback
+entry, planned-byte-preserving dirty normalization and complete guarded effects.
+It does not close the caller-exclusion, ownership or qualification limitations.
+The driver test's fixed clock cannot distinguish the second same-value set's
+ctime policy; inspect the actual independent reference observation before closure.
+
+Next: restore only the missing routes, obtain and verify the source/baseline
+artifacts, measure the actual failed tier and make a demonstrated repair. Then
+finish exact evidence/multiset/family review. This follow-up changes documentation
+only. Stage 5 remains not yet quantified and all casefold write gates stay closed.
+
 ### Guarded public setter implementation — 2026-10-19
 
 The reviewed whole-plan migration is now implemented; standalone family review
