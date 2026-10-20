@@ -66,6 +66,11 @@ permission to relax write gates, modify siblings or push to `main`.
   user's second message triggers fresh verification, a readiness/next-step report
   and a wait for explicit implementation confirmation. The user prefers a
   separate editable environment per chat; unavailable editing must be reported.
+  The complete known cloud access inventory is now listed upfront in `AGENTS.md`,
+  including the preset/custom routes, all source repositories, fork workflow
+  capabilities, writable roots and setup tools. Complete and verify that bundle
+  in the first setup; the second message rechecks it, with no known access deferred
+  to a later stage. This documents requirements; it does not repair the cloud proxy.
   The downloaded x86_64 log measures the existing full-CI failure at 183,600
   bytes against a 183,000-byte native-suite budget; no budget or source repair
   is made here. Complete evidence/multiset/policy review remains open.

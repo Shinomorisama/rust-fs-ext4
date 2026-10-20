@@ -12,26 +12,31 @@ limitation immediately; repository instructions cannot grant that capability.
 
 1. Read the initial `AGENTS.md` and follow its branch pointer to the applicable
    agent guide. Preserve the existing checkout and local work.
-2. Immediately identify and request required missing access using the available
-   permission/environment tools, grouped where possible. Inspect current runtime
-   capabilities and existing grants; distinguish already granted from requested
+2. Immediately identify and request **the entire initial access bundle in
+   `AGENTS.md`**, using available permission/environment tools and grouping all
+   missing items where possible. Inspect current runtime capabilities and
+   existing grants; distinguish already granted from requested
    and blocked access. Reuse existing approvals and injected authentication.
-   The Git/API, Actions storage, package/reference destinations and repository
-   permissions are listed in `AGENTS.md`. Contents/Actions read and authorized
-   casefold checkpoint push access are normally enough; Actions write is needed
-   only for an authorized dispatch/rerun. Do not request repository admin or a
+   Include the preset/custom hosts, all listed repository reads, authorized fork
+   workflow capabilities, workspace/temp writes and setup-tool execution. Include
+   Actions dispatch/rerun and shared claim/PR capabilities in this initial request
+   rather than postponing known workflow access until a later stage. Use supported
+   session-scoped approvals where available. Do not request repository admin or a
    personal token merely because a token variable is absent or `gh` asks to log in.
 3. Once access permits it, fetch the latest `casefold-rw`, read that branch's
-   `AGENTS.md`, then `docs/extprogress.md` and the next-step references. Refine
-   access requests if that task reveals another actual requirement. If fetch is
-   blocked, report it; do not call an old handoff the latest remote state.
-4. Prepare the documented tools as needed, after their required access works.
+   `AGENTS.md`, then `docs/extprogress.md` and the next-step references. Resolve
+   any initial inventory discrepancy before marking this first setup complete;
+   do not defer a known permission to the second message or implementation.
+   If fetch is blocked, report it; do not call an old handoff the latest remote state.
+4. Prepare the documented tools and verify **every item in the bundle**, after
+   the required access works. Do not label the setup complete with pending grants.
    Report the access/handoff status and pause for the user's second message
    requesting the double-check. Do not start the project implementation.
 
 ## Second message: verify, report the next step, then wait
 
-When the user asks to double-check access, run fresh checks in this chat:
+When the user asks to double-check access, freshly recheck the **whole initial
+bundle** in this chat. This is verification, not a planned second access request:
 
 - Inspect current runtime status/currentness, connectivity, applied policy and
   configuration/spec versions when the tools expose them. Preserve proxy/CA trust.
@@ -46,8 +51,11 @@ When the user asks to double-check access, run fresh checks in this chat:
   permission flow. Keep proxy inspection and TLS verification. Report any remaining
   failure as blocked; do not claim readiness from the editor's results.
 
-Report each required capability as verified or blocked. Say ready only when all
-requirements for the proposed next step have been verified. Give the existing
+Use non-mutating checks and grant metadata for write authorization; do not create
+test issues/PRs, dispatch workflows or push dummy content during verification.
+Report each required capability as verified or blocked, distinguishing reported
+write authorization from an actual write. Say ready only when the entire initial
+bundle has been checked with no unresolved requirement. Give the existing
 plain-language project/stage report, identify the next bounded task and its
 checks, and **wait for the user's explicit confirmation before implementing it**.
 A repository link, an access grant, or a request to double-check is not permission

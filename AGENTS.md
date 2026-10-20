@@ -15,10 +15,11 @@ than duplicating them:
 **Required two-message startup:** follow [the cloud startup/access checklist](docs/CLOUD-STARTUP.md)
 in that chat's own runtime. The user prefers a separate editable environment for
 each new chat after repeated failures with the shared environment. First read
-the applicable agent guide, immediately identify/request required missing access,
-then read the latest active-branch progress and next steps. Reuse existing grants.
+the applicable agent guide, immediately identify/request the **complete initial
+access bundle below** for this cloud workflow, then read the latest active-branch
+progress and next steps. Reuse existing grants.
 On the user's second message asking to double-check, actually verify all access
-needed for the next task, report ready only if those checks pass, explain the
+in that bundle, report ready only if those checks pass, explain the
 next bounded step and **wait for explicit confirmation before implementation**.
 A repository link, access approval or double-check request is not that confirmation.
 If this chat cannot create/edit its environment, say so; this file cannot grant
@@ -72,7 +73,15 @@ Update the existing handoff at checkpoint completion so future chats resume from
 the latest evidence; do not create another progress file or infer readiness from
 an earlier commit's results.
 
-At the beginning of a session, check the access needed for the next task:
+### Complete initial access bundle
+
+This is the upfront inventory for the current Linux cloud development and CI
+workflow. Match the environment described here in one initial setup: identify
+existing grants, request all missing items together where supported, and verify
+the entire bundle before saying setup is complete. Do not request only the next
+command's access or defer a known requirement until implementation. Use
+session-scoped approvals when the product supports them. The second message
+rechecks this same bundle; it is not a planned second permissions round.
 
 For this cloud chat's casefold development and CI investigation, keep the
 environment's **`package_managers` network preset** enabled. That preset covers
@@ -87,15 +96,66 @@ below. Add these custom destinations when restricted egress is used:
 | `unicode.org`, `www.unicode.org` | Official Unicode data/specifications for casefold work |
 | `docs.kernel.org` | Published filesystem format documentation permitted by the clean-room rules |
 
+The preset must also cover the setup script's signed Debian package downloads
+at **`deb.debian.org`**. If the preset selector is unavailable, configure the
+equivalent workflow hosts upfront: `github.com`, `codeload.github.com`,
+`raw.githubusercontent.com`, `release-assets.githubusercontent.com`,
+`github-cloud.githubusercontent.com`, `github-cloud.s3.amazonaws.com`,
+`sh.rustup.rs`, `static.rust-lang.org`, `crates.io`, `index.crates.io`,
+`static.crates.io`, `pypi.org`, `files.pythonhosted.org`, `deb.debian.org`, and
+all custom destinations in the table. Preserve the inherited platform Git proxy
+destinations and CA trust. The blob wildcard covers changing numbered artifact
+hosts; do not plan separate permission requests for each run's storage hostname.
+
 Allowlisting a hostname permits a network route; it does not grant GitHub
 permissions. Reuse the existing authenticated Git/`gh` bindings. The required
 repository permissions are **contents read** for source, **Actions read** for
 logs/artifacts, and **contents write** for authorized checkpoint pushes to
-`Shinomorisama/rust-fs-ext4`'s `casefold-rw` branch. Actions write is needed only
-if an authorized task must dispatch or rerun a workflow. No repository admin
-permission, main-branch push, or new secret is required for this checkpoint.
-Read access to `Shinomorisama/ext4-win-driver` and the pinned sibling sources
-supports inspection; this handoff does not authorize modifying those siblings.
+`Shinomorisama/rust-fs-ext4`'s `casefold-rw` branch. Include **Actions write**
+in the initial bundle for authorized workflow dispatches/reruns, and the
+**Issues/Pull requests read/write** capabilities used by the shared claim/PR
+workflow below. Granting access does not authorize running a stage, dispatching
+a workflow or posting communications before the applicable user instruction.
+No repository admin permission or main/upstream write access is needed. Reuse
+existing platform authentication rather than requesting another secret.
+
+Include source read access to every known repository below upfront. The first
+five are this environment's configured checkout set; the others supply known
+upstream inspection, pinned tooling and CI-harness sources. Public reads do not
+require adding a secret or cloning every repository.
+
+| Repository | Access/use |
+|---|---|
+| `Shinomorisama/rust-fs-ext4` | Active source, CI evidence and authorized fork workflow operations above |
+| `Shinomorisama/ext4-win-driver` | Read/inspect Windows integration; no sibling writes |
+| `antimatter-studios/rust-fs-core` | Read pinned dependency; casefold uses immutable v0.3.0 source, not a sibling reset |
+| `antimatter-studios/winfsp-fs-skeleton` | Read pinned driver dependency |
+| `antimatter-studios/winfsp-rs` | Read pinned driver dependency |
+| `antimatter-studios/rust-fs-ext4` | Read upstream changes for the existing upstream-review workflow |
+| `antimatter-studios/chore` | Read the pinned chore release/checksum files |
+| `antimatter-studios/fs-linux-test-harness` | Read the prescribed harness references; use existing CI runners |
+
+Include **read/write/create access under `/workspace` and `/tmp`**, execution of
+the unprivileged setup/build/test tools, and the process-local PRoot source view
+used by `scripts/cloud-casefold-setup.sh`. Build/cache/harness outputs stay in
+these writable roots. Verify Git, `gh`, Rust 1.95.0/rustfmt/clippy, chore 0.11.0,
+Python 3, curl, tar, SHA-256 tools, Debian package tools and the native compiler/
+linker dependencies during initial setup; acquire missing tools then, not mid-stage.
+Provision only supported session permissions; no blanket privileged shell,
+local image mounts, host e2fsprogs or local KVM is required for this workflow.
+
+The initial completion report must account for the whole bundle as **verified**
+or **blocked**, including actual redirected CI downloads and writable/tool checks.
+Use non-mutating access checks and available grant/permission metadata; label
+write authorization established only by metadata as reported authorization.
+Do not dispatch a workflow, create an issue/PR, or push dummy content just to
+test access before the user's implementation confirmation.
+Do not declare setup complete while a known permission request is deferred.
+Expired/revoked grants, a newly requested platform/task (such as Windows/card
+qualification), or a persistent cloud inspection failure can require outside
+action later; identify that concrete change instead of promising that a file
+can guarantee permanent permissions. The intent is no later requests for any
+known requirement of this unchanged cloud workflow.
 
 - **Source and GitHub API:** verify read-only Git access through the existing
   HTTPS proxy, then API access using `gh api repos/Shinomorisama/rust-fs-ext4`
