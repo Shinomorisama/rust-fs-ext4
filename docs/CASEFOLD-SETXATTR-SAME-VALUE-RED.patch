@@ -1,3 +1,7 @@
+Historical red: the two probe names below are now promoted into active tests.
+Do not reapply this patch to the repaired branch; it is retained to reproduce
+pre-repair behavior at the source named below without replacing newer work.
+
 Saved same-value ctime probes at b6ccad602cd71f6a6ca96c6d55585982b6bbece6.
 Apply: git apply docs/CASEFOLD-SETXATTR-SAME-VALUE-RED.patch
 Run: scripts/tier.sh setter:policy-probe setter-policy-probe 400 30000 -- scripts/test.sh --locked --lib same_value_policy_probe -- --show-output

@@ -562,7 +562,10 @@ fn setter_planning_and_effect_unwinds_retire_six_families_and_close() {
 fn setter_publication_unwind_latches_with_a_retained_context() {
     for flavor in [features::FsFlavor::Ext4, features::FsFlavor::Ext3] {
         let (dev, fs, ino, _) = specimen(flavor, 4096);
-        let buf = fs.plan_setxattr(b"/f\xff", NAME, &[b'x'; 600]).unwrap();
+        let buf = fs
+            .plan_setxattr(b"/f\xff", NAME, &[b'x'; 600])
+            .unwrap()
+            .unwrap();
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _held = fs.uninit_cleared.lock().unwrap();
             panic!("setter publication poison");
@@ -794,4 +797,293 @@ fn setter_corrupt_and_ea_inode_blocks_discard_local_inline_changes() {
             });
         }
     }
+}
+
+// Audit probe derived from all eight saved Linux same-value observations.
+fn same_value_policy_probe(capi: bool) {
+    let (_dev, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096);
+    let _fs = with_test_mount(fs, |handle, fs| {
+        clock.now.store(STAMP, Ordering::SeqCst);
+        if capi {
+            assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), 0);
+        } else {
+            fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
+        }
+        let before = fs.read_inode_verified(ino).unwrap().0;
+        assert_eq!((before.ctime, before.ctime_nsec), (STAMP, 0));
+        clock.now.store(STAMP + 10, Ordering::SeqCst);
+        if capi {
+            assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), 0);
+            assert_eq!(fs_ext4_last_errno(), 0);
+        } else {
+            fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
+        }
+        let (after, raw) = fs.read_inode_verified(ino).unwrap();
+        assert_eq!(
+            crate::xattr::get_resolved(fs, &after, &raw, NAME).unwrap(),
+            Some(b"n".to_vec())
+        );
+        assert_eq!(
+            (after.ctime, after.ctime_nsec),
+            (before.ctime, before.ctime_nsec),
+            "identical inline value must preserve ctime, as all eight Linux reference profiles do"
+        );
+    });
+}
+#[test]
+fn rust_same_value_policy_probe() {
+    same_value_policy_probe(false);
+}
+#[test]
+fn capi_same_value_policy_probe() {
+    same_value_policy_probe(true);
+}
+
+#[test]
+fn same_value_policy_preserves_clean_dirty_bytes_clock_and_status() {
+    for flavor in [features::FsFlavor::Ext4, features::FsFlavor::Ext3] {
+        for bs in [1024, 4096] {
+            for prior in [false, true] {
+                for dispatch in 0..3 {
+                    for length in [0, 1, 600] {
+                        let (dev, fs, _, clock) = specimen(flavor, bs);
+                        let path: &[u8] = if dispatch == 0 { b"/" } else { b"/f\xff" };
+                        let ino = fs.resolve(path).unwrap();
+                        let value = vec![b'n'; length];
+                        clock.now.store(STAMP, Ordering::SeqCst);
+                        fs.apply_setxattr_bytes(path, NAME, &value).unwrap();
+                        drop(fs);
+                        let fs =
+                            Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+                        if prior {
+                            fs.apply_chmod_ino(ino, 0o700).unwrap();
+                        }
+                        let before = dev.bytes();
+                        let status = fs.chmod_operation().unwrap().operation.status();
+                        let cleared = fs.uninit_cleared.lock().unwrap().cleared.clone();
+                        dev.reset();
+                        clock.calls.store(0, Ordering::SeqCst);
+                        clock.now.store(STAMP + 10, Ordering::SeqCst);
+                        let _fs = with_test_mount(fs, |handle, fs| {
+                            match dispatch {
+                                0 => fs.apply_setxattr("/", NAME, &value).unwrap(),
+                                1 => fs.apply_setxattr_bytes(path, NAME, &value).unwrap(),
+                                _ => {
+                                    assert_eq!(c_set(handle, path, NAME, &value), 0);
+                                    assert_eq!(fs_ext4_last_errno(), 0);
+                                }
+                            }
+                            assert!(
+                                dev.bytes() == before,
+                                "same-value call changed device bytes"
+                            );
+                            assert_eq!(&dev.counts()[1..3], &[0, 0]);
+                            assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+                            assert_eq!(fs.chmod_operation().unwrap().operation.status(), status);
+                            assert_eq!(fs.uninit_cleared.lock().unwrap().cleared, cleared);
+                            assert_eq!(fs.marked_not_clean.load(Ordering::SeqCst), prior);
+                            // A real change of the same length still stamps, writes and invalidates.
+                            let changed = if length == 0 {
+                                vec![b'x']
+                            } else {
+                                vec![b'x'; length]
+                            };
+                            fs.apply_setxattr_bytes(path, NAME, &changed).unwrap();
+                            assert_eq!(clock.calls.load(Ordering::SeqCst), 1);
+                            assert!(dev.counts()[1] > 0 && dev.counts()[2] > 0);
+                            assert_eq!(fs.read_inode_verified(ino).unwrap().0.ctime, STAMP + 10);
+                            assert!(
+                                fs.chmod_operation().unwrap().operation.status().epoch
+                                    > status.epoch
+                            );
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn same_value_policy_preserves_shared_external_blocks_and_peers() {
+    for flavor in [features::FsFlavor::Ext4, features::FsFlavor::Ext3] {
+        for bs in [1024, 4096] {
+            let (dev, fs, ino, clock, peer) = branch_specimen(flavor, bs, 1);
+            let inode = fs.read_inode_verified(ino).unwrap().0;
+            let nr = inode.file_acl;
+            let before = dev.bytes();
+            let peer = peer.unwrap();
+            let peer_raw = fs.read_inode_verified(peer).unwrap().1;
+            clock.now.store(STAMP, Ordering::SeqCst);
+            let _fs = with_test_mount(fs, |handle, fs| {
+                fs.apply_setxattr_bytes(b"/f\xff", NAME, &[b'v'; 600])
+                    .unwrap();
+                assert_eq!(c_set(handle, b"/f\xff", NAME, &[b'v'; 600]), 0);
+                assert!(dev.bytes() == before);
+                assert_eq!(&dev.counts()[1..3], &[0, 0]);
+                assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+                assert_eq!(fs.read_inode_verified(peer).unwrap().1, peer_raw);
+                assert_eq!(
+                    u32::from_le_bytes(fs.read_block(nr).unwrap()[4..8].try_into().unwrap()),
+                    2
+                );
+            });
+        }
+    }
+}
+
+#[test]
+fn same_value_policy_keeps_external_validation_and_duplicate_cleanup() {
+    for profile in 0..5 {
+        let (dev, fs, ino, clock, _) = branch_specimen(features::FsFlavor::Ext4, 4096, 3);
+        let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+        let start = 128 + u16::from_le_bytes(raw[128..130].try_into().unwrap()) as usize;
+        crate::xattr::plan_set_in_inode_region(&mut raw[start..], NAME, b"n").unwrap();
+        fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+            .unwrap();
+        fs.write_inode_raw(ino, &raw).unwrap();
+        if profile < 4 {
+            let mut block = fs.read_block(inode.file_acl).unwrap();
+            match profile {
+                0 => block[0] ^= 1,
+                1 => block[8..12].copy_from_slice(&2u32.to_le_bytes()),
+                2 => block[4095] ^= 1,
+                _ => block[36..40].copy_from_slice(&ino.to_le_bytes()),
+            }
+            if profile != 2 {
+                fs.csum.patch_xattr_block(inode.file_acl, &mut block);
+            }
+            fs.dev.write_at(inode.file_acl * 4096, &block).unwrap();
+        }
+        drop(fs);
+        let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+        let before = dev.bytes();
+        dev.reset();
+        clock.calls.store(0, Ordering::SeqCst);
+        clock.now.store(STAMP, Ordering::SeqCst);
+        let _fs = with_test_mount(fs, |handle, fs| {
+            if profile < 4 {
+                assert!(fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").is_err());
+                assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), -1);
+                assert!(dev.bytes() == before);
+                assert_eq!(&dev.counts()[1..3], &[0, 0]);
+                assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+            } else {
+                assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), 0);
+                let (after, raw) = fs.read_inode_verified(ino).unwrap();
+                let attrs = crate::xattr::read_all_resolved(fs, &after, &raw).unwrap();
+                assert_eq!(attrs.iter().filter(|a| a.name == NAME).count(), 1);
+                assert_eq!(after.file_acl, 0);
+                assert_eq!(after.ctime, STAMP);
+                assert!(dev.bytes() != before);
+                assert_eq!(clock.calls.load(Ordering::SeqCst), 1);
+            }
+        });
+    }
+}
+
+#[test]
+fn same_value_policy_cannot_bypass_held_failed_or_volume_gates() {
+    for profile in 0..5 {
+        let (dev, fs, _, clock) = specimen(features::FsFlavor::Ext4, 4096);
+        fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
+        drop(fs);
+        let mut fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+        let before = dev.bytes();
+        dev.reset();
+        clock.calls.store(0, Ordering::SeqCst);
+        match profile {
+            1 => fs.operation_failed.store(true, Ordering::SeqCst),
+            2 => dev.writable.store(false, Ordering::SeqCst),
+            3 => fs.sb.feature_incompat |= features::Incompat::CASEFOLD.bits(),
+            4 => fs.replay_pending.store(true, Ordering::SeqCst),
+            _ => {}
+        }
+        let _fs = with_test_mount(fs, |handle, fs| {
+            let held = if profile == 0 {
+                Some(fs.chmod_operation().unwrap())
+            } else {
+                None
+            };
+            assert!(fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").is_err());
+            assert_eq!(c_set(handle, b"/f\xff", NAME, b"n"), -1);
+            assert_eq!(&dev.counts()[..3], &[0; 3]);
+            assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+            assert!(dev.bytes() == before);
+            drop(held);
+        });
+    }
+}
+
+#[test]
+fn same_value_policy_keeps_feature_publication_and_zero_extra_initialization() {
+    for profile in 0..2 {
+        let (dev, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096);
+        let value = if profile == 0 {
+            vec![b'n']
+        } else {
+            vec![b'n'; 600]
+        };
+        fs.apply_setxattr_bytes(b"/f\xff", NAME, &value).unwrap();
+        if profile == 1 {
+            let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+            super::super::zero_extra_fixture::prepare(&mut raw).unwrap();
+            fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+                .unwrap();
+            fs.write_inode_raw(ino, &raw).unwrap();
+        }
+        drop(fs);
+        if profile == 0 {
+            let mut bytes = dev.bytes.lock().unwrap();
+            let sb = &mut bytes[1024..2048];
+            let compat = u32::from_le_bytes(sb[92..96].try_into().unwrap());
+            sb[92..96]
+                .copy_from_slice(&(compat & !features::Compat::EXT_ATTR.bits()).to_le_bytes());
+            let sum = crate::checksum::linux_crc32c(!0, &sb[..1020]);
+            sb[1020..].copy_from_slice(&sum.to_le_bytes());
+        }
+        let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+        let before = dev.bytes();
+        dev.reset();
+        clock.calls.store(0, Ordering::SeqCst);
+        clock.now.store(STAMP, Ordering::SeqCst);
+        fs.apply_setxattr_bytes(b"/f\xff", NAME, &value).unwrap();
+        assert!(dev.bytes() != before);
+        assert_eq!(clock.calls.load(Ordering::SeqCst), 1);
+        assert_ne!(compat(&dev) & features::Compat::EXT_ATTR.bits(), 0);
+        if profile == 1 {
+            assert_eq!(
+                u16::from_le_bytes(
+                    fs.read_inode_verified(ino).unwrap().1[128..130]
+                        .try_into()
+                        .unwrap()
+                ),
+                crate::inode::EXTRA_ISIZE_DEFAULT
+            );
+        }
+    }
+}
+
+#[test]
+fn same_value_policy_preserves_valid_noncanonical_inline_storage() {
+    let (dev, fs, ino, clock) = specimen(features::FsFlavor::Ext4, 4096);
+    fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
+    let (inode, mut raw) = fs.read_inode_verified(ino).unwrap();
+    let start = 128 + u16::from_le_bytes(raw[128..130].try_into().unwrap()) as usize;
+    // In-inode entry hashes and unused packing bytes do not change its value.
+    raw[start + 16..start + 20].copy_from_slice(&0x12345678u32.to_le_bytes());
+    raw[start + 64] = 0x5a;
+    fs.finalize_inode_raw(ino, inode.generation, &mut raw)
+        .unwrap();
+    fs.write_inode_raw(ino, &raw).unwrap();
+    drop(fs);
+    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+    let before = dev.bytes();
+    dev.reset();
+    clock.calls.store(0, Ordering::SeqCst);
+    clock.now.store(STAMP, Ordering::SeqCst);
+    fs.apply_setxattr_bytes(b"/f\xff", NAME, b"n").unwrap();
+    assert!(dev.bytes() == before);
+    assert_eq!(&dev.counts()[1..3], &[0, 0]);
+    assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
 }

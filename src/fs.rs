@@ -4691,7 +4691,7 @@ impl Filesystem {
     }
 
     /// Prepare the complete setter transaction without marker or commit effects.
-    fn plan_setxattr(&self, path: &[u8], name: &str, value: &[u8]) -> Result<BlockBuffer> {
+    fn plan_setxattr(&self, path: &[u8], name: &str, value: &[u8]) -> Result<Option<BlockBuffer>> {
         let ino = self.resolve(path)?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
         let mut buf = BlockBuffer::new(self.sb.block_size());
@@ -4702,6 +4702,9 @@ impl Filesystem {
         } else {
             0
         };
+        // Zero-extra larger inodes still need their existing initialization
+        // path, even when an external value already equals the requested one.
+        let initialized_layout = i_extra_isize != 0 || inode_size == 128;
         // NO AREA AT 0x80 (#380). `i_extra_isize = 0` -- `ext2.ko`, older
         // kernels, 256-byte-inode ext2 volumes -- is an inode whose extra
         // fields are unused, and the kernel parses no in-inode xattr area
@@ -4720,6 +4723,42 @@ impl Filesystem {
         let region_start = 128 + i_extra_isize;
         let region_end = inode_size.min(raw.len());
         let inline_capable = i_extra_isize != 0 && region_start + 8 <= region_end;
+
+        if initialized_layout {
+            let external = if inode.file_acl != 0 {
+                Some(self.buffer_read_xattr_block(&mut buf, inode.file_acl)?)
+            } else {
+                None
+            };
+            let inline = inline_capable.then(|| &raw[region_start..region_end]);
+            if crate::xattr::set_value_is_unchanged(inline, external.as_deref(), name, value)? {
+                // The mount snapshot can predate the first feature publication.
+                // Check current bytes, so a missing EXT_ATTR is still repaired.
+                let bs = u64::from(self.sb.block_size());
+                let offset = crate::superblock::SUPERBLOCK_OFFSET;
+                let block = buf.get_mut(self, offset / bs)?;
+                let start = (offset % bs) as usize;
+                let sb = &block[start..start + 1024];
+                if u16::from_le_bytes(sb[56..58].try_into().unwrap())
+                    != crate::superblock::EXT4_MAGIC
+                {
+                    return Err(Error::Corrupt("setxattr current superblock magic"));
+                }
+                if self.csum.enabled
+                    && crate::checksum::linux_crc32c(!0, &sb[..1020])
+                        != u32::from_le_bytes(sb[1020..].try_into().unwrap())
+                {
+                    return Err(Error::BadChecksum { what: "superblock" });
+                }
+                if u32::from_le_bytes(sb[92..96].try_into().unwrap())
+                    & features::Compat::EXT_ATTR.bits()
+                    != 0
+                {
+                    // No marker, clock, commit, flush or allocation publication.
+                    return Ok(None);
+                }
+            }
+        }
 
         // Try in-inode first; on overflow fall through to the external block.
         let inline_result = if inline_capable {
@@ -4761,7 +4800,7 @@ impl Filesystem {
         set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
         self.finalize_inode_raw(ino, inode.generation, &mut raw)?;
         self.buffer_write_inode(&mut buf, ino, &raw)?;
-        Ok(buf)
+        Ok(Some(buf))
     }
 
     /// Recompute the inode checksum (when enabled) and splice both halves

@@ -50,7 +50,7 @@ pub(super) fn lookup(fs: &Filesystem, path: &str) -> (u32, Inode) {
     let ino = fs.lookup_path_bytes(path.as_bytes()).unwrap();
     (ino, fs.read_inode_verified(ino).unwrap().0)
 }
-fn set(
+pub(super) fn set(
     fs: &Filesystem,
     handle: *mut crate::capi::fs_ext4_fs_t,
     capi: bool,
@@ -377,7 +377,14 @@ SET_INPUT_PY
                 assert_eq!(after.file_acl, t.before.file_acl);
             }
             assert_eq!(after.links_count, t.before.links_count);
-            assert_eq!((after.ctime, after.ctime_nsec), (STAMP, 0));
+            assert_eq!(
+                (after.ctime, after.ctime_nsec),
+                if matches!(t.branch, Branch::Same) {
+                    (t.before.ctime, t.before.ctime_nsec)
+                } else {
+                    (STAMP, 0)
+                }
+            );
             assert_eq!(
                 (
                     after.mode,
@@ -425,7 +432,7 @@ SET_INPUT_PY
         for t in targets.iter().filter(|t| matches!(t.branch, Branch::Peer)) {
             assert_eq!(fs.read_inode_verified(t.ino).unwrap().1, t.raw);
         }
-        assert_eq!(fs.chmod_operation().unwrap().operation.status().epoch, 13);
+        assert_eq!(fs.chmod_operation().unwrap().operation.status().epoch, 12);
     });
     std::fs::write(base.with_extension("observations.txt"), observations).unwrap();
     std::fs::copy(&image, base.with_extension("dirty.img")).unwrap();
@@ -517,6 +524,15 @@ SET_READ_PY
     assert_e2fsck_clean(image.to_str().unwrap(), "Linux public setter readback");
 }
 
+struct FirstClock(std::sync::atomic::AtomicI64);
+impl crate::runtime::Runtime for FirstClock {
+    fn now_unix_seconds(&self) -> i64 {
+        self.0.load(Ordering::SeqCst)
+    }
+    fn next_inode_generation(&self) -> u32 {
+        17
+    }
+}
 fn first_attribute(capi: bool, bs: u32, journal: bool) {
     let base = fs_ext4_test_support::temp_dir().join(format!("first-{capi}-{bs}-{journal}"));
     let image = base.with_extension("img");
@@ -565,7 +581,7 @@ for name,value in [('first',b'n'),('same',b'n'),('empty',b'')]:
     print(name,'first',before,after)
     if name=='same':
         time.sleep(0.02);os.setxattr(p,'user.audit',value);again=os.stat(p).st_ctime_ns
-        assert again>=after
+        assert again==after,(after,again)
         print(name,'same_value_changed',int(again!=after),after,again)
 FIRST_REF_PY
 "#,
@@ -603,7 +619,12 @@ FIRST_REF_PY
         report(&reference, &base, "reference", &target, &inode);
     }
     drop(ref_fs);
-    let fs = mount(&image);
+    let clock = Arc::new(FirstClock(std::sync::atomic::AtomicI64::new(STAMP)));
+    let fs = Filesystem::mount_with_runtime(
+        Arc::new(FileDevice::open_rw(image_str).unwrap()),
+        clock.clone(),
+    )
+    .unwrap();
     let free_before = free_blocks(&image);
     let targets: Vec<_> = ["/first", "/same", "/empty"]
         .into_iter()
@@ -623,9 +644,15 @@ FIRST_REF_PY
     let fs = crate::capi::with_test_mount(fs, |handle, fs| {
         for t in &targets {
             let value = vec![b'n'; t.attrs[0].2];
+            clock.0.store(STAMP, Ordering::SeqCst);
             set(fs, handle, capi, t.path, &value);
             if t.path == "/same" {
+                let before = std::fs::read(&image).unwrap();
+                let status = fs.chmod_operation().unwrap().operation.status();
+                clock.0.store(STAMP + 10, Ordering::SeqCst);
                 set(fs, handle, capi, t.path, &value);
+                assert!(std::fs::read(&image).unwrap() == before);
+                assert_eq!(fs.chmod_operation().unwrap().operation.status(), status);
             }
             let inode = fs.read_inode_verified(t.ino).unwrap().0;
             assert_eq!(inode.file_acl, 0);
@@ -634,7 +661,7 @@ FIRST_REF_PY
             assert_eq!(free_blocks(&image), free_before);
             check_dirty(&image, fs);
         }
-        assert_eq!(fs.chmod_operation().unwrap().operation.status().epoch, 5);
+        assert_eq!(fs.chmod_operation().unwrap().operation.status().epoch, 4);
     });
     std::fs::copy(&image, base.with_extension("dirty.img")).unwrap();
     fs.finish().unwrap();

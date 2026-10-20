@@ -190,7 +190,9 @@ impl Filesystem {
     ) -> Result<()> {
         self.check_chmod_context(context)?;
         self.write_refusal()?;
-        let buf = self.plan_setxattr(path, name, value)?;
+        let Some(buf) = self.plan_setxattr(path, name, value)? else {
+            return Ok(());
+        };
         self.commit_setxattr_in(context, buf)
     }
 

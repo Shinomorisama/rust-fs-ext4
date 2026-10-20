@@ -69,6 +69,43 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Same-value setter repair; independent emission review pending — 2026-10-20
+
+The timestamp blocker below now has an implemented repair. The saved two probes
+were rerun red, and all eight promoted policy controls now pass: five actual
+failures become green while three validation/gate/cleanup controls stay green.
+Fresh units retain every one of the 1,129 preceding successful occurrences and
+add eight, with 1,137 passed and zero failed/ignored. Full lint passes.
+
+The corrected reference-only job at `aa266f3` in
+[39390763789](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39390763789)
+passed. Its downloaded archive matches the advertised SHA-256. All 32 ordinary
+inline/empty/external/shared observations across eight profiles preserve ctime,
+raw inode bytes, values and external blocks. Four separate constructed duplicate
+diagnostics preserve both copies and ctime; those inputs remain outside healthy
+qualification. The initial reference fixture failure was actual Linux attribute
+deduplication before an exclusive-source constructor; distinct source data fixes
+that fixture while retaining its strict reference-count assertion.
+
+The private planner may now return no plan only after both locations are decoded,
+the external header/checksum and EA-inode refusals are retained, and exactly one
+ordinary matching value exists. Current SB magic/checksum/EXT_ATTR checks prevent
+an old mount snapshot hiding missing publication. Zero-extra initialization,
+zero-reference blocks and cross-location duplicate cleanup retain the mutation
+path. Context and volume refusal precede this decision. No-effect success avoids
+the clock, marker, commit, flush and publication; real changes retain the guarded
+whole-plan boundary. No ownership, lifecycle, raw-handle exclusion, seal or C
+lifetime guarantee is added.
+
+The first-attribute emission now advances its clock between identical calls,
+and the expanded oracle checks sixteen Rust/C images against Linux-created input
+bytes. These checks compile locally; fresh repaired-source Linux execution,
+actual artifacts, complete-suite budgets/retention and standalone family closure
+remain pending. The sixteen-layout same-value timestamp/epoch expectations now
+follow the observed no-effect policy; mutation assertions remain intact. The
+handoff records the separate measured older guest-budget failure and repair.
+Stage 5 is not yet quantified; casefold writes remain blocked.
+
 ### Setter image audit and same-value policy blocker — 2026-10-20
 
 The actual `casefold-fixtures` archive from successful focused run

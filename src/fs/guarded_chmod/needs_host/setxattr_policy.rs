@@ -1,5 +1,5 @@
 //! Black-box Linux policy observations, independent of driver emission.
-use super::setxattr::{lookup, make, mount};
+use super::setxattr::{lookup, make, mount, set};
 use super::*;
 
 #[test]
@@ -10,6 +10,16 @@ fn linux_records_same_value_setxattr_policy() {
                 reference(bs, size, journal);
             }
         }
+    }
+}
+
+struct PolicyClock(std::sync::atomic::AtomicUsize);
+impl crate::runtime::Runtime for PolicyClock {
+    fn now_unix_seconds(&self) -> i64 {
+        1_700_000_100 + 10 * self.0.fetch_add(1, Ordering::SeqCst) as i64
+    }
+    fn next_inode_generation(&self) -> u32 {
+        17
     }
 }
 
@@ -68,7 +78,7 @@ for name in ['inline','empty','external','shared']:
     assert os.getxattr(p,'user.audit')==value
     assert (before.st_ino,before.st_mode,before.st_blocks,before.st_size)==(after.st_ino,after.st_mode,after.st_blocks,after.st_size)
     assert (before.st_atime_ns,before.st_mtime_ns)==(after.st_atime_ns,after.st_mtime_ns)
-    assert after.st_ctime_ns>=before.st_ctime_ns
+    assert after.st_ctime_ns==before.st_ctime_ns,(name,before.st_ctime_ns,after.st_ctime_ns)
     print(json.dumps(dict(name=name,length=len(value),before=before.st_ctime_ns,after=after.st_ctime_ns,changed=after.st_ctime_ns!=before.st_ctime_ns,ino=after.st_ino,blocks=after.st_blocks)))
 assert os.getxattr(root+'/shared-peer','user.audit')==peer
 POLICY_SAME
@@ -111,5 +121,34 @@ POLICY_DUPLICATE
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
+    }
+    for capi in [false, true] {
+        let emitted = base.with_extension(if capi { "capi.img" } else { "rust.img" });
+        std::fs::copy(base.with_extension("input.img"), &emitted).unwrap();
+        let before = std::fs::read(&emitted).unwrap();
+        let clock = Arc::new(PolicyClock(std::sync::atomic::AtomicUsize::new(0)));
+        let fs = Filesystem::mount_with_runtime(
+            Arc::new(FileDevice::open_rw(emitted.to_str().unwrap()).unwrap()),
+            clock.clone(),
+        )
+        .unwrap();
+        let status = fs.chmod_operation().unwrap().operation.status();
+        let fs = crate::capi::with_test_mount(fs, |handle, fs| {
+            for path in ["/inline", "/empty", "/external", "/shared"] {
+                let (ino, inode) = lookup(fs, path);
+                let raw = fs.read_inode_verified(ino).unwrap().1;
+                let value = crate::xattr::get_resolved(fs, &inode, &raw, "user.audit")
+                    .unwrap()
+                    .unwrap();
+                set(fs, handle, capi, path, &value);
+                assert_eq!(fs.read_inode_verified(ino).unwrap().1, raw);
+                assert_eq!(fs.chmod_operation().unwrap().operation.status(), status);
+            }
+        });
+        assert_eq!(clock.0.load(Ordering::SeqCst), 0);
+        assert!(std::fs::read(&emitted).unwrap() == before);
+        fs.finish().unwrap();
+        assert!(std::fs::read(&emitted).unwrap() == before);
+        assert_e2fsck_clean(emitted.to_str().unwrap(), "same-value driver emission");
     }
 }

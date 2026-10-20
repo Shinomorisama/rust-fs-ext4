@@ -376,6 +376,50 @@ pub enum SetOutcome {
     Replaced,
 }
 
+/// A setter may do nothing only for one ordinary, equal-valued entry across
+/// both locations. Decode the complete regions and retain the rewrite path's
+/// EA-inode refusal; a first-match reader would hide duplicate cleanup.
+/// The caller must check the external block's header and checksum first.
+pub(crate) fn set_value_is_unchanged(
+    inode_region: Option<&[u8]>,
+    external_block: Option<&[u8]>,
+    name: &str,
+    value: &[u8],
+) -> Result<bool> {
+    let Some((index, suffix)) = split_qualified_name(name) else {
+        return Err(Error::InvalidArgument(
+            "xattr name missing known namespace prefix",
+        ));
+    };
+    if suffix.is_empty() && !matches!(index, 2 | 3) {
+        return Err(Error::InvalidArgument("xattr name suffix is empty"));
+    }
+    if suffix.len() > 255 {
+        return Err(Error::NameTooLong);
+    }
+    let mut entries = Vec::new();
+    if let Some(region) = inode_region {
+        if region.len() >= 4
+            && u32::from_le_bytes(region[..4].try_into().unwrap()) == EXT4_XATTR_MAGIC
+        {
+            entries.extend(decode_in_inode_entries(&region[4..])?);
+        }
+    }
+    if let Some(block) = external_block {
+        if u32::from_le_bytes(block[4..8].try_into().unwrap()) == 0 {
+            // A zero-reference block needs the existing rewrite path, rather
+            // than being accepted as a healthy unchanged-value operation.
+            return Ok(false);
+        }
+        entries.extend(decode_external_block_entries(block)?);
+    }
+    refuse_if_any_ea_inode_backed(&entries)?;
+    let mut matches = entries
+        .iter()
+        .filter(|e| e.name_index == index && e.name_bytes == suffix.as_bytes());
+    Ok(matches.next().is_some_and(|e| e.value == value) && matches.next().is_none())
+}
+
 /// Set (create-or-replace) an xattr entry in the in-inode region.
 /// `region` spans from the 4-byte magic to the end of the inode image.
 /// On success the bytes have been rewritten to include the new entry.
