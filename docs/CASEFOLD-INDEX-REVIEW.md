@@ -69,6 +69,180 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public unlink staging, marker and dispatch design audit — 2026-10-20
+
+Audited clean fetched `c20dd1b5bbd0800fa97a955e4a38a5991e8771cd`. Driver,
+tests and tasks are unchanged from the verified green `2c6ece6` full run
+39505996964: both whole suites retain 1,974 passes, the three unit contexts
+retain 1,139, and all 171 controls execute in five contexts. The documentation
+HEAD's own full CI is still pending at audit start. This checkpoint changes
+review/progress records only. **No new red control, fault injection, Linux
+reference measurement or emitted-image test was executed here.** Findings below
+are source observations and a proposed migration contract, not a completed fix.
+
+#### Concrete entry points and effects
+
+| Entry or phase | Observed current behavior and boundary to retain |
+|---|---|
+| Rust string/byte path | `apply_unlink` delegates to `apply_unlink_bytes`, which calls marker-writing `refuse_write` before splitting or resolving the parent. It follows intermediate/parent symlinks but removes the final entry itself. |
+| Trailing slash | After parent lookup, a live target directory returns IsADirectory and any other live target returns NotADirectory; lookup failures propagate. This branch returns before the parent-inode unlink call. |
+| Parent-inode form | `apply_unlink_at` calls `refuse_write`, validates the counted entry name, then runs the caller's `Into<InodeRef>` conversion and `live_dir`. Preserve generation/bitmap/liveness/type checks and that conversion order. |
+| Nested public edge | A normal path call invokes public `apply_unlink_at`, so it performs a second write verdict. Acquiring the nonblocking gate independently at both public entries would reject a valid operation recursively. |
+| C path | `fs_ext4_unlink` keeps its null and bounded C-path validation, byte paths, error clearing and `ffi_guard`; it delegates to the Rust byte entry without preliminary filesystem lookup. |
+| C parent-inode | `fs_ext4_unlink_at` uses `ino_call`, `inode_ref` and `name_arg`; foreign-memory null/length checks precede filesystem dispatch. Keep these priorities and caller-owned handle lifetimes. |
+| CLI | Its failed newly-created-file content-write cleanup also calls `apply_unlink`. This is a separate best-effort operation, not an existing held operation context or a reason to extend this migration into content writes. |
+| Entry selection | `find_dir_entry` retains stored spelling and inode identity; inline/casefold reads use shared resolution, ordinary block scans retain checksum checks. `buffer_remove_matched_dir_entry` rechecks that saved spelling still names the expected inode in the staged view. |
+| Durable boundary | Two terminal `commit_block_buffer` calls cover surviving-link and final-link plans. Marker I/O, both commits, checkpoint/flush and allocation-view publication currently lack the shared family context. |
+
+`refuse_write` is not a pure check: its `mark_not_clean_once` can write and flush
+the primary SB before a missing path, invalid name, stale parent, directory target
+or later planning refusal. This ordering is directly visible in source; exact
+callback counts and error/byte effects still need executable red controls.
+`write_refusal` already carries operation/direct-commit failure, device writability,
+replay, unsupported RO_COMPAT and write-breaking incompat refusals. Retain those
+verdicts and the casefold volume gate before lookup.
+
+#### One owned plan, with two meaningful branches
+
+Both current branches already stage one `BlockBuffer`; their helpers need no
+new inner commit. Parent/target inodes can share an inode-table block, so preserve
+`buffer_write_inode`'s splicing into the current buffer rather than replacing
+that whole block from a stale snapshot.
+
+| Branch | Changes that must stay in the same owned plan |
+|---|---|
+| Another hard link survives | Remove only the matched parent entry and decrement target links, restamping the target inode checksum. Keep inode allocation, data, external attributes/refcount, sectors and free counters intact. |
+| Final link | Remove the matched entry; free target storage and the inode slot; update inode/block bitmaps, BGD and SB counters/checksums; release the external attribute block or decrement its shared reference; zero the target body while retaining generation and recording deletion time; restamp the freed inode checksum. |
+| Inline parent | Read and edit its current buffered inode/inline entries; retain expected-inode recheck and directory checksum behavior. A target inode splice must retain the parent's distinct bytes even in the same table block. |
+| Extent-mapped target | `extent_tree_runs` includes data runs **and external index/leaf blocks**, including preallocation beyond size; it verifies external-node checksums. Do not replace this with a size-limited data-only walk. |
+| Indirect/inline/special target | `holds_block_map` excludes inline data, fast-symlink bytes and device numbers from pointer interpretation, subtracting external-xattr sectors. Real block maps free data and indirect blocks. Preserve that distinction. |
+| External attributes | A non-final hard-link removal does not release inode-owned attributes. At final deletion, an exclusive block is freed and credited; a shared block is restamped at a lower reference count, with peer attributes and allocation retained. |
+
+These existing collectors are not the disconnected complete owner/admission
+proof. Range, role, allocation and cross-owner alias qualification are not added
+by guarding their current use. Keep their current refusals; do not silently claim
+arbitrary-corruption safety or broaden accepted layouts.
+
+#### Reviewed migration contract
+
+1. Acquire the same mount-bound, nonblocking context as the six qualified
+   metadata families before filesystem/device/runtime callbacks, including
+   writability checks and generic inode conversion. Contention/reentry must
+   refuse promptly; failure/poison stays sticky. C pointer validation stays at
+   its current boundary and gains no handle-lifetime guarantee.
+2. Replace early marker-writing refusals with verdict-only checks. Preserve
+   volume-before-path/name ordering, parent resolution and trailing-slash errors,
+   name-before-Into ordering, parent generation/liveness and target-type checks.
+   The path-to-parent-inode edge becomes a private context-taking helper, not
+   another public entry. Retain its second pure write verdict rather than
+   silently removing an existing post-lookup policy check; cover it with a
+   device-writability-change control. The trailing-slash branch keeps its
+   existing error path without entering the ordinary unlink planner.
+3. Prepare one complete owned buffer without marker, raw commit, device write,
+   flush or allocation-view publication. Share this planner between path and
+   parent-inode dispatch. Retain matched spelling/expected inode and all current
+   read/checksum errors. An ordinary planning Err drops local staging; cache
+   reads are not promised invisible. A Rust planning unwind follows the existing
+   conservative mount-retirement policy.
+4. Add a private **unlink-specific** whole-buffer boundary. Check context
+   identity before callbacks and validate a staged primary-SB block's full shape
+   and magic before effects. If present, clear only VALID_FS and restamp its
+   checksum, preserving planned free-count credits, features, other state and
+   all bytes outside the SB. Do not replace it with current disk or mount SB
+   bytes. A surviving-link plan with no staged SB must remain SB-free.
+5. Keep marker-once and complete commit/checkpoint/flush/allocation publication
+   under the same context's failure-latching effects. Retain the context across
+   the whole public operation. Leave raw commit, other family boundaries and
+   shared deletion/allocation helpers unchanged; avoid a global raw-commit fix.
+   Test marker and all observed commit failures, effects that change bytes then
+   fail, caught Rust unwinds and post-durability publication poisoning. Later
+   guarded calls and clean close must refuse after uncertain effects.
+6. Preserve existing error priorities explicitly. `check_entry_name` currently
+   rejects empty/slash/NUL names but does not impose the creation helper's
+   255-byte limit; C's earlier `name_arg` ceiling is FFI_PATH_MAX. Do not silently
+   substitute `check_new_entry_name` or assume every overlong unlink name has
+   one established errno. Pin mixed-invalid-input cases first; independently
+   measure any intended Linux semantic correction before changing it.
+
+The intended pre-effect change also means an ordinary planning refusal no longer
+attempts marker I/O; a hypothetical marker-I/O failure is not preserved as an
+earlier error on that refused call. Preserve logical/FFI priorities without
+retaining those early physical side effects.
+
+Moving final-link planning before the marker creates the same stale-clean-SB
+hazard addressed separately for xattrs: the plan may contain a clean SB with
+valid free-count credits, then raw commit could overwrite the dirty marker.
+That is a **future-boundary hazard**, not a reproduced current-public dirty-bit
+regression: current unlink marks first. The private boundary must preserve the
+complete real plan while normalizing only state/checksum.
+
+#### Concrete next red preparation and positive controls
+
+The following are **unexecuted control requirements**. Use the existing native
+`Device`/`Clock` and C `with_test_mount` harness; ensure fixtures reach each
+intended assertion and save full logs/exact test counts through the tier wrapper.
+Do not count a missing fixture, build failure or zero matched tests as a red.
+
+| Control | Required observation before implementation |
+|---|---|
+| Held context through Rust string/byte/parent-inode and both C entries | Unsupported/established C errno before device properties, reads, writes, flush or runtime callbacks; snapshot bytes and control status. |
+| Callback worker and generic Into conversion | Each entry owns the shared context before callbacks; same-mount work promptly refuses in both directions with all six existing families. Invalid counted names precede conversion as before. |
+| Missing/invalid/stale/directory/trailing-slash refusals | Retain the exact current error, but no marker write/flush, disk change, allocation publication or epoch advance on a fresh clean mount; also preserve prior-dirty bytes. |
+| Volume and FFI priorities | Read-only/replay/feature/failure gates precede filesystem lookup; C null/length checks retain their earlier boundary. Pin overlong names, invalid parent generation and the path edge's second verdict without inventing a new errno. |
+| Planning callback unwind caught by C | Trigger a Rust Runtime panic on the final-link deletion-time path; C reports EIO, then the same mount's guarded calls/clean close refuse. Do not unwind a foreign C callback. |
+| Whole-plan SB normalization | Four 1/4 KiB direct/journal constructed clean-SB plans with explicit counter credits: old marker-plus-raw-commit order must expose the clean-bit hazard; credits, features, checksum and outside-SB sentinels must survive. Label these constructed diagnostics, not valid deletions; later adapt only them to the private boundary. |
+| Real positive deletion controls | Separate surviving-link and final-link cases on fresh images, with actual inode/block bitmap/counter changes, same-table parent/target bytes, shared/exclusive attributes, untouched peers, dirty/close/reopen state and Rust/C parity. These remain self-consistency evidence until independently qualified. |
+
+Save an actually executed, reapplied-and-rerun dormant red patch in the existing
+docs area, then reverse it and verify active source is byte-restored. That is the
+next bounded checkpoint; do not implement unlink or migrate other families in
+that preparation. Promote real controls without weaker assertions only after
+the reviewed boundary is ready. Preserve the 1,139-unit/1,974-whole occurrence
+baselines and all 171 existing controls. Measure any actual new log failure
+before changing an existing cap; no cap/floor/filter changes in this audit.
+
+#### Independent Linux and semantic qualification still required
+
+Existing `capi_unlink`, `capi_unlink_errno`, `capi_ino_api`, `capi_link`,
+`extent_block_leaks`, `block_mapped_writes_on_csum`, `shared_xattr_block`,
+`kernel_inline_writes`, `inline_dir_writes_oracle`, `htree_dir_writes_oracle`,
+`non_utf8_names_oracle` and `symlink_path_kernel` cover useful existing behavior.
+Retain them and all current metadata oracles. Their earlier green results do
+not execute the new exclusion/failure/marker contract or qualify a migrated
+family. The existing unlink crash sweep suppresses writes and checks remount;
+its title/comment does not establish complete namespace/allocation equivalence
+or a new power-loss recovery guarantee. Do not weaken it or treat it as a
+replacement for independent recovery qualification.
+
+Before family closure, add explicit independently built 1/4 KiB,
+legacy128/checksummed256, direct/journal, Rust/C path and counted-name coverage,
+including surviving/final hard links, inline/block parents, data/extent-node/
+indirect storage, zero-size preallocation, symlinks and shared/exclusive external
+attributes. Prove each selected shape actually exists in the input; do not
+silently substitute a smaller layout. Save before/dirty/closed images, parent
+namespace and inode identity, target/peer data and attributes, link/generation/
+sector/deletion-time reports, actual allocation bits/refcounts/counter deltas
+and applicable checksums. Require judged non-repairing e2fsck and cold Linux
+readback, not only a successful tool exit or this driver's reopen.
+Close reference file handles before recording final-deletion/free observations;
+open-file orphan/lifetime semantics remain a separate qualification obligation.
+
+**Timestamp policy is an open semantic prerequisite.** The current surviving-link
+branch changes links/checksum without explicitly stamping target ctime; parent
+entry removal does not explicitly stamp parent mtime/ctime. The final-link branch
+records dtime after zeroing the inode. These are source observations, not newly
+measured Linux answers. Existing namespace/readback tests do not establish that
+policy. Independently record Linux surviving-link target/parent timestamp changes
+and final-deletion observations with distinct advancing times before asserting
+equivalence or silently preserving/fixing them. Promote any demonstrated mismatch
+as a separate actual red-to-green semantic repair; fixed clocks cannot prove it.
+
+Keep caller exclusion for unguarded operations/raw handles/maintenance/C lifetimes
+and all mixed-layout, ignored-fuzz, insertion-alias, ownership/mapping/lifecycle/
+seal/admission/index-growth/recovery gates. Casefold writes stay blocked. No local
+VM, host oracle/mount, forbidden implementation source or Windows/SteamOS/card
+test was used. Stages 4–5 remain not yet quantified.
+
 ### Public setter family review closure — 2026-10-20
 
 **Decision: the standalone public setxattr migration, its same-value repair and
