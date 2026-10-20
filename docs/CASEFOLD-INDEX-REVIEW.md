@@ -69,6 +69,33 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Complete retention and measured native-budget repair — 2026-10-20
+
+Exact `4079f36` full run
+[39458801198](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39458801198)
+has completed. SHA-256-verified native/guest archives each retain every one of
+the preceding 1,972 successful occurrences and add only the two refusal-order
+controls: **1,974 passed, zero failed, one unchanged ignored slow fuzz test**.
+All 171 controls execute once in five contexts, with 1,139 passes in each of
+the three unit contexts. Focused Linux and actual saved-image evidence at this
+unchanged implementation source already pass as recorded below.
+
+The native job fails solely at the whole-suite byte budget: the actual log is
+3,374 lines / 186,123 bytes against 3,700 / 186,000. Replaying that complete log
+through the actual tier wrapper reproduces exit 65. The native-only measured
+repair raises the byte cap to 189,000; the same log passes byte-identically and
+the unchanged 1,060 floor counts all 1,974 tests. Its 2,523-byte growth since
+the earlier 183,600-byte source justifies restoring a similar output cushion.
+Guest output is 3,543 / 195,557 within unchanged limits. No code, test, filter,
+floor or line cap changes.
+
+The replay is not fresh Linux execution. Native script/CLI checks following
+the failed tier did not run in that job, so successful repair-source full CI
+and its exact artifacts still gate standalone setter-family closure. Scoped
+implementation review found no further blocker under caller exclusion; all
+broader ownership, lifecycle, layout and write-qualification limits remain.
+Casefold writes stay blocked.
+
 ### Current-source focused metadata follow-up — 2026-10-20
 
 Exact refusal-order implementation `4079f36` now passes both jobs in focused
