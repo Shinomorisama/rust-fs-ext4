@@ -69,6 +69,115 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public rmdir staging, marker and dispatch design audit — 2026-10-21
+
+Audited clean fetched `661ba754839d872e86f680e8cf84a59ddda9bdc7` after scoped
+unlink closure below. Exact full run `39547402531` passes every job and `ci-ok`;
+both whole suites retain 2,033 passes, all three unit contexts retain 1,196,
+and all 228 controls occur once in five contexts. This is a source/design audit
+only: no rmdir guard, new native red, fault injection, Linux policy measurement
+or emitted-image qualification is implemented or executed here.
+
+#### Existing entries and one owned deletion plan
+
+| Entry or phase | Observed behavior to retain |
+|---|---|
+| Rust string/byte path | `apply_rmdir` delegates to `apply_rmdir_bytes`; marker-writing `refuse_write` precedes `resolve_parent`. The split trims trailing slashes, rejects empty/root/relative paths as currently implemented, follows parent/intermediate symlinks, and looks up the final entry itself. Do not substitute unlink's special trailing-slash branch. |
+| Parent-inode form | `apply_rmdir_at` calls `refuse_write`, checks empty/slash/NUL names, refuses `.` with InvalidArgument and `..` with DirectoryNotEmpty, then invokes caller `Into<InodeRef>`, checks the live parent/generation, retains the matched entry and reads the live target. A non-directory target is NotADirectory. |
+| Nested public edge | The path entry calls public `apply_rmdir_at`, repeating the write verdict. Two independently acquired nonblocking guards would recurse. Retain the second pure verdict in a private context-taking helper. |
+| C forms | `fs_ext4_rmdir` and `fs_ext4_rmdir_at` keep existing null/path-length/counted-pointer validation, `ffi_guard`, success error clearing, byte names and symbolic errno mapping. `ino_call`, `inode_ref` and `name_arg` preserve generation and FFI argument priorities. C memory/handle lifetimes remain the caller's responsibility. |
+| Empty target | Inline targets use `refuse_nonempty_inline_dir`; block targets scan every size-covered logical block through the existing map, skip holes, retain role-dependent checksum checks and reject entries other than dot names. This is the existing algorithm, not full corrupt-directory/index admission. |
+| Storage and attributes | Extent release collects all data plus external tree nodes, including beyond-size extents, and verifies external-node checksums. Legacy release includes data/indirect blocks and excludes inline payloads via `holds_block_map`. Checked exclusive attributes are freed; shared attributes lose one reference/checksum while the peer stays allocated. |
+| Allocation accounting | One `BlockBuffer` stages block/inode bitmaps, BGD free-block/free-inode credits, a separate target-group used-directory decrement, and accumulated primary-SB block/inode credits/checksum. Preserve group-split accounting. |
+| Target and parent | Zero the target body while retaining generation and recording dtime/checksum. Remove only stored spelling with expected-inode recheck; a vanished entry maps to the existing Corrupt error. Read the parent through the current buffer before decrementing links, preserving inline edits and same-inode-table-block splices. Keep DIR_NLINK's unknown-count value of one. |
+| Durable boundary | There is one terminal `commit_block_buffer`. It includes journal commit/checkpoint or direct flushes, then allocation-view publication. Marker and that complete boundary currently lack the shared family context. |
+
+Source inspected includes `src/fs.rs` public rmdir entries, resolution, inline
+emptiness/entry removal, storage release, inode/BGD/SB staging and commit;
+`src/fs/guarded_chmod.rs` context/identity/effect/unlink boundary; both C entries
+and their argument helpers. Existing read/checksum refusals and logical ordering
+must survive. These helpers do not establish complete role/ownership, alias,
+mapping-shape, retained-handle or concurrent-lifecycle safety.
+
+#### Reviewed migration contract
+
+1. Acquire the same mount-bound nonblocking context used by the seven guarded
+   metadata/unlink families before filesystem/device/runtime callbacks or
+   generic parent conversion. Keep contention/reentry an untouched refusal and
+   prior failure/poison sticky. Preserve earlier C foreign-memory validation.
+2. Replace early marker-writing calls with pure write verdicts. Share one
+   private context through path resolution and parent-inode planning; retain
+   both verdicts on the ordinary path. Preserve name and dot/dotdot before
+   conversion, parent liveness/generation before lookup, final symlink/type and
+   trailing-slash behavior. Do not silently impose the creation or repaired
+   unlink name-length rule on rmdir.
+3. Extract the existing deletion into one private owned-buffer planner: no
+   marker, device write, flush, commit or publication until it succeeds. Keep
+   all existing empty checks, matched identity, storage/attribute reclamation,
+   used-directory accounting, freed-inode state, parent nlink and buffered
+   splicing. Logical Err drops staging; read-cache effects are not promised
+   invisible. Rust planning unwind conservatively retires the mount.
+4. Add a rmdir-specific whole-buffer boundary. Check context identity first;
+   validate the staged primary-SB full-block shape/magic and normalize only its
+   clean bit/checksum while retaining planned counters, other state and bytes
+   outside the SB. Real rmdir plans carry the SB credits even for inline targets.
+   Do not overwrite them from a stale mount/disk snapshot. This is a trusted
+   planner boundary, not admission of arbitrary buffers. Preserve the qualified
+   unlink boundary and raw commit rather than silently generalizing them.
+5. Hold the same context through marker-once and complete failure-latching
+   commit/checkpoint/flush/publication effects. Returned failures, writes that
+   change bytes then fail, Rust unwinds and post-durability publication poisoning
+   must retire all guarded families and clean close. No C callback is assumed
+   safe to unwind across its ABI. Other unguarded writers still require caller
+   exclusion and remain outside this migration.
+
+Moving the marker after planning creates a *future* staged-clean-SB ordering
+hazard because rmdir credits the primary SB. The current public code marks
+before building that buffer. Constructed clean-SB tests therefore must be labeled
+future-boundary diagnostics, not an existing public clean-bit regression.
+
+#### Executable controls and independent evidence required next
+
+Prepare native red/positive controls first using the existing Device/Clock/C
+harness. Cover all five Rust/C forms under a held shared context; prompt worker
+reentry from writability/read/runtime callbacks; Into ordering/panic; clean and
+prior-dirty missing, stale, file/symlink, nonempty, dot/dotdot and invalid-name
+refusals; second-verdict writability changes; existing volume and C argument/
+errno priorities. Positive cases must perform real empty-directory removal with
+ordinary/inline parent/target shapes where the fixture asserts them, literal and
+DIR_NLINK parent counts, exclusive/shared attributes and 1/4 KiB direct/journal
+layouts. Check parent/target/peer bytes, namespace, data/attributes, inode/block
+bitmaps, SB/BGD/statvfs and used-directory counters, checksums and dirty/close/
+reopen state. Include full observed write/flush failure sweeps, Rust planning/
+effect/publication unwinds, foreign contexts and malformed staged-SB diagnostics.
+An unsupported fixture/build/zero-match result is not an executed red.
+
+The source updates parent nlink/checksum but has no explicit parent mtime/ctime
+stamp; it stamps final dtime. Ordinary overlong counted names have no explicit
+255-byte check here. These are observations, not newly measured Linux answers.
+Before semantic correction, obtain independent reference-only Linux results
+with distinct advancing clocks and closed reference directory handles: successful
+empty removal, refusal timestamps, 255/256-byte names and mixed path/dot/type
+priorities. Preserve existing symbolic C errno values rather than copying raw
+Linux integers. Execute any resulting policy red before its repair.
+
+After migration, require asserted Linux-created input shapes and saved input,
+dirty and normally closed Rust/C images. Independently verify namespace,
+parent links/times, complete block/inode/used-directory reclamation, shared-peer
+preservation and checksums with judged e2fsck plus cold kernel readback. An empty
+directory grown and emptied on Linux retains a distinct multi-block/index shape;
+only claim shapes actually asserted and exercised. Existing C errno/liveness,
+non-UTF8, parent-symlink, inline, block-mapped/checksummed, DIR_NLINK and journal
+tests remain baseline. Existing crash tests' remount/root-link checks are not
+new complete recovery qualification.
+
+**Next bounded task:** execute and save a dormant native rmdir red/positive
+patch, reapply/rerun it byte-identically, then reverse and verify active source
+restoration plus baseline retention. Do not implement a guard or semantic repair
+in that preparation. Independent policy/emission and standalone family review
+remain later prerequisites. Stages 4–5 are not yet quantified; casefold writes,
+ownership/mapping/lifecycle/seal/index-growth/recovery and Windows/card gates stay.
+
 ### Standalone public unlink source/evidence review — 2026-10-20
 
 Reviewed at clean fetched `3998daaaf18e74efaec9ac6cfcbc17a5b9951a37`; driver,
@@ -176,7 +285,23 @@ or establish fresh full-CI success; source/test/workflow/pin/sibling/write gates
 remain unchanged. Both-limit repair-source full CI and trailing native checks
 are still required before scoped closure.
 
-**Remaining before closure:** inspect repair-source full-suite logs and
+**Completed scoped closure — 2026-10-21:** repair-source `661ba75` passes every
+job and `ci-ok` in exact full run `39547402531`. Actual SHA-256-verified archives
+retain all 1,975 preceding successful occurrences plus 58 additions in both
+whole suites (2,033 passed, zero failed, one unchanged ignored fuzz case).
+All 228 controls occur once in five CI contexts, and three unit contexts retain
+all 1,196 names; aarch64 retains all 527 image tests. Native trailing checks pass
+all twenty shell checks and 159 CLI checks. Actual native output is 3,433 lines /
+192,301 bytes within 3,700 / 195,000; guest is 3,603 / 201,982 within 3,900 /
+203,000. All commands/floors/filters/full output are retained. Driver/test/focused
+workflow bytes match independently verified `cd15806` evidence. Combined with
+the completed source and focused-image reviews above, no further blocker is
+found within the documented caller-exclusion, closed-reference-handle and
+healthy-layout contract. The scoped unlink review is complete. Broader fuzz,
+corruption/alias/ownership/mapping/lifecycle/recovery gates and casefold write
+refusal remain. The next operation is the rmdir design audit recorded above.
+
+**Closure requirements, satisfied by the completed-result addendum:** inspect repair-source full-suite logs and
 baseline-name multisets (including all 228 controls in five CI contexts), repair
 actual failures and complete required trailing native checks. Do not infer green CI from completed
 unit/emission jobs while other jobs are running. Do not raise output caps before
