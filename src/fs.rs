@@ -527,8 +527,8 @@ pub(crate) enum DirBlockRole {
 }
 
 pub struct Filesystem {
-    /// Used only by the private chmod family; legacy access needs exclusion
-    /// supplied by the caller. No ownership readiness is published here.
+    /// Shared by guarded metadata, unlink and rmdir dispatch. Other writers
+    /// still need caller exclusion; this publishes no ownership readiness.
     operation: crate::operation::Control,
     /// Sticky across refresh/control replacement, including early marker faults.
     operation_failed: std::sync::atomic::AtomicBool,
@@ -8792,35 +8792,33 @@ impl Filesystem {
 
     /// Remove an empty directory at `path`. Requires the target to contain
     /// only `.` and `..`. Frees the data block(s) + inode, removes the
-    /// entry from the parent, decrements parent's `i_links_count`.
+    /// entry from the parent, decrements parent's `i_links_count`, and updates
+    /// its modification/change times under the shared operation guard.
     pub fn apply_rmdir(&self, path: &str) -> Result<()> {
         self.apply_rmdir_bytes(path.as_bytes())
     }
 
     /// [`apply_rmdir`](Self::apply_rmdir) of a path given as bytes, never decoded.
     pub(crate) fn apply_rmdir_bytes(&self, path: &[u8]) -> Result<()> {
-        self.refuse_write()?;
-        let (parent, name) = self.resolve_parent(path)?;
-        self.apply_rmdir_at(parent, name)
+        self.guarded_rmdir_bytes(path)
     }
 
     /// [`apply_rmdir`](Self::apply_rmdir) of entry `name` in directory
     /// `dir`. `.` is refused with `Error::InvalidArgument` and `..` with
     /// `Error::DirectoryNotEmpty`, as rmdir(2) does.
     pub fn apply_rmdir_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<()> {
-        self.refuse_write()?;
-        check_entry_name(name)?;
-        // `.` is the directory itself: removing it freed the directory
-        // while its parent's entry still pointed at it.
-        if name == b"." {
-            return Err(Error::InvalidArgument("rmdir: cannot remove ."));
-        }
-        if name == b".." {
-            return Err(Error::DirectoryNotEmpty);
-        }
-        let dir = dir.into();
+        self.guarded_rmdir_from(dir, name)
+    }
+
+    /// Reads and owned staging only; public dispatch owns the guard/effects.
+    fn plan_rmdir_at(&self, dir: InodeRef, name: &[u8]) -> Result<BlockBuffer> {
         let parent_ino = dir.ino;
         let (parent_inode, _) = self.live_dir(dir)?;
+        // The independent rmdir_policy oracle establishes the 255-byte limit.
+        // Keep invalid names/dots/conversion and live-parent priorities above it.
+        if name.len() > 255 {
+            return Err(Error::NameTooLong);
+        }
         let target = self.find_dir_entry(parent_ino, &parent_inode, name)?;
         let target_ino = target.inode;
         let (target_inode, target_raw) = self.live_inode(target_ino.into())?;
@@ -8914,9 +8912,13 @@ impl Filesystem {
         // staged in its inode.
         let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
         self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_now, -1)?;
+        let now = self.runtime.now_unix_seconds();
+        set_inode_time(&mut parent_raw, InodeTime::Mtime, now);
+        set_inode_time(&mut parent_raw, InodeTime::Ctime, now);
+        self.finalize_inode_raw(parent_ino, parent_now.generation, &mut parent_raw)?;
         self.buffer_write_inode(&mut buf, parent_ino, &parent_raw)?;
 
-        self.commit_block_buffer(buf)
+        Ok(buf)
     }
 }
 

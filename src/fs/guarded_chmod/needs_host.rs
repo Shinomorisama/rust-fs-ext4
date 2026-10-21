@@ -2,6 +2,7 @@
 mod chown;
 mod flags;
 mod removexattr;
+mod rmdir;
 mod rmdir_policy;
 mod setxattr;
 mod setxattr_policy;

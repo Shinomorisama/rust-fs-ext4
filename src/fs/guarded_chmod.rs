@@ -1,4 +1,4 @@
-//! Shared metadata/unlink dispatch; other families need caller serialization.
+//! Shared metadata/unlink/rmdir dispatch; other writers need caller exclusion.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +45,91 @@ impl Drop for MountOperation<'_> {
 }
 
 impl Filesystem {
+    pub(super) fn guarded_rmdir_bytes(&self, path: &[u8]) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.rmdir_bytes_in(&mut context, path)
+    }
+
+    pub(super) fn guarded_rmdir_from(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.rmdir_from_in(&mut context, dir, name)
+    }
+
+    fn rmdir_bytes_in(&self, context: &mut MountOperation<'_>, path: &[u8]) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        let (parent, name) = self.resolve_parent(path)?;
+        self.rmdir_path_in(context, parent, name)
+    }
+
+    fn rmdir_path_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        parent: u32,
+        name: &[u8],
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        // Preserve the nested volume verdict before resolved-parent policy.
+        self.write_refusal()?;
+        self.live_dir(parent.into())?;
+        check_rmdir_name(name)?;
+        let buf = self.plan_rmdir_at(parent.into(), name)?;
+        self.commit_rmdir_in(context, buf)
+    }
+
+    fn rmdir_from_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?; // Verdict before names and arbitrary conversion.
+        check_rmdir_name(name)?;
+        let buf = self.plan_rmdir_at(dir.into(), name)?;
+        self.commit_rmdir_in(context, buf)
+    }
+
+    /// Rmdir-only trusted-plan boundary; preserve every staged credit and byte.
+    fn commit_rmdir_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        mut buf: BlockBuffer,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.prepare_rmdir_buffer(&mut buf)?;
+        if !self.marked_not_clean.load(Ordering::SeqCst) {
+            context.effect(|| self.mark_not_clean_once())?;
+        }
+        // Includes journal checkpoint/direct flush and allocation publication.
+        context.effect(|| self.commit_block_buffer(buf))
+    }
+
+    fn prepare_rmdir_buffer(&self, buf: &mut BlockBuffer) -> Result<()> {
+        let bs = u64::from(self.sb.block_size());
+        let offset = crate::superblock::SUPERBLOCK_OFFSET;
+        // Even inline rmdir releases an inode and must carry primary SB credits.
+        let block = buf
+            .dirty
+            .get_mut(&(offset / bs))
+            .ok_or(Error::Corrupt("rmdir prepared superblock missing"))?;
+        let start = (offset % bs) as usize;
+        if block.len() != bs as usize || start + 1024 > block.len() {
+            return Err(Error::Corrupt("rmdir prepared superblock shape"));
+        }
+        let sb = &mut block[start..start + 1024];
+        if u16::from_le_bytes(sb[0x38..0x3a].try_into().unwrap()) != crate::superblock::EXT4_MAGIC {
+            return Err(Error::Corrupt("rmdir prepared superblock magic"));
+        }
+        let state = u16::from_le_bytes(sb[0x3a..0x3c].try_into().unwrap());
+        sb[0x3a..0x3c].copy_from_slice(&(state & !crate::superblock::EXT4_VALID_FS).to_le_bytes());
+        if self.csum.enabled {
+            let checksum = crate::checksum::linux_crc32c(!0, &sb[..0x3fc]);
+            sb[0x3fc..].copy_from_slice(&checksum.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub(super) fn guarded_unlink_bytes(&self, path: &[u8]) -> Result<()> {
         let mut context = self.chmod_operation()?;
         self.unlink_bytes_in(&mut context, path)
@@ -441,6 +526,19 @@ impl Filesystem {
         };
         self.commit_metadata_in(context, r.ino, &raw)
     }
+}
+
+// Counted dot/name refusals precede arbitrary parent conversion. Path dispatch
+// separately verifies its resolved parent after the second volume verdict.
+fn check_rmdir_name(name: &[u8]) -> Result<()> {
+    check_entry_name(name)?;
+    if name == b"." {
+        return Err(Error::InvalidArgument("rmdir: cannot remove ."));
+    }
+    if name == b".." {
+        return Err(Error::DirectoryNotEmpty);
+    }
+    Ok(())
 }
 
 fn check_times(times: [(i64, u32); 2]) -> Result<()> {
@@ -938,9 +1036,11 @@ mod tests {
 
     mod chown_calls;
     mod flags_calls;
+    mod policy_rmdir_calls;
     mod policy_unlink_calls;
     mod public_calls;
     mod removexattr_calls;
+    mod rmdir_calls;
     mod setxattr_calls;
     mod unlink_calls;
     mod utimens_calls;

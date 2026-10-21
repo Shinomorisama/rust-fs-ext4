@@ -88,6 +88,18 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     unit      1,530 / 111,458    1,560 / 115,500   Guarded-rmdir local run,
+#                                                    2026-10-21, retained in
+#                                                    tmp/casefold-rmdir-repair/
+#                                                    unit-over-budget.log:
+#                                                    1,282 passed, zero failed/
+#                                                    ignored; all 1,196 prior
+#                                                    names plus 86 controls.
+#                                                    Actual exit 65 at old
+#                                                    1,460 / 106,500; identical
+#                                                    replay fails old/passes new.
+#                                                    Keep test selection/floor.
+#   Historical unit measurement and then-current budget:
 #     unit      1,370 /  96,210    1,400 / 100,000   Guarded-setter local run,
 #                                                    2026-10-19, retained in
 #                                                    tmp/guarded-setxattr/
@@ -505,7 +517,7 @@ tasks:
     # previous 1,400 / 100,000 limits fail with exit 65. Retain the full log,
     # command, selection and floor, with measured growth and similar headroom.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1460 106500 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1560 115500 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

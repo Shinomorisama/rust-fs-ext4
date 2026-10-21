@@ -69,6 +69,55 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Guarded public rmdir implementation, native evidence — 2026-10-21
+
+At fetched `482bbef`, the prescribed baseline retains all 1,196 names and its
+preceding exact CI now passes. Both unmodified dormant rmdir audits are rerun
+before repair (82 names, 15 pass / 67 fail, zero ignored, exit 101). Existing
+public boundaries and independent-policy reds are addressed by one shared
+mount context, private nested dispatch/two pure volume verdicts, owned deletion
+planning and a rmdir-only marker/whole-commit boundary. Context identity precedes
+callbacks. Required staged-SB shape/magic is checked and only clean state/CRC is
+normalized; planned counters, other state and outside-SB bytes remain intact.
+The existing empty/reclamation/attribute/matched-entry/group/parent-link staging
+is retained. Measured parent mtime/ctime and ordinary long-name errors are added.
+Path parent/dot ordering is corrected while preserving counted validation and
+conversion/generation/volume/FFI priorities. Other unguarded writers retain caller
+exclusion; no shared ownership readiness or generic sealed-plan admission.
+
+All **86 native controls pass**: the original 82 are promoted, four constructed
+credit tests now use the actual private boundary, and four new controls cover
+foreign/malformed plans, retained-context returned errors/publication unwind and
+second-verdict precedence. The last ordering edge was actually reproduced red
+before correction; details and harness corrections are in the
+[checkpoint ledger](extprogress.md#guarded-public-rmdir-implementation--2026-10-21).
+All 340 original write/error/unwind injections execute with zero retirement
+violations; all eight guarded families, flush and clean close retire. The normal
+native run retains all 1,196 names and adds exactly 86 (1,282 passes, zero failed/
+ignored, all 314 controls once). Full lint passes. Both rmdir patches retain
+historical bytes and **must not be reapplied onto promoted source**.
+
+Actual complete unit output (1,530 lines / 111,458 bytes) exceeds 1,460 / 106,500;
+the real wrapper and identical-log replay return 65. Same-byte replay passes the
+unit-only 1,560 / 115,500 repair with floor 440 and all output retained. Budget
+shell and 87 CI-profile controls pass. Whole caps/filters/floors/pins/siblings and
+write gates are unchanged. Final actual `chore test:unit` with the repaired
+wrapper passes normally (1,529 lines / 111,398 bytes), retaining every occurrence
+and all 314 controls with floor 440 passed. The new Rust/C emission test and Python syntax compile/parse locally;
+no independent emission result is claimed before actual VM evidence.
+
+The separate focused emission job plans 16 asserted ordinary block-directory
+layouts, 48 closed-target removals and 112 saved input/dirty/closed images. It
+checks per-group release, exclusive/shared attributes/peer preservation, parent
+links/times, refusal bytes and real 255-byte success. Judged e2fsck, cold kernel
+readback/statvfs and debugfs remain required. This is not Linux inline/indexed/
+grown-empty or open-target qualification. **Next:** inspect exact focused/full
+CI, verify archive digests and audit saved bytes plus retained matrices/complete
+occurrence retention; repair actual failures, then do standalone rmdir family
+review before closure. Stages 4–5 remain not yet quantified and casefold writes
+remain blocked; broader ownership/mapping/lifecycle/recovery and Windows/card
+gates stay open. No scoped rmdir closure is claimed by this implementation step.
+
 ### Native measured rmdir policy reds executed — 2026-10-21
 
 At fetched `e5eab76`, the new dormant `CASEFOLD-RMDIR-POLICY-RED.patch` adds
