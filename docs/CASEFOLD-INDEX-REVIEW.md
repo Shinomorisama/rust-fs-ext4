@@ -69,20 +69,40 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
-### Reference-only Linux unlink policy preparation — 2026-10-20
+### Executed reference-only Linux unlink policy — 2026-10-20
 
-The next independent oracle is now implemented, with execution pending. It
-records parent/surviving-hard-link timestamp and counted-name observations on
-eight coherent legacy/checksummed 1/4 KiB direct/journal profiles. All mutation
-uses the Linux VM, all regular-file descriptors close before final deletion,
-and each timestamp-sensitive unlink crosses a full second. Three phase images,
-JSON observations, debugfs parent/target reports and judged e2fsck checks preserve
-the evidence. Driver inspection opens the images read-only; no driver-emitted
-unlink or guard implementation is included. The focused job has a floor of one
-and retains its own archive. See `extprogress.md` for execution results; do not
-credit the proposed assertions as independent observations before CI passes.
-The dormant 28-control patch remains unchanged and unenabled. Production unlink,
-existing caps/floors/filters and all casefold write gates remain unchanged.
+Source `30c15f4` passes the new reference job in [focused run
+39534096165](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39534096165):
+**one passed / zero failed / zero ignored**, covering eight coherent legacy/
+checksummed 1/4 KiB direct/journal profiles. The complete 213-line / 17,242-byte
+log passes its ceiling and floor. The actual SHA-256-verified archive retains
+24 phase images, JSON and independent debugfs parent/target reports; all 24
+phases pass judged non-repairing e2fsck checks. All image mutation is in Linux;
+driver shape inspection uses a strictly read-only device. All regular-file
+handles close before final deletion, and timestamp-sensitive removals cross a
+full second even for legacy inodes.
+
+Saved raw bytes and reports confirm parent mtime/ctime updates on both removals,
+surviving hard-link ctime updates with unchanged atime/mtime/data/attributes,
+2→1 identity/generation preservation, non-final free-count preservation and final
+reclamation of the inode and every target data/map/exclusive-attribute block.
+Checksums, payload mappings, bitmaps, SB/BGD/statvfs counts and all 24 image states
+are audited. All eight 255-byte names succeed; all 40 error observations agree
+(256-byte ENAMETOOLONG, missing/empty ENOENT, directory EISDIR, trailing-regular
+slash ENOTDIR) without changing parent/target snapshots. The saved native
+ordinary-block 256-byte ENOENT control differs from this independent observation.
+Separate counted-entry slash/NUL/empty validation priorities remain their own
+API contract, not a reason to substitute arbitrary path semantics.
+
+Native baseline/post-change multisets each retain 1,139 passes and all 171
+controls; full lint passes. Full CI `39534096164` and the main focused fixture
+job remain pending at this checkpoint; the separate policy/symlink job passes
+without a fresh saved-byte audit here. Inspect their results, then prepare and actually
+execute advancing-clock native policy reds before semantic/guard changes.
+The dormant 28-control patch remains unchanged and unenabled. No driver-emitted
+unlink qualification or family closure is claimed; production code, existing
+caps/floors/filters and casefold write gates remain unchanged. Detailed provenance,
+measured results, evidence paths and the next bounded task are in `extprogress.md`.
 
 ### Executed dormant unlink red preparation — 2026-10-20
 
