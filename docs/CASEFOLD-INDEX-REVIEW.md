@@ -69,6 +69,93 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Standalone public unlink source/evidence review — 2026-10-20
+
+Reviewed at clean fetched `3998daaaf18e74efaec9ac6cfcbc17a5b9951a37`; driver,
+test and workflow bytes match independently executed implementation source
+`cd15806199a698e3e1a78f6bfdee58a62802f36a`. Runtime policy is current/enforced;
+Git/API and actual artifact downloads work without environment changes.
+
+**Source-review finding:** no additional blocker found within the existing
+caller-exclusion, closed-reference-handle and healthy-layout contract. This is
+not final family closure: exact full-CI retention and remaining focused evidence
+are still required until the completed-result addendum below records them.
+
+The walk inspected `src/fs.rs` public entries/planner, retained entry removal,
+current buffered inode splicing, extent/indirect storage and external-attribute
+release, bitmaps/BGD/SB counters, raw commit/checkpoint/allocation publication,
+and failure/close gates; `src/fs/guarded_chmod.rs` context entry/check/drop and
+unlink boundary; `src/operation.rs` exclusion/effect invalidation; both C ABI
+entries and their argument/error boundary; the 57 native controls and Linux
+reference/emission oracles. It establishes:
+
+- All five public Rust/C forms share one nonblocking mount context. Identity,
+  prior mount failure and contention precede device/runtime callbacks or generic
+  parent conversion. Path dispatch reuses the context, retaining both pure write
+  verdicts and its existing parent/trailing-slash logic rather than recursively
+  entering a public helper. Logical planning refusals drop only local staging.
+- Counted empty/slash/NUL validation precedes generic conversion; parent liveness
+  and generation precede the new ordinary-component length verdict. Mixed
+  invalid-name/stale-parent/read-only ordering remains covered. C foreign-memory
+  argument validation and the existing symbolic errno mapping remain unchanged.
+  The deliberately historical ENOENT observation was never an active baseline
+  contract; its replacement is supported by independent Linux measurements and
+  executed advancing-clock reds, not by silently weakening a passing baseline.
+- Entry planning retains stored spelling and expected inode identity. Parent
+  timestamps update the current buffered parent after removal, preserving inline
+  edits; each inode splice retains other inodes in the same table block. The
+  surviving-link branch updates ctime/link count without freeing storage or
+  changing atime/mtime. Final deletion retains the existing storage and
+  attribute-release helpers, generation/dtime, bitmap/checksum and credit rules.
+- The unlink-specific boundary checks owned primary-SB full shape and magic,
+  clears only VALID_FS and restamps its checksum, preserving planned credits, other
+  state and bytes outside the SB. An SB-free surviving plan stays SB-free. This
+  is a trusted planner boundary, not arbitrary buffer admission or a plan seal.
+- Marker-once and the complete raw commit/checkpoint/flush/allocation publication
+  are inside failure-latching effects while the same context remains held.
+  Returned failures and Rust planning/effect/publication unwinds retire later
+  writes and clean close, including a caught unwind with a retained context.
+  No foreign C callback is assumed safe to unwind across its ABI boundary.
+
+All 57 new controls passed and the 1,139-name local baseline is retained. The
+verified exact-source standalone and aarch64 CI unit artifacts each retain all
+1,196 occurrences and all 228 controls; aarch64 also retains every one of 527
+image-tier occurrences. The measured unit-budget repair passes with intact
+commands/filters/floor/output. The source/evidence review rechecks provenance of
+the existing SHA-256-matching emission archive and its 16-profile/80-image audit,
+including 80 judged e2fsck checks and 48 cold kernel mount/readbacks. Healthy
+exclusive/shared attributes, surviving/final links, distinct clocks, legacy/
+checksummed 1/4 KiB and direct/journal combinations are represented. Native tests
+add refusal/callback/failure/retained-context controls; their constructed SB
+credits are still ordering diagnostics, not independent deletion qualification.
+
+Limits remain explicit: the new matrix uses ordinary block parents, small inline
+extent roots or direct/single-indirect maps and closed reference file handles.
+It does not qualify arbitrary corruption/aliases, open-file deletion ownership,
+all timestamp encodings or every mixed trailing-slash/overlong path. The change
+preserves existing unsupported-case and logical error behavior outside the
+measured correction. Caller-owned C handle/inode/session lifetimes, unguarded
+families, complete ownership/mapping/lifecycle/seal/admission, deeper index
+writes and interrupted-write recovery remain separate gates. No casefold writes
+or Windows/SteamOS/card qualification is enabled by this review.
+
+**Completed focused evidence follow-up:** exact run `39542365213` now passes
+every job. Actual SHA-256-verified main saved bytes pass all 15 exact test logs,
+16 setter layouts, eight fresh first-attribute cases and 84 retained metadata
+profiles. The separate verified policy archive retains all 32 ordinary answers,
+16 byte-identical Rust/C emissions and four diagnostic duplicates; the five
+symlink tests and saved images also pass. These actual retained-family audits
+are distinct from the preceding verified 16-profile/80-image unlink audit.
+
+**Remaining before closure:** inspect exact completed full-suite logs and
+baseline-name multisets (including all 228 controls in five CI contexts), repair
+actual failures and complete required trailing native checks. Do not infer green CI from completed
+unit/emission jobs while other jobs are running. Do not raise output caps before
+an actual measured failure. The existing ignored slow fuzz case remains a broader
+qualification gate. The next operation after a completed unlink review is a
+bounded public-rmdir staging/marker/dispatch design audit, before new red tests
+or another guard migration.
+
 ### Guarded public unlink implementation — 2026-10-20
 
 At fetched `223adb3`, the saved 50-test red is reproduced before implementation;
