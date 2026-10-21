@@ -69,6 +69,105 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed dormant unlink red preparation — 2026-10-20
+
+At clean fetched `7ef3929cba92a6f11d610ed6c622953448955368`, the unchanged
+native baseline passes 1,139 tests. The reviewed unlink controls are now actually
+executed and saved in [CASEFOLD-UNLINK-RED.patch](CASEFOLD-UNLINK-RED.patch).
+The patch was reversed, checked, reapplied byte-identically, actually rerun and
+reversed again. Both final runs execute the same **28 names: five passed /
+23 failed / zero ignored**, exit 101. Each complete log measures **281 lines /
+20,608 bytes**, inside an isolated 900-line / 70,000-byte audit ceiling. No
+existing tier cap, floor or filter changes. Active production/test source is
+byte-restored; the patch is dormant, not a guard implementation. After final
+restoration, all 1,139 unit occurrences and 171 existing controls pass with no
+additions/losses or failed/ignored tests (1,387 lines / 96,842 bytes).
+
+The 23 failures reach the intended assertions:
+
+- **Five public entries** (Rust string/byte/parent-inode and C path/parent-inode)
+  bypass a held shared context and reach device effects instead of the proposed
+  prompt pre-callback refusal.
+- **Ten clean-mount refusals** retain their expected logical errors but each
+  writes and flushes the dirty marker once: Rust/C missing paths, invalid counted
+  names, stale parent generation, directory targets and trailing slashes on a
+  regular file. The desired pre-effect behavior is red, not their errno checks.
+- **Two callback controls** observe missing worker exclusion in both directions:
+  generic parent conversion allows all six existing metadata workers to avoid
+  Unsupported; callbacks in each of those families allow a non-final unlink
+  worker to avoid it. Every family actually reaches its callback. The worker
+  target has another hard link, avoiding recursive deletion-time callbacks.
+- **One second-verdict control** actually revokes device writability at the
+  path-to-parent edge's second query. ReadOnly propagates after exactly two
+  queries, but one marker write/flush has already occurred. Preserve that pure
+  policy check while removing the early effects.
+- **One caught planning unwind** triggers a Rust Runtime panic at final-link
+  deletion-time planning. C reports EIO, but `operation_failed` stays false.
+  No foreign C callback unwinds; subsequent retirement/close assertions are
+  requirements for the later repair.
+- **Four constructed SB-order controls**, at 1/4 KiB with direct/journal commit,
+  preserve synthetic free-block/inode credits, other state, applicable checksum
+  and outside-SB sentinels, but marker-plus-raw-commit restores VALID_FS. The
+  context records two effects and the marker is owed. These remain diagnostics
+  for the future unlink boundary, **not valid deletions or a current public
+  clean-bit regression**; current public unlink marks before planning.
+
+Five passing controls retain useful baseline behavior:
+
+1. Real surviving/final hard-link deletion in sixteen size/journal/interface/
+   shared-attribute combinations, **32 successful unlink calls**. Native checks
+   cover namespace/inode liveness, target and peer data, inode/block bitmap bits,
+   SB/BGD free counts and unchanged used-directory count, link counts, shared
+   references/checksums/values, peer raw inode bytes, freed generation/dtime,
+   dirty/closed state and reopen. C success clears an explicitly seeded errno.
+2. Ten prior-dirty refusal combinations retain their logical errors, complete
+   bytes, marker state and control status without another write/flush.
+3. Read-only, replay-pending, operation-failed, direct-failed and casefold policy
+   refusals preserve their priorities; C null/oversized counted-buffer checks
+   remain before filesystem callbacks.
+4. Invalid counted names and read-only refusal precede generic parent conversion.
+5. A 256-byte counted name in the current ordinary block directory returns native
+   NotFound/C ENOENT. This pins current behavior only; it is **not an independent
+   Linux errno verdict** and does not cover every directory layout.
+
+Test authoring initially hit a wrong errno constant name, a managed-flag input
+and the unsupported legacy pwrite setup. Those compilation/setup attempts are
+excluded from the final evidence. The corrected fixtures preserve EXTENTS while
+changing NODUMP and use the supported content-replacement path for legacy data;
+all sixteen final positive combinations execute. Full lint passes with the
+final audit source active, including format, clippy, provenance and shared/CI
+contracts. No test assertion or production behavior was weakened to obtain that
+result. Temporary logs, source hashes and exact result maps are retained in
+ignored `tmp/casefold-unlink-red`; the committed patch recreates the controls.
+
+To reproduce after the handoff's pinned setup, apply the patch, then run:
+
+```sh
+scripts/tier.sh unlink:audit-red unlink-audit-red 900 70000 -- scripts/test.sh --locked --lib fs::guarded_chmod::tests::unlink_calls:: -- --show-output
+```
+
+Expected outcome is the executed 5/23 result, not a green suite. Reverse the patch
+after inspection and check active-source restoration. A missing prerequisite or
+zero matched tests is not a substitute. The native positive images are self-
+consistency evidence, not new Linux compatibility, ownership or recovery proof.
+
+**Next bounded task:** obtain independent reference-only Linux unlink policy
+evidence for parent/surviving-inode timestamps and counted-name errors before
+semantic changes or equivalence claims. Use advancing/distinct timestamps,
+coherent legacy/checksummed 1/4 KiB direct/journal inputs, closed reference file
+handles and saved reports/images. Do not emit through or modify the driver in
+that reference checkpoint. Then implement the reviewed shared-context and
+unlink-specific owned-buffer boundary against the saved reds, retaining the
+positive controls and qualifying actual emissions independently. Any demonstrated
+timestamp/name mismatch needs its own red-to-green repair; current native ENOENT
+is not permission to preserve it as Linux behavior.
+
+All caller-exclusion/raw-handle/C-lifetime, mixed zero-extra, ignored-fuzz,
+insertion-alias, ownership/mapping/lifecycle/seal/admission/index-growth/recovery
+gates remain. No host oracle/mount, local VM, forbidden implementation source or
+Windows/SteamOS/card test was used. Casefold writes remain blocked; Stages 4–5
+are not yet quantified.
+
 ### Public unlink staging, marker and dispatch design audit — 2026-10-20
 
 Audited clean fetched `c20dd1b5bbd0800fa97a955e4a38a5991e8771cd`. Driver,
