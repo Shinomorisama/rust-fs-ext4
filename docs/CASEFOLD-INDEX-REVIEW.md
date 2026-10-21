@@ -69,6 +69,69 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Independent Linux rmdir reference evidence verified — 2026-10-21
+
+Exact reference source `ccef341391c69c2bc49529e43766a070eba93c4b` passes the
+`rmdir-policy-reference` job in focused run `39644593294`. The actual complete
+log executes the exact test once: one passed, zero failed/ignored, **405 lines /
+42,482 bytes**, floor one and unchanged isolated cap passed. Invocation evidence
+retains **eight mke2fs runs, 32 kernel mounts, 32 judged non-repairing e2fsck
+checks and 192 debugfs reports**. The archive matches GitHub's advertised SHA-256:
+`73f4446c3da7365a1ef481c1c139d666387e682ed2449b7d3b8fb8d65a73ad63`.
+
+Read-only saved-byte audit passes all **eight profiles / 32 images**, with
+184 error records and **24 actual closed-target directory removals**. The
+eight layouts assert 1/4 KiB, legacy block-mapped/checksummed extent-mapped
+128/256-byte inodes and direct/journal combinations. They use Linux-created
+ordinary block parents/targets; exclusive external attributes have one reference
+and shared target/peer attributes actually share a physical block with two.
+No driver mutation, native synthetic shape or retained open target handle is
+substituted for this evidence.
+
+The observed contract is:
+
+- Successful 255-byte, exclusive and shared-directory removals increase parent
+  mtime/ctime, preserve parent atime and decrease the parent link count by one.
+  Refusal loops preserve policy-parent/peer metadata; the whole raw policy-parent
+  inode matches before and after the combined error/name-boundary phase.
+- A real 255-byte directory name succeeds. An ordinary 256-byte final name is
+  ENAMETOOLONG. Missing/empty are ENOENT; regular file/symlink and their trailing
+  slashes are ENOTDIR; nonempty/dotdot are ENOTEMPTY; dot is EINVAL. Mixed paths
+  retain earlier missing/non-directory errors before a later overlong component;
+  a valid directory/symlink/dot prefix reaches ENAMETOOLONG. All 23 answers and
+  lengths agree across all eight profiles.
+- Each closed removal frees one inode and decreases the correct group's used-
+  directory count. Boundary removal frees one data block; exclusive removal
+  frees its data plus attribute block; shared removal frees its data while the
+  peer retains the attribute block at one reference. The final ledger in every
+  profile is **four blocks / three inodes reclaimed, used directories minus
+  three**, with per-group credits matching actual released block/inode bits.
+- Namespace, exact raw times versus kernel/debugfs observations, target inode
+  liveness, freed generation/dtime/checksum, peer inode/data/attribute values,
+  shared references, clean state and absence of replay-needed flags pass. Raw checks
+  include 16 SB, 40 BGD, 220 live-inode, 24 freed-inode, 28 attribute-block and
+  60 directory-block checksum validations; these counts include repeated views.
+
+Linux syscall errno numbers are observations, not a C ABI change. In particular,
+existing symbolic ENAMETOOLONG/ENOTEMPTY values and counted-name validation
+priorities remain; an empty Linux syscall result does not authorize changing the
+Rust/C counted-argument contract. No semantic repair is made in this checkpoint.
+The dormant 55-control rmdir patch is unchanged and still applies. Local native
+units retain all 1,196 names/228 controls; the SHA-256-verified exact-source CI
+unit archive retains the same multiset (1,452 lines / 103,329 bytes). Lint passes.
+
+Other focused jobs for unlink emission/policy and setter policy pass; the main
+focused fixture job and complete suites remain pending at this checkpoint.
+Expected whole-suite retention is 2,033 plus the new reference test, not yet a
+completed-result claim. Next: inspect actual remaining outcomes and prepare
+advancing-clock native policy reds for parent mtime/ctime and ordinary long-name
+behavior, covering all five entries and preserving mixed validation priorities.
+Prove composition/reapplication with the existing dormant audit and byte-restore
+active source before implementation. This is ordinary Linux reference evidence,
+not rmdir driver-emission, inline/indexed/grown-empty, retained-handle, corrupted
+map/ownership, recovery or Windows/card qualification. Casefold writes stay
+blocked and Stages 4–5 remain not yet quantified.
+
 ### Independent Linux rmdir policy reference added — 2026-10-21
 
 At fetched `ce2dc95`, the dormant 55-control rmdir audit stays unchanged.
