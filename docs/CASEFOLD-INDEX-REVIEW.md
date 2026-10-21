@@ -69,6 +69,56 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed native unlink policy red preparation — 2026-10-20
+
+At fetched `44b30bb`, native baseline and restored units each pass **1,139 / zero
+failed / zero ignored**, retaining the exact passing-name multiset and all
+**171** controls. The new dormant [CASEFOLD-UNLINK-POLICY-RED.patch](CASEFOLD-UNLINK-POLICY-RED.patch)
+adds **22** native controls grounded in the preceding independent Linux oracle:
+**two pass / 20 fail / zero ignored**, exit 101. All five Rust/C entries reach
+all six native 1/4 KiB ext2/direct, ext3/journal and checksummed ext4/direct
+profiles before each red asserts; checksummed-journal native coverage is not
+claimed. Distinct clock values separate setup, first unlink and final unlink.
+
+The reds reproduce missing parent mtime/ctime updates after both removals,
+missing surviving hard-link ctime updates, and the ENOENT result for 256-byte
+names. Existing atime/mtime, identity/generation, link counts, exact payload,
+attributes, allocated-sector/free counts and reopen checks pass before timestamp
+policy failure; overlong refusals preserve inode bytes and free counts.
+Positive controls execute 30 successful 255-byte removals (with C errno clearing)
+and 60 ordinary missing/directory refusals preserving complete inode bytes/times.
+Native ENAMETOOLONG uses the existing ABI's symbolic value **63**; independent
+Linux reports **36**. Do not broaden this repair into a global errno-table change
+or replace counted empty/slash/NUL validation with path-component semantics.
+
+Both patches compose in either order and reconstruct identical tested source.
+Two actual combined runs retain **50 names: seven passed / 43 failed / zero
+ignored**, exit 101; all original 28 outcomes remain identical. First combined
+log is **450 lines / 41,930 bytes**, rerun **451 / 41,990**, within an isolated
+1,200-line / 100,000-byte audit ceiling. Full lint passes with both audit modules
+active. Final reversal restores active source and leaves the original dormant
+patch byte-identical; restored units measure **1,387 lines / 96,842 bytes**.
+No existing tier cap/floor/filter, active test, production or write gate changes.
+
+One historical expectation must be explicitly superseded when promoting tests:
+`oversized_counted_name_retains_existing_block_directory_error` deliberately
+pins the old ENOENT observation rather than a Linux contract. Preserve that
+historical patch, replace that one dormant behavior-recording test with the new
+Linux-grounded long-name expectations, and retain the other **27 original** and
+all **22 new** controls without weakening them. This drops no active baseline
+test. Guard/failure/constructed-SB assertions remain requirements for repair.
+
+Focused Linux run `39534096165` now passes all three jobs; all 15 main test logs
+and their one-test floors are verified from a SHA-256-verified compressed archive.
+Main saved images are not re-audited here. Full run `39534096164` still has its
+native job pending. Verified guest bytes retain all 1,974 preceding successful
+occurrences and add only the unlink oracle (1,975 passed / zero failed / one
+unchanged ignored slow fuzz case); unchanged output limits pass. Unit/aarch64
+contexts each retain 1,139 passes and all 171 controls. No full-CI success or
+unlink-emission qualification is claimed. See `extprogress.md` for commands,
+evidence paths, complete measurements and the next bounded guarded/semantic
+unlink repair. Stages 4–5 remain not yet quantified and casefold writes blocked.
+
 ### Executed reference-only Linux unlink policy — 2026-10-20
 
 Source `30c15f4` passes the new reference job in [focused run
