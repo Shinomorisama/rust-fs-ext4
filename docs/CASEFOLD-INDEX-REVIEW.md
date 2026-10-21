@@ -69,6 +69,21 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Reference-only Linux unlink policy preparation — 2026-10-20
+
+The next independent oracle is now implemented, with execution pending. It
+records parent/surviving-hard-link timestamp and counted-name observations on
+eight coherent legacy/checksummed 1/4 KiB direct/journal profiles. All mutation
+uses the Linux VM, all regular-file descriptors close before final deletion,
+and each timestamp-sensitive unlink crosses a full second. Three phase images,
+JSON observations, debugfs parent/target reports and judged e2fsck checks preserve
+the evidence. Driver inspection opens the images read-only; no driver-emitted
+unlink or guard implementation is included. The focused job has a floor of one
+and retains its own archive. See `extprogress.md` for execution results; do not
+credit the proposed assertions as independent observations before CI passes.
+The dormant 28-control patch remains unchanged and unenabled. Production unlink,
+existing caps/floors/filters and all casefold write gates remain unchanged.
+
 ### Executed dormant unlink red preparation — 2026-10-20
 
 At clean fetched `7ef3929cba92a6f11d610ed6c622953448955368`, the unchanged

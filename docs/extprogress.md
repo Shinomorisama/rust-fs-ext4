@@ -55,6 +55,18 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Reference-only Linux unlink policy oracle is prepared; execution is pending.**
+  The new focused job measures eight coherent 1/4 KiB, legacy/checksummed,
+  direct/journal profiles. It saves Linux-created input, surviving-hard-link
+  and final-deletion images plus JSON and independent debugfs reports. It tests
+  parent and surviving-inode timestamps across a full-second clock advance,
+  unchanged payload/attributes, closed-handle final reclamation, five filename
+  errors and successful 255-byte removal. Image-shape inspection uses a strictly
+  read-only device; no driver mutator or dormant red patch is enabled. Native
+  baseline and post-change units each pass 1,139 with all 171 controls and exact
+  passing-name retention; full lint passes. Exact-commit CI results remain
+  pending until recorded below. Stages 4–5 stay
+  not yet quantified and casefold writes remain blocked.
 - **Unlink native red preparation is executed and saved, with active source
   restored.** `docs/CASEFOLD-UNLINK-RED.patch` was applied, reversed, reapplied
   byte-identically, rerun and reversed again. Both final runs execute the same
@@ -771,6 +783,52 @@ permission to relax write gates, modify siblings or push to `main`.
   immutable pinned archive through the documented source view; its actual
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
+
+## Reference-only Linux unlink policy checkpoint — 2026-10-20
+
+Started at fetched `85e7a87708b4c724fb667e029bbe6c0e39d9080e` with a clean
+checkout, current/enforced runtime policy, working Git/API access and reported
+push authorization. No environment configuration or sibling changes. Fresh
+native baseline: **1,139 passed / zero failed / zero ignored**, all **171**
+existing controls; **1,387 lines / 96,842 bytes** within unchanged unit caps.
+
+The new `needs_host::unlink_policy::linux_records_unlink_policy` oracle uses
+only `mke2fs` and real Linux mounts through the existing guest helpers to create
+or change images. A read-only driver device checks block/inode sizes, checksum
+and journal features, hard-link identity/generation and surviving ctime. All
+eight 1/4 KiB × 128/256-byte inode × direct/journal profiles retain three
+unmounted phase images, JSON observations and debugfs parent/target reports;
+every phase requires a judged non-repairing e2fsck-clean verdict.
+
+The guest test separates failed operations from successful unlink, waits 1.1
+seconds before each timestamp-sensitive deletion (including legacy inodes),
+and closes every regular-file descriptor before final reclamation. It checks
+that non-final unlink preserves data/attributes and free counts, and final
+unlink credits one inode and exactly the former target's allocated blocks.
+Five error observations cover 256-byte names, missing/empty names, directories
+and a regular file with trailing slash; a separate 255-byte name must succeed.
+Embedded NUL is intentionally not described as a kernel errno: Python rejects
+it before the syscall, and the driver's counted-entry validation is a separate
+API contract. No counted-name semantic answer is credited before actual CI.
+
+The focused workflow adds its own reference job, floor one and retained artifact.
+Its initial ceiling reuses the existing policy tier's 3,200 lines / 200,000 bytes;
+all pre-existing commands/caps/floors/filters remain unchanged. Post-change native
+units pass **1,139 / zero failed / zero ignored**, retaining the exact baseline
+passing-name multiset and all 171 controls; **1,387 lines / 96,842 bytes**.
+Full lint, frozen Unicode, shared-agent/family/CI-gate, provenance, formatting
+and whitespace checks pass with the new files tracked. Guest Python syntax is
+checked without executing it on the host. Exact-commit CI outcomes and artifact
+inspection remain pending at preparation. This is reference work only:
+the saved native red patch stays dormant, production unlink is unchanged, and
+driver-emitted unlink compatibility, guard migration and complete-suite retention
+are separate prerequisites. No host oracle/mount or forbidden source is used.
+
+**Next bounded task after successful evidence inspection:** pin any independently
+measured semantic difference with advancing-clock native reds, then repair the
+reviewed unlink family while retaining the saved 28 controls. Independently
+qualify actual emitted bytes before family closure. Stages 4–5 remain not yet
+quantified; no casefold, Windows, SteamOS or real-card write qualification.
 
 ## Executed dormant native unlink red preparation — 2026-10-20
 
