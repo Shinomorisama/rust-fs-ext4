@@ -69,6 +69,67 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Native measured rmdir policy reds executed — 2026-10-21
+
+At fetched `e5eab76`, the new dormant `CASEFOLD-RMDIR-POLICY-RED.patch` adds
+27 actually executed native controls: **nine pass / 18 fail / zero ignored**,
+exit 101, 209 lines / 31,321 bytes. Every red reaches all six native layouts.
+Ten timestamp controls expose stale parent mtime/ctime after first and second
+removals; five ordinary 256-byte controls expose ENOENT instead of the existing
+symbolic ENAMETOOLONG. Three mixed-path controls retain earlier missing/non-dir
+answers, but reproduce missing long-name refusals and `regular/.` EINVAL instead
+of measured ENOTDIR. Both advancing times are checked in the second-removal tests.
+All five forms also retain ordinary refusal metadata, actual 255-byte removals,
+C error clearing and read-only-before-long-name priorities. Rust/C counted APIs
+retain invalid-name/dot-before-generation checks, stale/non-directory-parent
+before ordinary long-name policy, and counted-empty EINVAL. Counted NUL does not
+pass through CString. New controls execute 120 valid removals and 564 refusals.
+
+The path-dot discrepancy requires validation of the resolved path parent before
+final-dot policy, while preserving counted dot-before-generation/conversion.
+Do not change the shared path walker or unrelated families without their own
+executed evidence. Parent atime, links, inode/block release, raw peer inode,
+data/attributes, refusal metadata and reopen checks remain in the policy audit;
+untouched whole-device refusal behavior is independently covered by the original
+safety audit. This is native policy evidence, not Linux-emitted-image qualification.
+
+Policy patch SHA-256 is
+`2be5a176724603262e9d0a4c2dfc0552ddbb61c3db7c3173fcc39e2a018663d3`
+(22,858 bytes / 592 patch lines). Original 55-control patch SHA-256 remains
+`4cf8a2ac2e55d1595530c980cb3bf0adfb399cede3e81d68ee3dfe022bcd5317`.
+Both application orders recreate identical source; two actual combined runs
+repeat **82 names / 15 pass / 67 fail / zero ignored**, exit 101. All original
+55 outcomes (six / 49) and all 340 uncertainty injections remain. Four failures
+are future staged-SB diagnostics; 63 exercise actual public boundaries/policy.
+Complete logs measure 1,151 lines / 101,888 and 101,887 bytes. Full lint passes
+with both audits active. Both patches are reversed and source/workflows/pins
+restored byte-identically. Restored native units retain the exact same 1,196
+passing occurrences/all 228 controls, zero failed/ignored (1,444 lines / 102,845
+bytes), within unchanged caps. Full evidence is in
+[the checkpoint ledger](extprogress.md#executed-native-rmdir-policy-red-preparation--2026-10-21).
+No production repair, global budget/floor/filter or dependency/sibling change.
+
+All preceding focused jobs now pass in `39644593294`. Verified source-`ccef341`
+guest evidence in `39644593304` retains 2,033 passes plus the new reference
+oracle (2,034 / zero failed / one existing ignored), all 228 controls and the
+unchanged output caps (3,605 lines / 202,180 bytes). Standalone/aarch64 units
+retain all 1,196 names/228 controls; aarch64 retains all 527 image tests. The
+full run now passes every job and ci-ok. Separately verified native whole evidence
+also retains 2,033 + one = 2,034 passes, zero failed/one existing ignored,
+3,438 lines / 192,859 bytes within unchanged caps. All 228 controls occur once
+in five CI contexts, and native trailing checks pass twenty shell/159 CLI checks.
+No output-budget repair is needed. The subsequent docs-only run remains pending;
+no repeated retained-image audit or rmdir emitted-image qualification is claimed.
+
+**Next bounded task:** inspect this checkpoint's exact CI results, then implement
+the reviewed shared-context/whole-plan rmdir repair and measured semantics using both
+patches. Add foreign-context/malformed-SB/retained-publication controls only once
+the private boundary exists, preserve the native baseline and obtain independent
+driver-emission evidence before standalone family closure. Keep the existing
+caller-exclusion, healthy-layout and closed-reference-handle scope. Broader
+ownership/mapping/lifecycle/recovery and Windows/SteamOS/card gates remain open.
+Stages 4–5 remain not yet quantified; casefold writes stay blocked.
+
 ### Independent Linux rmdir reference evidence verified — 2026-10-21
 
 Exact reference source `ccef341391c69c2bc49529e43766a070eba93c4b` passes the

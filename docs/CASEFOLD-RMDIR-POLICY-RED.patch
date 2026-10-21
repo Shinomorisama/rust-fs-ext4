@@ -1,0 +1,592 @@
+diff --git a/src/fs/guarded_chmod.rs b/src/fs/guarded_chmod.rs
+index f54935a..cd491f8 100644
+--- a/src/fs/guarded_chmod.rs
++++ b/src/fs/guarded_chmod.rs
+@@ -939,4 +939,5 @@ mod tests {
+     mod chown_calls;
+     mod flags_calls;
++    mod policy_rmdir_calls;
+     mod policy_unlink_calls;
+     mod public_calls;
+diff --git a/src/fs/guarded_chmod/tests/policy_rmdir_calls.rs b/src/fs/guarded_chmod/tests/policy_rmdir_calls.rs
+new file mode 100644
+index 0000000..af61024
+--- /dev/null
++++ b/src/fs/guarded_chmod/tests/policy_rmdir_calls.rs
+@@ -0,0 +1,576 @@
++//! Native expectations measured independently by rmdir_policy's VM oracle.
++//! This module does not qualify emitted images or change the C ABI errno table.
++use super::*;
++use crate::capi::*;
++use crate::inode::Inode;
++use std::ffi::CString;
++
++const INITIAL: i64 = 1_700_000_000;
++const FIRST: i64 = INITIAL + 100;
++const SECOND: i64 = INITIAL + 200;
++const NAME: &str = "user.audit";
++const DATA: &[u8] = b"target payload";
++
++#[derive(Clone, Copy, Debug)]
++enum Entry {
++    RustString,
++    RustBytes,
++    RustAt,
++    CPath,
++    CAt,
++}
++const ENTRIES: [Entry; 5] = [
++    Entry::RustString,
++    Entry::RustBytes,
++    Entry::RustAt,
++    Entry::CPath,
++    Entry::CAt,
++];
++
++fn specimen(
++    flavor: features::FsFlavor,
++    bs: u32,
++) -> (Arc<Device>, Filesystem, u32, u32, Arc<Clock>) {
++    let size = if bs == 1024 { 8 << 20 } else { 32 << 20 };
++    let dev = Arc::new(Device {
++        bytes: Mutex::new(vec![0; size]),
++        calls: std::array::from_fn(|_| AtomicUsize::new(0)),
++        fail_write: AtomicUsize::new(0),
++        fail_flush: AtomicUsize::new(0),
++        panic_flush: AtomicUsize::new(0),
++        writable: AtomicBool::new(true),
++    });
++    crate::mkfs::format_filesystem_with_flavor(
++        dev.as_ref(),
++        None,
++        Some([41; 16]),
++        size as u64,
++        bs,
++        flavor,
++    )
++    .unwrap();
++    let clock = Arc::new(Clock {
++        calls: AtomicUsize::new(0),
++        now: std::sync::atomic::AtomicI64::new(INITIAL),
++        hook: Mutex::new(None),
++    });
++    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
++    let parent = fs.apply_mkdir("/p", 0o750).unwrap();
++    let ino = fs.apply_mkdir("/p/target", 0o750).unwrap();
++    fs.apply_mkdir("/p/second", 0o750).unwrap();
++    fs.apply_mkdir("/p/nonempty", 0o750).unwrap();
++    fs.apply_create("/p/nonempty/kept", 0o640).unwrap();
++    fs.apply_create("/p/regular", 0o640).unwrap();
++    fs.apply_replace_file_content("/p/regular", DATA).unwrap();
++    fs.apply_setxattr("/p/regular", NAME, &[b'v'; 600]).unwrap();
++    fs.apply_symlink("target", "/p/link").unwrap();
++    for path in ["/p/target", "/p/second", "/p"] {
++        fs.apply_utimens(path, 1_600_000_000, 0, 1_600_000_001, 0)
++            .unwrap();
++    }
++    drop(fs);
++    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
++    assert_eq!(fs.sb.block_size(), bs);
++    assert_eq!(
++        fs.sb.inode_size,
++        if flavor == features::FsFlavor::Ext4 {
++            256
++        } else {
++            128
++        }
++    );
++    assert_eq!(fs.csum.enabled, flavor == features::FsFlavor::Ext4);
++    assert_eq!(fs.journal.is_some(), flavor == features::FsFlavor::Ext3);
++    assert_eq!(fs.read_inode_verified(ino).unwrap().0.links_count, 2);
++    dev.reset();
++    clock.calls.store(0, Ordering::SeqCst);
++    (dev, fs, parent, ino, clock)
++}
++
++fn call(
++    fs: &Filesystem,
++    handle: *mut fs_ext4_fs_t,
++    parent: InodeRef,
++    entry: Entry,
++    name: &[u8],
++) -> std::result::Result<(), i32> {
++    let path = [b"/p/".as_slice(), name].concat();
++    match entry {
++        Entry::RustString => fs
++            .apply_rmdir(std::str::from_utf8(&path).unwrap())
++            .map_err(|e| e.to_errno()),
++        Entry::RustBytes => fs.apply_rmdir_bytes(&path).map_err(|e| e.to_errno()),
++        Entry::RustAt => fs.apply_rmdir_at(parent, name).map_err(|e| e.to_errno()),
++        Entry::CPath | Entry::CAt => {
++            assert_eq!(unsafe { fs_ext4_rmdir(handle, std::ptr::null()) }, -1);
++            assert_eq!(fs_ext4_last_errno(), crate::error::errno::EINVAL);
++            let rc = if matches!(entry, Entry::CPath) {
++                let path = CString::new(path).unwrap();
++                unsafe { fs_ext4_rmdir(handle, path.as_ptr()) }
++            } else {
++                // Counted names can contain NUL: do not construct a CString here.
++                unsafe {
++                    fs_ext4_rmdir_at(
++                        handle,
++                        parent.ino,
++                        parent.generation.unwrap_or(FS_EXT4_GEN_ANY),
++                        name.as_ptr().cast(),
++                        name.len(),
++                    )
++                }
++            };
++            if rc == 0 {
++                assert_eq!(fs_ext4_last_errno(), 0);
++                Ok(())
++            } else {
++                assert_eq!(rc, -1);
++                Err(fs_ext4_last_errno())
++            }
++        }
++    }
++}
++
++fn times(inode: &Inode) -> [(i64, u32); 3] {
++    [
++        (inode.atime, inode.atime_nsec),
++        (inode.mtime, inode.mtime_nsec),
++        (inode.ctime, inode.ctime_nsec),
++    ]
++}
++
++fn counters(dev: &Device) -> (u64, u32) {
++    let b = dev.bytes();
++    (
++        u64::from(u32::from_le_bytes(b[1036..1040].try_into().unwrap()))
++            | (u64::from(u32::from_le_bytes(b[1368..1372].try_into().unwrap())) << 32),
++        u32::from_le_bytes(b[1040..1044].try_into().unwrap()),
++    )
++}
++
++// Refusals may currently dirty the volume (the separate safety audit proves
++// that defect); these controls independently pin namespace/inode preservation.
++fn metadata(fs: &Filesystem) -> Vec<(u32, Vec<u8>)> {
++    [
++        b"/p".as_slice(),
++        b"/p/target",
++        b"/p/second",
++        b"/p/nonempty",
++        b"/p/nonempty/kept",
++        b"/p/regular",
++        b"/p/link",
++    ]
++    .into_iter()
++    .map(|path| {
++        let ino = fs.resolve(path).unwrap();
++        (ino, fs.read_inode_verified(ino).unwrap().1)
++    })
++    .collect()
++}
++
++fn peer_preserved(fs: &Filesystem, raw: &[u8]) {
++    let ino = fs.resolve(b"/p/regular").unwrap();
++    let (inode, found) = fs.read_inode_verified(ino).unwrap();
++    assert_eq!(found, raw);
++    let mut data = vec![0; DATA.len()];
++    assert_eq!(fs.read_ino(ino, 0, &mut data).unwrap(), DATA.len());
++    assert_eq!(data, DATA);
++    assert_eq!(
++        crate::xattr::get_resolved(fs, &inode, &found, NAME).unwrap(),
++        Some(vec![b'v'; 600])
++    );
++}
++
++#[derive(Clone, Copy, Debug)]
++enum Policy {
++    FirstParent,
++    SecondParent,
++    LongName,
++}
++
++fn policy(entry: Entry, wanted: Policy) {
++    let mut mismatches = Vec::new();
++    let mut profiles = 0;
++    for flavor in [
++        features::FsFlavor::Ext2,
++        features::FsFlavor::Ext3,
++        features::FsFlavor::Ext4,
++    ] {
++        for bs in [1024, 4096] {
++            let (dev, fs, parent, _, clock) = specimen(flavor, bs);
++            clock.now.store(FIRST, Ordering::SeqCst);
++            let fs = with_test_mount(fs, |handle, fs| {
++                let before = metadata(fs);
++                let parent_before = fs.read_inode_verified(parent).unwrap().0;
++                let peer = fs
++                    .read_inode_verified(fs.resolve(b"/p/regular").unwrap())
++                    .unwrap()
++                    .1;
++                let counts = counters(&dev);
++                assert_eq!(parent_before.ctime, INITIAL);
++                if matches!(wanted, Policy::LongName) {
++                    let result = call(fs, handle, parent.into(), entry, &[b'n'; 256]);
++                    // Preserve the ABI's symbolic macOS ENAMETOOLONG (63).
++                    if result != Err(crate::error::errno::ENAMETOOLONG) {
++                        mismatches.push(format!("{flavor:?}/{bs}: overlong result={result:?}"));
++                    }
++                    assert_eq!(metadata(fs), before);
++                    assert_eq!(counters(&dev), counts);
++                } else {
++                    let names: &[(&[u8], i64)] = if matches!(wanted, Policy::SecondParent) {
++                        &[(b"target", FIRST), (b"second", SECOND)]
++                    } else {
++                        &[(b"target", FIRST)]
++                    };
++                    let mut freed = 0;
++                    for (index, &(name, stamp)) in names.iter().enumerate() {
++                        let path = [b"/p/".as_slice(), name].concat();
++                        let ino = fs.resolve(&path).unwrap();
++                        let target_before = fs.read_inode_verified(ino).unwrap().0;
++                        freed += target_before.blocks / (u64::from(bs) / 512);
++                        clock.now.store(stamp, Ordering::SeqCst);
++                        call(fs, handle, parent.into(), entry, name).unwrap();
++                        assert!(matches!(fs.resolve(&path), Err(Error::NotFound)));
++                        assert!(!fs.inode_bit_is_set(ino).unwrap());
++                        assert_eq!(
++                            counters(&dev),
++                            (counts.0 + freed, counts.1 + index as u32 + 1)
++                        );
++                        let after = fs.read_inode_verified(parent).unwrap().0;
++                        assert_eq!(
++                            after.links_count,
++                            parent_before.links_count - index as u16 - 1
++                        );
++                        assert_eq!(times(&after)[0], times(&parent_before)[0]);
++                        // Check both updates, including the first in the two-removal test.
++                        if times(&after)[1..] != [(stamp, 0), (stamp, 0)] {
++                            mismatches.push(format!(
++                                "{flavor:?}/{bs}: removal={} parent mtime/ctime={:?}, expected={stamp}",
++                                index + 1, &times(&after)[1..]
++                            ));
++                        }
++                        peer_preserved(fs, &peer);
++                    }
++                }
++                profiles += 1;
++            });
++            drop(fs);
++            let reopened = Filesystem::mount(dev).unwrap();
++            assert!(reopened.resolve(b"/p").is_ok());
++        }
++    }
++    assert_eq!(profiles, 6);
++    eprintln!(
++        "rmdir policy entry={entry:?} wanted={wanted:?}: all {profiles} native profiles reached assertions; mismatches={mismatches:?}"
++    );
++    assert!(
++        mismatches.is_empty(),
++        "Linux-measured rmdir policy mismatch"
++    );
++}
++
++macro_rules! entry_tests {
++    ($entry:ident, $first:ident, $second:ident, $long:ident, $refusals:ident) => {
++        #[test]
++        fn $first() {
++            policy(Entry::$entry, Policy::FirstParent);
++        }
++        #[test]
++        fn $second() {
++            policy(Entry::$entry, Policy::SecondParent);
++        }
++        #[test]
++        fn $long() {
++            policy(Entry::$entry, Policy::LongName);
++        }
++        #[test]
++        fn $refusals() {
++            refusals(Entry::$entry);
++        }
++    };
++}
++entry_tests!(
++    RustString,
++    rust_string_first_parent_times_follow_linux,
++    rust_string_second_parent_times_follow_linux,
++    rust_string_overlong_name_follows_linux,
++    rust_string_refusals_preserve_metadata
++);
++entry_tests!(
++    RustBytes,
++    rust_bytes_first_parent_times_follow_linux,
++    rust_bytes_second_parent_times_follow_linux,
++    rust_bytes_overlong_name_follows_linux,
++    rust_bytes_refusals_preserve_metadata
++);
++entry_tests!(
++    RustAt,
++    rust_at_first_parent_times_follow_linux,
++    rust_at_second_parent_times_follow_linux,
++    rust_at_overlong_name_follows_linux,
++    rust_at_refusals_preserve_metadata
++);
++entry_tests!(
++    CPath,
++    c_path_first_parent_times_follow_linux,
++    c_path_second_parent_times_follow_linux,
++    c_path_overlong_name_follows_linux,
++    c_path_refusals_preserve_metadata
++);
++entry_tests!(
++    CAt,
++    c_at_first_parent_times_follow_linux,
++    c_at_second_parent_times_follow_linux,
++    c_at_overlong_name_follows_linux,
++    c_at_refusals_preserve_metadata
++);
++
++fn refusals(entry: Entry) {
++    let mut observations = 0;
++    for flavor in [
++        features::FsFlavor::Ext2,
++        features::FsFlavor::Ext3,
++        features::FsFlavor::Ext4,
++    ] {
++        for bs in [1024, 4096] {
++            let (dev, fs, parent, _, clock) = specimen(flavor, bs);
++            let _fs = with_test_mount(fs, |handle, fs| {
++                let before = metadata(fs);
++                let counts = counters(&dev);
++                clock.now.store(SECOND, Ordering::SeqCst);
++                for (name, expected) in [
++                    (b"missing".as_slice(), crate::error::errno::ENOENT),
++                    (b"regular", crate::error::errno::ENOTDIR),
++                    (b"link", crate::error::errno::ENOTDIR),
++                    (b"nonempty", crate::error::errno::ENOTEMPTY),
++                    (b".", crate::error::errno::EINVAL),
++                    (b"..", crate::error::errno::ENOTEMPTY),
++                ] {
++                    assert_eq!(call(fs, handle, parent.into(), entry, name), Err(expected));
++                    assert_eq!(metadata(fs), before);
++                    assert_eq!(counters(&dev), counts);
++                    observations += 1;
++                }
++                if matches!(entry, Entry::RustString | Entry::RustBytes | Entry::CPath) {
++                    for (name, expected) in [
++                        (b"regular/".as_slice(), crate::error::errno::ENOTDIR),
++                        (b"link/", crate::error::errno::ENOTDIR),
++                        (b"nonempty/", crate::error::errno::ENOTEMPTY),
++                    ] {
++                        assert_eq!(call(fs, handle, parent.into(), entry, name), Err(expected));
++                        assert_eq!(metadata(fs), before);
++                        assert_eq!(counters(&dev), counts);
++                        observations += 1;
++                    }
++                }
++            });
++        }
++    }
++    assert_eq!(
++        observations,
++        if matches!(entry, Entry::RustAt | Entry::CAt) {
++            36
++        } else {
++            54
++        }
++    );
++    eprintln!("rmdir refusal entry={entry:?}: {observations} unchanged-metadata observations");
++}
++
++#[test]
++fn all_entries_remove_255_byte_names_and_clear_c_errno() {
++    let mut removals = 0;
++    for flavor in [
++        features::FsFlavor::Ext2,
++        features::FsFlavor::Ext3,
++        features::FsFlavor::Ext4,
++    ] {
++        for bs in [1024, 4096] {
++            let (dev, fs, parent, _, clock) = specimen(flavor, bs);
++            let _fs = with_test_mount(fs, |handle, fs| {
++                for entry in ENTRIES {
++                    let name = [b'n'; 255];
++                    let path = format!("/p/{}", std::str::from_utf8(&name).unwrap());
++                    let ino = fs.apply_mkdir(&path, 0o750).unwrap();
++                    let before = fs.read_inode_verified(parent).unwrap().0;
++                    let counts = counters(&dev);
++                    clock.now.store(SECOND, Ordering::SeqCst);
++                    call(fs, handle, parent.into(), entry, &name).unwrap();
++                    assert!(matches!(fs.resolve(path.as_bytes()), Err(Error::NotFound)));
++                    assert!(!fs.inode_bit_is_set(ino).unwrap());
++                    assert_eq!(
++                        fs.read_inode_verified(parent).unwrap().0.links_count,
++                        before.links_count - 1
++                    );
++                    assert_eq!(counters(&dev), (counts.0 + 1, counts.1 + 1));
++                    removals += 1;
++                }
++            });
++        }
++    }
++    assert_eq!(removals, 30);
++    eprintln!("rmdir 255-byte boundary: all {removals} removals succeeded");
++}
++
++fn mixed_paths(entry: Entry) {
++    let mut observations = 0;
++    let mut mismatches = Vec::new();
++    for flavor in [
++        features::FsFlavor::Ext2,
++        features::FsFlavor::Ext3,
++        features::FsFlavor::Ext4,
++    ] {
++        for bs in [1024, 4096] {
++            let (dev, fs, parent, _, clock) = specimen(flavor, bs);
++            let _fs = with_test_mount(fs, |handle, fs| {
++                let before = metadata(fs);
++                let counts = counters(&dev);
++                clock.now.store(SECOND, Ordering::SeqCst);
++                for (prefix, expected) in [
++                    (b"regular/".as_slice(), crate::error::errno::ENOTDIR),
++                    (b"missing/", crate::error::errno::ENOENT),
++                    (b"link/", crate::error::errno::ENAMETOOLONG),
++                    (b"nonempty/", crate::error::errno::ENAMETOOLONG),
++                    (b"./", crate::error::errno::ENAMETOOLONG),
++                    (b"../", crate::error::errno::ENAMETOOLONG),
++                ] {
++                    let name = [prefix, &[b'n'; 256]].concat();
++                    let found = call(fs, handle, parent.into(), entry, &name);
++                    if found != Err(expected) {
++                        mismatches.push(format!(
++                            "{flavor:?}/{bs}: prefix={prefix:?} found={found:?} expected={expected}"
++                        ));
++                    }
++                    assert_eq!(metadata(fs), before);
++                    assert_eq!(counters(&dev), counts);
++                    observations += 1;
++                }
++                for (name, expected) in [
++                    (b"regular/.".as_slice(), crate::error::errno::ENOTDIR),
++                    (b"missing/.", crate::error::errno::ENOENT),
++                    (b"link/.", crate::error::errno::EINVAL),
++                ] {
++                    let found = call(fs, handle, parent.into(), entry, name);
++                    if found != Err(expected) {
++                        mismatches.push(format!(
++                            "{flavor:?}/{bs}: name={name:?} found={found:?} expected={expected}"
++                        ));
++                    }
++                    assert_eq!(metadata(fs), before);
++                    assert_eq!(counters(&dev), counts);
++                    observations += 1;
++                }
++            });
++        }
++    }
++    assert_eq!(observations, 54);
++    eprintln!(
++        "rmdir mixed paths entry={entry:?}: all 6 native profiles, {observations} observations; mismatches={mismatches:?}"
++    );
++    assert!(
++        mismatches.is_empty(),
++        "Linux-measured rmdir mixed path policy mismatch"
++    );
++}
++#[test]
++fn rust_string_mixed_path_priorities_follow_linux() {
++    mixed_paths(Entry::RustString);
++}
++#[test]
++fn rust_bytes_mixed_path_priorities_follow_linux() {
++    mixed_paths(Entry::RustBytes);
++}
++#[test]
++fn c_path_mixed_path_priorities_follow_linux() {
++    mixed_paths(Entry::CPath);
++}
++
++fn mixed_at(entry: Entry) {
++    let mut observations = 0;
++    for flavor in [
++        features::FsFlavor::Ext2,
++        features::FsFlavor::Ext3,
++        features::FsFlavor::Ext4,
++    ] {
++        for bs in [1024, 4096] {
++            let (dev, fs, parent, _, clock) = specimen(flavor, bs);
++            let _fs = with_test_mount(fs, |handle, fs| {
++                let before = metadata(fs);
++                let counts = counters(&dev);
++                let generation = fs.read_inode_verified(parent).unwrap().0.generation;
++                let stale = InodeRef::new(parent, generation ^ 1);
++                let regular = fs.resolve(b"/p/regular").unwrap();
++                let regular_generation = fs.read_inode_verified(regular).unwrap().0.generation;
++                let mut slash = [b'n'; 256];
++                slash[255] = b'/';
++                let mut nul = [b'n'; 256];
++                nul[255] = 0;
++                clock.now.store(SECOND, Ordering::SeqCst);
++                for (dir, name, expected) in [
++                    (stale, &[b'n'; 256][..], crate::error::errno::ESTALE),
++                    (regular.into(), &[b'n'; 256], crate::error::errno::ENOTDIR),
++                    (
++                        InodeRef::new(regular, regular_generation ^ 1),
++                        &[b'n'; 256],
++                        crate::error::errno::ESTALE,
++                    ),
++                    (0u32.into(), &[b'n'; 256], crate::error::errno::ESTALE),
++                    (stale, &slash, crate::error::errno::EINVAL),
++                    (stale, &nul, crate::error::errno::EINVAL),
++                    (stale, b".", crate::error::errno::EINVAL),
++                    (stale, b"..", crate::error::errno::ENOTEMPTY),
++                    // Counted-name validation stays EINVAL despite syscall empty ENOENT.
++                    (stale, b"", crate::error::errno::EINVAL),
++                ] {
++                    assert_eq!(call(fs, handle, dir, entry, name), Err(expected));
++                    assert_eq!(metadata(fs), before);
++                    assert_eq!(counters(&dev), counts);
++                    observations += 1;
++                }
++            });
++        }
++    }
++    assert_eq!(observations, 54);
++    eprintln!(
++        "rmdir mixed parent/name entry={entry:?}: all 6 native profiles, {observations} observations"
++    );
++}
++#[test]
++fn rust_at_mixed_name_generation_priorities_are_retained() {
++    mixed_at(Entry::RustAt);
++}
++#[test]
++fn c_at_mixed_name_generation_priorities_are_retained() {
++    mixed_at(Entry::CAt);
++}
++
++#[test]
++fn all_entries_keep_volume_refusal_before_overlong_names() {
++    let mut observations = 0;
++    for flavor in [
++        features::FsFlavor::Ext2,
++        features::FsFlavor::Ext3,
++        features::FsFlavor::Ext4,
++    ] {
++        for bs in [1024, 4096] {
++            let (dev, fs, parent, _, clock) = specimen(flavor, bs);
++            let _fs = with_test_mount(fs, |handle, fs| {
++                let before = metadata(fs);
++                let counts = counters(&dev);
++                clock.now.store(SECOND, Ordering::SeqCst);
++                dev.writable.store(false, Ordering::SeqCst);
++                for entry in ENTRIES {
++                    assert_eq!(
++                        call(fs, handle, parent.into(), entry, &[b'n'; 256]),
++                        Err(crate::error::errno::EROFS)
++                    );
++                    assert_eq!(metadata(fs), before);
++                    assert_eq!(counters(&dev), counts);
++                    observations += 1;
++                }
++                dev.writable.store(true, Ordering::SeqCst);
++            });
++        }
++    }
++    assert_eq!(observations, 30);
++    eprintln!("rmdir read-only before long name: all {observations} observations retained");
++}
