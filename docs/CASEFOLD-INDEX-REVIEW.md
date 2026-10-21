@@ -147,7 +147,20 @@ profiles. The separate verified policy archive retains all 32 ordinary answers,
 symlink tests and saved images also pass. These actual retained-family audits
 are distinct from the preceding verified 16-profile/80-image unlink audit.
 
-**Remaining before closure:** inspect exact completed full-suite logs and
+**Measured native full-suite follow-up:** exact run `39542365226` now retains
+all 1,975 preceding successful occurrences plus 57 native controls and the
+emitted-image oracle (2,033 passed, zero failed, one unchanged ignored slow fuzz
+case). All 228 controls occur once in the whole suite and native units retain
+all 1,196 names. The actual verified archived log is 3,433 lines / 192,299 bytes;
+the job fails with output-budget exit 65 at 189,000 bytes. Byte-identical saved-log
+replay reproduces that failure and passes the measured native-only 195,000-byte
+repair. The 6,000-byte adjustment tracks 5,728 bytes of baseline growth and
+restores 2,701 bytes of headroom. Line cap, floor, command, filters and all output
+remain intact. Guest is still running, so its limits stay unchanged. Native
+trailing shell/CLI checks did not run after the failed wrapper. Fresh full CI is
+required; no source/test/pin/sibling/write-gate change or family closure is claimed.
+
+**Remaining before closure:** inspect exact completed guest and repair-source full-suite logs and
 baseline-name multisets (including all 228 controls in five CI contexts), repair
 actual failures and complete required trailing native checks. Do not infer green CI from completed
 unit/emission jobs while other jobs are running. Do not raise output caps before

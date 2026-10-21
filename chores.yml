@@ -226,15 +226,15 @@ chore_min_version: 0.6.0
 #                                                    lines, so one more
 #                                                    compared fixture is a
 #                                                    visible step
-#     suite     3,374 / 186,123    3,700 / 189,000   Measured at 4079f36, CI
-#                                                    39458801198: all 1,974
+#     suite     3,433 / 192,299    3,700 / 195,000   Measured at cd15806, CI
+#                                                    39542365226: all 2,033
 #                                                    pass; one existing ignored.
-#                                                    Retains all 1,972 preceding
-#                                                    occurrences and adds two.
-#                                                    Log grew 2,523 bytes from
-#                                                    9035b80; +3,000 restores
-#                                                    2,877 bytes of headroom.
-#                                                    Old 186,000 returns 65.
+#                                                    Retains all 1,975 preceding
+#                                                    occurrences and adds 58.
+#                                                    Log grew 5,728 bytes from
+#                                                    30c15f4; +6,000 restores
+#                                                    2,701 bytes of headroom.
+#                                                    Old 189,000 returns 65.
 #                                                    Lines, floor, filters and
 #                                                    full output unchanged.
 #     scripts      28 /   1,427       50 /   3,000   ~75%: three tests
@@ -724,7 +724,7 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 189000 -- scripts/test.sh --locked --release'
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 195000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then

@@ -55,6 +55,23 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Unlink full-native retention passes; its measured output-budget failure is
+  repaired.** Exact source `cd15806` in run `39542365226` retains all 1,975
+  preceding successful occurrences and adds 58 (2,033 passed, zero failed, one
+  unchanged ignored slow fuzz case). All 228 controls occur once in the complete
+  suite; native units retain all 1,196 names and controls. The verified archived
+  suite log is 3,433 lines / 192,299 bytes, exceeding the 189,000-byte cap;
+  the actual job reports exit 65. Identical complete-log replay reproduces that
+  failure and passes at the measured native-only 195,000-byte ceiling, retaining
+  the 3,700-line cap, 1,060-test floor, command, filters and all output. The
+  6,000-byte adjustment tracks 5,728 bytes of growth from the preceding baseline
+  and restores 2,701 bytes of headroom. Guest CI is still running; its ceiling
+  stays unchanged. Native checks after the failed wrapper did not run. Fresh
+  repair-source full CI, guest retention and trailing native checks remain
+  prerequisites to scoped unlink closure and the subsequent public-rmdir audit.
+  Source/focused-image review is already complete; do not repeat it merely for
+  this configuration repair. Stages 4–5 remain not yet quantified and casefold
+  writes stay blocked.
 - **Standalone unlink source/saved-evidence review is complete; full-CI closure
   is pending.** At byte-identical implementation source `cd15806`, the source
   walk found no additional blocker within the caller-exclusion, closed-reference-
@@ -836,6 +853,46 @@ permission to relax write gates, modify siblings or push to `main`.
   immutable pinned archive through the documented source view; its actual
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
+
+## Unlink native full-suite output-budget repair — 2026-10-20
+
+Exact implementation-source [full run 39542365226](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39542365226)
+has completed its native job. The actual SHA-256-verified tier archive retains
+all **1,975** preceding successful occurrences and adds precisely the **57**
+native controls plus the emitted-image oracle: **2,033 passed, zero failed**.
+The sole ignored case is the unchanged `deep_walk_byte_flip_fuzz_never_panics`;
+it remains a broader qualification gate. All **228** controls occur once in the
+whole suite, and native debug units retain the complete **1,196**-name multiset.
+Together with the previously verified standalone/aarch64 units, four of the five
+required CI contexts are now inspected; the guest context is still pending.
+
+The complete native log measures **3,433 lines / 192,299 bytes**. Its actual job
+fails only the **189,000-byte** ceiling, with exit **65** after successful tests.
+The same saved bytes reproduce exit 65 through the pinned tier wrapper before
+the change and pass byte-identically at **195,000 bytes**, including the unchanged
+**1,060-test floor**. Its SHA-256 is
+`4ac292636d54f7779cc8bfb8e2f44b0c313541d28e1e8ee7154d60200dad78c1`.
+Compared with the preceding 186,571-byte baseline, the 5,728-byte growth supports
+a 6,000-byte adjustment, restoring 2,701 bytes of headroom. The line ceiling,
+test command, filtering and full output remain unchanged. Guest limits are not
+raised from a prediction while that job is unfinished.
+
+Only `chores.yml`'s native byte ceiling/measurement and the existing review/handoff
+change. No implementation, active/dormant test, workflow, floor, dependency/lock,
+sibling or write gate changes. The budget-contract shell check, aggregate CI-gate
+check, shared-agent check, clean-room provenance check and full lint pass;
+whitespace checks pass. This replay verifies the configuration against an actual saved CI log; it
+is not a fresh Linux execution or full-CI pass. Existing exact-source focused
+Linux/image evidence and source review remain applicable to unchanged code.
+
+**Next bounded task:** inspect the original guest job's completed log and any
+actual failure, then the fresh repair-source full CI. Require both complete
+baseline-name multisets, all 228 controls in five contexts, and the native twenty
+shell/159 CLI checks after the whole-suite wrapper before scoped unlink closure.
+The previous failed native wrapper prevented those trailing checks. Only after
+closure perform the public-rmdir staging/marker/dispatch design audit. Stages
+4–5 remain not yet quantified; casefold writes and Windows/SteamOS/card
+qualification remain blocked.
 
 ## Standalone unlink source/saved-evidence review — 2026-10-20
 
