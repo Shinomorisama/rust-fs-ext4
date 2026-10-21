@@ -69,6 +69,75 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed dormant rmdir red/positive controls — 2026-10-21
+
+Prepared at clean fetched `60e25de143f3ad0b273abc5b8424597f07d3ff28`, whose
+own full CI `39552501832` now passes. The preceding independently inspected
+full run `39547402531` retains 2,033 passes in both whole suites and all 228
+controls in five contexts. Fresh local baseline units pass all 1,196 names.
+
+`docs/CASEFOLD-RMDIR-RED.patch` adds only a test module registration and native
+`rmdir_calls` module. It is **executed**, reversed, reapplied byte-identically,
+executed again, and reversed to restore active source. Both final runs execute
+the same **55** names/outcomes: **six passed / 49 failed / zero ignored**, exit
+**101**. Each complete log is **962 lines / 71,082 bytes**, within the final
+isolated audit ceiling of 1,200 / 100,000. Native task/CI limits, floors, commands
+and filters are unchanged. The patch SHA-256 is
+`4cf8a2ac2e55d1595530c980cb3bf0adfb399cede3e81d68ee3dfe022bcd5317`.
+
+| Executed failing controls | Count and observed boundary |
+|---|---|
+| Held shared context | Five public Rust/C forms proceed instead of refusing before callbacks; generic parent conversion also runs while the context is held (six controls). |
+| Clean logical refusals | Twenty Rust/C counted-name cases retain expected missing/invalid/stale/file/symlink/nonempty/dot errors but write/flush the marker. Two path controls execute all nine missing/root/empty/relative/trailing-slash/dot cases each; every refusal changes the clean image. |
+| Reentry and policy | Seven guarded workers proceed from caller conversion; writability, read and runtime callbacks allow metadata workers; callbacks in all seven guarded families allow rmdir workers. The second path verdict still refuses read-only but retains earlier marker effects (six controls). |
+| Rust planning unwinds | Four Rust/C clean/prior-dirty deletion-clock cases plus a generic conversion panic fail untouched sticky retirement. C catches Rust-side planning panic as existing EIO (five controls). |
+| Uncertain effects | Six complete sweeps cover Rust/C writes, flush errors and Rust-device flush unwinds. Each Rust/C set reaches all **114 observed writes**, **28 flush errors** and **28 flush unwinds**, across 1/4 KiB direct/journal and clean/prior-dirty profiles. All 340 injections execute before the aggregate assertions; each lacks the required eight-family/flush/clean-close retirement. |
+| Proposed staged-SB boundary only | Four constructed 1/4 KiB direct/journal plans preserve synthetic credits, other state, checksums and outside-SB sentinels but restore the clean bit when committed after a marker. No real bitmap/inode reclamation occurs. These are future-order diagnostics, **not current public clean-bit defects**. |
+
+Thus **45** reds exercise current public dispatch/refusal/reentry/unwind/failure
+behavior; **four** diagnose the proposed owned-buffer boundary. Preliminary
+harness compilation and counted-C-name preparation issues were corrected before
+the reported runs and are not credited as driver failures.
+
+The **six passing controls** retain existing volume/FFI and invalid/dot-before-
+conversion priorities; all twenty prior-dirty refusal cases preserve errors,
+bytes and context; and the positive matrices complete **127 valid removals**:
+
+- **60** ordinary cases: ext2 direct, ext3 journal and checksummed ext4 direct,
+  1/4 KiB, all five Rust/C forms and exclusive/shared external attributes.
+- **64** checksummed cases: ordinary/inline parent and target combinations,
+  1/4 KiB, Rust byte/C parent forms, exclusive/shared attributes and literal/
+  DIR_NLINK unknown parent link counts. Native inline construction releases the
+  old directory map, adds `system.data`, restamps checksums and persists features;
+  it does not merely relabel allocated pointers.
+- **Three** Rust string/byte/C path cases retain parent-symlink traversal and
+  successful trailing-slash removal, preserving the symlink across reopen.
+
+Positive assertions cover namespace/inode allocation, exact block/inode and
+used-directory credits, parent links, freed generation/dtime and checksums,
+shared refcounts/peer inode/data/attributes, inline-parent entries, dirty state,
+normal clean close and reopen. These remain driver-built native fixtures;
+independent Linux statvfs/image/layout qualification is still required. No parent
+timestamp or ordinary 256-byte errno correction is inferred or pinned as Linux
+policy from these controls.
+
+Full lint passes with the final audit active. After reversal, the native unit
+tier retains the exact **1,196**-name baseline and all **228** controls, with no
+failed/ignored cases. Active source is byte-restored and the patch applies
+cleanly. No guard/semantic repair, workflow, task/budget/floor/filter, pin/lock,
+sibling or write-gate change. Future private-boundary foreign-context/malformed-
+SB and retained-context publication controls still need the actual rmdir
+boundary; they are not claimed executed by this public-entry preparation.
+
+**Next bounded task:** independent reference-only Linux rmdir policy measurement
+in the existing CI VM, using distinct advancing timestamps and closed reference
+directory handles. Measure successful/refused parent times, 255/256-byte and
+mixed dot/type/path errors, reclamation and shared-attribute behavior before
+semantic correction. Then execute any new policy reds before a reviewed guarded
+repair. Preserve all native/whole-suite baselines and completed unlink evidence.
+Casefold writes and broader ownership/mapping/lifecycle/recovery/Windows/card
+qualification remain blocked; Stages 4–5 stay not yet quantified.
+
 ### Public rmdir staging, marker and dispatch design audit — 2026-10-21
 
 Audited clean fetched `661ba754839d872e86f680e8cf84a59ddda9bdc7` after scoped
