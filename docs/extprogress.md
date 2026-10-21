@@ -55,6 +55,24 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Both unlink whole suites retain the baseline; the measured guest output
+  limit is now repaired too.** Original exact-source run `39542365226` is
+  complete: native and guest each retain all 1,975 preceding successful
+  occurrences and add 58 (2,033 passed, zero failed, one unchanged ignored slow
+  fuzz case). SHA-256-verified artifacts confirm all 228 controls once in each
+  of five CI contexts, with all three unit contexts retaining 1,196 names.
+  Guest fails only its output budget: 3,601 lines / 201,734 bytes exceeds
+  196,500; the actual job and identical saved-log replay return 65. The same
+  complete bytes pass at 203,000 with the unchanged 3,900-line limit and
+  1,060-test floor. The 6,500-byte adjustment tracks 6,093 bytes of growth from
+  the preceding baseline and restores 1,266 bytes of headroom. Native remains
+  at the separately measured 195,000-byte repair. Lint and budget-contract
+  checks pass. No implementation/test/workflow/filter/floor/pin/sibling/write-gate
+  change. Native-only repair run `39546367987` is still in progress; fresh full
+  CI with both measured limits, including native trailing checks, remains
+  required before scoped unlink closure and the public-rmdir design audit.
+  Completed source/focused-image reviews stay applicable. Stages 4–5 remain
+  not yet quantified; casefold writes stay blocked.
 - **Unlink full-native retention passes; its measured output-budget failure is
   repaired.** Exact source `cd15806` in run `39542365226` retains all 1,975
   preceding successful occurrences and adds 58 (2,033 passed, zero failed, one
@@ -853,6 +871,49 @@ permission to relax write gates, modify siblings or push to `main`.
   immutable pinned archive through the documented source view; its actual
   sibling checkout stays clean at onboarding `v0.3.6`. Neither sibling nor
   dependency pins/locks are to be modified.
+
+## Unlink guest full-suite output-budget repair — 2026-10-21
+
+Original exact implementation-source [run 39542365226](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39542365226)
+is now complete. Its SHA-256-verified guest archive retains the exact **1,975**
+preceding successful occurrences and adds precisely **57 native controls plus
+one emitted-image oracle**: **2,033 passed, zero failed**, with only the unchanged
+ignored `deep_walk_byte_flip_fuzz_never_panics`. Native has the same complete
+retention. A consolidated read-only audit rechecks exact-source artifact digests
+and all **228** controls once in each of **five CI contexts**: standalone,
+aarch64 and native units, plus native and guest whole suites. Each unit context
+retains the complete **1,196**-name multiset. The ignored fuzz case remains a
+broader qualification gate, not new unlink evidence.
+
+The actual guest job fails only its output budget, returning **65** after all
+tests succeed: **3,601 lines / 201,734 bytes** exceeds **196,500 bytes**. Before
+changing the limit, identical saved-log replay through the pinned wrapper
+reproduces exit 65. Afterward the same complete bytes pass at **203,000 bytes**,
+including the unchanged **1,060-test floor**. The log SHA-256 is
+`460976e0bda3b29fee98b0ecb943137e5563c46593b200afe74ec2b997843ff1`.
+The preceding guest baseline is **3,544 lines / 195,641 bytes**; its measured
+6,093-byte growth supports a 6,500-byte increase and restores **1,266 bytes** of
+headroom. The **3,900-line** cap, command, filters and full output stay intact.
+Native retains the separately measured **195,000-byte** ceiling from `ae7f863`.
+
+Only the guest byte ceiling/measurement in `chores.yml` and the existing
+review/handoff change. No implementation, active/dormant test, workflow, floor,
+dependency/lock, sibling or write gate changes. Full lint, the output-budget
+contract, shared-agent, aggregate CI-gate, provenance and whitespace checks pass.
+The red/green replay is a configuration check against actual saved CI bytes;
+it is not fresh guest execution or a green full-CI result. Existing exact-source
+focused Linux/image evidence and standalone source review remain applicable.
+
+**Next bounded task:** inspect fresh full CI with both measured limits, retaining
+both complete baseline-name multisets and all 228 controls in five contexts.
+Native-only repair [run 39546367987](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39546367987)
+is still in progress at this checkpoint. Require successful native trailing
+twenty shell checks and 159 CLI checks as well as the aggregate gate before
+closing the scoped unlink review. Only then perform the public-rmdir
+staging/marker/dispatch design audit, before new reds or implementation. Do not
+repeat completed source/image reviews because configuration CI is pending.
+Stages 4–5 remain not yet quantified; casefold writes and Windows/SteamOS/card
+qualification remain blocked.
 
 ## Unlink native full-suite output-budget repair — 2026-10-20
 

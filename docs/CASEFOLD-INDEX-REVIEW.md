@@ -160,7 +160,23 @@ remain intact. Guest is still running, so its limits stay unchanged. Native
 trailing shell/CLI checks did not run after the failed wrapper. Fresh full CI is
 required; no source/test/pin/sibling/write-gate change or family closure is claimed.
 
-**Remaining before closure:** inspect exact completed guest and repair-source full-suite logs and
+**Measured guest full-suite follow-up — 2026-10-21:** original exact-source run
+`39542365226` is now complete. Guest retains the same 1,975 preceding successful
+occurrences plus 58 additions (2,033 passed, zero failed, one unchanged ignored
+fuzz case). Rechecked SHA-256-matching exact-source artifacts retain all 228
+controls once in five CI contexts and all 1,196 names in three unit contexts.
+The actual guest job and identical saved-log replay fail only the output budget
+with exit 65: 3,601 lines / 201,734 bytes exceeds 196,500. The same complete bytes
+pass the measured guest-only 203,000-byte repair, retaining the 3,900-line cap,
+1,060-test floor, command, filters and all output. The 6,500-byte adjustment tracks
+6,093 bytes of growth from the preceding guest baseline, restoring 1,266 bytes
+of headroom. Native stays at its separately measured 195,000-byte repair. Lint
+and budget-contract checks pass. This does not repair a functional test failure
+or establish fresh full-CI success; source/test/workflow/pin/sibling/write gates
+remain unchanged. Both-limit repair-source full CI and trailing native checks
+are still required before scoped closure.
+
+**Remaining before closure:** inspect repair-source full-suite logs and
 baseline-name multisets (including all 228 controls in five CI contexts), repair
 actual failures and complete required trailing native checks. Do not infer green CI from completed
 unit/emission jobs while other jobs are running. Do not raise output caps before
