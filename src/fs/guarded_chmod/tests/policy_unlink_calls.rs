@@ -1,0 +1,373 @@
+//! Native expectations measured independently by unlink_policy's VM oracle.
+//! This module does not qualify emitted images or change the C ABI errno table.
+use super::*;
+use crate::capi::*;
+use crate::inode::Inode;
+use std::ffi::CString;
+
+const INITIAL: i64 = 1_700_000_000;
+const FIRST: i64 = INITIAL + 100;
+const SECOND: i64 = INITIAL + 200;
+const NAME: &str = "user.audit";
+const DATA: &[u8] = b"target payload";
+
+#[derive(Clone, Copy, Debug)]
+enum Entry {
+    RustString,
+    RustBytes,
+    RustAt,
+    CPath,
+    CAt,
+}
+const ENTRIES: [Entry; 5] = [
+    Entry::RustString,
+    Entry::RustBytes,
+    Entry::RustAt,
+    Entry::CPath,
+    Entry::CAt,
+];
+
+fn specimen(
+    flavor: features::FsFlavor,
+    bs: u32,
+) -> (Arc<Device>, Filesystem, u32, u32, Arc<Clock>) {
+    let size = if bs == 1024 { 8 << 20 } else { 32 << 20 };
+    let dev = Arc::new(Device {
+        bytes: Mutex::new(vec![0; size]),
+        calls: std::array::from_fn(|_| AtomicUsize::new(0)),
+        fail_write: AtomicUsize::new(0),
+        fail_flush: AtomicUsize::new(0),
+        panic_flush: AtomicUsize::new(0),
+        writable: AtomicBool::new(true),
+    });
+    crate::mkfs::format_filesystem_with_flavor(
+        dev.as_ref(),
+        None,
+        Some([41; 16]),
+        size as u64,
+        bs,
+        flavor,
+    )
+    .unwrap();
+    let clock = Arc::new(Clock {
+        calls: AtomicUsize::new(0),
+        now: std::sync::atomic::AtomicI64::new(INITIAL),
+        hook: Mutex::new(None),
+    });
+    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+    let parent = fs.apply_mkdir("/p", 0o750).unwrap();
+    let ino = fs.apply_create("/p/target", 0o640).unwrap();
+    fs.apply_replace_file_content("/p/target", DATA).unwrap();
+    fs.apply_setxattr("/p/target", NAME, &[b'v'; 600]).unwrap();
+    fs.apply_link_at(ino, parent, b"alias").unwrap();
+    fs.apply_mkdir("/p/directory", 0o750).unwrap();
+    for path in ["/p/target", "/p"] {
+        fs.apply_utimens(path, 1_600_000_000, 0, 1_600_000_001, 0)
+            .unwrap();
+    }
+    drop(fs);
+    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+    assert_eq!(fs.sb.block_size(), bs);
+    assert_eq!(
+        fs.sb.inode_size,
+        if flavor == features::FsFlavor::Ext4 {
+            256
+        } else {
+            128
+        }
+    );
+    assert_eq!(fs.csum.enabled, flavor == features::FsFlavor::Ext4);
+    assert_eq!(fs.journal.is_some(), flavor == features::FsFlavor::Ext3);
+    assert_eq!(fs.read_inode_verified(ino).unwrap().0.links_count, 2);
+    dev.reset();
+    clock.calls.store(0, Ordering::SeqCst);
+    (dev, fs, parent, ino, clock)
+}
+
+fn call(
+    fs: &Filesystem,
+    handle: *mut fs_ext4_fs_t,
+    parent: u32,
+    entry: Entry,
+    name: &[u8],
+) -> std::result::Result<(), i32> {
+    let path = [b"/p/".as_slice(), name].concat();
+    match entry {
+        Entry::RustString => fs
+            .apply_unlink(std::str::from_utf8(&path).unwrap())
+            .map_err(|e| e.to_errno()),
+        Entry::RustBytes => fs.apply_unlink_bytes(&path).map_err(|e| e.to_errno()),
+        Entry::RustAt => fs.apply_unlink_at(parent, name).map_err(|e| e.to_errno()),
+        Entry::CPath | Entry::CAt => {
+            assert_eq!(unsafe { fs_ext4_unlink(handle, std::ptr::null()) }, -1);
+            assert_eq!(fs_ext4_last_errno(), crate::error::errno::EINVAL);
+            let path = CString::new(path).unwrap();
+            let rc = if matches!(entry, Entry::CPath) {
+                unsafe { fs_ext4_unlink(handle, path.as_ptr()) }
+            } else {
+                unsafe {
+                    fs_ext4_unlink_at(
+                        handle,
+                        parent,
+                        FS_EXT4_GEN_ANY,
+                        name.as_ptr().cast(),
+                        name.len(),
+                    )
+                }
+            };
+            if rc == 0 {
+                assert_eq!(fs_ext4_last_errno(), 0);
+                Ok(())
+            } else {
+                assert_eq!(rc, -1);
+                Err(fs_ext4_last_errno())
+            }
+        }
+    }
+}
+
+fn times(inode: &Inode) -> [(i64, u32); 3] {
+    [
+        (inode.atime, inode.atime_nsec),
+        (inode.mtime, inode.mtime_nsec),
+        (inode.ctime, inode.ctime_nsec),
+    ]
+}
+fn counters(dev: &Device) -> (u64, u32) {
+    let b = dev.bytes();
+    (
+        u64::from(u32::from_le_bytes(b[1036..1040].try_into().unwrap()))
+            | (u64::from(u32::from_le_bytes(b[1368..1372].try_into().unwrap())) << 32),
+        u32::from_le_bytes(b[1040..1044].try_into().unwrap()),
+    )
+}
+fn preserved(fs: &Filesystem, ino: u32, before: &Inode) {
+    let (after, raw) = fs.read_inode_verified(ino).unwrap();
+    assert_eq!(after.links_count, 1);
+    assert_eq!(
+        (after.generation, after.blocks, after.size, after.file_acl),
+        (
+            before.generation,
+            before.blocks,
+            before.size,
+            before.file_acl
+        )
+    );
+    assert_eq!(&times(&after)[..2], &times(before)[..2]);
+    let mut data = vec![0; DATA.len()];
+    assert_eq!(fs.read_ino(ino, 0, &mut data).unwrap(), DATA.len());
+    assert_eq!(data, DATA);
+    assert_eq!(
+        crate::xattr::get_resolved(fs, &after, &raw, NAME).unwrap(),
+        Some(vec![b'v'; 600])
+    );
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Policy {
+    ParentNonfinal,
+    ParentFinal,
+    Survivor,
+    LongName,
+}
+
+fn policy(entry: Entry, wanted: Policy) {
+    let mut mismatches = Vec::new();
+    let mut profiles = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (dev, fs, parent, ino, clock) = specimen(flavor, bs);
+            clock.now.store(FIRST, Ordering::SeqCst);
+            let fs = with_test_mount(fs, |handle, fs| {
+                let (before, before_raw) = fs.read_inode_verified(ino).unwrap();
+                let (parent_before, parent_raw) = fs.read_inode_verified(parent).unwrap();
+                let counts = counters(&dev);
+                assert_eq!(before.ctime, INITIAL);
+                assert_eq!(parent_before.ctime, INITIAL);
+                if matches!(wanted, Policy::LongName) {
+                    let result = call(fs, handle, parent, entry, &[b'n'; 256]);
+                    // The ABI currently declares macOS errno numbers. Pin its
+                    // existing symbolic ENAMETOOLONG (63), not Linux's raw 36.
+                    if result != Err(crate::error::errno::ENAMETOOLONG) {
+                        mismatches.push(format!("{flavor:?}/{bs}: overlong result={result:?}"));
+                    }
+                    assert_eq!(fs.read_inode_verified(ino).unwrap().1, before_raw);
+                    assert_eq!(fs.read_inode_verified(parent).unwrap().1, parent_raw);
+                    assert_eq!(counters(&dev), counts);
+                } else {
+                    call(fs, handle, parent, entry, b"target").unwrap();
+                    assert!(matches!(fs.resolve(b"/p/target"), Err(Error::NotFound)));
+                    assert_eq!(fs.resolve(b"/p/alias").unwrap(), ino);
+                    preserved(fs, ino, &before);
+                    assert_eq!(counters(&dev), counts);
+                    let (mut observed, stamp) = if matches!(wanted, Policy::Survivor) {
+                        (fs.read_inode_verified(ino).unwrap().0, FIRST)
+                    } else {
+                        (fs.read_inode_verified(parent).unwrap().0, FIRST)
+                    };
+                    if matches!(wanted, Policy::ParentFinal) {
+                        clock.now.store(SECOND, Ordering::SeqCst);
+                        call(fs, handle, parent, entry, b"alias").unwrap();
+                        assert!(matches!(fs.resolve(b"/p/alias"), Err(Error::NotFound)));
+                        assert!(!fs.inode_bit_is_set(ino).unwrap());
+                        let freed = before.blocks / (u64::from(bs) / 512);
+                        assert_eq!(counters(&dev), (counts.0 + freed, counts.1 + 1));
+                        observed = fs.read_inode_verified(parent).unwrap().0;
+                    }
+                    let stamp = if matches!(wanted, Policy::ParentFinal) {
+                        SECOND
+                    } else {
+                        stamp
+                    };
+                    let found = times(&observed);
+                    if matches!(wanted, Policy::Survivor) {
+                        if found[2] != (stamp, 0) {
+                            mismatches.push(format!(
+                                "{flavor:?}/{bs}: target ctime={:?}, expected={stamp}",
+                                found[2]
+                            ));
+                        }
+                    } else {
+                        assert_eq!(found[0], times(&parent_before)[0]);
+                        if found[1..] != [(stamp, 0), (stamp, 0)] {
+                            mismatches.push(format!(
+                                "{flavor:?}/{bs}: parent mtime/ctime={:?}, expected={stamp}",
+                                &found[1..]
+                            ));
+                        }
+                    }
+                }
+                profiles += 1;
+            });
+            drop(fs);
+            let reopened = Filesystem::mount(dev).unwrap();
+            assert!(reopened.resolve(b"/p").is_ok());
+        }
+    }
+    assert_eq!(profiles, 6);
+    eprintln!("unlink policy entry={entry:?} wanted={wanted:?}: all {profiles} native profiles reached assertions; mismatches={mismatches:?}");
+    assert!(
+        mismatches.is_empty(),
+        "Linux-measured unlink policy mismatch"
+    );
+}
+
+macro_rules! entry_tests {
+    ($entry:ident, $parent:ident, $final:ident, $survivor:ident, $long:ident) => {
+        #[test]
+        fn $parent() {
+            policy(Entry::$entry, Policy::ParentNonfinal);
+        }
+        #[test]
+        fn $final() {
+            policy(Entry::$entry, Policy::ParentFinal);
+        }
+        #[test]
+        fn $survivor() {
+            policy(Entry::$entry, Policy::Survivor);
+        }
+        #[test]
+        fn $long() {
+            policy(Entry::$entry, Policy::LongName);
+        }
+    };
+}
+entry_tests!(
+    RustString,
+    rust_string_nonfinal_parent_times_follow_linux,
+    rust_string_final_parent_times_follow_linux,
+    rust_string_surviving_ctime_follows_linux,
+    rust_string_overlong_name_follows_linux
+);
+entry_tests!(
+    RustBytes,
+    rust_bytes_nonfinal_parent_times_follow_linux,
+    rust_bytes_final_parent_times_follow_linux,
+    rust_bytes_surviving_ctime_follows_linux,
+    rust_bytes_overlong_name_follows_linux
+);
+entry_tests!(
+    RustAt,
+    rust_at_nonfinal_parent_times_follow_linux,
+    rust_at_final_parent_times_follow_linux,
+    rust_at_surviving_ctime_follows_linux,
+    rust_at_overlong_name_follows_linux
+);
+entry_tests!(
+    CPath,
+    c_path_nonfinal_parent_times_follow_linux,
+    c_path_final_parent_times_follow_linux,
+    c_path_surviving_ctime_follows_linux,
+    c_path_overlong_name_follows_linux
+);
+entry_tests!(
+    CAt,
+    c_at_nonfinal_parent_times_follow_linux,
+    c_at_final_parent_times_follow_linux,
+    c_at_surviving_ctime_follows_linux,
+    c_at_overlong_name_follows_linux
+);
+
+#[test]
+fn all_entries_remove_255_byte_names_and_clear_c_errno() {
+    let mut removals = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (_, fs, parent, _, clock) = specimen(flavor, bs);
+            let _fs = with_test_mount(fs, |handle, fs| {
+                for entry in ENTRIES {
+                    let name = [b'n'; 255];
+                    let path = format!("/p/{}", std::str::from_utf8(&name).unwrap());
+                    let ino = fs.apply_create(&path, 0o640).unwrap();
+                    clock.now.store(SECOND, Ordering::SeqCst);
+                    call(fs, handle, parent, entry, &name).unwrap();
+                    assert!(matches!(fs.resolve(path.as_bytes()), Err(Error::NotFound)));
+                    assert!(!fs.inode_bit_is_set(ino).unwrap());
+                    removals += 1;
+                }
+            });
+        }
+    }
+    assert_eq!(removals, 30);
+    eprintln!("255-byte boundary: all {removals} removals succeeded");
+}
+
+#[test]
+fn ordinary_refusals_preserve_parent_and_target_timestamps() {
+    let mut refusals = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (_, fs, parent, ino, clock) = specimen(flavor, bs);
+            let _fs = with_test_mount(fs, |handle, fs| {
+                let parent_raw = fs.read_inode_verified(parent).unwrap().1;
+                let target_raw = fs.read_inode_verified(ino).unwrap().1;
+                clock.now.store(SECOND, Ordering::SeqCst);
+                for entry in ENTRIES {
+                    for (name, expected) in [
+                        (b"missing".as_slice(), crate::error::errno::ENOENT),
+                        (b"directory", crate::error::errno::EISDIR),
+                    ] {
+                        assert_eq!(call(fs, handle, parent, entry, name), Err(expected));
+                        assert_eq!(fs.read_inode_verified(parent).unwrap().1, parent_raw);
+                        assert_eq!(fs.read_inode_verified(ino).unwrap().1, target_raw);
+                        refusals += 1;
+                    }
+                }
+            });
+        }
+    }
+    assert_eq!(refusals, 60);
+    eprintln!("missing/directory controls: all {refusals} errors preserve inode timestamps");
+}

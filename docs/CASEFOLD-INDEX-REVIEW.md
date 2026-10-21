@@ -69,6 +69,40 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Guarded public unlink implementation — 2026-10-20
+
+At fetched `223adb3`, the saved 50-test red is reproduced before implementation;
+four added write/flush retirement controls also fail at the missing shared latch.
+The public unlink family now uses the shared context, private nested dispatch,
+verdict-only planning and an unlink-specific owned-buffer boundary. Parent
+mtime/ctime and surviving ctime follow measured policy; long-name correction
+retains mixed invalid-name/parent/volume priorities and the existing C errno table.
+The boundary preserves planned credits/state/outside-SB bytes while normalizing
+dirty state/checksum, and latches marker/commit/checkpoint/publication failures.
+Raw commit, shared storage helpers, caller-exclusion and write gates are unchanged.
+
+All **57** controls pass, preserving the 27 original contracts and all 22 policy
+controls, plus eight failure/priority/boundary checks. Only the documented dormant
+ENOENT observation is superseded; historical patches stay unchanged and should
+not be reapplied onto promoted source. Constructed SB diagnostics now exercise
+the actual new boundary without weakening their assertions. Failure sweeps cover
+176 writes / 52 flushes for each Rust/C dispatch set, with all seven families and
+clean close retired. Planning/flush unwinds and retained-context publication
+panic are checked. Native units retain all 1,139 names and add 57 (1,196 passes,
+zero failed/ignored). Full lint passes. The actual 1,444-line / 102,845-byte unit
+log fails the old ceiling and passes identical replay at the measured 1,460 /
+106,500 repair; no command/filter/floor/output change.
+
+Earlier exact reference-source full/focused runs now both pass; native/guest
+retention confirms 1,975 passes and one existing ignored fuzz case. A new focused
+16-profile Rust/C unlink-emission job saves Linux-created input and dirty/closed
+branch images, requires actual shared-attribute layout and independent Linux/
+e2fsck checks. Its actual execution and saved-byte audit, fresh full CI and the
+standalone family review remain pending. See `extprogress.md` for exact results
+and next prerequisites; Stages 4–5 stay not yet quantified and casefold writes
+remain blocked. No ownership/lifecycle/index-growth/recovery or card qualification
+is claimed from this implementation checkpoint.
+
 ### Executed native unlink policy red preparation — 2026-10-20
 
 At fetched `44b30bb`, native baseline and restored units each pass **1,139 / zero

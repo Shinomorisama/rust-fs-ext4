@@ -5148,9 +5148,9 @@ impl Filesystem {
     ///   clears the inode bitmap bit, zeroes the inode body, and sets
     ///   `i_dtime = now`. When `links_count > 1` we only drop the dir entry
     ///   and decrement — matches POSIX unlink semantics for hard-linked files.
-    /// - Mutates: parent-dir block (entry removal), target inode, block +
-    ///   inode bitmaps, BGD counters, SB counters. No journaling yet —
-    ///   safe only on scratch images (same caveat as `apply_truncate_shrink`).
+    /// - Stages parent entries/timestamps, target inode, bitmaps and counters
+    ///   under the shared metadata context; commits through the journal when
+    ///   available. Casefold volumes retain their existing write refusal.
     ///
     /// Returns `Error::NotFound` if the path doesn't exist,
     /// `Error::NotADirectory` if the parent isn't a directory, and
@@ -5161,39 +5161,23 @@ impl Filesystem {
 
     /// [`apply_unlink`](Self::apply_unlink) of a path given as bytes, never decoded.
     pub(crate) fn apply_unlink_bytes(&self, path: &[u8]) -> Result<()> {
-        self.refuse_write()?;
-        // POSIX: a trailing slash asserts the path refers to a directory,
-        // which is incompatible with `unlink(2)` no matter what kind of file
-        // the path resolves to. `split_parent_and_base` swallows the slash,
-        // so snapshot the flag first.
-        let trailing_slash = path.len() > 1 && path.ends_with(b"/");
-        let (parent_path, base_name) = split_parent_and_base(path)?;
-        let parent_ino = self.resolve_dir(parent_path)?;
-        if trailing_slash {
-            // The call fails either way; only the errno depends on what the
-            // name is: a directory is EISDIR, as unlink(2) says of any
-            // directory, and anything else ENOTDIR, the slash having
-            // asserted a directory.
-            let (parent_inode, _) = self.live_dir(parent_ino.into())?;
-            let target_ino = self.find_entry_in_dir(parent_ino, &parent_inode, base_name)?;
-            let (target_inode, _) = self.live_inode(target_ino.into())?;
-            return Err(if target_inode.is_dir() {
-                Error::IsADirectory
-            } else {
-                Error::NotADirectory
-            });
-        }
-        self.apply_unlink_at(parent_ino, base_name)
+        self.guarded_unlink_bytes(path)
     }
 
-    /// [`apply_unlink`](Self::apply_unlink) of entry `name` in directory
-    /// `dir`.
+    /// [`apply_unlink`](Self::apply_unlink) of entry `name` in directory `dir`.
     pub fn apply_unlink_at(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<()> {
-        self.refuse_write()?;
-        check_entry_name(name)?;
-        let dir = dir.into();
+        self.guarded_unlink_from(dir, name)
+    }
+
+    /// Reads and local staging only; public dispatch owns the context/effects.
+    fn plan_unlink_at(&self, dir: InodeRef, name: &[u8]) -> Result<BlockBuffer> {
         let parent_ino_num = dir.ino;
         let (parent_inode, _parent_raw) = self.live_dir(dir)?;
+        // Keep invalid counted names, conversion and parent liveness priorities.
+        // The independent unlink_policy oracle establishes this length verdict.
+        if name.len() > 255 {
+            return Err(Error::NameTooLong);
+        }
 
         let target = self.find_dir_entry(parent_ino_num, &parent_inode, name)?;
         let target_ino = target.inode;
@@ -5211,15 +5195,24 @@ impl Filesystem {
         // block holding it, or an inline directory's inode (#428).
         let bs = self.sb.block_size();
         self.buffer_remove_matched_dir_entry(&mut buf, parent_ino_num, &parent_inode, &target)?;
+        let now = self.runtime.now_unix_seconds();
+        // An inline parent may already have a staged inode edit. Preserve it,
+        // and splice each inode into the current buffer even when blocks coincide.
+        let (parent, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino_num)?;
+        set_inode_time(&mut parent_raw, InodeTime::Mtime, now);
+        set_inode_time(&mut parent_raw, InodeTime::Ctime, now);
+        self.finalize_inode_raw(parent_ino_num, parent.generation, &mut parent_raw)?;
+        self.buffer_write_inode(&mut buf, parent_ino_num, &parent_raw)?;
 
         // Decrement link count. Non-zero after → just persist the new count.
         let new_links = target_inode.links_count.saturating_sub(1);
         target_raw[0x1A..0x1C].copy_from_slice(&new_links.to_le_bytes());
 
         if new_links > 0 {
+            set_inode_time(&mut target_raw, InodeTime::Ctime, now);
             self.finalize_inode_raw(target_ino, target_inode.generation, &mut target_raw)?;
             self.buffer_write_inode(&mut buf, target_ino, &target_raw)?;
-            return self.commit_block_buffer(buf);
+            return Ok(buf);
         }
 
         // Last link gone — free data blocks + inode slot, all into the same
@@ -5265,7 +5258,7 @@ impl Filesystem {
         self.finalize_inode_raw(target_ino, old_gen, &mut target_raw)?;
         self.buffer_write_inode(&mut buf, target_ino, &target_raw)?;
 
-        self.commit_block_buffer(buf)
+        Ok(buf)
     }
 
     /// Common setup for creating a new inode inside a directory: resolves

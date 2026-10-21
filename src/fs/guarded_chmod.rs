@@ -1,4 +1,4 @@
-//! Shared chmod/chown/utimens/flags/removexattr/setxattr dispatch; other families need caller serialization.
+//! Shared metadata/unlink dispatch; other families need caller serialization.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +45,85 @@ impl Drop for MountOperation<'_> {
 }
 
 impl Filesystem {
+    pub(super) fn guarded_unlink_bytes(&self, path: &[u8]) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.unlink_bytes_in(&mut context, path)
+    }
+
+    pub(super) fn guarded_unlink_from(&self, dir: impl Into<InodeRef>, name: &[u8]) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.unlink_from_in(&mut context, dir, name)
+    }
+
+    fn unlink_bytes_in(&self, context: &mut MountOperation<'_>, path: &[u8]) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        let trailing_slash = path.len() > 1 && path.ends_with(b"/");
+        let (parent_path, base_name) = split_parent_and_base(path)?;
+        let parent_ino = self.resolve_dir(parent_path)?;
+        if trailing_slash {
+            let (parent_inode, _) = self.live_dir(parent_ino.into())?;
+            let target_ino = self.find_entry_in_dir(parent_ino, &parent_inode, base_name)?;
+            let (target_inode, _) = self.live_inode(target_ino.into())?;
+            return Err(if target_inode.is_dir() {
+                Error::IsADirectory
+            } else {
+                Error::NotADirectory
+            });
+        }
+        self.unlink_from_in(context, parent_ino, base_name)
+    }
+
+    fn unlink_from_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        check_entry_name(name)?;
+        let buf = self.plan_unlink_at(dir.into(), name)?;
+        self.commit_unlink_in(context, buf)
+    }
+
+    /// Unlink-only boundary: retain the planner's credits and all other bytes.
+    fn commit_unlink_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        mut buf: BlockBuffer,
+    ) -> Result<()> {
+        self.check_chmod_context(context)?;
+        self.prepare_unlink_buffer(&mut buf)?;
+        if !self.marked_not_clean.load(Ordering::SeqCst) {
+            context.effect(|| self.mark_not_clean_once())?;
+        }
+        context.effect(|| self.commit_block_buffer(buf))
+    }
+
+    fn prepare_unlink_buffer(&self, buf: &mut BlockBuffer) -> Result<()> {
+        let bs = u64::from(self.sb.block_size());
+        let offset = crate::superblock::SUPERBLOCK_OFFSET;
+        let Some(block) = buf.dirty.get_mut(&(offset / bs)) else {
+            return Ok(());
+        };
+        let start = (offset % bs) as usize;
+        if block.len() != bs as usize || start + 1024 > block.len() {
+            return Err(Error::Corrupt("unlink prepared superblock shape"));
+        }
+        let sb = &mut block[start..start + 1024];
+        if u16::from_le_bytes(sb[0x38..0x3a].try_into().unwrap()) != crate::superblock::EXT4_MAGIC {
+            return Err(Error::Corrupt("unlink prepared superblock magic"));
+        }
+        let state = u16::from_le_bytes(sb[0x3a..0x3c].try_into().unwrap());
+        sb[0x3a..0x3c].copy_from_slice(&(state & !crate::superblock::EXT4_VALID_FS).to_le_bytes());
+        if self.csum.enabled {
+            let checksum = crate::checksum::linux_crc32c(!0, &sb[..0x3fc]);
+            sb[0x3fc..].copy_from_slice(&checksum.to_le_bytes());
+        }
+        Ok(())
+    }
+
     fn chmod_operation(&self) -> Result<MountOperation<'_>> {
         if self.operation_failed.load(Ordering::SeqCst) {
             return Err(Error::ReadOnly);
@@ -859,9 +938,11 @@ mod tests {
 
     mod chown_calls;
     mod flags_calls;
+    mod policy_unlink_calls;
     mod public_calls;
     mod removexattr_calls;
     mod setxattr_calls;
+    mod unlink_calls;
     mod utimens_calls;
 }
 

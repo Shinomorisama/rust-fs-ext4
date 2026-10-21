@@ -500,10 +500,11 @@ tasks:
     # Which targets: scripts/test-targets.sh, derived from the tests
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
-    # Removal guard controls measured 1,340 lines / 91,776 bytes before the
-    # final branch matrix control; retain line cap and allow measured growth.
+    # Unlink controls: 1,196 passes measured 1,444 lines / 102,845 bytes;
+    # previous 1,400 / 100,000 limits fail with exit 65. Retain the full log,
+    # command, selection and floor, with measured growth and similar headroom.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1400 100000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1460 106500 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

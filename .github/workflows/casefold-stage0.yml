@@ -47,6 +47,37 @@ env:
   CARGO_BUILD_JOBS: "4"
 
 jobs:
+  unlink-emission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Check public Rust and C unlink emission with Linux
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/unlink-emission
+        run: |
+          scripts/tier.sh casefold:unlink-emission casefold-unlink-emission 3200 200000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::unlink::linux_checks_public_unlink_metadata -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-unlink-emission 1
+      - name: Keep unlink emission images and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unlink-emission
+          path: |
+            tmp/unlink-emission/
+            tmp/logs/casefold-unlink-emission.log
+          if-no-files-found: error
+          retention-days: 30
   unlink-policy-reference:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

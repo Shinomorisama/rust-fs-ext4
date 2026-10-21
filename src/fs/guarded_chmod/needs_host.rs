@@ -4,6 +4,7 @@ mod flags;
 mod removexattr;
 mod setxattr;
 mod setxattr_policy;
+mod unlink;
 mod unlink_policy;
 mod utimens;
 use super::*;
