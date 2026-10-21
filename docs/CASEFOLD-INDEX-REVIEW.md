@@ -69,6 +69,26 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Independent Linux rmdir policy reference added — 2026-10-21
+
+At fetched `ce2dc95`, the dormant 55-control rmdir audit stays unchanged.
+The new needs-host reference test and guest-only Python observer use Linux
+syscalls, the existing pinned harness and e2fsprogs tools; the driver only reads
+saved bytes. Eight ordinary layouts cover 1/4 KiB, legacy/checksummed 128/256-byte
+inodes and direct/journal operation. Planned evidence is four phases per layout,
+23 ordinary/mixed dot/type/path/name refusals, a real 255-byte removal, parent
+times/links, exclusive/shared attributes, statvfs and inode/block/used-directory
+reclamation, with closed target handles, advancing clocks and peer preservation.
+Read-only shape checks, saved phase images/JSON and debugfs/e2fsck reports must
+execute in the new exact focused job (floor one). Syntax/lint/native retention
+pass; Linux execution is pending and no measured answer is claimed yet.
+
+No public rmdir/guard/semantic change, dormant-patch edit, global budget/floor/
+filter, pin/lock, sibling or write-gate change. Inspect actual CI artifacts
+before policy reds or repair. This ordinary-layout reference does not qualify
+inline/indexed/grown-empty directory emission, retained target handles, arbitrary
+corruption/alias/ownership, interruption recovery or Windows/card operation.
+
 ### Executed dormant rmdir red/positive controls — 2026-10-21
 
 Prepared at clean fetched `60e25de143f3ad0b273abc5b8424597f07d3ff28`, whose
