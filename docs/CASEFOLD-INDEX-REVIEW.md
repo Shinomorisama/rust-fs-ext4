@@ -97,10 +97,25 @@ Earlier exact reference-source full/focused runs now both pass; native/guest
 retention confirms 1,975 passes and one existing ignored fuzz case. A new focused
 16-profile Rust/C unlink-emission job saves Linux-created input and dirty/closed
 branch images, requires actual shared-attribute layout and independent Linux/
-e2fsck checks. Its actual execution and saved-byte audit, fresh full CI and the
-standalone family review remain pending. See `extprogress.md` for exact results
-and next prerequisites; Stages 4–5 stay not yet quantified and casefold writes
-remain blocked. No ownership/lifecycle/index-growth/recovery or card qualification
+e2fsck checks. The exact source `cd15806` now passes that job in [run
+39542365213](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39542365213):
+one passed / zero failed / zero ignored, covering all 16 profiles. Its complete
+log is 285 lines / 28,950 bytes; floor and ceiling pass. The advertised SHA-256
+matches the actual compressed archive; all **80 images** and relevant reports
+are read and audited without local mounts or full extraction. Raw checks cover
+all target payload/maps, external attributes and sharing references, generation,
+inode/block bits and free counts, checksums, parent/target times and dirty/closed
+state. Complete peer inode/data/attributes are retained; final reclamation agrees
+with Linux statvfs (two inodes and 37/35/11 blocks for legacy-1K/checksummed-1K/4K).
+All 80 judged e2fsck checks and 48 Linux mount/readbacks pass. Verified exact-source
+CI units retain all 1,196 passes and 228 controls within the measured ceiling.
+
+Main focused fixture work and full run `39542365226` remain pending, as do complete-
+suite retention and the standalone unlink-family review. The new job qualifies
+healthy emitted layouts, not caller/raw-handle lifetime, ownership/alias admission,
+mapping broadening, crash recovery or the real card. See `extprogress.md` for
+commands, artifacts, exact-source results and next prerequisites; Stages 4–5
+stay not yet quantified and casefold writes remain blocked. No ownership/lifecycle/index-growth/recovery or card qualification
 is claimed from this implementation checkpoint.
 
 ### Executed native unlink policy red preparation — 2026-10-20
