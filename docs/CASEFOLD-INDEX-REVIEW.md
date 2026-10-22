@@ -69,6 +69,55 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed measured native mkdir policy reds — 2026-10-22
+
+At fetched `9937200`, the new dormant
+[27-control policy patch](CASEFOLD-MKDIR-POLICY-RED.patch) executes **fourteen
+passes / thirteen failures**, each red reaching all six native profiles. Ten
+parent timestamp controls cover first/back-to-back creations through all five
+Rust/C forms; three mixed pathname controls show regular/missing prefixes
+currently lose to final-name length. Across the policy run, 252 creations and
+714 refusal/precedence/syntax observations execute. Positive controls retain
+raw-byte/255-byte identity, existing/dot/trailing errors, allocation accounting,
+C attributes, parent storage/atime and protected peer data/attributes.
+
+The review preserves explicit low-twelve-mode-bit behavior, absolute-path
+syntax, counted empty/slash/NUL/length-before-conversion priorities, generation
+validation, FFI null/slice checks and symbolic errno mapping. The measured
+syscall SGID/empty-path differences do not override those contracts. The next
+mixed-prefix correction is local to mkdir; `resolve_new_parent` keeps its
+existing earlier-length semantics for other creation families. A discovery
+positive-test failure caused by parent growth is corrected with fresh parents,
+not counted as a driver defect.
+
+Both final patch orders recreate identical complete source; both actual
+combined runs execute the same **100 names/outcomes: 25 passes / 75 failures /
+zero ignored**, exit 101, **1,037 lines / 80,845 bytes** each. All original 73
+safety outcomes, 352 injected I/O faults, four actual publication unwinds and
+original positives remain. Four failures are future SB-ordering diagnostics;
+71 exercise current public safety/policy gaps. Full lint passes with both
+audits active. Patches are reversed and all production/test/workflow/task/lock
+bytes restored; normal units retain every **1,282 name / 314 control**, zero
+failed/ignored. The original safety patch is byte-identical; the new policy
+patch SHA-256 is `a90024d81eedffe73e09ba3628bf053e27d2a27463f74562406fc2297a573a6a`.
+The [executed ledger](extprogress.md#executed-native-mkdir-policy-red-preparation--2026-10-22)
+records complete coverage, composition, evidence and limitations.
+
+Prior source `79ed456` now passes all full CI jobs/ci-ok (`39826871657`) and
+all seven focused jobs (`39826871672`); docs `9937200` passes `39828986312`.
+Five source/digest/CRC-verified log archives retain all 2,121 preceding whole-
+suite occurrences plus the mkdir reference (2,122 passes, one unchanged ignored
+fuzz test), all 314 controls in five contexts, all 1,282 unit names, 527 aarch64
+image passes, twenty native shell checks and 159 CLI checks in both contexts.
+Actual job logs confirm executed floors; complete whole logs fit unchanged caps.
+
+Next: inspect this checkpoint's CI, implement the reviewed mkdir guard/owned-
+plan and timestamp/path repairs, bind diagnostics to the actual private boundary,
+then independently qualify real driver emissions and perform scoped review.
+No repair or emission qualification is claimed here. Stages 4–5 remain not yet
+quantified; casefold writes, broader ownership/lifecycle/recovery and Windows/
+SteamOS/card gates remain blocked.
+
 ### Verified independent Linux mkdir policy evidence — 2026-10-22
 
 Exact `79ed456` passes `mkdir-policy-reference` job `119992355646` in focused
