@@ -69,6 +69,54 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed native mkdir safety red preparation — 2026-10-22
+
+At fetched `166e43f`, exact full CI `39717854554` reports completed success.
+The prescribed native baseline has 1,282 passes and all 314 controls. The new
+dormant `CASEFOLD-MKDIR-RED.patch` is actually executed, reversed/reapplied with
+byte-identical source and rerun: both final runs retain exactly **73 names,
+11 passed / 62 failed / zero ignored**, exit 101, 931 lines / 59,622 bytes.
+SHA-256 is `575d683b4e47d1028d426b4497632fb0b963fae2d1d298126f3043875bf88932`.
+
+Fifty-eight failures exercise current public exclusion, untouched-refusal,
+conversion/callback/worker/C-readback and complete-effect retirement gaps.
+Four constructed pre-marker SB diagnostics preserve debits/other state but
+restore clean state after the marker; they describe a future private-boundary
+requirement, not a current public clean-bit regression. All **352** measured
+write/flush error/unwind injections execute before aggregate assertions, with
+352 retirement violations. Four actual public publication unwinds occur after
+committed namespace writes; all initially leave the sticky mount latch false.
+Every profile reaches its observation before the final aggregate failure.
+
+Fifty-four positive creation profiles cover all five entries on six native
+flavor/block-size layouts, Rust/C full-parent growth, inline edit/conversion
+and DIR_NLINK unknown count. They retain child/parent fields, next-allocation
+identity, counters/used-directory credits, peers/external attributes and reopen.
+Two same-table cases assert their shape. One additional constructed 2 KiB/
+two-group/uninit profile checks three distinct blocks, two inodes, exact group
+debits, bitmap CRC/padding, itable-unused and flag publication. It is not an
+ownership-qualified Linux fixture. Four optional C-readback callbacks admit
+guarded workers (red); four injected post-commit reads preserve EIO with one
+created entry and no repeated allocation (positive compatibility controls).
+
+The [executed ledger](extprogress.md#executed-native-mkdir-safety-red-preparation--2026-10-22)
+records the fixture/compile/probe corrections, actual source and diagnostics,
+complete repeatability and remaining scope. Full lint passes with the audit
+active; after reversal normal native units retain exactly 1,282 names and all
+314 controls, zero failed/ignored. Only the dormant patch and review/handoff
+remain changed. New private foreign/malformed-SB/retained-context controls are
+deferred until the actual mkdir-only boundary exists; the four constructed
+ordering controls must then call that real boundary. No fake helper or new
+production guard is introduced just to compile future tests.
+
+Next: independent reference-only Linux mkdir parent/child timestamp, name/path/
+error and accounting measurement, with saved-byte audit, before measured policy
+reds or semantic repair. Preserve the existing qualified families, pins, global
+caps/floors/filters and write gates; do not reapply promoted rmdir/unlink patches.
+No new Linux outcome, arbitrary corruption/ownership, lifecycle/recovery or
+Windows/SteamOS/card qualification follows. Stages 4–5 remain not yet quantified
+and public casefold writes remain blocked.
+
 ### Public-mkdir staging, marker and dispatch design audit — 2026-10-21
 
 Audited clean fetched `a98fcdc3669b795b3ad8799cad4e3e395d57e4cf` using
