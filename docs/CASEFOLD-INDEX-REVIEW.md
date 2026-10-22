@@ -69,6 +69,38 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Scoped rmdir full-CI closure — 2026-10-22
+
+Budget repair `0da4221` and evidence checkpoint `49d3484` now pass all eleven
+jobs, including `ci-ok`, in full runs `39702689248` and `39703344673`.
+All ten downloaded tier archives match advertised SHA-256 and workflow source.
+Exact successful-name multisets retain 2,121 passes in each whole suite, all
+1,282 unit names in three contexts, all 314 controls once in five contexts and
+527 aarch64 image passes. The same one ignored slow fuzz case remains in both
+whole suites and aarch64 images; it stays a broader qualification gate.
+Both runs now execute all twenty trailing native shell checks and 159 installed
+CLI checks; standalone CLI also passes 159. Actual latest native/guest job logs
+confirm normal wrappers and unchanged floors. Complete native 3,526 / 201,673
+and guest 3,693 / 210,993 logs fit repaired limits without removing output.
+The [closure ledger](extprogress.md#scoped-rmdir-full-ci-review-closure--2026-10-22)
+records both exact runs, measurements, artifact digests and local evidence.
+
+Source/test/workflow/helper/pin bytes remain identical to independently tested
+`fbc334e`; completed source and new/retained saved-image audits remain applicable.
+The standalone rmdir review is **closed under caller exclusion, healthy layouts
+and closed reference handles**, with no further scoped blocker found. No new
+production/test/configuration repair or broader ownership/lifecycle/recovery
+qualification is claimed. Casefold writes and Windows/SteamOS/card use remain
+blocked; Stages 4–5 remain not yet quantified.
+
+Next is the bounded public-mkdir staging/marker/dispatch design audit: trace all
+Rust/C forms, name/generation/error priorities, inode/data allocation and parent
+growth, inheritance/counters/checksums, owned-plan preparation and complete
+effect/publication retirement. Select one shared-context private dispatch and
+specific native red/positive controls before implementation. That audit and its
+new tests have not yet executed. Independent Linux policy measurements precede
+semantic corrections; preserve all already qualified boundaries and write gates.
+
 ### Rmdir emission/evidence verified; measured wrapper repair — 2026-10-21
 
 At exact `fbc334e`, all focused jobs pass in `39684661329`. The new rmdir
