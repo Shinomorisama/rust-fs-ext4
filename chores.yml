@@ -88,6 +88,19 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     native    3,525 / 201,559    3,700 / 205,000   Exact rmdir source fbc334e,
+#     guest     3,695 / 210,972    3,900 / 213,000   CI run 39684661421:
+#                                                    both retain 2,034 prior
+#                                                    passes and add 87, with
+#                                                    2,121 passed/zero failed/
+#                                                    one existing ignored.
+#                                                    Actual jobs and identical
+#                                                    complete-log replays fail
+#                                                    old 195,000 / 203,000 byte
+#                                                    caps with status 65 and
+#                                                    pass these measured caps.
+#                                                    Keep lines/floors/output.
+#   Historical unit measurement and then-current budget:
 #     unit      1,530 / 111,458    1,560 / 115,500   Guarded-rmdir local run,
 #                                                    2026-10-21, retained in
 #                                                    tmp/casefold-rmdir-repair/
@@ -695,7 +708,7 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        scripts/tier.sh test:vm vm 3900 203000 -- \
+        scripts/tier.sh test:vm vm 3900 213000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 
@@ -737,7 +750,7 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 195000 -- scripts/test.sh --locked --release'
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 205000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then

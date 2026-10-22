@@ -69,6 +69,51 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Rmdir emission/evidence verified; measured wrapper repair — 2026-10-21
+
+At exact `fbc334e`, all focused jobs pass in `39684661329`. The new rmdir
+job executes once (one pass/zero failed/ignored), 669 lines / 80,886 bytes.
+Actual logs retain 16 mke2fs, 64 kernel mounts, 112 judged e2fsck and 320 debugfs
+calls. The 4,335,231-byte compressed archive matches advertised SHA-256
+`18d05ba6ab52464581c3971ff65de51e641811e660e89821f738750d8493018e`.
+Read-only audit verifies every one of 16 ordinary Rust/C layouts / 112 images /
+48 closed-target removals: namespace, parent times/links, complete per-group
+bitmap/SB/BGD/used-directory credits, exclusive/shared attributes, peer inode/
+payload/storage preservation, freed generation/dtime, dirty/clean state and CRCs
+including initialized bitmap checksums. Final ledger per profile is +4 blocks,
++3 inodes, -3 used directories. Independent Linux/debugfs readbacks match.
+Intervening Linux readlink may update surviving symlink atime; all other fields
+and each dirty/closed pair remain checked, with that observer effect recorded in
+[the evidence ledger](extprogress.md#verified-rmdir-linux-emission-and-whole-suite-budget-repair--2026-10-21).
+
+The standalone source walk traces all five entries, private single-context
+planning/volume/name/generation ordering, matched/inline/storage/parent staging,
+required full-SB normalization and complete error/unwind/publication retirement.
+No additional scoped source blocker is found under caller exclusion, healthy
+asserted layouts and closed reference handles. This is not arbitrary ownership/
+corruption/plan admission or unguarded-writer/lifecycle/recovery qualification.
+
+Verified full archives in `39684661421` retain exactly 2,034 prior passes +87:
+**2,121 passed, zero failed, one unchanged ignored** in each whole suite. All
+314 controls occur once in five contexts; all units retain 1,282 names and
+all 527 aarch64 image tests remain. Native 3,525 / 201,559 and guest 3,695 /
+210,972 fail only old byte caps (195,000 / 203,000), actual exit 65. Identical
+complete-log replay fails old and passes repaired 205,000 / 213,000 with floors,
+line caps, commands, output and filters retained. Native trailing shell/installed
+CLI checks did not run after that wrapper failure. Unit limits/pins/siblings and
+write gates are unchanged; no production/test-body repair is included.
+
+GitHub authenticated API access changed to HTTP 401 after initial verified
+downloads; both helper/gh confirm it while policy remains current/enforced and
+Git source reads work. Refresh is requested. Other focused jobs report success,
+but their fresh retained metadata/policy/symlink saved-byte audits remain pending
+because additional downloads are blocked. The new rmdir audit/source walk are
+complete; **family closure remains pending** repair-source full CI/native trailing
+checks and those remaining retained audits. Reuse completed audits while source
+is identical, then finish scoped closure before another unguarded family. Stages
+4–5 remain not yet quantified; casefold writes and broader Windows/card gates
+stay blocked. No host oracle or new power-loss qualification is claimed.
+
 ### Guarded public rmdir implementation, native evidence — 2026-10-21
 
 At fetched `482bbef`, the prescribed baseline retains all 1,196 names and its
