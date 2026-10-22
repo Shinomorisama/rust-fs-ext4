@@ -103,16 +103,32 @@ line caps, commands, output and filters retained. Native trailing shell/installe
 CLI checks did not run after that wrapper failure. Unit limits/pins/siblings and
 write gates are unchanged; no production/test-body repair is included.
 
-GitHub authenticated API access changed to HTTP 401 after initial verified
-downloads; both helper/gh confirm it while policy remains current/enforced and
-Git source reads work. Refresh is requested. Other focused jobs report success,
-but their fresh retained metadata/policy/symlink saved-byte audits remain pending
-because additional downloads are blocked. The new rmdir audit/source walk are
-complete; **family closure remains pending** repair-source full CI/native trailing
-checks and those remaining retained audits. Reuse completed audits while source
-is identical, then finish scoped closure before another unguarded family. Stages
-4–5 remain not yet quantified; casefold writes and broader Windows/card gates
-stay blocked. No host oracle or new power-loss qualification is claimed.
+Every remaining exact-source focused archive is now downloaded and digest/
+workflow-SHA verified. Fresh read-only audits pass all 16 setter/eight first-
+attribute/84 removal-retained layouts, 32 ordinary setter-policy observations/
+16 byte-identical Rust/C images/four duplicate diagnostics, all 16 unlink emission
+layouts/80 images, unlink reference eight layouts/24 images/40 errors/eight
+255-byte successes, rmdir reference eight layouts/32 images/184 errors/24 removals,
+and all five symlink tests with their selected namespace/boundary saved images.
+All fifteen main focused logs execute one successful test with no failed/ignored.
+The standalone rmdir source/saved-evidence review is complete within the recorded
+caller-exclusion, healthy-layout and closed-reference-handle contract; no further
+scoped blocker is found. Broader gates remain unchanged.
+
+The inherited API-helper/gh credential returned 401 after initial downloads, but
+public REST reads/downloads succeed without Authorization, with normal proxy/CA,
+redirect and digest checks. Default Git fetch/push also works. No credential or
+environment setting is changed, and reconnect is unnecessary for this public read
+workflow; authenticated Actions-write access is not verified by that fallback.
+
+Budget repair `0da4221` is pushed and exact full CI `39702689248` is running.
+Unit/CLI/fixtures/MSRV/semver/wasm/provenance jobs report success; whole suites and
+aarch64 remain pending. **Scoped rmdir closure still requires** the repair's full
+CI, exact occurrence retention and native trailing shell/installed-CLI checks.
+Reuse the completed image/source reviews while implementation bytes are identical,
+then close the scope before another family. Stages 4–5 remain not yet quantified;
+casefold writes and broader Windows/card gates stay blocked. No host oracle or
+new power-loss qualification is claimed.
 
 ### Guarded public rmdir implementation, native evidence — 2026-10-21
 
