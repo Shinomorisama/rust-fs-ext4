@@ -69,6 +69,141 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public-mkdir staging, marker and dispatch design audit — 2026-10-21
+
+Audited clean fetched `a98fcdc3669b795b3ad8799cad4e3e395d57e4cf` using
+Sol 6.1. Its exact full run `39711385558` now passes every job and `ci-ok`.
+This is a source/helper/test design audit, not new native execution, Linux
+policy measurement, a guard migration or ownership admission. The completed
+rmdir review and its verified archives remain applicable; no unchanged image
+matrix is rerun for this audit.
+
+#### Existing entry and staging boundaries
+
+| Path | Observed behavior | Migration obligation |
+|---|---|---|
+| Rust `apply_mkdir` / `apply_mkdir_bytes` | String delegates to bytes. Marker-writing `refuse_write` precedes `resolve_new_parent`; that helper splits/trims the path, rejects an overlong final name before parent resolution, then resolves parent symlinks. Bytes then call public `apply_mkdir_at`, repeating the volume verdict. | Enter one shared nonblocking mount operation before callbacks or reads; retain both pure volume verdicts through private nested dispatch. Do not call a second guarded public method. |
+| Rust `apply_mkdir_at` | Volume verdict, `check_new_entry_name`, caller `Into<InodeRef>`, live allocated inode/generation/type, duplicate scan, parent link-room check, then allocation. Invalid/overlong counted names precede conversion and stale-parent checks. Literal dot names have no new rmdir-style special check here. | Preserve these priorities and generation/error propagation. Do not transplant rmdir name policy; measure uncertain semantic cases independently before changing them. |
+| C `fs_ext4_mkdir` | Null/path-length checks precede the byte API; returns inode or zero with errno. The C string accepts non-UTF-8 bytes. | Keep pointer/string checks and return convention; delegate to the same guarded filesystem boundary, without an additional ABI lock. |
+| C `fs_ext4_mkdir_at` | `ino_call` checks the handle; `name_arg` checks null and the FFI slice ceiling before the filesystem verdict. The filesystem creates the entry, then optional `attr_out` calls `stat_ino` and fills attributes; it may report an error after creation has committed. | Keep the counted-pointer/length priorities and zero/-1 convention. Hold the same context through optional attribute readback; distinguish that post-commit read error from failed creation or rollback. |
+
+The current `refuse_write` can write/flush the primary superblock before any
+name, stale-parent, duplicate, checksum, link-limit or allocation refusal. There
+is no shared operation entry around mkdir planning. The journal mutex inside
+`commit_block_buffer` begins after planning and exists only for journaled
+mounts. Those source observations define controls; they are not executed reds.
+
+The planner first selects a directory inode using the existing Orlov hint and
+one data block, then stages their bitmaps, per-group/SB debits and used-directory
+credit. `buffer_mark_inode_used` also preserves uninit handling, bitmap CRC,
+`bg_itable_unused` and descriptor CRC. `build_directory_inode` masks mode to
+the low twelve bits, sets directory type, two links, one-block size/sectors,
+flavor-specific direct/extent mapping, extra-isize, runtime times/generation and
+inode CRC. It inherits only the validated parent casefold policy, not INDEX or
+INLINE_DATA. The seed contains `.`/`..` and the conditional directory tail.
+Public casefold write refusal remains earlier than all this construction.
+
+Parent insertion preserves several distinct paths:
+
+- An inline parent is edited/expanded in its inode or converted in the same
+  buffer. Conversion retains its other entries and strips only inline storage.
+- Ordinary block insertion and indexed routing keep existing checksum/error
+  behavior. Only `OutOfBounds` requests growth; other errors propagate.
+- Growth may split an ordinary htree leaf or drop an ordinary index, then
+  append through legacy indirect or extent helpers. Casefold index dropping
+  remains explicitly refused; this audit does not qualify casefold growth.
+- Further parent allocations use staged bitmaps **and staged uninit flags**;
+  deep extent planning also reserves not-yet-staged data/metadata blocks. The
+  child's allocation must remain visible to every later parent allocation.
+- Both final branches re-read the parent through `buffered_inode_verified`
+  before its link increment, preserving inline/growth edits and shared inode-
+  table blocks. DIR_NLINK unknown-count and link-limit behavior remain intact.
+
+Both branches currently commit their complete buffer once, then return the
+new inode. Despite the old public comment saying “Not journaled”, actual
+`commit_block_buffer` uses journal commit/checkpoint when configured, or ordered
+direct writes/flushes otherwise, followed by allocation-flag publication.
+Publication may allocate/unwind. A commit-only guard or effect ending before
+publication is insufficient. The parent-link patch and directory-inode staging
+helpers do not themselves stamp parent mtime/ctime; child times already use the
+runtime. Parent timestamp semantics need independent advancing-clock evidence
+before a correction. This audit does not infer a new Linux result.
+
+#### Proposed bounded migration
+
+1. Acquire the existing shared mount context once for each public Rust/C
+   filesystem operation, before writability, reads, conversion and runtime
+   callbacks. Context identity/freshness precedes even device property calls.
+   Use private byte/path/parent helpers with the two existing pure volume
+   verdicts and the counted-name ordering above. Contention is an untouched
+   refusal; unrelated writers still require caller exclusion.
+2. Extract an owned mkdir result containing the new inode number and one
+   completed `BlockBuffer`. Keep all allocator, bitmap, seed, insertion,
+   growth, buffered-parent and checksum helpers. Merge the two terminal commit
+   branches into one private mkdir-only boundary, after every refusal-capable
+   planning step. This internal result is not a generic sealed/admitted plan.
+3. Before any effect, require the staged full primary-SB block, validate its
+   size/offset/magic, clear only its clean bit and restamp the SB CRC. Preserve
+   every planned debit/credit, other state and bytes outside the SB region.
+   A plan built before the marker could otherwise overwrite its dirty state.
+   Constructed clean-SB controls are future-ordering diagnostics, not a current
+   public clean-bit regression: current mkdir marks before constructing it.
+4. Run the one-time marker and **complete** raw commit/checkpoint/direct flush/
+   allocation publication under the existing failure-latching effects. Preserve
+   all eight qualified families and their boundaries. Returned effect errors,
+   swallowed inner unwinds with a retained context and outer unwinds must
+   retire the mount, including flush/clean close; ordinary pre-effect refusals
+   leave it reusable. Do not change raw commit or broaden lifecycle guarantees.
+5. For counted C creation with requested attributes, use a mkdir-specific
+   guarded adapter that reads an owned `Inode` snapshot after successful commit
+   and before releasing the context. C formatting can fill the output from that
+   snapshot without filesystem reads. A null attr needs no additional read.
+   Preserve the existing possible readback error after durable creation; do not
+   retry creation, return fabricated attributes or claim rollback. Preserve C
+   pointer validity, external lifetime/aliasing and maintenance obligations.
+
+#### Concrete next controls and independent evidence
+
+Prepare native controls with the existing Device/Clock/C fixture machinery and
+assert actual fixture shape. At minimum cover ext2/ext3/ext4 × 1/4 KiB, with
+targeted inline, full-parent, same-table and multi-group/uninit fixtures beyond
+that six-profile base. Do not infer Linux compatibility from self-built images.
+
+| Control group | Required observation |
+|---|---|
+| Entry/exclusion | All five string/byte/counted/C forms refuse a held context before device/runtime/Into calls; successful release permits creation. |
+| Reentry | Writability/read/runtime-time/generation/marker/commit/flush hooks and a worker callback cannot enter mkdir or the eight already guarded families while mkdir holds the context. Use legal Rust/C lifetimes, not overlapping mutable ABI references. |
+| Untouched refusal | Clean and already-dirty invalid/missing/stale/duplicate/long-name/bad-checksum/link-limit/allocation refusals preserve complete device bytes, make no write/flush calls and do not retire a healthy mount. |
+| Priority | Volume before Rust name/Into; invalid/long counted name before conversion; live generation/type before duplicate; path basename limits before parent lookup; second verdict before resolved-parent work; existing FFI null/slice checks remain earlier. Test literal dots, slashes, NUL and raw-byte names without assuming rmdir policy. |
+| Successful staging | Exact child identity, mode, generation/times, `.`/`..`, CRCs, two links, bitmap/SB/per-group deltas and parent links; peer bytes/attributes preserved; distinct back-to-back allocations; inline/growth edits survive same-table splicing. |
+| Buffered allocation | Assert the chosen multi-group/uninit state and actual growth/conversion; child data, parent data and metadata remain distinct, flags/padding/itable-unused/CRCs correct, with no allocation publication on pre-effect refusal. |
+| Private boundary | Foreign context and missing/malformed SB refuse before callbacks; constructed clean-SB credit plans preserve all counters/features/outside bytes, stay dirty until healthy close and keep the source boundary private. |
+| Uncertain effects | Sweep every actually observed write/flush position on direct and journal paths, plus runtime/Into/publication unwinds and retained-context errors. Verify each injection executes before aggregate assertions; no subsequent guarded family, flush or clean close may write. |
+| Counted C attributes | Requested attributes match committed inode/generation under the same context, including callback reentry at readback. Null attr avoids readback; injected post-commit read failure reports error while the new entry remains created, with no second allocation. |
+
+Before implementation, actually execute/save the native red/positive patch,
+reapply and rerun with identical source/name occurrences, then restore active
+source and retain all 1,282 units/314 controls. Keep unmeasured semantic cases
+separate from safety reds. Next add independent reference-only Linux mkdir
+observations for parent/child times, dot/trailing/long-name and mixed-error
+priorities, controlled mode/ownership expectations and resource accounting.
+Do not silently broaden into umask, setgid/default-ACL/credential inheritance
+without an explicit API contract and measured evidence.
+
+After executed reds and a bounded repair, independent emitted-image evidence
+must cover Rust/C, direct/journal, 1/4 KiB and legacy/checksummed layouts with
+asserted input shapes. Audit every saved dirty/closed image: cold namespace and
+`..`, child/parent fields, peers, complete per-group bitmap/free/used-directory
+deltas, uninit transitions and CRCs, judged e2fsck/debugfs/kernel readback.
+Charge actual parent growth/map-node allocations rather than assuming one block
+for every case; Linux need not choose the same physical inode/block numbers.
+Retain existing inline/index-growth/journal/crash/unique-inode/DIR_NLINK and
+kernel readback tests. The existing mkdir crash sweep requires remount success
+but adds no existence/accounting postcondition; it does not replace full accounting or
+qualify arbitrary power loss. Finish source/saved-byte/full-CI review before
+another family. Public casefold writes, ownership aliases, plan seals, ignored
+fuzz, lifecycle/recovery and Windows/SteamOS/card gates remain unchanged.
+
 ### Scoped rmdir full-CI closure — 2026-10-22
 
 Budget repair `0da4221` and evidence checkpoint `49d3484` now pass all eleven
