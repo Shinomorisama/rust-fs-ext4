@@ -69,6 +69,34 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Independent Linux mkdir policy oracle added — 2026-10-22
+
+At fetched `cd22d9c`, preceding exact full CI `39813130020` reports success.
+One new reference-only needs-host test and separate floor-one focused job
+cover eight 1/4 KiB, 128-byte legacy/256-byte checksummed, direct/journal
+layouts. Linux creates all bytes; driver mounts are read-only. Five saved
+phases per layout require 216 error observations, 24 creations and 40 images.
+Complete JSON/stderr, images and debugfs reports are retained even on failure.
+
+The reference records parent/child times with advancing-clock legacy handling,
+actual requested/special mode answers under controlled credentials/umask,
+ordinary existing/dot/trailing/long/mixed-path errors, raw-byte and 255-byte
+successes, namespace identity, peer payload/attributes, exact per-group
+allocation/used-directory debits and clean journal/closed-image state.
+Input shapes and unchanged parent storage are asserted; e2fsck is judged.
+No special-mode, credential-inheritance or uncertain error repair is inferred
+before actual measurements. Existing code and native safety reds remain intact.
+
+Python syntax, Rust compilation, full lint and normal native retention pass:
+all 1,282 names and 314 controls, zero failed/ignored. The
+[reference ledger](extprogress.md#independent-linux-mkdir-policy-oracle-added--2026-10-22)
+records coverage and the next actual-evidence audit. The VM job and saved-byte
+inspection are **pending**, not Linux passes. Inspect exact CI and verified
+artifacts, repair real measurement failures, then prepare independently grounded
+policy reds before the bounded mkdir guard migration. Global floors/caps/
+filters, pins/siblings and write gates are unchanged; Stages 4–5 remain not yet
+quantified and casefold writes/Windows/SteamOS/card qualification stay blocked.
+
 ### Executed native mkdir safety red preparation — 2026-10-22
 
 At fetched `166e43f`, exact full CI `39717854554` reports completed success.

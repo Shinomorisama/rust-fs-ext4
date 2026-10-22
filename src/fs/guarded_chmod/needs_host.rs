@@ -1,6 +1,7 @@
 //! Independent emitted-metadata evidence for the guarded metadata families.
 mod chown;
 mod flags;
+mod mkdir_policy;
 mod removexattr;
 mod rmdir;
 mod rmdir_policy;
