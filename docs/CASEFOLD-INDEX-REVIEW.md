@@ -69,6 +69,41 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Verified independent Linux mkdir policy evidence — 2026-10-22
+
+Exact `79ed456` passes `mkdir-policy-reference` job `119992355646` in focused
+run `39826871672`: one pass, zero failed/ignored, 565 lines / 64,658 bytes,
+actual floor one passed. Its source/advertised-SHA-verified 1,675,744-byte ZIP
+(`2f642a1c548844fad8ed4878613ae58a353ee065df073f798cc54f81c4a54195`)
+retains forty images. Read-only audit passes every eight-layout phase, all
+216 consistent error observations, 24 creations and 328 complete debugfs
+reports against saved bytes, including times, permissions, identities, mappings,
+SB/BGD/bitmap/CRC accounting, protected namespace/payload/attributes and clean
+state. Actual calls are eight mke2fs, forty kernel mounts, forty judged e2fsck
+and 328 debugfs. The final per-layout ledger is -3 blocks/-3 inodes/+3 directories.
+
+Linux creation advances parent mtime/ctime, preserves atime, accepts the tested
+raw-byte/255-byte and symlink/trailing cases, and refuses 256-byte components.
+Regular/missing intermediate components precede final-name length in the
+observed path errors. Root/zero-umask/non-setgid-parent observations store
+requested 02750 as 0750, 01770 as 01770 and 0750 as 0750. Keep those measured
+syscall facts separate from explicit counted-name/FFI/platform-errno and mode
+API contracts; do not silently rewrite them. Symlink traversal atime/covering
+CRC is the only allowed observer change in otherwise preserved symlink bytes.
+The [verified ledger](extprogress.md#verified-independent-linux-mkdir-policy-evidence--2026-10-22)
+records the exact checks, policy table, scope and artifact provenance.
+
+The standalone reference audit is complete for ordinary healthy non-growing
+layouts, not driver write emission or guarded mkdir qualification. No production
+or test source changes follow the passing run. Native baseline retention and
+lint remain passed; source aarch64 passes, while native/guest whole suites
+and focused fixtures remain running. Next: inspect those outcomes,
+then execute independently grounded native parent-timestamp policy reds and
+review mixed-prefix/mode contracts before broader semantic changes. Keep the
+73-control safety patch dormant until composition/repetition, and restore
+source before implementation. Stages 4–5 remain not yet quantified, with casefold
+writes and broader ownership/lifecycle/recovery/Windows/card gates blocked.
+
 ### Independent Linux mkdir policy oracle added — 2026-10-22
 
 At fetched `cd22d9c`, preceding exact full CI `39813130020` reports success.
