@@ -69,6 +69,41 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Verified public mkdir Linux emission; full retention pending — 2026-10-23
+
+Exact source `97356c9` passes focused `mkdir-emission` job `120278298194` in
+run `39912448406`: one executed pass, floor one, zero failed/ignored, complete
+log 893 lines / 111,735 bytes. Artifact `12483279278` matches source and
+advertised SHA-256 `4f1b9fcd9b3773ffa48f7cd54b1c1ebac8cb2437d07497ece0a7d3087efc4914`.
+All 1,329 archive members are read/CRC checked directly from the compressed ZIP.
+
+All sixteen Rust/C × 1/4 KiB × 128/256-byte × direct/journal layouts and 112
+input/dirty/closed images pass raw-byte audit. All 48 creations, 544 complete
+debugfs reports and 432 cold Linux metadata records agree on identities,
+fields/times/mappings and byte names. Per-group bitmaps/free counts/used dirs,
+all affected checksums, peer/existing inode/payload/EA preservation, parent
+links/times/atime and unchanged storage agree. Final per-layout allocation is
+-3 blocks/-3 inodes/+3 used dirs. Dirty and closed state is correct; all 56
+journal headers are checkpointed and all 28 checksummed journal SBs pass CRC.
+Explicit 02750/01770/0750 API modes survive independent Linux stat. Actual
+calls are sixteen mke2fs, 112 judged e2fsck, 544 debugfs and 64 kernel mounts.
+This is ordinary healthy emission evidence under caller exclusion, not power-
+loss, arbitrary ownership, index growth, lifecycle or Windows/card qualification.
+
+Source/digest/CRC-verified exact CI unit output retains every 1,386 local
+successful occurrence and all 418 controls once, zero failed/ignored, within
+unchanged limits. All other separate focused jobs and full unit/CLI/MSRV/wasm/
+provenance/semver jobs pass. Main focused fixtures and full fixture/runner setup
+remain running; complete-suite/aarch64/trailing evidence and ci-ok are pending.
+No driver/test/workflow/task/global cap/filter/pin change is included here.
+
+The [verified ledger](extprogress.md#verified-mkdir-linux-emission-and-saved-byte-audit--2026-10-23)
+records artifact provenance, raw/independent checks, exact-source retention and
+remaining gates. Next inspect remaining actual CI, repair real failures and
+complete retained-family and standalone source/evidence review before scoped
+mkdir closure. Reuse verified images while source stays unchanged. Stages 4–5
+remain not yet quantified; casefold writes and broader qualification stay blocked.
+
 ### Guarded public mkdir implementation; independent evidence pending — 2026-10-23
 
 At fetched `ea2b41b` every preceding full CI job/ci-ok passes. Fresh replay
