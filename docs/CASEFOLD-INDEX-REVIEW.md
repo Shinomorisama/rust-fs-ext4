@@ -69,6 +69,37 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Scoped mkdir full-CI review closure — 2026-10-23
+
+Budget repair `7f9617dc3b4c4d2e3663f382d7a644bd681fd62e` passes every job and
+ci-ok in [exact full run 39997261948](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39997261948).
+Five source/advertised-digest/CRC-verified tier archives retain all **2,227**
+whole-suite successful occurrences in both suites, zero failed and one unchanged
+ignored slow fuzz case. All **418** controls occur once in five contexts; all
+three unit contexts retain 1,386 occurrences and aarch64 images retain 527 passes.
+Native whole output is 3,633 lines / 212,215 bytes; guest is 3,800 / 221,518.
+Actual wrappers and unchanged 1,060 floors pass. Trailing native **twenty shell
+checks and 159 installed-CLI checks now execute and pass**, with all prior shell
+names/verdicts and CLI-file counts retained. Standalone CLI also passes 159.
+
+Implementation/test/workflow bytes match independently verified `97356c9`.
+The completed source walk, sixteen-layout/112-image/48-creation mkdir audit
+and retained-family saved-byte audits above remain applicable; no unchanged
+image audit or new native regression is claimed for this docs-only checkpoint.
+No further blocker is found within **caller exclusion, healthy layouts and
+closed reference handles**. The scoped mkdir source/evidence/full-CI review is
+closed. Both mkdir patches remain historical promoted artifacts.
+
+The [closure ledger](extprogress.md#scoped-mkdir-full-ci-review-closure--2026-10-23)
+records exact provenance, occurrence multisets, actual floors and trailing checks.
+Next is a bounded regular-file `create` Rust/C staging/marker/dispatch design
+audit, including shared planner callers and optional C attributes, before new
+red execution or migration. This checkpoint chooses that audit rather than
+claiming it complete. Keep every qualified family intact. Arbitrary ownership/
+corruption, retained handles, mapping/index growth, lifecycle/seal, recovery,
+ignored-fuzz and actual Windows/SteamOS/card qualification remain open.
+Stages 4–5 remain not yet quantified; **casefold writes stay blocked**.
+
 ### Mkdir scoped source/evidence review and whole-byte repair — 2026-10-23
 
 Review at implementation `97356c9` finds no further blocker within healthy
