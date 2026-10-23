@@ -1,4 +1,4 @@
-//! Shared metadata/unlink/rmdir dispatch; other writers need caller exclusion.
+//! Shared metadata/unlink/rmdir/mkdir dispatch; other writers need caller exclusion.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +45,126 @@ impl Drop for MountOperation<'_> {
 }
 
 impl Filesystem {
+    pub(super) fn guarded_mkdir_bytes(&self, path: &[u8], mode: u16) -> Result<u32> {
+        let mut context = self.chmod_operation()?;
+        self.mkdir_bytes_in(&mut context, path, mode)
+    }
+
+    pub(super) fn guarded_mkdir_from(
+        &self,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+        mode: u16,
+    ) -> Result<u32> {
+        let mut context = self.chmod_operation()?;
+        self.mkdir_from_in(&mut context, dir, name, mode)
+    }
+
+    /// The optional C readback is still part of the same excluded operation.
+    /// Its read error can follow a successful creation and does not undo it.
+    pub(crate) fn guarded_mkdir_with_attr(
+        &self,
+        dir: InodeRef,
+        name: &[u8],
+        mode: u16,
+        read_attr: bool,
+    ) -> Result<(u32, Option<Inode>)> {
+        let mut context = self.chmod_operation()?;
+        let ino = self.mkdir_from_in(&mut context, dir, name, mode)?;
+        let attr = if read_attr {
+            Some(self.stat_ino(ino)?)
+        } else {
+            None
+        };
+        Ok((ino, attr))
+    }
+
+    fn mkdir_bytes_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        path: &[u8],
+        mode: u16,
+    ) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        // Linux's measured regular/missing parent errors precede final-name
+        // length. Keep resolve_new_parent unchanged for other creation families.
+        let (parent, name) = self.resolve_parent(path)?;
+        self.mkdir_path_in(context, parent, name, mode)
+    }
+
+    fn mkdir_path_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        parent: u32,
+        name: &[u8],
+        mode: u16,
+    ) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        // Path parent type precedes final length; counted-name calls retain
+        // their earlier name validation and arbitrary-conversion priorities.
+        self.live_dir(parent.into())?;
+        check_new_entry_name(name)?;
+        let plan = self.plan_mkdir_at(parent.into(), name, mode)?;
+        self.commit_mkdir_in(context, plan)
+    }
+
+    fn mkdir_from_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+        mode: u16,
+    ) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        // Retain the second path verdict and counted-name-before-Into contract.
+        self.write_refusal()?;
+        check_new_entry_name(name)?;
+        let plan = self.plan_mkdir_at(dir.into(), name, mode)?;
+        self.commit_mkdir_in(context, plan)
+    }
+
+    /// Mkdir-only trusted staging, including the full allocation publication.
+    fn commit_mkdir_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        mut plan: MkdirPlan,
+    ) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        self.prepare_mkdir_buffer(&mut plan.buf)?;
+        if !self.marked_not_clean.load(Ordering::SeqCst) {
+            context.effect(|| self.mark_not_clean_once())?;
+        }
+        context.effect(|| self.commit_block_buffer(plan.buf))?;
+        Ok(plan.ino)
+    }
+
+    fn prepare_mkdir_buffer(&self, buf: &mut BlockBuffer) -> Result<()> {
+        let bs = u64::from(self.sb.block_size());
+        let offset = crate::superblock::SUPERBLOCK_OFFSET;
+        // Every mkdir allocates an inode and must carry primary SB debits.
+        let block = buf
+            .dirty
+            .get_mut(&(offset / bs))
+            .ok_or(Error::Corrupt("mkdir prepared superblock missing"))?;
+        let start = (offset % bs) as usize;
+        if block.len() != bs as usize || start + 1024 > block.len() {
+            return Err(Error::Corrupt("mkdir prepared superblock shape"));
+        }
+        let sb = &mut block[start..start + 1024];
+        if u16::from_le_bytes(sb[0x38..0x3a].try_into().unwrap()) != crate::superblock::EXT4_MAGIC {
+            return Err(Error::Corrupt("mkdir prepared superblock magic"));
+        }
+        let state = u16::from_le_bytes(sb[0x3a..0x3c].try_into().unwrap());
+        sb[0x3a..0x3c].copy_from_slice(&(state & !crate::superblock::EXT4_VALID_FS).to_le_bytes());
+        if self.csum.enabled {
+            let checksum = crate::checksum::linux_crc32c(!0, &sb[..0x3fc]);
+            sb[0x3fc..].copy_from_slice(&checksum.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub(super) fn guarded_rmdir_bytes(&self, path: &[u8]) -> Result<()> {
         let mut context = self.chmod_operation()?;
         self.rmdir_bytes_in(&mut context, path)
@@ -1036,6 +1156,7 @@ mod tests {
 
     mod chown_calls;
     mod flags_calls;
+    mod mkdir_calls;
     mod policy_rmdir_calls;
     mod policy_unlink_calls;
     mod public_calls;
@@ -1044,6 +1165,8 @@ mod tests {
     mod setxattr_calls;
     mod unlink_calls;
     mod utimens_calls;
+
+    mod policy_mkdir_calls;
 }
 
 #[cfg(test)]

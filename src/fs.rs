@@ -34,6 +34,12 @@ pub(crate) struct BlockBuffer {
     pub uninit_cleared: BTreeMap<usize, u16>,
 }
 
+/// Completed mkdir staging, owned until its guarded effects have finished.
+struct MkdirPlan {
+    ino: u32,
+    buf: BlockBuffer,
+}
+
 impl BlockBuffer {
     /// `block_size` is taken and not stored.
     ///
@@ -7010,30 +7016,27 @@ impl Filesystem {
     }
 
     /// Create a subdirectory at `path` with POSIX mode bits (low 12 bits of
-    /// `mode`). Returns the new directory's inode number. Steps: allocate
-    /// inode (Orlov-hinted) → allocate one data block → seed it with `.` / `..`
-    /// → build dir inode → write inode + data block → add dir entry in parent
-    /// → bump parent's `i_links_count` → commit BGD/SB counters.
-    ///
-    /// Not journaled — safe only in scratch-image contexts until transaction
-    /// wrapping lands.
+    /// `mode`). Returns the new directory's inode number. Allocation, dot entries,
+    /// parent links/times and counters are staged before the dirty marker, then
+    /// committed together through the configured journal or direct-write path.
+    /// Caller exclusion is still required for writers outside the shared guard.
     pub fn apply_mkdir(&self, path: &str, mode: u16) -> Result<u32> {
         self.apply_mkdir_bytes(path.as_bytes(), mode)
     }
 
     /// [`apply_mkdir`](Self::apply_mkdir) of a path given as bytes, never decoded.
     pub(crate) fn apply_mkdir_bytes(&self, path: &[u8], mode: u16) -> Result<u32> {
-        self.refuse_write()?;
-        let (parent, name) = self.resolve_new_parent(path)?;
-        self.apply_mkdir_at(parent, name, mode)
+        self.guarded_mkdir_bytes(path, mode)
     }
 
     /// [`apply_mkdir`](Self::apply_mkdir) of entry `name` in directory
     /// `dir`. `name` is bytes and need not be UTF-8.
     pub fn apply_mkdir_at(&self, dir: impl Into<InodeRef>, name: &[u8], mode: u16) -> Result<u32> {
-        self.refuse_write()?;
-        check_new_entry_name(name)?;
-        let dir = dir.into();
+        self.guarded_mkdir_from(dir, name, mode)
+    }
+
+    /// Reads and local staging only; dispatch owns the context and all effects.
+    fn plan_mkdir_at(&self, dir: InodeRef, name: &[u8], mode: u16) -> Result<MkdirPlan> {
         let parent_ino = dir.ino;
         let (parent_inode, _) = self.live_dir(dir)?;
         if self.entry_exists(parent_ino, &parent_inode, name)? {
@@ -7066,9 +7069,8 @@ impl Filesystem {
         )?;
         let data_block = bplan.first_block;
 
-        // Multi-block transaction: inode bitmap + block bitmap + counters
-        // + new dir inode + seeded data block + parent dir entry +
-        // parent nlink bump, all atomic.
+        // One owned staging buffer carries allocation bitmaps/counters, the
+        // child inode/dots and every parent edit into the configured commit.
         let mut buf = BlockBuffer::new(bs);
         self.buffer_mark_inode_used(&mut buf, new_ino)?;
         self.buffer_patch_bgd_counters(
@@ -7120,18 +7122,9 @@ impl Filesystem {
             Err(e) => return Err(e),
         };
 
-        if !parent_extends {
-            // In-place add succeeded — bump parent's nlink in the same
-            // buffer, read through it: an inline parent's new entry is in
-            // its inode, staged there (#428).
-            let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
-            self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_now, 1)?;
-            self.buffer_write_inode(&mut buf, parent_ino, &parent_raw)?;
-            self.commit_block_buffer(buf)?;
-        } else {
-            // Parent dir is full → grow it, and bump its nlink, in the
-            // same transaction. The parent is re-read from the buffer,
-            // where the growth restaged it.
+        if parent_extends {
+            // Growth, inline conversion and allocations must remain in the
+            // same buffer as the child's allocation and the parent inode.
             self.extend_dir_and_add_entry(
                 &mut buf,
                 parent_ino,
@@ -7139,13 +7132,18 @@ impl Filesystem {
                 new_ino,
                 crate::dir::DirEntryType::Directory,
             )?;
-            let (grown_parent, mut grown_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
-            self.patch_inode_nlink(parent_ino, &mut grown_raw, &grown_parent, 1)?;
-            self.buffer_write_inode(&mut buf, parent_ino, &grown_raw)?;
-            self.commit_block_buffer(buf)?;
         }
+        // Read through staged edits, including shared inode-table blocks.
+        let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
+        self.patch_inode_nlink(parent_ino, &mut parent_raw, &parent_now, 1)?;
+        // Independently measured by the mkdir_policy Linux reference.
+        let now = self.runtime.now_unix_seconds();
+        set_inode_time(&mut parent_raw, InodeTime::Mtime, now);
+        set_inode_time(&mut parent_raw, InodeTime::Ctime, now);
+        self.finalize_inode_raw(parent_ino, parent_now.generation, &mut parent_raw)?;
+        self.buffer_write_inode(&mut buf, parent_ino, &parent_raw)?;
 
-        Ok(new_ino)
+        Ok(MkdirPlan { ino: new_ino, buf })
     }
 
     /// Create a hard link at `dst` pointing to the same inode as `src`.

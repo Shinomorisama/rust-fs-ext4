@@ -100,6 +100,17 @@ chore_min_version: 0.6.0
 #                                                    caps with status 65 and
 #                                                    pass these measured caps.
 #                                                    Keep lines/floors/output.
+#     unit      1,634 / 121,718    1,740 / 131,000   Guarded-mkdir local run,
+#                                                    2026-10-23; retained in
+#                                                    tmp/casefold-mkdir-repair/
+#                                                    unit-over-budget.log:
+#                                                    1,386 passes, zero failed/
+#                                                    ignored; all 1,282 earlier
+#                                                    names plus 104 controls.
+#                                                    Actual exit 65 at old
+#                                                    1,560 / 115,500; identical
+#                                                    replay fails old/passes new.
+#                                                    Keep selection and floor.
 #   Historical unit measurement and then-current budget:
 #     unit      1,530 / 111,458    1,560 / 115,500   Guarded-rmdir local run,
 #                                                    2026-10-21, retained in
@@ -526,11 +537,11 @@ tasks:
     # Which targets: scripts/test-targets.sh, derived from the tests
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
-    # Unlink controls: 1,196 passes measured 1,444 lines / 102,845 bytes;
-    # previous 1,400 / 100,000 limits fail with exit 65. Retain the full log,
-    # command, selection and floor, with measured growth and similar headroom.
+    # Mkdir controls: 1,386 passes measured 1,634 lines / 121,718 bytes;
+    # previous 1,560 / 115,500 limits fail with exit 65. Identical complete-log
+    # replay passes the measured caps above; retain selection and floor.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1560 115500 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1740 131000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

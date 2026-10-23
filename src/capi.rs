@@ -2918,8 +2918,14 @@ pub unsafe extern "C" fn fs_ext4_mkdir_at(
     let what = || format!("mkdir_at {dir_ino}/{}", name_for_msg(name, name_len));
     ino_call(fs, -1, &what, |fs| {
         let dir = inode_ref(dir_ino, dir_generation);
-        let ino = fs.apply_mkdir_at(dir, name_arg(name, name_len)?, mode)?;
-        attr_out(fs, ino, attr)
+        let (ino, snapshot) =
+            fs.guarded_mkdir_with_attr(dir, name_arg(name, name_len)?, mode, !attr.is_null())?;
+        if let Some(inode) = snapshot {
+            // SAFETY: requested only for a non-null writable caller output.
+            // All filesystem reads finished under the shared operation context.
+            fill_attr(unsafe { &mut *attr }, ino, &inode);
+        }
+        Ok(0)
     })
 }
 

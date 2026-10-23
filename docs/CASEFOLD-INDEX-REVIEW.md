@@ -69,6 +69,55 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Guarded public mkdir implementation; independent evidence pending — 2026-10-23
+
+At fetched `ea2b41b` every preceding full CI job/ci-ok passes. Fresh replay
+retains all 100 saved outcomes (25 passes / 75 failures), then the reviewed
+repair makes all original controls and four new private-boundary controls pass:
+**104 passed / zero failed/ignored**, complete log 644 lines / 45,594 bytes.
+All 352 observed I/O failures/unwinds and four actual public publication unwinds
+now retire nine guarded families/flush/close. All 54 primary positive storage
+profiles and additional same-table/uninit/C-readback controls remain executed.
+
+All five Rust/C forms enter one shared context before callbacks/planning. One
+owned `MkdirPlan` retains complete inode/data/parent/counter staging. The
+mkdir-only commit boundary checks identity/health and full primary-SB shape/
+magic, preserves debits/state/sentinels, clears clean state and refreshes CRC
+before marker and complete commit/checkpoint/direct-flush/allocation-publication
+effects. Both parent-storage branches converge before parent link/time updates,
+preserving staged inline/growth/shared-table edits. Optional counted C attribute
+readback remains in the same context; a later read error still leaves one
+creation and NULL avoids that extra read. This is trusted planning, not generic
+ownership/admission or lifecycle/recovery qualification.
+
+Measured parent timestamps and pathname parent-type/length precedence now
+pass, preserving the second pure volume verdict. Counted empty/slash/NUL/length
+before generic conversion/liveness, explicit modes, generation/FFI priorities,
+absolute-path syntax and platform errno mapping remain. Other creation
+families' `resolve_new_parent` is unchanged. Four historically named future SB
+probes now exercise the actual boundary; four new tests cover foreign/missing/
+malformed SBs, retained-context error/unwind retirement and second-verdict
+precedence. Both saved mkdir patches are historical promoted artifacts and
+must not be reapplied.
+
+Native normal units retain all 1,282 earlier occurrences plus 104 (**1,386
+passes**, zero failed/ignored), with all **418 controls once**. An actual
+1,634-line / 121,718-byte unit log exceeds old caps; identical complete-log
+replay fails old and passes measured **1,740 / 131,000** limits. Selection,
+floor/output and other tier limits stay unchanged. Full lint passes.
+
+One sixteen-layout ordinary Rust/C Linux emission matrix and exact floor-one
+job are added, retaining input/dirty/closed images and full debugfs/kernel
+reports. Planned coverage is 112 images / 48 creations, per-group allocation,
+parent/child times and identity, exact byte names, peers/attributes, refusals,
+judged e2fsck and cold Linux namespace/statvfs checks. Python syntax and native
+compilation pass; **actual CI, saved-byte audit, full retention and standalone
+review closure remain pending**, not independent passes. The
+[implementation ledger](extprogress.md#guarded-public-mkdir-implementation--2026-10-23)
+records the executed red/green distinction, complete effects and next audit.
+Stages 4–5 remain not yet quantified, with casefold writes and broader
+ownership/index/lifecycle/recovery/Windows/SteamOS/card gates blocked.
+
 ### Executed measured native mkdir policy reds — 2026-10-22
 
 At fetched `9937200`, the new dormant
