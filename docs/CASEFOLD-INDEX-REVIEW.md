@@ -69,6 +69,55 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed dormant public-create native safety controls — 2026-10-23
+
+At fetched `0d38ff1`, the new [native safety patch](CASEFOLD-CREATE-RED.patch)
+actually executes, reverses/reapplies to identical source and repeats all
+**72 names/outcomes: fourteen passes / 58 failures / zero ignored**, exit 101,
+complete logs **908 lines / 58,680 bytes** each. All 58 are current public
+exclusion/refusal/reentry/unwind/C-readback/retirement assertions, not future
+constructed-SB diagnostics or unmeasured Linux semantics. The real private
+boundary and its foreign/missing/malformed-SB controls remain promotion work.
+
+All **288 measured I/O injections** reach their actual callback positions:
+per Rust/C interface, 88 write errors, 28 flush errors and 28 flush unwinds over
+direct/journal × 1/4 KiB × clean/dirty layouts. Four real public publication
+unwinds assert committed namespace before the aggregate retirement verdict.
+The complete ten-family/flush/close shared-latch contract fails; this does not
+claim existing partial direct/journal protections are absent. All nine-family
+callback directions, self-worker/same-thread and optional C readback callbacks
+execute. Clean refusals write the early marker; prior-dirty refusals preserve
+bytes/errors/context. All twelve pathname observations execute before aggregate
+assertion, and create-specific Into/name/volume/stale/FFI priorities are retained.
+
+All **54 primary positive profiles** and additional same-table/max-link/rooted-
+path/reuse/readback checks execute. Empty regular inode fields/mapping/mode/
+identity/CRCs, exact group/SB/bitmap accounting, unchanged directory counts and
+parent links, inline conversion/growth and peer/EA preservation pass. A real
+constructed 2 KiB/two-group uninit allocation profile reaches two distinct
+file inodes and one parent growth block with correct flags, padding/itable-
+unused/counters/CRCs/publication/reopen. Four injected C readback errors preserve
+one creation and attr sentinels; NULL avoids the extra read. Native positives
+do not establish independent Linux policy or arbitrary ownership admission.
+Two discovery legacy-listing test-harness failures are corrected with verified
+mapped-block inspection and are not counted as create defects.
+
+Full lint passes with the audit active. The patch is reversed again and restored
+normal units retain every **1,386 occurrence / 418 controls**, zero failed/ignored.
+No production/test/workflow/task/cap/floor/filter/pin/lock/sibling or write-gate
+change remains active. Exact preceding CI `40025606526` still has the native job
+running at inspection, with all other jobs passed; no ci-ok result is inferred.
+The [executed ledger](extprogress.md#executed-native-public-create-safety-preparation--2026-10-23)
+records provenance, repeatability, controls, fixture correction and scope.
+
+Next actually execute and audit independent **reference-only Linux exclusive
+regular-file creation** for advancing times, names/mixed errors, controlled
+modes/owner/umask and resource accounting before measured semantic reds or the
+reviewed guarded repair. Keep explicit API/Into/FFI/rooted-path contracts distinct;
+keep the dormant patch inactive in ordinary CI and both mkdir patches historical.
+Stages 4–5 remain not yet quantified; casefold writes and broader ownership/
+mapping/lifecycle/recovery/ignored-fuzz/Windows/SteamOS/card gates remain blocked.
+
 ### Public-create staging, marker and dispatch design audit — 2026-10-23
 
 Audited clean fetched `1248f71f1cb6032d1ebb1d7c0c9cd25e9d8f70b3` using Sol 6.1.
