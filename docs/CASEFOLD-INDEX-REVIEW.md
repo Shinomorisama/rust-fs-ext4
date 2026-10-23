@@ -69,6 +69,190 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public-create staging, marker and dispatch design audit — 2026-10-23
+
+Audited clean fetched `1248f71f1cb6032d1ebb1d7c0c9cd25e9d8f70b3` using Sol 6.1.
+Its exact [full CI 40013659564](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/40013659564)
+now passes every job and ci-ok. The preceding repair-source occurrence/image
+baseline and scoped mkdir closure remain applicable: implementation/test bytes
+are unchanged. This is a current-source/helper/test design audit, **not executed
+create reds, a guard migration, new Linux policy/emission evidence or ownership
+admission**. No historical non-clean implementation or oracle source is read.
+
+#### Observed entry contracts and effects
+
+| Entry | Current source behavior | Required migration behavior |
+|---|---|---|
+| Rust `apply_create` / `apply_create_bytes` | String delegates directly to bytes. `refuse_write` runs before `resolve_new_parent`; bytes then call public `apply_create_at`, repeating the volume verdict. | One shared nonblocking context before device/runtime callbacks and reads, then private nested dispatch with both pure volume verdicts. No recursive public entry. |
+| Rust `apply_create_at` | `refuse_write`, caller `Into<InodeRef>`, then `plan_new_inode_in_dir`: empty/slash/NUL/length validation, allocated inode/generation/type check, duplicate scan and allocation. | **Preserve conversion before counted-name validation**, unlike mkdir. Acquire context and pure verdict before conversion. Invalid counted names still precede parent liveness after conversion. |
+| C `fs_ext4_create` | Null fs/path and FFI path-length checks precede the byte API; valid path bytes need not be UTF-8. Success returns the inode, failure zero and symbolic platform errno. | Keep pointer/string checks and return convention; use the same filesystem guard, not a second ABI lock. |
+| C `fs_ext4_create_at` | `ino_call` checks the handle; `name_arg` validates null and the FFI slice ceiling before filesystem entry. It creates, then optional `attr_out` reads the inode. Success is zero, failure -1. | Keep those FFI priorities and optional output. Read an owned inode snapshot under the same context after commit, then format without further filesystem access. A readback error can follow successful creation. |
+
+`refuse_write` calls `write_refusal` and then `mark_not_clean_once`. The first
+allowed call can read/write/flush the primary SB before path syntax, parent,
+duplicate, name, allocation or runtime refusal/unwind. Create has no shared
+operation context. The journal mutex is acquired only inside commit, after
+allocation and duplicate planning; it cannot serialize the full operation and
+is absent on direct mounts. These are source observations defining future
+controls, not measured red outcomes. Existing direct/journal failure checks may
+already satisfy some controls; do not predict all faults will be red.
+
+The exact existing path rules matter. `split_parent_and_base` trims trailing
+slashes, rejects an empty/all-slash path and a path with no separator, and
+rejects NUL in the basename. `resolve_new_parent` rejects a final component over
+255 bytes **before** walking the parent, then follows parent symlinks. The
+walker starts at root even for a non-leading-slash parent: `p/new` has a slash
+and can resolve from root, while `new` fails at splitting. Do not silently
+introduce an absolute-only rule, Unix current-directory semantics, a new trailing-
+slash policy or mkdir's measured mixed-prefix ordering. Measure any proposed
+pathname change independently first; keep generic helpers unchanged meanwhile.
+Dot names reach the existing duplicate lookup rather than a new special-case
+refusal. Only `NotFound` means absent; checksum/encoding/other lookup errors
+propagate. Counted input remains byte-based, with 255 accepted/256 refused;
+validation order is empty, slash, NUL, length, after `Into` but before liveness.
+Volume refusal remains before those Rust checks; FFI null/ceiling remains earlier.
+
+#### Completed-buffer and allocator obligations
+
+`NewInodePlan` is currently **partial setup**, not a completed create result.
+`plan_new_inode_in_dir` validates parent/name/absence, prefers the parent's group
+and plans one **non-directory inode** (`is_dir=false`). It stages inode bitmap,
+BGD/SB free-inode debits and zero used-directory delta. Reserved-inode/range
+checks, full groups, uninit override views, bitmap padding/CRC, `itable_unused`
+and descriptor CRC remain the existing helpers' responsibility. Shared callers
+are regular create, special-file `mknod` and symlink; changing that helper's
+priorities or adding create policy there would affect all three.
+
+`build_regular_file_inode` constructs `S_IFREG | (mode & 0x0fff)`, one link,
+zero size/sectors and zero initial owner/group. Ext4 uses the EXTENTS flag and
+an empty depth-zero root; ext2/ext3 retain zero direct/indirect pointers and no
+extent flag. Extra-isize is initialized; child timestamps and generation come
+from the runtime, and the inode checksum is stamped for the allocated identity.
+No child data block, directory dot records, CASEFOLD/INDEX/INLINE inheritance,
+credential/umask/default-ACL policy or parent link increment is added here.
+Preserve that API contract pending independently measured, separately reviewed
+policy work; ordinary Linux syscall results must not silently redefine it.
+
+The child inode is spliced through `buffer_write_inode`, retaining other edits
+in the same table block. Parent insertion uses the same buffer:
+
+- Inline insertion/expansion or conversion retains all entries and its staged
+  inode. Conversion allocates/maps parent storage in that buffer and strips
+  inline storage without overwriting the new child sharing its table block.
+- In-place linear/indexed insertion preserves routing and checksum/error rules.
+  **Only `OutOfBounds`** requests growth; other failures propagate.
+- Growth attempts an ordinary htree split, may drop an ordinary index under the
+  existing fallback, and appends with legacy indirect or extent/depth helpers.
+  Casefold index dropping and unqualified insertion stay refused. A guard does
+  not qualify casefold routing, collision splitting or arbitrary mapping shape.
+- Later parent allocations consult staged bitmaps and uninit flags. Actual data
+  and mapping-node allocations must be distinct and fully charged. Ext2/ext3
+  single-indirect growth bounds and deeper extent refusal/propagation remain.
+- Both terminal create branches currently call **one complete**
+  `commit_block_buffer(buf)` and return the new inode. Older “Not journaled” /
+  “commits early” comments do not describe the current body. The growth helpers
+  stage into the supplied buffer rather than making a separate create commit.
+
+The ordinary in-place create body does not explicitly stamp parent mtime/ctime;
+that is a candidate for advancing-clock Linux measurement, not a demonstrated
+semantic red in this audit. A later parent metadata patch must read the latest
+`buffered_inode_verified` **after** insertion/growth and preserve child bytes,
+parent mappings/inline entries, link count, atime and unrelated attributes.
+Do not restage the pre-insertion inode snapshot over those edits.
+
+`commit_block_buffer` clones pending uninit state, builds/commits the journal
+transaction and checkpoints, or orders/flushed direct writes with SB last; then
+it publishes allocation overrides. The entire call, including clone/lock/
+publication errors or unwinds, belongs inside the latching effect. Holding only
+the journal transaction is insufficient. Direct writes are ordered, not a
+power-loss atomicity claim. Existing raw commit and the nine qualified metadata/
+unlink/rmdir/mkdir families must remain unchanged in the bounded create work.
+
+#### Chosen bounded design
+
+1. All five Rust/C forms enter the existing mount operation mechanism once,
+   before arbitrary `Into`, device property/read or runtime hooks. Use private
+   byte/parent helpers borrowing that context and preserve both pure volume
+   verdicts. In counted Rust dispatch keep `Into` before name validation; do
+   not copy mkdir's different priority or edit shared planner callers.
+2. Extract a private, nominal **completed create plan** containing the new
+   inode and one finished buffer, retaining `NewInodePlan` for its existing
+   shared setup. Complete child construction, entry insertion and any parent
+   growth locally; converge the two terminal branches before one create-only
+   commit helper. A plan is internal trusted staging, not a generic seal or
+   ownership proof, and is not exposed through the public ABI.
+3. Before effects, check context identity/health and require the staged full
+   primary-SB block with valid shape/offset/magic. Preserve planned allocation
+   debits, other state/features and bytes outside the SB region; clear only
+   `EXT4_VALID_FS` and refresh its CRC. A future pre-marker planner could
+   otherwise replay clean state over the marker. This is a **future-boundary
+   diagnostic**, not a current public clean-bit regression: current create
+   marks before building that buffer. Keep this boundary create-specific.
+4. Run the one-time marker and the **whole** raw commit/checkpoint/direct-flush/
+   allocation-publication call inside the existing context's failure-latching
+   effects. Returned effect errors and legal unwinds retire the mount across
+   all qualified families, flush and clean close; pre-effect ordinary refusals
+   release healthy entry without any disk writes. Preserve the existing
+   retained-context `EffectFailure` protection; do not refactor shared effects.
+5. Add a create-specific C adapter retaining that context through requested
+   `stat_ino` readback and returning an owned optional `Inode`. C field formatting
+   then uses only the snapshot. NULL avoids the extra read. Preserve a possible
+   error after successful creation, untouched attr on failed read, generation/
+   byte identity and zero/-1 versus inode/zero conventions. Never retry creation,
+   fabricate attrs or claim rollback. A normal readback error is distinct from
+   an uncertain write; legal readback unwinds still cross the held context.
+
+#### Next executed controls and independent qualification
+
+First prepare **and actually execute** native safety/positive controls through
+`scripts/tier.sh`, using the existing Device/Clock/C fixture machinery and
+asserting fixture shape. Keep the patch dormant in normal CI until repaired.
+Use ext2/ext3/ext4 × 1/4 KiB base profiles plus actual same-table, inline,
+full-parent and constructed multi-group/uninit cases. Do not import another
+family's fault counts as create measurements.
+
+| Control group | Required observed coverage |
+|---|---|
+| Entry/exclusion | All five forms refuse a held context before device/runtime calls; counted Rust also precedes caller conversion. Releasing the held context allows creation. |
+| Reentry | Legal same-thread/worker callbacks from writability/read/clock/generation/marker/commit/flush cannot reenter create or any of the nine qualified families. Never panic through extern C or fabricate overlapping mutable ABI references. |
+| Untouched refusal | Clean and already-dirty missing/stale/non-directory/duplicate/invalid/long-name/bad-checksum/allocation refusals preserve complete device bytes and pending allocation state, make no write/flush calls and leave a healthy mount reusable. |
+| Priorities and identity | Volume before Rust conversion/name; **conversion before name**; name before live generation/type; second path verdict; basename length before parent lookup; FFI null/ceiling first. Preserve dot/trailing/separator/root-walk behavior, explicit modes and raw/255-byte names. |
+| Positives and accounting | One new regular inode, one link, zero data size/sectors, correct dialect map/flags/generation/times/CRCs, exact per-group/SB/bitmap/itable-unused accounting and unchanged used-directory/parent links. Preserve peer contents/EA, parent storage, shared inode-table splices and distinct back-to-back allocations. Charge actual parent growth/conversion allocations. |
+| Uncertainty | Measure a successful call's actual writes/flushes, inject each observed position on direct/journal profiles, and prove every injection ran before aggregate assertions. Include native runtime/Into/publication unwinds and retained-context errors; after uncertainty no qualified family, flush or clean close may write. Some current protections may already pass. |
+| C attributes | Readback callbacks observe the held context; committed attrs/identity agree. NULL avoids readback; injected read failure reports error while exactly one created entry remains and attr sentinel stays intact. |
+| Future private boundary | Once the real helper exists, foreign context/missing/malformed SB and constructed clean-state/debit/outside-byte controls exercise that actual boundary. Do not add a fake helper to compile diagnostics before migration. |
+
+Save complete red/positive logs and outcome/name multisets; reverse/reapply and
+rerun to establish reproducibility, then restore production/test bytes and
+retain all **1,386 native successful occurrences / 418 controls**, zero failed/
+ignored, with lint passed. Compile/fixture failures are not driver reds. Record
+actual red/pass/injection counts, including positives; keep semantic candidates
+separate. Both promoted mkdir patches remain historical and must not be reapplied.
+
+After native safety preparation, use **reference-only Linux exclusive regular-
+file creation** in the existing CI VM to measure advancing parent/child times,
+existing file/directory/symlink and dot/trailing/255/256-byte behavior, mixed
+prefix/name errors, controlled zero-umask/root mode/ownership and exact resource
+accounting. Linux creates all reference bytes; the driver initially reads only.
+Measure modes/credentials/ACL and rooted path differences explicitly rather than
+changing API semantics by assumption. Use fresh asserted non-growing parents
+for empty-file allocation expectations; growth is separate. Save before/after
+images, judged e2fsck, complete debugfs and cold kernel records and audit their
+raw bytes before native policy reds and repair.
+
+After executed reds and the bounded repair, qualify actual Rust/C emissions
+across 1/4 KiB, legacy/checksummed and direct/journal layouts, with saved input/
+dirty/closed images, byte names, empty-file identity, peer/EA/timestamp/map
+preservation, per-group accounting/CRCs, journal state, judged e2fsck/debugfs and
+cold Linux readback. Preserve existing create/inode/unique-allocation/uninit/
+inline/index-growth/journal/crash and complete-suite evidence; qualify actual
+parent growth separately rather than assuming every create costs only one inode.
+Arbitrary ownership/aliases, mappings/seals, other writers, retained handles,
+maintenance/C lifetimes, lifecycle, recovery, ignored fuzz and actual Windows/
+SteamOS/card remain open. Stages 4–5 are not yet quantified; casefold writes stay
+blocked. No source/test/workflow/cap/floor/filter/pin/lock/sibling change or new
+oracle execution is part of this audit.
+
 ### Scoped mkdir full-CI review closure — 2026-10-23
 
 Budget repair `7f9617dc3b4c4d2e3663f382d7a644bd681fd62e` passes every job and
