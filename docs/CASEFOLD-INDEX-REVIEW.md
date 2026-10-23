@@ -69,6 +69,47 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Mkdir scoped source/evidence review and whole-byte repair — 2026-10-23
+
+Review at implementation `97356c9` finds no further blocker within healthy
+ordinary layouts, caller exclusion and closed reference handles. All five
+Rust/C forms share one context and owned plan; both pure verdicts and counted
+validation priorities remain. Parent timestamps/link count converge after
+inline/growth/same-table edits. The mkdir-only full-SB marker preserves staging
+and spans complete commit/checkpoint/direct flush **and allocation publication**.
+Optional C readback stays in the context, with post-commit read errors retaining
+one creation. Explicit modes/name/generation/FFI and mkdir-local pathname
+contracts stay intact. No other creation helper or guarded family is refactored.
+All 104 promoted/native controls, 352 measured I/O uncertainties, four public
+publication unwinds and independently audited 112-image emission support that
+scope; arbitrary ownership, mapping/index growth and lifecycle remain open.
+
+All eight focused jobs now pass. Eight freshly source/digest-verified retained
+archives pass metadata/setter/removal/unlink/rmdir/reference/symlink saved-byte
+audits at this implementation. Both implementation/docs full runs retain all
+2,122 preceding successful occurrences plus 104 native controls/one oracle:
+**2,227 passed / zero failed / one unchanged ignored slow fuzz test** in each
+whole suite. Unit contexts retain 1,386 occurrences; all 418 controls occur
+once in five contexts; architecture images retain 527 passes.
+
+Full runs `39912448414` / `39913996529` fail only because native/guest whole
+output exceeds old byte caps (65 after successful test commands). All four
+complete logs fail old and pass measured new **220,000 / 230,000** byte caps,
+with identical SHA-256 and replay floor 2,227 against 1,060. Line limits,
+floors, output and selection stay unchanged. Fresh 94 CI profile/contract checks
+and full lint pass. No source/test/workflow/pin/sibling changes.
+
+**Full-CI/scoped closure remains pending:** old wrappers prevent actual whole
+floor commands and trailing native twenty shell/159 installed-CLI checks.
+Separate CLI success does not replace them. Inspect the new budget-repair
+commit's exact full run, retain all occurrences/controls and require actual
+floors/trailing checks/ci-ok before closing mkdir review. The
+[ledger](extprogress.md#mkdir-full-suite-budget-repair-and-scoped-evidence-review--2026-10-23)
+records measurements, provenance, review and limits. Reuse unchanged image
+qualification; keep both promoted patches historical. Stages 4–5 remain not yet
+quantified; casefold writes, recovery and Windows/SteamOS/card qualification stay
+blocked. No host oracle, mount or forbidden implementation source is used.
+
 ### Verified public mkdir Linux emission; full retention pending — 2026-10-23
 
 Exact source `97356c9` passes focused `mkdir-emission` job `120278298194` in
