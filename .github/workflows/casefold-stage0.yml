@@ -47,6 +47,37 @@ env:
   CARGO_BUILD_JOBS: "4"
 
 jobs:
+  create-policy-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Record independent Linux create policy
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/create-policy
+        run: |
+          scripts/tier.sh casefold:create-policy casefold-create-policy 3200 200000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::create_policy::linux_records_create_policy -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-create-policy 1
+      - name: Keep create reference images and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: create-policy-reference
+          path: |
+            tmp/create-policy/
+            tmp/logs/casefold-create-policy.log
+          if-no-files-found: error
+          retention-days: 30
   mkdir-policy-reference:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

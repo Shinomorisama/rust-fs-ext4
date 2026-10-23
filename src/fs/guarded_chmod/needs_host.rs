@@ -1,5 +1,6 @@
 //! Independent emitted-metadata evidence for the guarded metadata families.
 mod chown;
+mod create_policy;
 mod flags;
 mod mkdir;
 mod mkdir_policy;

@@ -69,6 +69,36 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Independent Linux exclusive-create reference added — 2026-10-23
+
+One host-only reference test now covers eight 1/4 KiB × 128-byte legacy/
+256-byte checksummed × direct/journal profiles. Linux alone creates the bytes;
+all Rust mounts are read-only. Six saved phases plan **48 images / 24 exclusive
+regular-file creations / 216 actual error observations**, with a final fresh
+kernel mount checking exact byte names and empty data. Existing peers, raw
+inodes/EA, parent links/storage/atime, child fields/times/modes/mapping, bitmaps,
+per-group free-inode debits/unchanged blocks and used dirs, checksums and clean
+journal state are checked. Expected independent calls are eight mke2fs, 48
+mounts, 48 judged e2fsck and 408 debugfs reports; none is claimed executed here.
+
+The guest records uncertain error codes and full requested/actual special modes
+under explicit exclusive-open flags/root/zero-umask/no-default-ACL parents.
+It does not substitute mkdir or native API answers. An extra cold phase verifies
+all three closed files after remount. A separate exact focused CI job enforces
+floor one and retains every image/report/log; no global cap/floor/filter changes.
+
+Python syntax, Rust compilation, 94 CI profile/contract checks, full lint and
+all **1,386 native unit occurrences / 418 controls** pass locally. The dormant
+72-control safety patch and production create/other helpers remain unchanged.
+**Actual Linux execution, saved-byte audit and exact full CI remain pending**;
+no semantic repair or independent pass is inferred. The
+[collection ledger](extprogress.md#independent-linux-create-policy-oracle-added--2026-10-23)
+records fixture shape, planned evidence, local validation and next audit.
+Inspect exact-source CI and source/digest-verified saved artifacts before native
+semantic reds or migration; fix actual failures without weakening expectations.
+Stages 4–5 remain not yet quantified; casefold writes and broader qualification
+stay blocked.
+
 ### Executed dormant public-create native safety controls — 2026-10-23
 
 At fetched `0d38ff1`, the new [native safety patch](CASEFOLD-CREATE-RED.patch)
