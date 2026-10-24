@@ -69,6 +69,51 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Verified independent Linux exclusive-create reference — 2026-10-23
+
+Exact `e384ed9` passes all nine focused jobs in `40033593125`. The create policy
+job `120687552982` executes one pass, zero failed/ignored, **669 lines / 80,503
+bytes**, actual floor one passed. Archive `12536511380` matches source and
+advertised SHA-256
+`d202498a3e751014d440c5b039b3c1f0792293d1e4177bf796d2ea3d5d958ec7`;
+all 553 member CRCs pass. Read-only compressed-image audit passes **eight
+layouts / 48 images / 24 creations / 216 consistent errno observations** and
+all **408 debugfs reports**, with final cold Linux byte namespaces/empty files.
+Actual calls are eight mke2fs, 48 judged e2fsck, 408 debugfs and 48 kernel mounts.
+
+Raw fields/mappings/times/CRCs/peers/EA agree with independent outputs. All 120
+block-bitmap comparisons remain byte-identical; all 120 inode-bitmap/itable-
+unused comparisons change only for actual new identities. Per-layout allocation
+is **zero blocks / -3 inodes / zero used directories**; parent links/storage/
+atime stay intact, parent mtime/ctime advance, and closed journal state is clean.
+Requested/actual regular-file modes **02750/01770/0750 match in every profile**.
+Regular-file/missing prefixes produce ENOTDIR/ENOENT before overlong final names;
+valid parent/256-byte cases produce ENAMETOOLONG. Existing/trailing and empty
+syscall observations are recorded separately from explicit API shortcuts and
+counted Into/name/generation/FFI/mode contracts; no automatic rewriting follows.
+
+Exact full run `40033593162` passes all jobs/ci-ok. Five source/digest/CRC-verified
+current log archives retain every 2,227 preceding occurrence plus one oracle:
+**2,228 passed / zero failed / one unchanged ignored fuzz** in both whole suites.
+All 418 controls occur once in five contexts, all 1,386 unit occurrences and 527
+architecture image passes remain, and trailing twenty shell/159 installed-CLI
+checks actually pass. Whole native/guest output fits unchanged caps at
+3,635/212,417 and 3,802/221,719; actual floor commands pass. Earlier design/native
+safety full runs also now pass. The ignored fuzz case remains a broader gate.
+
+The [verified ledger](extprogress.md#verified-independent-linux-create-policy-evidence--2026-10-23)
+records provenance, actual policy table, checks and retention. Reference-only
+qualification is complete within these ordinary healthy inputs; driver emission,
+guarded create and broader ownership/mapping/lifecycle/recovery remain open.
+Next execute/save native measured parent-timestamp and mixed-prefix policy reds,
+compose with the unchanged dormant 72-control safety patch in both orders, retain
+all original outcomes/288 I/O/four publication coverage, lint and restore all
+1,386 units/418 controls before migration. Preserve explicit API/Into/FFI/rooted-
+path/trailing contracts and other shared creation helpers; do not reapply promoted
+mkdir patches. No production repair, limit/pin/sibling or write-gate change.
+Stages 4–5 remain not yet quantified; casefold writes and Windows/SteamOS/card
+qualification stay blocked.
+
 ### Independent Linux exclusive-create reference added — 2026-10-23
 
 One host-only reference test now covers eight 1/4 KiB × 128-byte legacy/
