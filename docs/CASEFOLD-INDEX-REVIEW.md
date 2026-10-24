@@ -69,6 +69,51 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Independent create emission and saved-byte audit — 2026-10-24
+
+Exact `f436f4e0bb3a220f3f25dfb62cfebd2fc8041bff` passes focused create job
+`120817437070` in [run 40075365381](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/40075365381),
+with one executed test/floor one, zero failed/ignored and actual wrapper output
+**893 lines / 113,247 bytes**. Artifact `12553351249` has verified source,
+advertised SHA-256 `4d74027244a5836504286224bc1e2e11ddb3f01cae08017dc6c92484e0be02e7`,
+all 1,329 member CRCs and a complete read-only saved-byte audit.
+
+All **sixteen Rust/C layouts / 112 images / 48 creations / 496 refusal
+observations / 544 debugfs reports / 432 cold Linux inode records** pass. Raw
+empty regular-file identity, byte/255-byte names, explicit modes, parent times/
+atime/links/maps/EA, peers and journal dirty/clean state agree with independent
+Linux/e2fsck. **280 exact block-bitmap and 280 inode-bitmap/itable-unused checks**
+prove only the expected inode allocations with no block/used-directory delta.
+All primary/BGD/inode/directory/EA/bitmap and present journal-SB checksums pass.
+The matrix uses asserted non-growing parents; it does not qualify arbitrary
+parent growth, casefold indexes or interrupted writes.
+
+Every focused job and all fifteen main focused logs now pass. Fresh current-source
+retained metadata/setter/removal/unlink/rmdir/mkdir/reference/symlink byte audits
+pass. Complete verified CI archives retain **2,337 whole-suite successes** in
+both suites: all 2,228 earlier occurrences plus 108 controls/one emission; zero
+failed and one unchanged ignored slow fuzz test. All **526 controls in five
+contexts**, 1,494 units and 527 architecture image passes remain; standalone CLI
+passes 159. Actual native and guest wrappers fail only measured output caps,
+exit 65; whole floors and twenty shell/159 native CLI trailing checks are unrun.
+
+Native actual output is **3,745 lines / 223,395 bytes**; guest **3,913 / 232,693**.
+Identical complete-log replays fail old and pass measured new **3,950 / 238,000**
+and **4,120 / 248,000** limits. Only the two whole caps and their explanation
+change; floors, selection, complete output, driver/test/workflow/pins and write
+gates remain intact. Corrected full CI/ci-ok and actual trailing execution still
+require a fresh run, so scoped create closure remains **pending**.
+
+The [evidence ledger](extprogress.md#independent-regular-file-create-emission-evidence-and-saved-byte-audit--2026-10-24)
+records provenance, raw preservation, full occurrence/control retention, actual
+wrapper failures and replay proof. The completed source/evidence walk finds no
+further scoped blocker under caller exclusion, healthy layouts and closed
+external handles. Next verify the budget-repair commit's exact CI, full retention,
+actual floors and trailing checks before closing this family review. All broader
+ownership/alias/mapping/index-growth/seal/lifecycle/recovery/ignored-fuzz/Windows/
+SteamOS/card gates remain open. Casefold writes stay blocked; all create/mkdir
+patches remain historical/promoted.
+
 ### Guarded regular-file create repair and native validation — 2026-10-24
 
 At fetched `e2d1cc0`, both preceding exact full runs `40053837295` and

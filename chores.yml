@@ -88,6 +88,20 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     native    3,745 / 223,395    3,950 / 238,000   Guarded-create source f436f4e,
+#     guest     3,913 / 232,693    4,120 / 248,000   full run 40075365376,
+#                                                    2026-10-24; both retain all
+#                                                    2,228 prior occurrences
+#                                                    plus 108 native controls
+#                                                    and one emission test:
+#                                                    2,337 passes, zero failed,
+#                                                    one unchanged ignored fuzz.
+#                                                    Actual wrappers fail old
+#                                                    line/byte caps with exit 65;
+#                                                    identical complete-log
+#                                                    replays fail old/pass new.
+#                                                    Keep selection/floors/output.
+#   Historical whole-suite measurement and then-current budget:
 #     native    3,634 / 212,331    3,700 / 220,000   Mkdir implementation/docs:
 #     guest     3,801 / 221,651    3,900 / 230,000   runs 39913996529/native and
 #                                                    39912448414/guest, 2026-10-23.
@@ -746,7 +760,7 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        scripts/tier.sh test:vm vm 3900 230000 -- \
+        scripts/tier.sh test:vm vm 4120 248000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 
@@ -788,7 +802,7 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3700 220000 -- scripts/test.sh --locked --release'
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3950 238000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
