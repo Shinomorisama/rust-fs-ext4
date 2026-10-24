@@ -40,6 +40,12 @@ struct MkdirPlan {
     buf: BlockBuffer,
 }
 
+/// Completed regular-file creation, separate from shared partial inode setup.
+struct CreatePlan {
+    ino: u32,
+    buf: BlockBuffer,
+}
+
 impl BlockBuffer {
     /// `block_size` is taken and not stored.
     ///
@@ -5322,28 +5328,27 @@ impl Filesystem {
     /// - Refuses if `path` already exists.
     /// - Allocates an inode via `plan_inode_allocation` (hints to the
     ///   parent's group), marks the bitmap, bumps BGD + SB counters.
-    /// - Initialises the inode as a regular file with EXTENTS flag and an
-    ///   empty extent tree (size=0, blocks=0). Timestamps set to `now`.
-    /// - Adds the directory entry into the first parent block with room
-    ///   (linear; htree-extending dirs are a follow-up).
-    /// - Not journaled — scratch-image safe, same caveat as other Phase-4
-    ///   applies.
+    /// - Initialises an empty regular inode using the filesystem's mapping
+    ///   dialect. Child times and parent mtime/ctime are set to `now`.
+    /// - Stages the entry and any supported parent growth with allocation.
+    /// - Holds the shared operation context through marker, complete commit
+    ///   and allocation publication; uncertain effects retire the mount.
     pub fn apply_create(&self, path: &str, mode: u16) -> Result<u32> {
         self.apply_create_bytes(path.as_bytes(), mode)
     }
 
     /// [`apply_create`](Self::apply_create) of a path given as bytes, never decoded.
     pub(crate) fn apply_create_bytes(&self, path: &[u8], mode: u16) -> Result<u32> {
-        self.refuse_write()?;
-        let (parent, name) = self.resolve_new_parent(path)?;
-        self.apply_create_at(parent, name, mode)
+        self.guarded_create_bytes(path, mode)
     }
 
     /// [`apply_create`](Self::apply_create) of entry `name` in directory
     /// `dir`. `name` is bytes and need not be UTF-8.
     pub fn apply_create_at(&self, dir: impl Into<InodeRef>, name: &[u8], mode: u16) -> Result<u32> {
-        self.refuse_write()?;
-        let dir = dir.into();
+        self.guarded_create_from(dir, name, mode)
+    }
+
+    fn plan_create_at(&self, dir: InodeRef, name: &[u8], mode: u16) -> Result<CreatePlan> {
         let NewInodePlan {
             new_ino,
             parent_ino,
@@ -5354,10 +5359,7 @@ impl Filesystem {
         let raw = self.build_regular_file_inode(new_ino, mode)?;
         self.buffer_write_inode(&mut buf, new_ino, &raw)?;
 
-        // Multi-block transaction: inode bitmap + BGD + SB + new inode +
-        // parent dir entry, all atomic, and the parent's growth with them
-        // when it has no room (see `extend_dir_and_add_entry` for the one
-        // case that commits early).
+        // Keep all allocation, entry and parent-growth edits in one buffer.
         match self.buffer_add_dir_entry_inplace(
             &mut buf,
             parent_ino,
@@ -5366,10 +5368,7 @@ impl Filesystem {
             new_ino,
             crate::dir::DirEntryType::RegFile,
         ) {
-            Ok(()) => {
-                self.commit_block_buffer(buf)?;
-                Ok(new_ino)
-            }
+            Ok(()) => {}
             Err(Error::OutOfBounds) => {
                 // Parent dir is full → grow it in the same transaction as
                 // the inode allocation.
@@ -5380,11 +5379,19 @@ impl Filesystem {
                     new_ino,
                     crate::dir::DirEntryType::RegFile,
                 )?;
-                self.commit_block_buffer(buf)?;
-                Ok(new_ino)
             }
-            Err(e) => Err(e),
+            Err(e) => return Err(e),
         }
+        // Insertion may convert/grow the parent or share the child's table
+        // block. Patch the latest staged inode, never the original snapshot.
+        let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, parent_ino)?;
+        // Independently measured by the create_policy Linux reference.
+        let now = self.runtime.now_unix_seconds();
+        set_inode_time(&mut parent_raw, InodeTime::Mtime, now);
+        set_inode_time(&mut parent_raw, InodeTime::Ctime, now);
+        self.finalize_inode_raw(parent_ino, parent_now.generation, &mut parent_raw)?;
+        self.buffer_write_inode(&mut buf, parent_ino, &parent_raw)?;
+        Ok(CreatePlan { ino: new_ino, buf })
     }
 
     /// Create a special file (FIFO, socket, char device, block device).

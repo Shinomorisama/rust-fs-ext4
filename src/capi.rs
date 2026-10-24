@@ -2898,8 +2898,14 @@ pub unsafe extern "C" fn fs_ext4_create_at(
     let what = || format!("create_at {dir_ino}/{}", name_for_msg(name, name_len));
     ino_call(fs, -1, &what, |fs| {
         let dir = inode_ref(dir_ino, dir_generation);
-        let ino = fs.apply_create_at(dir, name_arg(name, name_len)?, mode)?;
-        attr_out(fs, ino, attr)
+        let (ino, snapshot) =
+            fs.guarded_create_with_attr(dir, name_arg(name, name_len)?, mode, !attr.is_null())?;
+        if let Some(inode) = snapshot {
+            // SAFETY: requested only for a non-null writable caller output.
+            // All filesystem reads finished under the shared operation context.
+            fill_attr(unsafe { &mut *attr }, ino, &inode);
+        }
+        Ok(0)
     })
 }
 

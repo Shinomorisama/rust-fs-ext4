@@ -69,6 +69,50 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Guarded regular-file create repair and native validation — 2026-10-24
+
+At fetched `e2d1cc0`, both preceding exact full runs `40053837295` and
+`40051856797` report completed success. All 99 saved native outcomes reproduce
+**28 passes / 71 failures** before production changes. The bounded repair now
+turns them green and adds nine controls against the real create boundary:
+**108 pass**, zero failed/ignored. Native units retain every 1,386 previous
+successful occurrence and add precisely those controls: **1,494 passes / 526
+operation controls once**, no failed/ignored; full lint passes.
+
+All five Rust/C forms hold one existing context before hooks, through completed
+owned `CreatePlan`, full staged primary-SB validation/dirty-state/checksum repair,
+marker, entire raw commit/checkpoint/allocation publication and optional C owned
+inode readback. Shared partial allocation, other creator/path helpers and raw
+commit/effect machinery remain unchanged. Parent mtime/ctime use the latest
+staged parent after entry/growth; regular/missing-prefix errors precede final
+length only in create's path adapter. Counted Into-before-name, FFI priorities,
+explicit modes/byte names and current root-walk/trailing contracts are retained.
+
+The repaired success is remeasured before each sweep: **304 actual write/flush
+injections**, zero retirement violations, plus **four public post-commit
+publication unwinds**. All 54 primary positive profiles and 270 policy creations /
+714 priority/refusal observations remain. New private controls exercise foreign/
+malformed staging, full-SB debits/state/outside bytes, retained-context returned
+errors/flush/publication unwinds and the second pure verdict. Constructed SB
+controls diagnose the new real boundary; they are not pre-fix public clean bugs.
+
+Actual normal unit output exceeds its old caps at **1,742 lines / 132,491 bytes**,
+exit 65 with all tests green. Identical complete-log replay fails old and passes
+new **1,860 / 143,000** caps, preserving selection/floor/output. No whole-suite
+cap is raised without an actual measured overflow. A sixteen-layout Rust/C
+regular-file emission test and exact floor-one focused job are added, planning
+**112 saved images / 48 creations**, judged e2fsck/debugfs/cold Linux reads and
+exact empty-file/parent/peer/allocation/journal preservation.
+
+The [checkpoint ledger](extprogress.md#guarded-public-regular-file-creation-and-measured-policy-repair--2026-10-24)
+records implementation, native outcomes, counts and log provenance. Actual
+implementation CI/emission, saved-byte audit, full-suite/retained-family retention
+and standalone scoped review are **pending**. Next inspect exact runs and qualify
+those results before create closure. Both create red patches are historical
+promoted artifacts; **do not reapply**, likewise mkdir's historical patches.
+Ownership/alias/mapping/index-growth/seal/lifecycle/recovery/ignored-fuzz/actual
+Windows/SteamOS/card gates remain open; casefold writes remain blocked.
+
 ### Executed measured native create policy reds — 2026-10-23
 
 At fetched `365ffea`, the new dormant
