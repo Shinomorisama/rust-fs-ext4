@@ -69,6 +69,53 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Executed measured native create policy reds — 2026-10-23
+
+At fetched `365ffea`, the new dormant
+[27-control policy patch](CASEFOLD-CREATE-POLICY-RED.patch) executes **fourteen
+passes / thirteen failures / zero ignored**, exit 101, complete log **120 lines /
+21,877 bytes**. Ten first/back-to-back timestamp controls cover all five forms;
+three mixed pathname controls cover Rust string/bytes/C path. Every red completes
+all six ext2/ext3/ext4 × 1/4 KiB profiles before aggregating mismatches. Parent
+mtime/ctime remain stale; regular/missing prefixes lose to final-name length.
+Independent Linux reference already establishes the intended corrected behavior.
+
+All **270 policy creations / 714 refusal/priority/syntax observations** execute,
+retaining empty regular-file fields and one-inode/no-child-block accounting,
+parent links/atime/storage/EA/peers, raw/255-byte identities, explicit low-twelve
+modes, counted **Into-before-name**, name-before-stale and FFI priorities. Current
+empty/separator-free and rooted-parent/basename-trimming/trailing contracts stay
+explicit. Linux numeric errno/empty/trailing answers do not silently override
+these API contracts or shared `mknod`/symlink/generic parent helpers.
+
+Policy→safety and safety→policy recreate byte-identical combined source. Both
+actual **99-control runs report 28 passed / 71 failed / zero ignored**, exit 101,
+**1,014 lines / 80,065 bytes** each. Every original 72 safety verdict, all **288
+I/O injections / four real public publication unwinds**, safety-positive profiles
+and new policy outcome is retained. No future constructed-SB diagnostic or
+compile/fixture failure is counted as a current public red. Real private-boundary
+foreign/missing/malformed-SB/retained-context controls wait for promotion.
+
+Full lint passes with both audits active. Both patches are reversed again and
+normal units retain all **1,386 occurrences / 418 controls once**, zero failed/
+ignored. The original safety artifact stays byte-identical; the new 30,406-byte
+policy patch has SHA-256
+`36d6d325594c8548a2ee6b7b7a4b1a9712fc2628f41e7894733f27b567b9ab32`.
+The [executed ledger](extprogress.md#executed-native-create-policy-red-preparation--2026-10-23)
+records complete coverage, reproducibility, restoration and remaining work.
+
+Next inspect exact checkpoint CI, reproduce saved reds, then implement the
+reviewed create guard/private dispatch/completed owned plan, create-only full-SB
+and complete commit/publication effects, advancing parent times and measured
+create-local mixed-prefix correction. Keep optional C readback inside the same
+context and preserve error-after-creation/null semantics. Add actual private-
+boundary controls only when that helper exists; preserve all qualified families
+and explicit API priorities. Independent Rust/C emitted-image/full-CI/standalone
+review closure remains required after native repair. No production/task/workflow/
+limit/pin/sibling/write-gate change here. Stages 4–5 remain not yet quantified;
+casefold writes and broader ownership/mapping/lifecycle/recovery/Windows/SteamOS/
+card qualification stay blocked. Do not reapply promoted mkdir patches.
+
 ### Verified independent Linux exclusive-create reference — 2026-10-23
 
 Exact `e384ed9` passes all nine focused jobs in `40033593125`. The create policy
