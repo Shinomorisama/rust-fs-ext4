@@ -69,6 +69,38 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Scoped regular-file create full-CI review closure — 2026-10-27
+
+Budget repair `38295af4cc23ec93253c9edd963cffde73bbd692` passes every job and
+ci-ok in [exact full run 40080977121](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/40080977121).
+Five source/advertised-digest/all-CRC-verified tier archives retain all **2,337
+successful occurrences** in both whole suites, zero failed and one unchanged
+ignored slow fuzz test. All **526 controls once in five contexts**, all 1,494
+unit occurrences and 527 architecture image passes remain. Actual native and
+guest wrappers and **2,337 executed / 1,060 floors pass**. Native **twenty shell
+and 159 installed-CLI checks now execute and pass**, with exact prior names/
+verdicts and CLI-file counts retained; standalone CLI also passes 159.
+
+Native whole output is **3,746 lines / 223,509 bytes**; guest **3,915 / 232,808**,
+inside the repaired caps. Implementation/test/workflow/manifest/lock/agent bytes
+match independently audited `f436f4e`. Its sixteen-layout/112-image/48-creation
+emission, retained-family image audits and completed source/native fault-boundary
+reviews remain applicable; no unchanged large image audit is repeated here.
+No further blocker is found under **caller exclusion, healthy layouts and closed
+external reference handles**. **Scoped create source/evidence/full-CI review is
+closed**, alongside unlink/rmdir/mkdir. All create/mkdir patches are historical/
+promoted and must not be reapplied.
+
+The [closure ledger](extprogress.md#scoped-create-full-ci-review-closure--2026-10-27)
+records exact provenance, full name/control multisets, actual floors and trailing
+checks, hashes and scope limits. Next is a bounded public hard-link (`link`)
+Rust/C staging/marker/dispatch and source/destination identity design audit,
+including shared helpers and optional readback, before new native reds or
+migration. That audit is not claimed complete. Ownership/alias, mapping/index
+growth/seals, other writers/retained handles, lifecycle/C ownership, recovery,
+ignored-fuzz and Windows/SteamOS/card remain open. Casefold writes stay blocked;
+stages 4–5 remain not yet quantified.
+
 ### Independent create emission and saved-byte audit — 2026-10-24
 
 Exact `f436f4e0bb3a220f3f25dfb62cfebd2fc8041bff` passes focused create job
