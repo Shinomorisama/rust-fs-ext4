@@ -928,3 +928,28 @@ fn symlink_paths_capi_resolves_bytes_reports_loops_and_clears_errno() {
     drop(handle);
     std::fs::remove_file(&image).unwrap();
 }
+
+// Regression for upstream #587: sparse growth cannot exceed the format limit.
+#[test]
+fn sparse_truncate_refuses_unrepresentable_lengths_without_changing_device() {
+    for (flavor, blocks) in [
+        (FsFlavor::Ext2, 16_843_020u64),
+        (FsFlavor::Ext4, u64::from(u32::MAX) / 2),
+    ] {
+        let (dev, fs) = mount(formatted(flavor));
+        let ino = fs.apply_create("/bounded", 0o644).unwrap();
+        let max = blocks * 1024;
+        fs.apply_truncate_ino(ino, max).unwrap();
+        assert_eq!(fs.read_inode_verified(ino).unwrap().0.size, max);
+        for too_large in [max + 1, u64::MAX] {
+            let before = dev.snapshot();
+            let got = fs.apply_truncate_ino(ino, too_large);
+            assert_eq!(
+                got.as_ref().err().map(Error::to_errno),
+                Some(fs_ext4::error::errno::EFBIG),
+                "{flavor:?}: oversized truncate {too_large}: {got:?}"
+            );
+            assert_eq!(dev.snapshot(), before, "refusal changed the device");
+        }
+    }
+}

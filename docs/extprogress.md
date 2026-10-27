@@ -55,6 +55,24 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Selective upstream compatibility backports are in progress (2026-10-27).**
+  The user approved three changes after a public upstream/seven-fork survey:
+  truncate file-size limits (#587), exact raw xattr names (#590), and the
+  trailing-slash walker portion of #589. The initial native baseline retains
+  **1,494 successful occurrences / 526 controls**. The truncate regression
+  actually accepted an oversized Ext2 sparse length before repair; it now
+  passes for Ext2 and Ext4, including exact accepted boundaries, EFBIG on
+  boundary+1/u64::MAX and unchanged device bytes on refusal. Adapted core
+  `3322f7b` adds mapping/feature-specific bounds and EFBIG; newer CLI/core,
+  workflow and dependency upgrades are excluded. An eight-layout Linux
+  boundary-bisection/Rust+C readback test is added, not yet executed here.
+  Full retention/lint and exact independent CI remain pending. The xattr/path
+  fixes are next within this approved run; the hard-link design remains
+  complete but native link red preparation has not run. Casefold writes stay
+  blocked; stages 4–5 remain not yet quantified. Local PRoot test retries were
+  interrupted at sandbox approval. Direct native checks use the identical
+  immutable core via a temporary manifest path selection, restored afterward;
+  the committed manifest/lock and sibling files remain unchanged.
 - **Public hard-link staging/marker/dispatch design audit is complete.**
   At clean fetched `c15e588`, all five Rust/C forms, two-Into/name/source/parent
   priorities, existing target identity/nlink and shared growth/commit/readback
