@@ -71,6 +71,15 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ### Public hard-link staging, marker and dispatch design audit — 2026-10-27
 
+**Follow-up after the approved upstream compatibility backports:** the normal
+restored native baseline is now **1,503 occurrences / 526 controls**; the 1,494
+counts below describe the original audit source. The shared walker now treats
+a source path's trailing slash as a directory requirement and follows its final
+symlink in that case; a source without that slash still preserves its final
+symlink. Destination splitting and counted-name/Into priorities are unchanged.
+Use those updated contracts for future dormant link controls. First close the
+kernel log-budget/full-CI and cancelled-reference gates in `extprogress.md`.
+
 Audited clean fetched `c15e588e721ee6300c6dee86214d3a04b0939ec6` using Sol 6.1.
 Its exact full CI `40476503989` is still in progress at inspection. Production,
 test, workflow and dependency bytes match verified `38295af`, whose exact full

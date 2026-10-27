@@ -652,10 +652,12 @@ tasks:
 
   test:kernel:
     desc: 'The driver writes, THE KERNEL reads back: our images loop-mounted by Linux in the guest'
-    # Run 38489085592 at 0896577 retained 464 lines / 40,920 bytes, with
-    # 28 passed, zero failed or ignored. The recovery regression exceeded
-    # the old 460-line cap by four. 620/55,000 restores ~34% headroom in
-    # both dimensions without removing any independent-validation output.
+    # Exact fce2afb run 40502466987 retains all 36 kernel successes but
+    # its complete log measures 630 lines / 55,111 bytes: old 620/55,000
+    # limits fail with exit 65. Identical saved-log replay passes 700/62,000,
+    # leaving 70 lines / 6,889 bytes of headroom without changing output,
+    # test selection or the floor. The three upstream compatibility tests
+    # extend the retained 28-test baseline and five symlink regressions.
     # The gap e2fsprogs cannot close: a volume it calls clean can still be
     # one Linux mounts differently. These tests write with the Rust API
     # and with the C ABI, mount read-only in the guest, and compare names,
@@ -663,7 +665,7 @@ tasks:
     # written — plus the reverse direction, and a deliberate corruption
     # that must fail.
     cmds:
-      - 'scripts/tier.sh test:kernel kernel 620 55000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
+      - 'scripts/tier.sh test:kernel kernel 700 62000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
       # Retain the measured 28-test kernel baseline and all five added
       # symlink boundary/path/casefold regressions. Budgets stay measured;
       # fresh CI must supply any evidence needed for another cap change.

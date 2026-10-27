@@ -55,6 +55,40 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Measured kernel log-budget repair passes local checks; fresh CI is next.**
+  Full source run `40502466987` at `fce2afb` and docs-source run `40537693019`
+  at `07e86b3` both fail only the actual kernel output wrapper: **36 successful
+  kernel tests**, zero failed/ignored, **630 lines / 55,111 bytes**, exceeding
+  620 / 55,000 and returning exit 65. Native whole-suite execution/floor and
+  trailing shell/installed-CLI checks were **unrun**, not passing. Downloaded
+  five source/digest/all-CRC-verified archives retain **1,503 unit occurrences**
+  in unit/native/ARM contexts and all **526 controls** there and in the guest;
+  the guest whole suite exactly retains every **2,337** previous occurrence
+  plus twelve additions (**2,349 passes**, zero failed, one unchanged ignored
+  slow fuzz case). ARM image names exactly retain **527 passes** and that same
+  existing ignored case; standalone CLI retains **159** checks. Four of five
+  control contexts are verified; native whole remains outstanding.
+  Only the `test:kernel` caps in `chores.yml` change to **700 / 62,000**.
+  Actual identical-log replay fails old limits with 65 and passes new with 0,
+  preserving all 55,111 bytes; headroom is 70 lines / 6,889 bytes. Test selection,
+  output, floor 33, other caps, driver/test/workflow/dependency bytes and write
+  gates are unchanged. All **87 CI-profile controls**, the output-wrapper shell
+  checks and full lint pass locally. This configuration repair does not claim
+  a fresh Linux execution or successful actual wrapper/native whole suite.
+  Stage 0 run `40502467008` has nine successful jobs and a cancelled unlink
+  reference job, whose log reports cancellation rather than a test verdict.
+  An authorized targeted rerun of job `122183292746` is accepted (HTTP 201);
+  its new outcome and evidence remain pending. Session network permission
+  restored actual API access after this runtime's sandbox could not reach its
+  configured proxy; the granted network scope is this session.
+  **Next:** inspect the budget-repair exact-commit CI, require the actual kernel
+  wrapper/floor, native whole/floor, trailing twenty shell/159 CLI checks and
+  ci-ok, and verify five-context retention and remaining saved Stage 0 evidence.
+  Then resume dormant hard-link safety preparation against the current **1,503
+  native occurrences / 526 controls**, incorporating the new source trailing-
+  slash contract. No link guard or executed link red is introduced here.
+  Casefold writes remain blocked; stages 4–5 remain not yet quantified;
+  Windows/SteamOS/card and broader ownership/growth/recovery work stay open.
 - **All three upstream backports pass focused independent Linux validation.**
   Tested/pushed implementation is **`fce2afb64232d1264f1504f18d2ae5dfa642b081`**,
   following truncate `3d98e5e` and raw-xattr `4428a10`. Exact focused run
