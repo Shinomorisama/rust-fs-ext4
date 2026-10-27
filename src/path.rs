@@ -156,11 +156,8 @@ pub(crate) fn resolve_entry(
         return Err(Error::Unsupported("inline casefold directory lookup"));
     }
     let lookup_name = crate::casefold::LookupName::new(name, encoding)?;
-    if encoding.is_some()
-        && dir_inode.flag_set().contains(InodeFlags::INDEX)
-        && (name == b"." || name == b"..")
-    {
-        return find_casefold_index_dot(dev, sb, dir_ino, dir_inode, name, csum);
+    if dir_inode.flag_set().contains(InodeFlags::INDEX) && (name == b"." || name == b"..") {
+        return find_index_dot(dev, sb, dir_ino, dir_inode, name, csum);
     }
     // Both extent-backed and legacy direct/indirect-backed directories are
     // supported here — `find_entry_linear` and `find_entry_htree` use
@@ -207,7 +204,7 @@ pub(crate) fn resolve_entry(
 /// Dot records live in the index root, outside the hashed leaves. Verify the
 /// root's dx checksum: any old directory-tail marker inside its padding is not
 /// a leaf checksum. Only literal dots reach this function.
-fn find_casefold_index_dot(
+fn find_index_dot(
     dev: &dyn BlockDevice,
     sb: &Superblock,
     ino: u32,
@@ -223,7 +220,16 @@ fn find_casefold_index_dot(
         .ok_or(Error::CorruptDirEntry("casefold index root is sparse"))?;
     let mut root = vec![0; block_size as usize];
     dev.read_at(physical * u64::from(block_size), &mut root)?;
-    casefold_root_info(&root)?;
+    // Keep the casefold depth/flag restrictions. Ordinary dots need only
+    // the index root, never a name hash or traversal into a hashed leaf.
+    if inode.directory_casefold_encoding(sb)?.is_some() {
+        casefold_root_info(&root)?;
+    } else {
+        let info = htree::parse_root_info(&root)?;
+        if info.info_length != 8 || info.unused_flags != 0 {
+            return Err(Error::CorruptDirEntry("invalid index root info"));
+        }
+    }
     if csum.enabled && csum.verify_dx_tail(ino, inode.generation, &root, 32) != Some(true) {
         return Err(Error::BadChecksum {
             what: "htree index block",
@@ -893,6 +899,37 @@ mod tests {
             blocks.push(leaf);
         }
         (sb, inode, csum, blocks)
+    }
+
+    #[test]
+    fn indexed_dot_lookup_checks_root_bytes_for_ordinary_and_casefold_directories() {
+        struct Blocks(Vec<Vec<u8>>);
+        impl BlockDevice for Blocks {
+            fn read_at(&self, offset: u64, out: &mut [u8]) -> Result<()> {
+                let index = usize::try_from(offset / 1024).unwrap() - 1;
+                out.copy_from_slice(&self.0[index]);
+                Ok(())
+            }
+            fn size_bytes(&self) -> u64 {
+                4096
+            }
+        }
+        for folded in [false, true] {
+            let (sb, mut inode, csum, blocks) = insertion_fixture();
+            if !folded {
+                inode.flags &= !InodeFlags::CASEFOLD.bits();
+            }
+            inode.block[4..8].copy_from_slice(&2u32.to_le_bytes());
+            inode.block[8..12].copy_from_slice(&3u32.to_le_bytes());
+            let mut dev = Blocks(blocks);
+            assert_eq!(find_entry(&dev, &sb, 2, &inode, b".", &csum).unwrap(), 2);
+            assert_eq!(find_entry(&dev, &sb, 2, &inode, b"..", &csum).unwrap(), 2);
+            dev.0[0][1023] ^= 1;
+            assert!(matches!(
+                find_entry(&dev, &sb, 2, &inode, b".", &csum),
+                Err(Error::BadChecksum { .. })
+            ));
+        }
     }
 
     #[test]

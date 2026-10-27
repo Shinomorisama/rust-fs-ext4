@@ -1,0 +1,61 @@
+name: upstream compatibility evidence
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/upstream-compat.yml
+      - src/fs.rs
+      - src/path.rs
+      - src/xattr.rs
+      - src/capi.rs
+      - src/error.rs
+      - tests/truncate_size_limit_kernel.rs
+      - tests/xattr_raw_names_kernel.rs
+      - tests/trailing_slash_kernel.rs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+  CARGO_TERM_COLOR: never
+  CARGO_BUILD_JOBS: "4"
+
+jobs:
+  linux-compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Compare size limits, raw attributes and path outcomes with Linux
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/upstream-compat
+        run: |
+          mkdir -p tmp/upstream-compat
+          git rev-parse HEAD > tmp/upstream-compat/source-commit.txt
+          sha256sum src/fs.rs src/path.rs src/xattr.rs src/capi.rs src/error.rs tests/truncate_size_limit_kernel.rs tests/xattr_raw_names_kernel.rs tests/trailing_slash_kernel.rs > tmp/upstream-compat/source-sha256.txt
+          scripts/tier.sh upstream:compat upstream-compat 620 55000 -- scripts/test.sh --locked --release --test truncate_size_limit_kernel --test xattr_raw_names_kernel --test trailing_slash_kernel -- --show-output
+          bash scripts/core.sh test-floor --refuse-ignored upstream-compat 3
+      - name: Keep Linux reference reports, images and complete test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-compatibility
+          path: |
+            tmp/upstream-compat/
+            tmp/logs/upstream-compat.log
+          if-no-files-found: error
+          retention-days: 30

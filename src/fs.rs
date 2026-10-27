@@ -1921,7 +1921,8 @@ impl Filesystem {
     ///
     /// Intermediate symbolic links are followed from the root for absolute
     /// targets and from the link's parent for relative targets. The final
-    /// component remains the link itself. More than [`MAX_SYMLINKS`] links
+    /// component remains the link itself unless a trailing slash requires a
+    /// directory and follows that link too. More than [`MAX_SYMLINKS`] links
     /// in one lookup returns [`Error::SymlinkLoop`]. Each expanded component
     /// still uses this branch's verified, casefold-aware entry lookup.
     pub fn lookup_path_bytes(&self, path: &[u8]) -> Result<u32> {
@@ -1939,6 +1940,11 @@ impl Filesystem {
     fn walk_path(&self, path: &[u8], follow_last: bool) -> Result<u32> {
         let mut pending: Vec<Vec<u8>> = Vec::new();
         let push = |pending: &mut Vec<Vec<u8>>, p: &[u8]| {
+            // A trailing slash follows the preceding symlink and requires a
+            // directory, including when it appears inside an expanded target.
+            if p.ends_with(b"/") {
+                pending.push(b".".to_vec());
+            }
             let parts = p.split(|&b| b == b'/').filter(|c| !c.is_empty());
             pending.extend(parts.rev().map(<[u8]>::to_vec));
         };

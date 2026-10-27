@@ -118,6 +118,9 @@ fn walk(fs: &Filesystem, path: &str) -> Result<u32> {
 /// `follow_last` is set, as the kernel walks a name's parent (#564).
 fn walk_following(fs: &Filesystem, path: &str, follow_last: bool) -> Result<u32> {
     let push = |pending: &mut Vec<Vec<u8>>, p: &[u8]| {
+        if p.ends_with(b"/") {
+            pending.push(b".".to_vec());
+        }
         let parts = p.split(|&b| b == b'/').filter(|c| !c.is_empty());
         pending.extend(parts.rev().map(<[u8]>::to_vec));
     };
@@ -952,4 +955,50 @@ fn sparse_truncate_refuses_unrepresentable_lengths_without_changing_device() {
             assert_eq!(dev.snapshot(), before, "refusal changed the device");
         }
     }
+}
+
+#[test]
+fn a_trailing_slash_requires_a_directory_and_follows_the_final_symlink() {
+    let (_dev, fs) = mount(formatted(FsFlavor::Ext4));
+    let full = fs.apply_mkdir("/full", 0o755).unwrap();
+    let file = fs.apply_create("/full/x", 0o644).unwrap();
+    let link = fs.apply_symlink("full", "/dirlink").unwrap();
+    fs.apply_symlink("dirlink/", "/chain").unwrap();
+    fs.apply_symlink("/dirlink/", "/absolute").unwrap();
+    fs.apply_symlink("full/x", "/filelink").unwrap();
+    fs.apply_symlink("full/x/", "/bad-target").unwrap();
+    fs.apply_symlink("missing", "/dangling").unwrap();
+    fs.apply_symlink("self", "/self").unwrap();
+
+    for path in ["/full/", "/dirlink/", "/dirlink//", "/chain/", "/absolute/"] {
+        assert_eq!(
+            fs.lookup_path_bytes(path.as_bytes()).unwrap(),
+            full,
+            "{path}"
+        );
+    }
+    assert_eq!(fs.lookup_path_bytes(b"/dirlink").unwrap(), link);
+    assert_eq!(fs.lookup_path_bytes(b"/full/x").unwrap(), file);
+    assert_eq!(fs.lookup_path_bytes(b"/").unwrap(), ROOT);
+    for path in ["/full/x/", "/filelink/", "/bad-target/", "/bad-target/."] {
+        assert_eq!(
+            errno_of(fs.lookup_path_bytes(path.as_bytes())),
+            Error::NotADirectory.to_errno(),
+            "{path}"
+        );
+    }
+    // A slash inside the expanded target also requires a directory,
+    // even when the caller follows the final link without a slash.
+    assert_eq!(
+        errno_of(fs.lookup_dir_path_bytes(b"/bad-target")),
+        Error::NotADirectory.to_errno()
+    );
+    assert_eq!(
+        errno_of(fs.lookup_path_bytes(b"/dangling/")),
+        Error::NotFound.to_errno()
+    );
+    assert_eq!(
+        errno_of(fs.lookup_path_bytes(b"/self/")),
+        Error::SymlinkLoop.to_errno()
+    );
 }
