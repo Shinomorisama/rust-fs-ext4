@@ -69,6 +69,44 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Upstream compatibility and kernel-budget evidence closure — 2026-10-27
+
+Reviewed current `ceb3232` after recovery of the interrupted local audit.
+Backport driver/test/workflow/dependency bytes remain identical to `fce2afb`;
+`3e3d922` changes only the measured kernel budget and documentation. Exact full
+CI `40550417452` passes all eleven jobs and ci-ok; retained Stage 0
+`40502467008` attempt two passes all ten jobs, resolving the cancelled unlink
+reference. The pre-review docs tip also passes full CI `40554014520`.
+
+Five source/digest/all-CRC-verified archives preserve all **1,503 units**, every
+old **2,337** whole-suite occurrence plus twelve new ones (**2,349 successes**
+in each whole suite), and all **526 controls once in five contexts**. Actual
+kernel/whole wrappers and floors pass, all twenty trailing native shell checks
+and 159 installed-CLI checks execute successfully, and ARM retains all 527 image
+successes. The existing ignored slow fuzz case remains unchanged and remains an
+open qualification gate. Kernel output measures **631 lines / 55,214 bytes**;
+no further cap change is needed.
+
+All eleven retained archives have verified source identity, advertised digest
+and every ZIP CRC. The completed metadata, setter/removal, policy, unlink,
+rmdir, symlink and mkdir-reference audits remain recorded in the pre-outage
+log. Recovery resumed only the unfinished mkdir emission, Linux create reference
+and create emission audits. These now pass all **16/112/48**, **8/48/24** and
+**16/112/48** layout/image/creation counts respectively. The reference retains
+216 error observations; each emission retains 544 debugfs reports. Local
+`image-audit-summary.json` binds the earlier completed-log hash to the verified
+archives and the three resumed receipts. The original focused compatibility
+run's fourteen images/reports also remain applicable to the unchanged source.
+
+No additional blocker was found in the scoped ordinary-volume compatibility
+backports. This closes their pending CI/retention/image review, not broader
+ownership/admission, index growth, complete-operation lifecycle/recovery or
+Windows/card qualification. No new production code, guard, test, dependency,
+workflow, write gate or independent dispatch is introduced by this review.
+Next execute/save/reapply/repeat the dormant native link safety preparation,
+then restore the **1,503-occurrence / 526-control** active baseline and lint.
+Actual link semantic policy and emitted-image qualification remain later steps.
+
 ### Public hard-link staging, marker and dispatch design audit — 2026-10-27
 
 **Follow-up after the approved upstream compatibility backports:** the normal
@@ -77,8 +115,9 @@ counts below describe the original audit source. The shared walker now treats
 a source path's trailing slash as a directory requirement and follows its final
 symlink in that case; a source without that slash still preserves its final
 symlink. Destination splitting and counted-name/Into priorities are unchanged.
-Use those updated contracts for future dormant link controls. First close the
-kernel log-budget/full-CI and cancelled-reference gates in `extprogress.md`.
+Use those updated contracts for future dormant link controls. The upstream
+compatibility closure above now closes the kernel-budget/full-CI and cancelled-
+reference gates; executed dormant native link preparation is next.
 
 Audited clean fetched `c15e588e721ee6300c6dee86214d3a04b0939ec6` using Sol 6.1.
 Its exact full CI `40476503989` is still in progress at inspection. Production,
