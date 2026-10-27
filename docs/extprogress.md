@@ -55,6 +55,20 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Raw-byte xattr read compatibility is adapted locally (2026-10-27).**
+  Upstream `ea72663` (#590) core/parser and C names-only listing changes now
+  preserve exact `raw_name` bytes, provide raw listing/resolved lookup, and
+  prevent lossy display spelling from becoming lookup identity. Four actual
+  native failures precede repair (both parsers, neighboring lookup and inline
+  overflow content); all twenty xattr unit controls now pass, including exact
+  parsed bytes and a display-collision setter/remover preservation control.
+  Our guarded setters/removers and their byte encoders are retained. The
+  newer CLI and dependency changes are excluded. A new independent Linux
+  test builds inline/external raw-name cases at 1/4 KiB, compares Rust/C names
+  and values, mutates an ordinary neighbor and checks Linux retained bytes;
+  it compiles but has not executed here. Full retention/lint and independent
+  CI remain pending. The approved trailing-slash adaptation is next; this
+  update does not qualify casefold writes or advance stages 4–5 percentages.
 - **Selective upstream compatibility backports are in progress (2026-10-27).**
   The user approved three changes after a public upstream/seven-fork survey:
   truncate file-size limits (#587), exact raw xattr names (#590), and the
