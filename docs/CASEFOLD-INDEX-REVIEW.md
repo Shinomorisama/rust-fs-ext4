@@ -69,6 +69,194 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public hard-link staging, marker and dispatch design audit — 2026-10-27
+
+Audited clean fetched `c15e588e721ee6300c6dee86214d3a04b0939ec6` using Sol 6.1.
+Its exact full CI `40476503989` is still in progress at inspection. Production,
+test, workflow and dependency bytes match verified `38295af`, whose exact full
+CI `40080977121` and scoped create closure pass. This is a current-source/helper/
+existing-test design audit, **not executed link reds, a link guard, a timestamp/
+pathname repair or fresh independent link evidence**. No forbidden historical,
+kernel or oracle implementation source is read.
+
+#### Five entry forms and actual priority contracts
+
+| Entry | Observed behavior to preserve during guard migration |
+|---|---|
+| Rust `apply_link` / `apply_link_bytes` | String delegates to bytes. `refuse_write` first; split destination and reject final length; resolve source without following its final symlink; verify live source and reject a directory; resolve destination parent; call public counted API, repeating volume verdict. |
+| Rust `apply_link_at` | `refuse_write`; validate counted name **before both Into conversions**; convert target, validate live identity/generation, reject directory and check link room; **only then convert destination parent**, check live directory/generation and duplicates. |
+| C `fs_ext4_link` | Null fs/src/dst first, bounded source C string then bounded destination C string before filesystem entry. Paths remain bytes, maximum 4,096 bytes each. Success zero/failure -1 with existing errno mapping. |
+| C `fs_ext4_link_at` | Handle check, counted-name null/FFI ceiling first; construct both generation refs and call counted API; optional `attr_out` reads the **existing target inode** after commit. It may return -1 although the link now exists. |
+
+The counted name order is empty, slash, NUL, then length (255 accepted/256
+refused). Invalid names prevent both arbitrary conversions; stale/directory/
+full-count source prevents destination conversion. Source type/maximum precedes
+destination generation/type/duplicate checks. Directory source maps to the
+existing `IsADirectory` convention, not a new errno policy. Existing-name and
+same-name attempts refuse; hard link has no rename-style same-inode no-op.
+Only `NotFound` establishes destination absence; checksum/encoding/other lookup
+errors propagate. Preserve `FS_EXT4_GEN_ANY`, explicit generations and symbolic
+platform errno constants rather than substituting Linux numeric values.
+
+Path priority differs from counted priority. Destination splitting/NUL/final
+length precedes source lookup; source-directory refusal precedes destination
+walking, but not those earlier destination checks. The second volume verdict
+occurs only after path resolution. Destination splitting trims trailing slashes,
+rejects empty/all-slash/separator-free paths, and accepts a non-leading-slash
+parent such as `p/new` from root. Source walking accepts current root-based
+forms, preserves its final link (including a dangling link), and follows only
+intermediate symlinks; the destination-parent walk follows its final symlink.
+Do not replace this with a generic two-parent resolver, absolute-only rule,
+source final-symlink dereference, new trailing/NUL rule or Linux syscall error
+order without separate measurement and executed semantic reds.
+
+Current `refuse_write` marks the primary SB before these name/identity/duplicate/
+allocation refusals. There is no shared link context; arbitrary Into/device
+callbacks can run outside exclusion. The journal mutex is acquired during commit,
+after duplicate/count planning, and is absent on direct mounts. These source
+observations define controls; they are **not measured red results**. No claim is
+made that every current failure path lacks existing journal/direct protection.
+
+#### Completed staging, existing source identity and optional superblock
+
+Link creates an entry for an **existing live non-directory inode**, not a new
+inode. Regular files, fast/slow symlinks and supported special-file types must
+not be silently restricted to regular files. Count zero/freed/reused identities
+stay stale. `check_link_room`/`next_links_count` enforce **MAX_LINKS 65,000** for
+files; `DIR_NLINK` does not make a non-directory source unbounded. A successful
+link must retain source inode/generation, mode/owners, data/maps, size/sectors and
+EA ownership/refcount; it increments that inode's link count once. Sharing a name
+does not create a second inode or a second EA reference. Parent link count does
+not increase for a non-directory entry.
+
+`patch_inode_nlink` changes the count and its inode checksum only; it is shared
+by mkdir/rmdir/rename accounting and must remain unchanged. The current link body
+has no explicit source ctime or destination-parent mtime/ctime update and no
+direct Runtime clock/generation call. Those timestamps are candidates for
+independent Linux measurement, not established semantic reds. Do not copy
+create's Clock/generation-unwind tests and count an unreached hook as a failure.
+Later measured time patches must read the latest buffered source/parent inode
+and preserve shared inode-table splices, inline entries and growth mappings.
+A valid non-directory source cannot also be the same valid directory inode;
+keep the existing rejection order for that input, without manufacturing a
+same-inode two-role positive fixture.
+
+Both current terminal branches already commit **one complete BlockBuffer**:
+source nlink/CRC plus destination entry, including all supported parent growth.
+The older “Not journaled” comment is not an accurate description of the body.
+`buffer_add_dir_entry_inplace` handles linear/indexed or inline insertion/
+expansion/conversion; **only OutOfBounds** requests the growth helper. Inline
+conversion, ordinary htree split/fallback and legacy direct/single-indirect or
+extent/deep append stage allocations, bitmaps, BGD/SB counters, mappings and
+checksums in the same buffer. Read staged inode slices through
+`buffered_inode_verified`; do not overwrite source edits when parent and source
+share a table block. Unsupported casefold insertion/index dropping remain
+refused, not an allocation/growth signal.
+
+**Unlike create/mkdir, a non-growing link legitimately has no staged primary SB.**
+It allocates no inode/block and changes no free or used-directory count; its
+source/table/entry buffer may omit that block entirely. Inline conversion or
+parent growth can stage a full primary-SB block with allocator debits. A future
+link-only boundary therefore validates/dirties/restamps the **full block when
+present**, following the optional-SB principle already used by unlink. Do not
+mechanically copy create's mandatory-SB check. Actual growth/conversion planner
+fixtures must prove their required SB/debits are staged; an optional check is
+not an ownership seal or permission to drop allocator edits. Constructed missing-
+SB rejection must not be called a public bug when the legitimate plan is
+allocation-free. Pending uninit flags, staged bitmap padding/CRC, descriptor
+updates and publication remain the existing allocator helpers' responsibilities.
+
+`commit_block_buffer` clones pending flags, locks/builds/commits/checkpoints the
+journal or orders/flushed direct writes, then publishes allocation overrides.
+The entire call belongs in the latching effect, **even for an empty override
+map**. Current publication can still run for a non-growing link. Returned errors
+and legal marker/flush/publication unwinds must retire the mount across every
+qualified family, flush and clean close. Ordered direct writes are not a
+power-loss atomicity claim. Keep shared raw commit/effect code unchanged.
+
+#### Chosen bounded migration design
+
+1. All five Rust/C forms enter the existing nonblocking mount context once,
+   before device/runtime/arbitrary target or destination Into hooks. Private
+   nested byte/counted helpers borrow it, retaining both path volume verdicts,
+   the early path source-directory check and exact counted conversion order.
+2. Extract a nominal private **completed LinkPlan** owning the target identity
+   needed by readback and the entire finished buffer. Keep shared nlink,
+   allocator, insertion/growth and generic path helper contracts unchanged.
+   Converge successful in-place/growth branches before one link-only commit.
+3. That boundary checks context identity/health before callbacks/effects. No
+   primary-SB block is valid for genuine allocation-free staging; when present,
+   require full block length, correct SB offset/magic, preserve all allocator/
+   state/outside-region bytes, clear only the clean bit and restamp its CRC.
+   The trusted plan is not a generic seal. Required growth SB presence/debits
+   must also be tested at the real planner, not inferred from an optional check.
+4. Use the existing EffectFailure-protected context for one-time marking and
+   the whole raw commit/checkpoint/flush/publication operation. Ordinary
+   pre-effect refusals leave bytes and pending state untouched and release a
+   healthy context; legal planning/conversion unwinds retain the existing
+   conservative retirement policy. Never retry a partially uncertain link.
+5. Add a **link-specific optional C owned-inode snapshot adapter** holding the
+   same context through requested target `stat_ino` readback. Format only the
+   snapshot afterward; do not refactor shared `attr_out` or recursively call a
+   public guarded method. NULL skips extra reads. A normal read error can follow
+   one committed entry/count increment and leaves attr sentinels untouched;
+   an unwind crossing the held context latches retirement. Keep ABI signatures,
+   source/parent generations, bytes and zero/-1 conventions unchanged.
+
+#### Executed preparation and independent evidence required next
+
+Existing coverage includes C identity/content/remount/chained links and error
+cases (`capi_link*`), Rust/C inode lifetime and stale-generation parity,
+`writes_verify_the_block_they_restamp`, link-count boundary native tests, byte
+names, ordinary htree/inline insertion, mixed inode-API e2fsck and journal/crash
+cases. Shared unlink fixtures create aliases before arming their callback hooks;
+production qualified operations do not call public link internally. Preserve
+all these tests and earlier successful occurrences. Prior mixed-operation/crash
+tests do not substitute for focused operation-wide exclusion/retirement or new
+measured hard-link timestamp/path policy evidence.
+
+The next checkpoint must actually execute/save a dormant native safety/positive
+patch, reverse/reapply to identical source and repeat complete names/outcomes,
+then restore production/test bytes and verify the normal **1,494 occurrences /
+526 controls** plus lint. Use `scripts/tier.sh`; compile/fixture failures and
+unreached hooks are not driver reds. Do not promote intentionally red controls
+into normal CI or introduce a fake private commit helper.
+
+| Control group | Required executed coverage |
+|---|---|
+| Entry/conversion | Held context refuses all five forms before device properties/reads and both Into hooks; release permits success. Counted invalid names precede both conversions; invalid source/type/MAX_LINKS precedes parent conversion. |
+| Refusal priorities | Clean/already-dirty invalid/long/duplicate/dot/stale source/stale parent/directory/non-directory/MAX_LINKS/corrupt-inode-or-dir/unsupported-growth errors retain exact bytes, source nlink, counters, pending flags and healthy ordinary reuse. Volume/second verdict and earlier C pointer/ceiling checks remain. |
+| Reentry | Link callbacks cannot reenter itself or any **ten qualified families**; callbacks in each qualified family cannot enter link. Use actual observed size/read/writable/marker/commit/flush and conversion hooks; no fabricated Rust Runtime hooks or illegal unwinds through extern-C callbacks/overlapping ABI references. |
+| Positive identities | Existing regular, fast/slow symlink and supported special-file identities; raw/255-byte names, aliases in same/different parents, source generation/mode/owner/data/EA/maps intact, nlink +1, unchanged parent nlink and no inode allocation. Existing names refuse rather than rename-style no-op. |
+| Storage/planning | Real fresh non-growing linear/inline plans with no staged SB, same table-block source/parent slices, inline conversion, full parent and supported index/legacy/extent growth, multi-group/uninit accounting. Only actual parent data/map blocks are charged; keep source data/EA, inode bitmap/itable-unused and inode/used-directory counts unchanged. |
+| Uncertainty | Measure a successful call's actual writes/flushes in each direct/journal × 1/4 KiB × clean/dirty Rust/C profile; inject every observed position, aggregate only after all ran. Do not import create's 304 count. Prove retirement across all eleven families/flush/close. |
+| Publication/unwind | Actual public post-commit publication unwind asserts destination presence and source nlink increment before retirement. Inject only after last planning allocation-state reads; an early poisoned lock is not a publication result. Exercise both Into unwinds and retained-context returned errors/unwinds once the real helper exists. |
+| C readback | Held context through optional target read; updated source nlink/identity attrs agree. NULL avoids reads; normal failed read leaves one link/count increment and unchanged output sentinel, without retry or rollback claim; legal readback unwind retires. |
+| Future private boundary | Only after the actual helper exists: foreign identity, valid no-SB allocation-free plan, malformed present SB, growth SB/debits/state/checksum/outside-byte preservation and retained-context failures. Keep these separate from current public marker/refusal reds. |
+
+After reproducible native safety preparation, execute **reference-only Linux
+hard-link/linkat-with-zero-flags** measurements inside the existing CI VM. Linux
+creates all reference bytes; initially the driver only reads closed images.
+Measure source ctime, destination-parent mtime/ctime and unaffected old parent/
+peers; explicit source mode/owner/generation/EA/data, no new inode/block for
+non-growing parents, exact link counts and accounting; regular/fast/slow/dangling
+symlinks and source final-link identity; source versus destination invalid/missing/
+long/dot/trailing/rooted-path error priorities. Preserve API-versus-syscall and
+symbolic errno distinctions rather than silently rewriting contracts. Save
+before/after images, complete debugfs reports, judged non-repairing e2fsck and
+cold kernel namespace/identity/content/metadata records. Audit the actual saved
+bytes before executed measured semantic reds and their patch composition.
+
+Only then migrate the guard/owned-plan/optional-SB/readback boundary and measured
+policy repairs, retain every prior control, and independently qualify actual
+Rust/C emissions across legacy/checksummed 1/4 KiB direct/journal profiles.
+Qualify actual parent growth separately from no-allocation cases. Complete full
+CI occurrence/floor/trailing retention and standalone source/evidence review
+precede scoped link closure. No source/test/workflow/task/cap/floor/pin/lock or
+write-gate change occurs in this design audit. Stages 4–5 remain not yet quantified;
+casefold writes and broader ownership/alias/mapping/index-growth/lifecycle/
+recovery/ignored-fuzz/Windows/SteamOS/card qualification remain open.
+
 ### Scoped regular-file create full-CI review closure — 2026-10-27
 
 Budget repair `38295af4cc23ec93253c9edd963cffde73bbd692` passes every job and
