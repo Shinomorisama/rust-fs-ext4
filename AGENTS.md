@@ -75,6 +75,17 @@ an earlier commit's results.
 
 ### Complete initial access bundle
 
+**Sandbox approval reuse:** the environment's Internet setting and a chat's
+sandbox grant are separate. Request missing session network permission through
+`request_permissions` when available, confirm the returned scope, then use normal
+commands; do not elevate every `curl`, Git or native build out of habit. Continuing
+`do next` messages do not restart setup. Reuse existing workspace/temp access and
+GitHub authentication. A previously reported session grant was unavailable in a
+later execution context here; a renewed supported grant restored access. Record
+that persistence limitation rather than inventing missing hosts or credentials.
+See [the approval inventory](docs/CLOUD-STARTUP.md#sandbox-approvals-and-what-the-environment-can-save)
+for the separate PRoot/ptrace requirement and the limits of saved configuration.
+
 This is the upfront inventory for the current Linux cloud development and CI
 workflow. Match the environment described here in one initial setup: identify
 existing grants, request all missing items together where supported, and verify

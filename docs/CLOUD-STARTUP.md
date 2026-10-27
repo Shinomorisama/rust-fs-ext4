@@ -69,6 +69,52 @@ The older handoff's request for individual blob host additions is historical:
 the editor now succeeds with the configured wildcard. Recheck the affected
 chat's actual policy before assuming another allowlist entry is required.
 
+## Sandbox approvals and what the environment can save
+
+Do this inventory during initial setup, not repeatedly at each `do next`.
+User authorization, the environment's network destinations, GitHub credentials
+and the execution sandbox are different controls. A saved environment or an
+`AGENTS.md` instruction does not itself grant sandbox privileges.
+
+| Capability | Upfront handling and observed evidence |
+|---|---|
+| Session network | Request `network.enabled=true` with `request_permissions` when missing and supported. Verify the returned grant and scope. Afterward use ordinary commands for Git, API requests, downloads and authorized pushes/reruns. Do not request command elevation merely because the operation uses the network. |
+| Workspace and temporary files | Read/write/create under `/workspace` and `/tmp` covers this workflow, including Rustup, Cargo, build, log, pinned-tool and cache paths. Verify actual writes and create missing directories under those roots. A nonexistent cache directory is not a denied permission. Do not request unrelated home/system paths. |
+| GitHub repository and CI access | Reuse platform HTTPS authentication. Source/API, redirected artifact/log reads, authorized `casefold-rw` pushes and an authorized Actions job rerun have actually worked here. Repository API metadata also reports pull/push access. Preserve the full agent-guide inventory; do not request a new PAT, admin access or duplicate secret for these working operations. A future claim/PR workflow must still verify its own required scope. |
+| PRoot process execution | The older `/workspace/.cloud-setup/run-casefold.sh` uses `ptrace`, which has been denied by the command sandbox. Network permission does not grant it. If this runner is needed, identify the process capability in the initial bundle and seek a narrow reusable runner-command approval where the client supports one. Do not present it as granted merely because PRoot is installed. Use already tested, authorized unprivileged coding workflows normally; do not impose PRoot on Git/API or unrelated commands. During onboarding preserve tracked manifests, locks and siblings. |
+| Later platforms | Current Linux core work needs no host image mounts/e2fsprogs, local KVM, Docker daemon, Windows administrator or real-card/device access. Independent Linux checks use GitHub's pinned harness. Request separately scoped Windows/card capabilities only when that work is selected. |
+
+On 2026-10-27 the saved configuration and policy file already selected
+**unrestricted Internet**. The runtime reported current observations but an
+unknown enforcement state, so actual requests were tested. Ordinary commands
+still failed to connect to the configured `proxy:8080` until the supported
+session network permission was granted. The tool returned session scope; in a
+later execution context the same connection failure recurred, and a renewed
+grant restored access again. **Grant persistence across contexts is therefore
+not established.** This is separate from the historical inspection 403 below.
+
+Reuse grants and try normal required operations first. If a genuine sandbox
+failure recurs, follow the governing permission/retry flow once for the affected
+capability, then return to normal execution when it works. Record the error,
+scope and affected context; do not repeatedly run unchanged escalation requests,
+add already-covered hosts, replace credentials or promise that publication fixes
+the sandbox. Do not restart the two-message setup because the user said `do next`.
+
+The available environment draft API can save installation/startup instructions,
+network destinations and credential/variable requirements. It has **no field
+for persistent sandbox auto-approval, session-grant lifetime or ptrace policy**.
+Do not invent environment variables or scripts that claim to grant those powers.
+Saving startup instructions records what the next chat must request and verify;
+it does not itself approve it. If the client cannot retain a needed grant, report
+that precise platform limitation rather than claiming all future prompts are solved.
+
+Keep existing network policy, repositories, pins and credential bindings unless
+a demonstrated missing requirement calls for a change. Updating startup notes
+is a real draft change: review/save/publish it once to apply it to future restored
+environments when the product requires publication. Ordinary code checkpoints
+do not require republishing the environment. Publication is not evidence that a
+sandbox grant will survive another task or execution context.
+
 ## Recognize the reported cloud inspection failure
 
 Three regular chats using this selected environment were reported to fail with:
