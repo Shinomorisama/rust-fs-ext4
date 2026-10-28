@@ -47,6 +47,42 @@ env:
   CARGO_BUILD_JOBS: "4"
 
 jobs:
+  link-emission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact link emission source identity
+        run: |
+          mkdir -p tmp/link-emission
+          git rev-parse HEAD > tmp/link-emission/source-commit.txt
+          sha256sum src/fs.rs src/capi.rs src/fs/guarded_chmod.rs src/fs/guarded_chmod/needs_host.rs src/fs/guarded_chmod/needs_host/link_emission.rs src/fs/guarded_chmod/needs_host/link_emission_guest.py src/fs/guarded_chmod/needs_host/link_policy_guest.py src/fs/guarded_chmod/needs_host/setxattr.rs Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml > tmp/link-emission/source-sha256.txt
+      - name: Check allocation-free public Rust and C hard-link emission
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/link-emission
+        run: |
+          scripts/tier.sh casefold:link-emission casefold-link-emission 4200 320000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::link_emission::linux_checks_public_link_metadata -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-link-emission 1
+      - name: Keep driver and Linux-copy images and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-emission
+          path: |
+            tmp/link-emission/
+            tmp/logs/casefold-link-emission.log
+          if-no-files-found: error
+          retention-days: 30
   link-policy-reference:
     runs-on: ubuntu-24.04
     timeout-minutes: 25

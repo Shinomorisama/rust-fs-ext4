@@ -108,6 +108,26 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Allocation-free public-link independent test preparation — 2026-10-28
+
+The new focused `link-emission` test/job prepares sixteen independent Rust/C
+profiles using Linux-created inputs, seven driver-created aliases per layout
+and saved dirty/closed driver and post-Linux-copy images. It checks all source
+kinds/API forms, exact source/parent/target-attr semantics, zero allocation,
+complete descriptor/bitmap/EA/peer preservation, debugfs metadata/version and
+cold Linux alias/content/namespace agreement. Judged e2fsck outputs and exact
+source hashes are retained. The [preparation ledger](extprogress.md#allocation-free-public-hard-link-emission-test-preparation--2026-10-28)
+records the planned 112-link/352-image matrix and evidence limits.
+
+Full native lint, Python syntax and all 1,639 native occurrences/662 controls
+pass; production bytes stay at `afd24b8`. Actual independent execution, source/
+digest/CRC bindings, saved-byte audit and implementation full-CI retention remain
+pending. No pass is inferred from compilation or older Linux reference bytes.
+The new focused cap is provisional until actual measurement; existing tier
+caps are unchanged. Independent growth/counter-wrap qualification and the scoped
+source/evidence review remain separate prerequisites. Keep all broader gates
+and casefold write restrictions; stages 4–5 remain not quantified.
+
 ### Guarded public hard-link native migration — 2026-10-27
 
 The bounded implementation now uses one shared context for all five Rust/C
