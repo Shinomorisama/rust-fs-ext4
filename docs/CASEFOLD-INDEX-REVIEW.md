@@ -108,6 +108,32 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Exact inline Linux emission audit; full retention pending — 2026-10-28
+
+Source `6c71cbe` passes all fourteen focused jobs in **40785791695**. Inline
+job **123158524255** executes exactly one test/floor one; output is 957 lines /
+129,769 bytes. Archive **12858898992**, SHA-256
+`111e88308cda4bb2fe38cf845bf7e85989957153c6598ed9a8bc308bead38665`,
+is API-source/digest/all-CRC/24-file-hash verified. Every sixteen-layout / 48-link /
+160-image input/dirty/closed/cold snapshot is audited against raw metadata,
+applicable checksums, exact allocation, complete table/bitmap/EA preservation,
+608 debugfs/112 judged e2fsck reports and 540 actual Linux rows/twelve C snapshots.
+Fit remains inline, conversion adds exactly one block, and later fit adds none.
+The same source's two linear matrices also retain all sixteen-layout/112-link/
+352-image checks each, including actual wrappers and one-test floors.
+
+See the [full audit ledger](extprogress.md#inline-parent-exact-linux-saved-byte-audit-and-pending-full-retention--2026-10-28)
+for all archive IDs/digests, raw checks and constraints. No source/test/workflow/
+budget/pin or gate changes in this audit. Exact full **40785791674** still has
+native **123159535998** and guest **123159536037** whole jobs running; available
+unit/ARM artifacts retain 1,647 occurrences and 670 controls, plus 527 ARM image,
+five wasm and 159 standalone CLI successes. Complete 2,497-whole/five-context/
+wrapper/floor/trailing retention is pending, not credited. The existing ignored
+slow fuzz case remains a gate. Close that full result next before broader growth
+or the scoped review; healthy focused bytes do not establish complete operation/
+recovery/ownership or Windows/card/SteamOS qualification. Casefold writes remain
+blocked and stages 4–5 remain unquantified.
+
 ### Inline-parent native controls and exact Linux test preparation — 2026-10-28
 
 Eight new native tests now cover same-table inline fit/convert/postfit across
