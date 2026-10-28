@@ -108,6 +108,49 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Executed native hard-link policy reds and reference-CI closure — 2026-10-27
+
+Exact reference source `9fd59cf` now passes all eleven jobs/ci-ok in full run
+`40615435814`; docs source `8f0006a` also passes exact run `40616704908`. Five
+source/digest/all-CRC-verified archives retain every **2,350 whole-suite success**,
+all **526 controls once in five contexts**, all 1,503 units and 527 ARM image
+successes. Actual whole wrappers/1,060 floors, twenty shell/159 native installed-
+CLI and 159 standalone CLI checks pass. One unchanged ignored fuzz case remains
+a qualification gate. Native/guest whole logs are 3,778/225,383 and 3,945/234,723,
+inside unchanged caps. The eight-layout/80-image/56-link Linux reference stays
+unchanged; no repeated dispatch or emitted-image qualification is inferred.
+
+The [new dormant policy patch](CASEFOLD-LINK-POLICY-RED.patch) actually executes
+**39 controls / 12 passes / 27 semantic failures**, zero ignored. All five Rust/C
+forms, five existing source kinds and six native profiles reach measured source
+ctime, destination mtime/ctime/version and optional C target-attr expectations.
+Each policy run actually performs **1,554 successful links / 516 refusals**;
+1,290 links reach semantic comparisons. Identity/data/EA/owners/generation,
+raw/255-byte names, no-allocation/old-parent/peer invariants and explicit API
+path/name/dual-Into/C pointer/ceiling/generation priorities remain. Native six-
+profile self-built fixtures are separate from the independent eight-profile VM
+reference. No fake helper or unreached Runtime clock/generation hook is counted.
+
+Policy→safety and safety→policy reproduce identical source and both **123-control
+runs repeat 32 passes / 91 failures**, zero ignored, retaining every original
+84 safety outcome, all 200 I/O/four actual publication injections, 54 original
+positive profiles and C readback observations. Standalone/composed clippy passes;
+both patches remain dormant and active source/test/workflow/manifest/lock bytes
+are restored. All 1,503 native occurrences/526 controls plus full lint remain.
+The [executed ledger](extprogress.md#measured-native-hard-link-policy-reds-and-composition--2026-10-27)
+records exact patch/source/log hashes, profile counts and evidence limits.
+
+Next implement shared-context public link and completed LinkPlan with measured
+metadata repair, optional full SB when genuinely present, whole commit/effect/
+publication and optional C owned target readback. Preserve source-before-parent/
+name-before-both-Into/path/FFI contracts and source identity/EA ownership. Real
+private-boundary and reached Runtime diagnostics come after those real helpers;
+re-measure I/O positions when staging changes. Both repaired patches must turn
+green before promotion and independent Rust/C emission/growth/full-CI review.
+No link guard or semantic repair is yet implemented. Stages 4–5 remain not yet
+quantified; casefold writes and broader ownership/lifecycle/recovery/platform
+qualification remain gated.
+
 ### Independent Linux hard-link reference policy — 2026-10-27
 
 Corrected source `9fd59cf5b5d3c1f00846c9015233594f06adb70e` passes focused job
