@@ -3,6 +3,11 @@ set -euo pipefail
 export RUSTUP_HOME=/workspace/.rustup CARGO_HOME=/workspace/.cargo
 export PATH=/workspace/.cargo/bin:/workspace/onboarding/bin:$PATH
 export CARGO_BUILD_JOBS=4
+export CARGO_INCREMENTAL=0
+for tool in python3 git gh curl tar sha256sum rg cc ar; do
+  command -v "$tool" >/dev/null || { printf 'Missing setup tool: %s\n' "$tool" >&2; exit 1; }
+done
+test "$(uname -m)" = x86_64
 mkdir -p /workspace/onboarding/bin
 if ! command -v rustup >/dev/null; then
   curl -fsSL https://sh.rustup.rs -o /tmp/onboarding-rustup.sh
@@ -30,34 +35,13 @@ if test -e "$setup_root/pinned-core-0.3.0"; then
 else
   mv "$chore_dir/core" "$setup_root/pinned-core-0.3.0"
 fi
-# proot supplies a process-local source view; no mount privilege or sibling rewrite.
-# A fresh library-only checkout may have no sibling mount target yet.
-mkdir -p /workspace/rust-fs-core
-test "$(uname -m)" = x86_64
-apt_root="$setup_root/apt"
-mkdir -p "$apt_root/etc/parts" "$apt_root/etc/preferences.d" "$apt_root/lists/partial" "$apt_root/cache/archives/partial" "$setup_root/tools"
-cat > "$apt_root/config" <<'APTCONFIG'
-Dir::Etc "/workspace/.cloud-setup/apt/etc";
-Dir::Etc::main "-";
-Dir::Etc::parts "parts";
-Dir::Etc::sourceparts "-";
-Dir::State::lists "/workspace/.cloud-setup/apt/lists";
-Dir::Cache "/workspace/.cloud-setup/apt/cache";
-APTCONFIG
-cat > "$apt_root/etc/sources.list" <<'APTSOURCES'
-deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian trixie main
-APTSOURCES
-APT_CONFIG="$apt_root/config" /usr/bin/apt-get update
-mkdir "$chore_dir/debs"
-(cd "$chore_dir/debs"; APT_CONFIG="$apt_root/config" /usr/bin/apt-get download proot libtalloc2)
-for package_file in "$chore_dir"/debs/*.deb; do
-  dpkg-deb --extract "$package_file" "$setup_root/tools"
-done
+# Native execution needs no ptrace, PRoot, mount or sibling rewrite.
 cat > "$setup_root/env.sh" <<'CASEFOLDENV'
 export CARGO_HOME=/workspace/.cargo
 export RUSTUP_HOME=/workspace/.rustup
 export PATH=/workspace/onboarding/bin:/workspace/.cargo/bin:/usr/bin:$PATH
 export CARGO_BUILD_JOBS=4
+export CARGO_INCREMENTAL=0
 export CARGO_TARGET_DIR=/workspace/rust-fs-ext4/target/casefold-baseline
 export XDG_CACHE_HOME=/workspace/.cache
 export XDG_STATE_HOME=/workspace/.local/state
@@ -68,8 +52,7 @@ cat > "$setup_root/run-casefold.sh" <<'CASEFOLDRUN'
 #!/usr/bin/env bash
 set -euo pipefail
 source /workspace/.cloud-setup/env.sh
-export LD_LIBRARY_PATH=/workspace/.cloud-setup/tools/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-exec /workspace/.cloud-setup/tools/usr/bin/proot -b /workspace/.cloud-setup/pinned-core-0.3.0:/workspace/rust-fs-core "$@"
+exec python3 /workspace/rust-fs-ext4/scripts/cloud-casefold-run.py "$@"
 CASEFOLDRUN
 chmod 755 "$setup_root/run-casefold.sh"
 command -v gh >/dev/null

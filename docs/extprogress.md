@@ -53,6 +53,32 @@ statuses, evidence and next task. Preserve historical evidence and restrictions;
 do not create a competing progress file. These reporting instructions add no
 permission to relax write gates, modify siblings or push to `main`.
 
+## Fresh environment handoff — 2026-10-28
+
+Start with `AGENTS.md` and `docs/CLOUD-STARTUP.md`: request/verify the complete
+known access bundle upfront, then perform the required second-message recheck
+and wait for implementation confirmation. The setup script now generates a
+native runner using tracked `scripts/cloud-casefold-run.py`; no ignored helper,
+PRoot/ptrace grant, host oracle or sibling rewrite is needed. The core/chore/
+Rust pins and archive checks remain. Source `/workspace/.cloud-setup/env.sh`
+and use that runner for Cargo/chore checks; its temporary manifest selection
+is restored and the lock is checked. The tracked runner passes the full native
+unit tier with every 1,639 occurrence / 662 controls retained, plus full lint.
+Offline dependency selection and manifest/lock restoration are verified on both
+successful and failed child commands. Setup-shell/Python syntax checks pass;
+the complete download/bootstrap has not been rerun in an empty machine here.
+Do not reuse an old generated PRoot wrapper on a fresh setup.
+
+The project checkpoint below remains authoritative. Corrected growth source
+`09cf8dc` started focused **40744071010** (growth job **123013076874**,
+allocation-free **123013076829**) and full **40744071049**; the last observed
+statuses were running. Inspect their actual later outcomes rather than crediting
+them from local tests. This setup-only update does not change their driver/test
+bytes or qualify growth. Fresh bootstrap network access and permission persistence
+must be verified in the new chat; the repository cannot guarantee the platform
+will honor/retain Full access or session approvals. All changes are intended
+for `casefold-rw`, never main or siblings.
+
 ## Current checkpoint
 
 - **The first linear-growth CI failure is a reproduced test expectation error; its EA-sector accounting is corrected, with rerun pending.**
@@ -11287,31 +11313,21 @@ git branch --show-current
 git status --short
 git log -5 --oneline
 git rev-parse HEAD
-git -C ../rust-fs-core status --short
-git -C ../rust-fs-core describe --tags --exact-match
-git -C ../fs-linux-test-harness status --short
-git -C ../fs-linux-test-harness rev-parse HEAD
 gh run list --branch casefold-rw --limit 5
 ```
 
-The existing local toolchain uses:
+Follow `docs/CLOUD-STARTUP.md` for fresh setup, then load the pinned tool paths:
 
 ```sh
-export CARGO_HOME=/workspace/.cargo
-export RUSTUP_HOME=/workspace/.rustup
-export PATH=/workspace/bin:/workspace/.cargo/bin:$PATH
-export CARGO_BUILD_JOBS=4
-export CARGO_TARGET_DIR=/workspace/rust-fs-ext4/target/casefold-baseline
-export XDG_CACHE_HOME=/workspace/.cache
-export XDG_STATE_HOME=/workspace/.local/state
+source /workspace/.cloud-setup/env.sh
 ```
 
 Use the repository's tasks, preserve command exit statuses, and inspect failure logs:
 
 ```sh
-chore test:unit
-chore lint
-chore cli:install
+python3 scripts/cloud-casefold-run.py chore test:unit
+python3 scripts/cloud-casefold-run.py chore lint
+python3 scripts/cloud-casefold-run.py chore cli:install
 ```
 
 Run them sequentially with failure handling; do not let a later successful command hide an earlier failure. Focused tests also run through `scripts/tier.sh` and `scripts/test.sh`. The full Linux/e2fsprogs/kernel suite runs in GitHub CI using the existing VM harness. GitHub CLI and HTTPS push worked in this workspace; reuse existing access before asking for credentials. A fresh environment may need the onboarding setup restored.

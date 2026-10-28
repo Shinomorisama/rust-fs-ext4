@@ -146,9 +146,11 @@ require adding a secret or cloning every repository.
 | `antimatter-studios/chore` | Read the pinned chore release/checksum files |
 | `antimatter-studios/fs-linux-test-harness` | Read the prescribed harness references; use existing CI runners |
 
-Include **read/write/create access under `/workspace` and `/tmp`**, execution of
-the unprivileged setup/build/test tools, and the process-local PRoot source view
-used by `scripts/cloud-casefold-setup.sh`. Build/cache/harness outputs stay in
+Include **read/write/create access under `/workspace` and `/tmp`** and execution
+of the unprivileged setup/build/test tools. The committed native
+`scripts/cloud-casefold-run.py` selects the verified core without PRoot/ptrace
+or sibling changes, restoring the manifest and checking the lock after commands.
+Do not request PRoot access for the current workflow. Build/cache/harness outputs stay in
 these writable roots. Verify Git, `gh`, Rust 1.95.0/rustfmt/clippy, chore 0.11.0,
 Python 3, curl, tar, SHA-256 tools, Debian package tools and the native compiler/
 linker dependencies during initial setup; acquire missing tools then, not mid-stage.

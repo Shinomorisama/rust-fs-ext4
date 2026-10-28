@@ -81,7 +81,7 @@ and the execution sandbox are different controls. A saved environment or an
 | Session network | Request `network.enabled=true` with `request_permissions` when missing and supported. Verify the returned grant and scope. Afterward use ordinary commands for Git, API requests, downloads and authorized pushes/reruns. Do not request command elevation merely because the operation uses the network. |
 | Workspace and temporary files | Read/write/create under `/workspace` and `/tmp` covers this workflow, including Rustup, Cargo, build, log, pinned-tool and cache paths. Verify actual writes and create missing directories under those roots. A nonexistent cache directory is not a denied permission. Do not request unrelated home/system paths. |
 | GitHub repository and CI access | Reuse platform HTTPS authentication. Source/API, redirected artifact/log reads, authorized `casefold-rw` pushes and an authorized Actions job rerun have actually worked here. Repository API metadata also reports pull/push access. Preserve the full agent-guide inventory; do not request a new PAT, admin access or duplicate secret for these working operations. A future claim/PR workflow must still verify its own required scope. |
-| PRoot process execution | The older `/workspace/.cloud-setup/run-casefold.sh` uses `ptrace`, which has been denied by the command sandbox. Network permission does not grant it. If this runner is needed, identify the process capability in the initial bundle and seek a narrow reusable runner-command approval where the client supports one. Do not present it as granted merely because PRoot is installed. Use already tested, authorized unprivileged coding workflows normally; do not impose PRoot on Git/API or unrelated commands. During onboarding preserve tracked manifests, locks and siblings. |
+| Native build execution | The committed `scripts/cloud-casefold-run.py` uses the verified immutable core with ordinary unprivileged processes, serializes runner invocations and restores its temporary manifest selection on exit. The setup script generates a native `run-casefold.sh`. PRoot/ptrace is no longer required; do not request that extra capability or reuse an old generated PRoot wrapper. Never change sibling checkouts or dependency pins. |
 | Later platforms | Current Linux core work needs no host image mounts/e2fsprogs, local KVM, Docker daemon, Windows administrator or real-card/device access. Independent Linux checks use GitHub's pinned harness. Request separately scoped Windows/card capabilities only when that work is selected. |
 
 On 2026-10-27 the saved configuration and policy file already selected
@@ -149,17 +149,43 @@ bash scripts/cloud-casefold-setup.sh
 
 The script prepares Rust 1.95.0, chore 0.11.0, and the immutable core v0.3.0
 source view used by casefold. It verifies the core archive SHA-256 and chore
-release checksum, and uses signed Debian package metadata for unprivileged
-PRoot tools. It targets the existing x86_64 Debian cloud workspace; inspect the
-platform before using it elsewhere. It does not change branches, tracked
-sources, sibling checkout contents, pins or lockfiles. An absent sibling mount
-directory can be created without cloning or modifying another project.
+release checksum and uses the committed native runner. It targets the existing
+x86_64 Linux cloud workspace; inspect the platform before using it elsewhere.
+It checks basic setup/compiler tools upfront. No PRoot, ptrace, host mount or
+sibling checkout is needed for this pinned-core view. The runner temporarily
+selects that core in the manifest, restores the original bytes in `finally`
+and checks that the lockfile stayed unchanged. Do not edit the manifest or run
+Cargo outside the runner concurrently. Branches, source code, sibling contents
+and dependency pins remain unchanged.
 
 Use `/workspace/.cloud-setup/run-casefold.sh <command>` for subsequent locked
 Cargo/chore checks from this checkout. The setup script builds the CLI and runs
 the existing unit tier; a zero-test run or merely installing tools is not
 validation. It also retains the older main/core-0.3.6 workflow when that dependency
 is selected and available, but the casefold handoff remains authoritative.
+
+The native runner is tracked; a fresh chat must not rely on ignored
+`tmp/upstream-forks-oct27/run-direct.py` or cached audit scripts. After setup:
+
+```sh
+source /workspace/.cloud-setup/env.sh
+python3 scripts/cloud-casefold-run.py chore test:unit
+```
+
+Historical logs and audit helpers under `tmp/` are conveniences. Retrieve
+source-matched CI artifacts and reconstruct any audit from committed tests,
+format documentation and the evidence ledger when those helpers are absent.
+Resume the latest `docs/extprogress.md` checkpoint; inspect that exact commit's
+focused/full CI before interpreting an old failure or starting a later stage.
+
+On 2026-10-28 the chat UI showed **Full access** while environment status
+reported **unrestricted/enforced**, but normal Git/API commands still failed
+to connect to `proxy:8080`; approved retries worked and prompted again. This
+is an observed runtime/approval mismatch, not evidence of a new missing host.
+Request and verify the full known bundle upfront, reuse actual grants, and
+report a recurrence accurately. Do not promise that another session approval,
+environment publication, repository instruction or fresh environment guarantees
+approval persistence. Follow the governing runtime retry rules when blocked.
 
 No local KVM means Linux/e2fsprogs/kernel qualification uses the existing CI VM.
 Never mount images or run host e2fsprogs here. Do not alter Windows driver locks
