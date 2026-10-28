@@ -108,6 +108,39 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Allocation-free public-link exact Linux emission closure — 2026-10-28
+
+Source **`e6db258`** passes exact focused job **122646396891** in **40637075787**.
+Advertised SHA-256/source/eleven source hashes/all 4,275 ZIP CRCs bind artifact
+**12793499218**. The complete saved-byte audit passes all **sixteen layouts /
+112 links / 352 images / 1,536 debugfs reports / 240 e2fsck reports / 128 mounts**,
+including 24 requested C target snapshots and 1,928 cold Linux rows. The actual
+one-test wrapper/floor passes at **2,141/287,619** lines/bytes; no cap repair.
+All expected source/parent/alias metadata/version/maps/content/EA and exact
+zero-allocation accounting match, all unrelated allocated inode bytes remain,
+and dirty/closed/journal/Linux-copy states and checksums are retained. Linux
+observer atime changes affect only disposable copies; actual driver bytes stay
+pristine between operations. See the [closure ledger](extprogress.md#allocation-free-public-hard-link-exact-linux-emission-and-saved-byte-closure--2026-10-28)
+for exact source, scope, API/source-kind pairings, digest and evidence limits.
+
+Implementation **afd24b8** also now passes all eleven full jobs/ci-ok in
+**40633679897**, preserving all 1,639 unit/2,486 whole occurrences, 662 controls
+in five contexts, actual floors/wrappers, twenty shell/159 native CLI/159
+standalone CLI, 36 kernel and 527 ARM image successes. Native/guest whole logs
+measure **3,914/237,852** and **4,081/247,052**;
+existing caps fit. One unchanged ignored fuzz case remains a gate. The three
+protected writer files are unchanged in e6db258, which adds one host test;
+its separate **40637075795** full CI/2,487-whole retention remains pending.
+
+This closes only the healthy ordinary allocation-free independent matrix and
+the original implementation's full-CI gate. It does not close independent
+growth/conversion/index/legacy/extent/deep/uninit or counter-wrap qualification,
+the later scoped implementation/saved-evidence review, corruption/ownership/
+admission/lifecycle/recovery/fuzz gates, or Windows/card/SteamOS qualification.
+Keep casefold writes blocked and stages 4–5 not quantified. Both link patches
+stay historical/promoted. This closure changes documentation only; no fresh
+later-tip CI result is inferred.
+
 ### Allocation-free public-link independent test preparation — 2026-10-28
 
 The new focused `link-emission` test/job prepares sixteen independent Rust/C
