@@ -46,6 +46,12 @@ struct CreatePlan {
     buf: BlockBuffer,
 }
 
+/// Completed hard-link staging for an existing live target and all parent edits.
+struct LinkPlan {
+    target: u32,
+    buf: BlockBuffer,
+}
+
 impl BlockBuffer {
     /// `block_size` is taken and not stored.
     ///
@@ -7234,26 +7240,14 @@ impl Filesystem {
     /// - `dst` must not already exist.
     /// - On success the shared inode's `i_links_count` is incremented by 1.
     ///
-    /// Not journaled — same caveat as other Phase-4 ops.
+    /// Source count and all parent edits commit under one guarded operation.
     pub fn apply_link(&self, src: &str, dst: &str) -> Result<()> {
         self.apply_link_bytes(src.as_bytes(), dst.as_bytes())
     }
 
     /// [`apply_link`](Self::apply_link) of a path given as bytes, never decoded.
     pub(crate) fn apply_link_bytes(&self, src: &[u8], dst: &[u8]) -> Result<()> {
-        self.refuse_write()?;
-        let (dst_parent_path, dst_name) = split_parent_and_base(dst)?;
-        if dst_name.len() > 255 {
-            return Err(Error::NameTooLong);
-        }
-        let src_ino = self.resolve(src)?;
-        // Before the destination is resolved, as it always was: linking a
-        // directory is EISDIR wherever it was to go.
-        if self.live_inode(src_ino.into())?.0.is_dir() {
-            return Err(Error::IsADirectory);
-        }
-        let dst_parent = self.resolve_dir(dst_parent_path)?;
-        self.apply_link_at(src_ino, dst_parent, dst_name)
+        self.guarded_link_bytes(src, dst)
     }
 
     /// [`apply_link`](Self::apply_link): a new entry `dst_name` in
@@ -7264,7 +7258,15 @@ impl Filesystem {
         dir: impl Into<InodeRef>,
         dst_name: &[u8],
     ) -> Result<()> {
-        self.refuse_write()?;
+        self.guarded_link_from(target, dir, dst_name)
+    }
+
+    fn plan_link_at(
+        &self,
+        target: impl Into<InodeRef>,
+        dir: impl Into<InodeRef>,
+        dst_name: &[u8],
+    ) -> Result<LinkPlan> {
         check_new_entry_name(dst_name)?;
         let target = target.into();
         let src_ino = target.ino;
@@ -7285,9 +7287,9 @@ impl Filesystem {
 
         let dir_type = crate::dir::DirEntryType::from_mode(src_inode.mode);
 
-        // Build the multi-block transaction: bump nlink + add dir entry,
-        // both staged into one buffer so a crash either applies both or
-        // neither.
+        // Stage the source count and all destination edits together. Journaled
+        // commits use the existing transaction; direct writes retain their
+        // existing ordered-flush contract, without power-loss atomicity.
         let mut buf = BlockBuffer::new(self.sb.block_size());
         self.patch_inode_nlink(src_ino, &mut src_raw, &src_inode, 1)?;
         self.buffer_write_inode(&mut buf, src_ino, &src_raw)?;
@@ -7300,7 +7302,7 @@ impl Filesystem {
             src_ino,
             dir_type,
         ) {
-            Ok(()) => self.commit_block_buffer(buf),
+            Ok(()) => {}
             Err(Error::OutOfBounds) => {
                 // Parent dir is full → grow it in the same transaction as
                 // the nlink bump.
@@ -7311,10 +7313,38 @@ impl Filesystem {
                     src_ino,
                     dir_type,
                 )?;
-                self.commit_block_buffer(buf)
             }
-            Err(e) => Err(e),
+            Err(e) => return Err(e),
         }
+        // Read the latest staged slices after inline conversion, index/mapping
+        // growth and source nlink edits. Source and parent may share a table block.
+        let (source_now, mut source_raw) = self.buffered_inode_verified(&buf, src_ino)?;
+        let (parent_now, mut parent_raw) = self.buffered_inode_verified(&buf, dst_parent_ino)?;
+        // One Runtime reading serves the metadata times measured by link_policy.
+        let now = self.runtime.now_unix_seconds();
+        set_inode_time(&mut source_raw, InodeTime::Ctime, now);
+        self.finalize_inode_raw(src_ino, source_now.generation, &mut source_raw)?;
+        self.buffer_write_inode(&mut buf, src_ino, &source_raw)?;
+        set_inode_time(&mut parent_raw, InodeTime::Mtime, now);
+        set_inode_time(&mut parent_raw, InodeTime::Ctime, now);
+        // Persisted directory change counter, separate from mount epochs and
+        // inode generation. Carry into the high word only when it is covered.
+        let low = u32::from_le_bytes(parent_raw[36..40].try_into().unwrap());
+        let (low, carry) = low.overflowing_add(1);
+        parent_raw[36..40].copy_from_slice(&low.to_le_bytes());
+        if carry
+            && parent_raw.len() >= 156
+            && u16::from_le_bytes(parent_raw[128..130].try_into().unwrap()) >= 28
+        {
+            let high = u32::from_le_bytes(parent_raw[152..156].try_into().unwrap()).wrapping_add(1);
+            parent_raw[152..156].copy_from_slice(&high.to_le_bytes());
+        }
+        self.finalize_inode_raw(dst_parent_ino, parent_now.generation, &mut parent_raw)?;
+        self.buffer_write_inode(&mut buf, dst_parent_ino, &parent_raw)?;
+        Ok(LinkPlan {
+            target: src_ino,
+            buf,
+        })
     }
 
     /// Rename `src` → `dst` within the same filesystem.

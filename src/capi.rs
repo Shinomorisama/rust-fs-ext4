@@ -3008,12 +3008,18 @@ pub unsafe extern "C" fn fs_ext4_link_at(
         )
     };
     ino_call(fs, -1, &what, |fs| {
-        fs.apply_link_at(
+        let (target, snapshot) = fs.guarded_link_with_attr(
             inode_ref(ino, generation),
             inode_ref(dir_ino, dir_generation),
             name_arg(name, name_len)?,
+            !attr.is_null(),
         )?;
-        attr_out(fs, ino, attr)
+        if let Some(inode) = snapshot {
+            // SAFETY: output is requested only for a non-null writable pointer.
+            // All filesystem reads finished under the same operation context.
+            fill_attr(unsafe { &mut *attr }, target, &inode);
+        }
+        Ok(0)
     })
 }
 

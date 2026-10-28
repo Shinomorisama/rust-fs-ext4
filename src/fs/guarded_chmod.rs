@@ -1,4 +1,4 @@
-//! Shared metadata/unlink/rmdir/mkdir/create dispatch; other writers need caller exclusion.
+//! Shared metadata/unlink/rmdir/mkdir/create/link dispatch; other writers need caller exclusion.
 use super::*;
 use crate::operation::{Health, Operation};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +45,112 @@ impl Drop for MountOperation<'_> {
 }
 
 impl Filesystem {
+    pub(super) fn guarded_link_bytes(&self, src: &[u8], dst: &[u8]) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.link_bytes_in(&mut context, src, dst).map(|_| ())
+    }
+
+    pub(super) fn guarded_link_from(
+        &self,
+        target: impl Into<InodeRef>,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+    ) -> Result<()> {
+        let mut context = self.chmod_operation()?;
+        self.link_from_in(&mut context, target, dir, name)
+            .map(|_| ())
+    }
+
+    /// Optional C attrs describe the existing target, under the same context.
+    /// A read error may follow one committed alias and does not undo that link.
+    pub(crate) fn guarded_link_with_attr(
+        &self,
+        target: InodeRef,
+        dir: InodeRef,
+        name: &[u8],
+        read_attr: bool,
+    ) -> Result<(u32, Option<Inode>)> {
+        let mut context = self.chmod_operation()?;
+        let ino = self.link_from_in(&mut context, target, dir, name)?;
+        let attr = if read_attr {
+            Some(self.stat_ino(ino)?)
+        } else {
+            None
+        };
+        Ok((ino, attr))
+    }
+
+    fn link_bytes_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        src: &[u8],
+        dst: &[u8],
+    ) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?;
+        let (parent_path, name) = split_parent_and_base(dst)?;
+        if name.len() > 255 {
+            return Err(Error::NameTooLong);
+        }
+        let target = self.resolve(src)?;
+        // Keep the path source-directory refusal before destination walking.
+        if self.live_inode(target.into())?.0.is_dir() {
+            return Err(Error::IsADirectory);
+        }
+        let parent = self.resolve_dir(parent_path)?;
+        self.link_from_in(context, target, parent, name)
+    }
+
+    fn link_from_in(
+        &self,
+        context: &mut MountOperation<'_>,
+        target: impl Into<InodeRef>,
+        dir: impl Into<InodeRef>,
+        name: &[u8],
+    ) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        self.write_refusal()?; // Retain the second path volume verdict.
+        let plan = self.plan_link_at(target, dir, name)?;
+        self.commit_link_in(context, plan)
+    }
+
+    /// Link-only trusted whole-plan boundary; no generic ownership seal.
+    fn commit_link_in(&self, context: &mut MountOperation<'_>, mut plan: LinkPlan) -> Result<u32> {
+        self.check_chmod_context(context)?;
+        self.prepare_link_buffer(&mut plan.buf)?;
+        if !self.marked_not_clean.load(Ordering::SeqCst) {
+            context.effect(|| self.mark_not_clean_once())?;
+        }
+        let target = plan.target;
+        // Publication can run even for allocation-free plans with no overrides.
+        context.effect(|| self.commit_block_buffer(plan.buf))?;
+        Ok(target)
+    }
+
+    fn prepare_link_buffer(&self, buf: &mut BlockBuffer) -> Result<()> {
+        let bs = u64::from(self.sb.block_size());
+        let offset = crate::superblock::SUPERBLOCK_OFFSET;
+        // Existing-inode links can genuinely stage no primary SB at all.
+        let Some(block) = buf.dirty.get_mut(&(offset / bs)) else {
+            return Ok(());
+        };
+        let start = (offset % bs) as usize;
+        if block.len() != bs as usize || start + 1024 > block.len() {
+            return Err(Error::Corrupt("link prepared superblock shape"));
+        }
+        let sb = &mut block[start..start + 1024];
+        if u16::from_le_bytes(sb[0x38..0x3a].try_into().unwrap()) != crate::superblock::EXT4_MAGIC {
+            return Err(Error::Corrupt("link prepared superblock magic"));
+        }
+        let state = u16::from_le_bytes(sb[0x3a..0x3c].try_into().unwrap());
+        sb[0x3a..0x3c].copy_from_slice(&(state & !crate::superblock::EXT4_VALID_FS).to_le_bytes());
+        if self.csum.enabled {
+            let checksum = crate::checksum::linux_crc32c(!0, &sb[..0x3fc]);
+            sb[0x3fc..].copy_from_slice(&checksum.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub(super) fn guarded_create_bytes(&self, path: &[u8], mode: u16) -> Result<u32> {
         let mut context = self.chmod_operation()?;
         self.create_bytes_in(&mut context, path, mode)
@@ -1277,6 +1383,7 @@ mod tests {
     mod chown_calls;
     mod create_calls;
     mod flags_calls;
+    mod link_calls;
     mod mkdir_calls;
     mod policy_rmdir_calls;
     mod policy_unlink_calls;
@@ -1290,6 +1397,7 @@ mod tests {
     mod policy_mkdir_calls;
 
     mod policy_create_calls;
+    mod policy_link_calls;
 }
 
 #[cfg(test)]

@@ -1,0 +1,872 @@
+//! Native expectations measured by the independent link/linkat(0) reference.
+//! Self-built fixtures are not emitted-image qualification. Explicit API priorities stay separate.
+use super::*;
+use crate::capi::*;
+use crate::inode::Inode;
+use std::ffi::CString;
+const INITIAL: i64 = 1_700_000_000;
+const FIRST: i64 = INITIAL + 100;
+const NAME: &str = "user.audit";
+const DATA: &[u8] = b"link native source payload";
+const PATHS: [&[u8]; 5] = [
+    b"/old/regular",
+    b"/old/fast",
+    b"/old/slow",
+    b"/old/dangling",
+    b"/old/fifo",
+];
+fn specimen(flavor: features::FsFlavor, bs: u32) -> (Arc<Device>, Filesystem, u32, Arc<Clock>) {
+    let size = if bs == 1024 { 8 << 20 } else { 32 << 20 };
+    let dev = Arc::new(Device {
+        bytes: Mutex::new(vec![0; size]),
+        calls: std::array::from_fn(|_| AtomicUsize::new(0)),
+        fail_write: AtomicUsize::new(0),
+        fail_flush: AtomicUsize::new(0),
+        panic_flush: AtomicUsize::new(0),
+        writable: AtomicBool::new(true),
+    });
+    crate::mkfs::format_filesystem_with_flavor(
+        dev.as_ref(),
+        None,
+        Some([67; 16]),
+        size as u64,
+        bs,
+        flavor,
+    )
+    .unwrap();
+    let clock = Arc::new(Clock {
+        calls: AtomicUsize::new(0),
+        now: std::sync::atomic::AtomicI64::new(1_700_000_000),
+        hook: Mutex::new(None),
+    });
+    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+
+    let p = fs.apply_mkdir("/p", 0o750).unwrap();
+    for path in ["/q", "/old", "/peer", "/p/existingdir"] {
+        fs.apply_mkdir(path, 0o750).unwrap();
+    }
+    for path in ["/old/regular", "/peer/kept", "/p/existing"] {
+        fs.apply_create(path, 0o640).unwrap();
+        fs.apply_replace_file_content(path, DATA).unwrap();
+    }
+    fs.apply_chown("/old/regular", 1001, 1002).unwrap();
+    fs.apply_setxattr("/old/regular", NAME, &[b'v'; 600])
+        .unwrap();
+    fs.apply_setxattr("/p", NAME, &[b'a'; 512]).unwrap();
+    fs.apply_setxattr("/peer", NAME, &[b'b'; 512]).unwrap();
+    fs.apply_symlink("regular", "/old/fast").unwrap();
+    fs.apply_symlink(&"x".repeat(300), "/old/slow").unwrap();
+    fs.apply_symlink("absent", "/old/dangling").unwrap();
+    let fifo = fs.apply_create("/old/fifo", 0o640).unwrap();
+    let (i, mut raw) = fs.read_inode_verified(fifo).unwrap();
+    raw[..2].copy_from_slice(&(crate::inode::S_IFIFO | 0o640).to_le_bytes());
+    fs.finalize_inode_raw(fifo, i.generation, &mut raw).unwrap();
+    let mut buf = BlockBuffer::new(bs);
+    fs.buffer_write_inode(&mut buf, fifo, &raw).unwrap();
+    fs.commit_block_buffer(buf).unwrap();
+    fs.apply_symlink("p", "/parent-link").unwrap();
+    for path in [
+        "/p",
+        "/q",
+        "/old",
+        "/peer",
+        "/peer/kept",
+        "/p/existingdir",
+        "/p/existing",
+        "/old/regular",
+    ] {
+        fs.apply_utimens(path, 1_600_000_000, 0, 1_600_000_001, 0)
+            .unwrap();
+    }
+    drop(fs);
+    let fs = Filesystem::mount_with_runtime(dev.clone(), clock.clone()).unwrap();
+    assert_eq!(
+        (
+            fs.sb.block_size(),
+            fs.sb.inode_size,
+            fs.csum.enabled,
+            fs.journal.is_some()
+        ),
+        (
+            bs,
+            if flavor == features::FsFlavor::Ext4 {
+                256
+            } else {
+                128
+            },
+            flavor == features::FsFlavor::Ext4,
+            flavor == features::FsFlavor::Ext3
+        )
+    );
+    dev.reset();
+    clock.calls.store(0, Ordering::SeqCst);
+    (dev, fs, p, clock)
+}
+#[derive(Clone, Copy, Debug)]
+enum Entry {
+    String,
+    Bytes,
+    At,
+    CPath,
+    CAt,
+}
+const ENTRIES: [Entry; 5] = [
+    Entry::String,
+    Entry::Bytes,
+    Entry::At,
+    Entry::CPath,
+    Entry::CAt,
+];
+fn call(
+    fs: &Filesystem,
+    h: *mut fs_ext4_fs_t,
+    target: InodeRef,
+    parent: InodeRef,
+    entry: Entry,
+    src: &[u8],
+    dst: &[u8],
+) -> std::result::Result<Option<fs_ext4_attr_t>, i32> {
+    match entry {
+        Entry::String => fs
+            .apply_link(
+                std::str::from_utf8(src).unwrap(),
+                std::str::from_utf8(dst).unwrap(),
+            )
+            .map(|_| None)
+            .map_err(|e| e.to_errno()),
+        Entry::Bytes => fs
+            .apply_link_bytes(src, dst)
+            .map(|_| None)
+            .map_err(|e| e.to_errno()),
+        Entry::At => fs
+            .apply_link_at(target, parent, dst)
+            .map(|_| None)
+            .map_err(|e| e.to_errno()),
+        Entry::CPath => {
+            let s = CString::new(src).unwrap();
+            let d = CString::new(dst).unwrap();
+            let rc = unsafe { fs_ext4_link(h, s.as_ptr(), d.as_ptr()) };
+            if rc == 0 {
+                assert_eq!(fs_ext4_last_errno(), 0);
+                Ok(None)
+            } else {
+                assert_eq!(rc, -1);
+                Err(fs_ext4_last_errno())
+            }
+        }
+        Entry::CAt => {
+            let mut attr: fs_ext4_attr_t = unsafe { std::mem::zeroed() };
+            let rc = unsafe {
+                fs_ext4_link_at(
+                    h,
+                    target.ino,
+                    target.generation.unwrap_or(FS_EXT4_GEN_ANY),
+                    parent.ino,
+                    parent.generation.unwrap_or(FS_EXT4_GEN_ANY),
+                    dst.as_ptr().cast(),
+                    dst.len(),
+                    &mut attr,
+                )
+            };
+            if rc == 0 {
+                assert_eq!(fs_ext4_last_errno(), 0);
+                Ok(Some(attr))
+            } else {
+                assert_eq!(rc, -1);
+                Err(fs_ext4_last_errno())
+            }
+        }
+    }
+}
+fn reference(fs: &Filesystem, ino: u32) -> InodeRef {
+    InodeRef::new(ino, fs.read_inode_verified(ino).unwrap().0.generation)
+}
+fn invoke(
+    fs: &Filesystem,
+    h: *mut fs_ext4_fs_t,
+    target: InodeRef,
+    parent: InodeRef,
+    entry: Entry,
+    src: &[u8],
+    name: &[u8],
+) -> std::result::Result<Option<fs_ext4_attr_t>, i32> {
+    let path = [b"/p/".as_slice(), name].concat();
+    call(
+        fs,
+        h,
+        target,
+        parent,
+        entry,
+        src,
+        if matches!(entry, Entry::At | Entry::CAt) {
+            name
+        } else {
+            &path
+        },
+    )
+}
+fn times(i: &Inode) -> [(i64, u32); 3] {
+    [
+        (i.atime, i.atime_nsec),
+        (i.mtime, i.mtime_nsec),
+        (i.ctime, i.ctime_nsec),
+    ]
+}
+fn version(raw: &[u8]) -> u64 {
+    let high = if raw.len() >= 156 && u16::from_le_bytes(raw[128..130].try_into().unwrap()) >= 28 {
+        u32::from_le_bytes(raw[152..156].try_into().unwrap())
+    } else {
+        0
+    };
+    u64::from(u32::from_le_bytes(raw[36..40].try_into().unwrap())) | (u64::from(high) << 32)
+}
+fn counters(dev: &Device) -> (u64, u32) {
+    let b = dev.bytes();
+    (
+        u64::from(u32::from_le_bytes(b[1036..1040].try_into().unwrap()))
+            | (u64::from(u32::from_le_bytes(b[1368..1372].try_into().unwrap())) << 32),
+        u32::from_le_bytes(b[1040..1044].try_into().unwrap()),
+    )
+}
+fn metadata(fs: &Filesystem) -> Vec<(u32, Vec<u8>)> {
+    [
+        b"/p".as_slice(),
+        b"/q",
+        b"/old",
+        b"/peer",
+        b"/peer/kept",
+        b"/p/existingdir",
+        b"/p/existing",
+    ]
+    .into_iter()
+    .chain(PATHS)
+    .map(|p| {
+        let n = fs.resolve(p).unwrap();
+        (n, fs.read_inode_verified(n).unwrap().1)
+    })
+    .collect()
+}
+fn others(fs: &Filesystem, before: &[(u32, Vec<u8>)], source: u32, parent: u32) {
+    for (n, raw) in before {
+        if *n != source && *n != parent {
+            assert_eq!(fs.read_inode_verified(*n).unwrap().1, *raw);
+        }
+    }
+}
+fn same_source(before: &[u8], after: &[u8]) {
+    let mut a = before.to_vec();
+    let mut b = after.to_vec();
+    for (at, len) in [(12, 4), (26, 2), (124, 2), (130, 2), (132, 4)] {
+        if at + len <= a.len() {
+            a[at..at + len].fill(0);
+            b[at..at + len].fill(0);
+        }
+    }
+    assert_eq!(
+        a, b,
+        "source identity/data/EA/mode/owners/generation/version changed"
+    );
+}
+fn identity(fs: &Filesystem, source: u32, old: &Inode, raw: &[u8], after: &Inode) {
+    same_source(raw, &fs.read_inode_verified(source).unwrap().1);
+    assert_eq!(after.links_count, old.links_count + 1);
+    assert_eq!(times(after)[..2], times(old)[..2]);
+    if old.is_file() {
+        let mut b = vec![0; DATA.len()];
+        assert_eq!(fs.read_ino(source, 0, &mut b).unwrap(), DATA.len());
+        assert_eq!(b, DATA);
+        assert_eq!(
+            crate::xattr::get_resolved(fs, after, &fs.read_inode_verified(source).unwrap().1, NAME)
+                .unwrap(),
+            Some(vec![b'v'; 600])
+        );
+    }
+    if old.is_symlink() {
+        let expected = match old.size {
+            7 => b"regular".to_vec(),
+            6 => b"absent".to_vec(),
+            300 => vec![b'x'; 300],
+            _ => panic!("unexpected native symlink fixture"),
+        };
+        assert_eq!(fs.read_link(source).unwrap(), expected);
+    }
+}
+#[derive(Clone, Copy, Debug)]
+enum Role {
+    Source,
+    Parent,
+    Version,
+    Attr,
+}
+fn measured(entry: Entry, twice: bool, role: Role) {
+    let mut mismatches = Vec::new();
+    let mut calls = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (dev, fs, p, clock) = specimen(flavor, bs);
+            let fs = with_test_mount(fs, |h, fs| {
+                for (kind, src) in PATHS.into_iter().enumerate() {
+                    let source = fs.resolve(src).unwrap();
+                    let target = reference(fs, source);
+                    for n in 0..if twice { 2 } else { 1 } {
+                        let stamp = FIRST + kind as i64 * 1000 + n * 100;
+                        clock.now.store(stamp, Ordering::SeqCst);
+                        let before = metadata(fs);
+                        let (old, raw) = fs.read_inode_verified(source).unwrap();
+                        let (parent, parent_raw) = fs.read_inode_verified(p).unwrap();
+                        let counts = counters(&dev);
+                        let name = format!("t-{kind}-{n}");
+                        let attr =
+                            invoke(fs, h, target, reference(fs, p), entry, src, name.as_bytes())
+                                .unwrap();
+                        let (after, _) = fs.read_inode_verified(source).unwrap();
+                        let (now, now_raw) = fs.read_inode_verified(p).unwrap();
+                        assert_eq!(fs.lookup_at(p, name.as_bytes()).unwrap(), source);
+                        identity(fs, source, &old, &raw, &after);
+                        others(fs, &before, source, p);
+                        assert_eq!(counters(&dev), counts);
+                        assert_eq!(
+                            (
+                                now.links_count,
+                                now.size,
+                                now.blocks,
+                                now.block,
+                                now.file_acl,
+                                now.generation,
+                                now.mode,
+                                now.uid,
+                                now.gid
+                            ),
+                            (
+                                parent.links_count,
+                                parent.size,
+                                parent.blocks,
+                                parent.block,
+                                parent.file_acl,
+                                parent.generation,
+                                parent.mode,
+                                parent.uid,
+                                parent.gid
+                            )
+                        );
+                        assert_eq!(times(&now)[0], times(&parent)[0]);
+                        let bad = match role {
+                            Role::Source => times(&after)[2] != (stamp, 0),
+                            Role::Parent => times(&now)[1..] != [(stamp, 0); 2],
+                            Role::Version => version(&now_raw) != version(&parent_raw) + 1,
+                            Role::Attr => {
+                                let a = attr.expect("CAt attributes required");
+                                assert_eq!(
+                                    (
+                                        a.inode,
+                                        a.generation,
+                                        a.mode,
+                                        a.uid,
+                                        a.gid,
+                                        a.link_count,
+                                        a.size,
+                                        a.blocks_512
+                                    ),
+                                    (
+                                        source,
+                                        old.generation,
+                                        old.mode & 0o7777,
+                                        old.uid,
+                                        old.gid,
+                                        old.links_count + 1,
+                                        old.size,
+                                        old.blocks
+                                    )
+                                );
+                                (a.ctime, a.ctime_nsec) != (stamp, 0)
+                            }
+                        };
+                        if bad {
+                            mismatches.push(format!("{flavor:?}/{bs}/kind={kind}/link={n}: source={:?} parent={:?} version={}->{} wanted={stamp}",times(&after)[2],&times(&now)[1..],version(&parent_raw),version(&now_raw)));
+                        }
+                        calls += 1;
+                    }
+                }
+                eprintln!("link measured role={role:?} entry={entry:?} twice={twice} {flavor:?}/{bs}: five source kinds exercised");
+            });
+            let saved = metadata(&fs);
+            drop(fs);
+            let reopened = Filesystem::mount(dev).unwrap();
+            assert_eq!(metadata(&reopened), saved);
+        }
+    }
+    assert_eq!(calls, if twice { 60 } else { 30 });
+    eprintln!("link measured summary role={role:?} entry={entry:?} twice={twice}: links={calls} mismatches={}",mismatches.len());
+    assert!(
+        mismatches.is_empty(),
+        "Linux-measured {role:?} mismatch: {mismatches:?}"
+    );
+}
+macro_rules! role_test {
+    ($n:ident,$e:ident,$twice:expr,$role:ident) => {
+        #[test]
+        fn $n() {
+            measured(Entry::$e, $twice, Role::$role);
+        }
+    };
+}
+role_test!(string_source_times_once, String, false, Source);
+role_test!(string_source_times_twice, String, true, Source);
+role_test!(bytes_source_times_once, Bytes, false, Source);
+role_test!(bytes_source_times_twice, Bytes, true, Source);
+role_test!(at_source_times_once, At, false, Source);
+role_test!(at_source_times_twice, At, true, Source);
+role_test!(cpath_source_times_once, CPath, false, Source);
+role_test!(cpath_source_times_twice, CPath, true, Source);
+role_test!(cat_source_times_once, CAt, false, Source);
+role_test!(cat_source_times_twice, CAt, true, Source);
+role_test!(string_parent_times_once, String, false, Parent);
+role_test!(string_parent_times_twice, String, true, Parent);
+role_test!(bytes_parent_times_once, Bytes, false, Parent);
+role_test!(bytes_parent_times_twice, Bytes, true, Parent);
+role_test!(at_parent_times_once, At, false, Parent);
+role_test!(at_parent_times_twice, At, true, Parent);
+role_test!(cpath_parent_times_once, CPath, false, Parent);
+role_test!(cpath_parent_times_twice, CPath, true, Parent);
+role_test!(cat_parent_times_once, CAt, false, Parent);
+role_test!(cat_parent_times_twice, CAt, true, Parent);
+role_test!(string_directory_version_twice, String, true, Version);
+role_test!(bytes_directory_version_twice, Bytes, true, Version);
+role_test!(at_directory_version_twice, At, true, Version);
+role_test!(cpath_directory_version_twice, CPath, true, Version);
+role_test!(cat_directory_version_twice, CAt, true, Version);
+role_test!(c_target_attrs_once, CAt, false, Attr);
+role_test!(c_target_attrs_twice, CAt, true, Attr);
+
+#[test]
+fn existing_identity_all_types_and_entries() {
+    let mut links = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (dev, fs, p, _) = specimen(flavor, bs);
+            let _fs = with_test_mount(fs, |h, fs| {
+                for (entry_index, entry) in ENTRIES.into_iter().enumerate() {
+                    for (kind, src) in PATHS.into_iter().enumerate() {
+                        let source = fs.resolve(src).unwrap();
+                        let (old, raw) = fs.read_inode_verified(source).unwrap();
+                        let before = metadata(fs);
+                        let parent = fs.read_inode_verified(p).unwrap().0;
+                        let counts = counters(&dev);
+                        let name = format!("e-{entry_index}-{kind}");
+                        invoke(
+                            fs,
+                            h,
+                            reference(fs, source),
+                            reference(fs, p),
+                            entry,
+                            src,
+                            name.as_bytes(),
+                        )
+                        .unwrap();
+                        let after = fs.read_inode_verified(source).unwrap().0;
+                        identity(fs, source, &old, &raw, &after);
+                        others(fs, &before, source, p);
+                        assert_eq!(fs.lookup_at(p, name.as_bytes()).unwrap(), source);
+                        assert_eq!(counters(&dev), counts);
+                        assert_eq!(
+                            fs.read_inode_verified(p).unwrap().0.links_count,
+                            parent.links_count
+                        );
+                        links += 1;
+                    }
+                }
+            });
+        }
+    }
+    assert_eq!(links, 150);
+    eprintln!("link policy identities: {links} links across all five entries, five source kinds, six profiles");
+}
+#[test]
+fn names_at_255_bytes_preserve_identity_and_allocation() {
+    let mut links = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            for entry in ENTRIES {
+                let (dev, fs, p, _) = specimen(flavor, bs);
+                let source = fs.resolve(PATHS[0]).unwrap();
+                let counts = counters(&dev);
+                let _fs = with_test_mount(fs, |h, fs| {
+                    invoke(
+                        fs,
+                        h,
+                        reference(fs, source),
+                        reference(fs, p),
+                        entry,
+                        PATHS[0],
+                        &[b'n'; 255],
+                    )
+                    .unwrap();
+                    assert_eq!(fs.lookup_at(p, &[b'n'; 255]).unwrap(), source);
+                    assert_eq!(fs.read_inode_verified(source).unwrap().0.links_count, 2);
+                    assert_eq!(counters(&dev), counts);
+                });
+                links += 1;
+            }
+        }
+    }
+    assert_eq!(links, 30);
+    eprintln!("link policy 255-byte names: {links} links, no allocations");
+}
+#[test]
+fn byte_and_c_forms_preserve_raw_source_and_destination_names() {
+    let mut links = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            for entry in [Entry::Bytes, Entry::At, Entry::CPath, Entry::CAt] {
+                let (dev, fs, p, _) = specimen(flavor, bs);
+                let source = fs.apply_create_bytes(b"/old/raw-\xfe", 0o640).unwrap();
+                let counts = counters(&dev);
+                let _fs = with_test_mount(fs, |h, fs| {
+                    invoke(
+                        fs,
+                        h,
+                        reference(fs, source),
+                        reference(fs, p),
+                        entry,
+                        b"/old/raw-\xfe",
+                        b"raw-\xff",
+                    )
+                    .unwrap();
+                    assert_eq!(fs.lookup_at(p, b"raw-\xff").unwrap(), source);
+                    assert_eq!(fs.read_inode_verified(source).unwrap().0.links_count, 2);
+                    assert_eq!(counters(&dev), counts);
+                });
+                links += 1;
+            }
+        }
+    }
+    assert_eq!(links, 24);
+    eprintln!("link policy raw names: {links} links, source and destination bytes retained");
+}
+fn path_errors(entry: Entry) {
+    let mut observations = 0;
+    let long = [b"/p/".as_slice(), &[b'n'; 256]].concat();
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (dev, fs, p, _) = specimen(flavor, bs);
+            fs.apply_chmod("/peer/kept", 0o600).unwrap();
+            let source = fs.resolve(PATHS[0]).unwrap();
+            let before = metadata(&fs);
+            let bytes = dev.bytes();
+            let counts = counters(&dev);
+            let _fs = with_test_mount(fs, |h, fs| {
+                for (src, dst, expected) in [
+                    (PATHS[0], b"".as_slice(), crate::error::errno::EINVAL),
+                    (PATHS[0], b"/", crate::error::errno::EINVAL),
+                    (PATHS[0], b"bare", crate::error::errno::EINVAL),
+                    (
+                        b"/missing",
+                        long.as_slice(),
+                        crate::error::errno::ENAMETOOLONG,
+                    ),
+                    (b"/old", long.as_slice(), crate::error::errno::ENAMETOOLONG),
+                    (b"/old", b"/missing/new", crate::error::errno::EISDIR),
+                    (b"/old/", b"/p/new", crate::error::errno::EISDIR),
+                    (b"/old/regular/", b"/p/new", crate::error::errno::ENOTDIR),
+                    (b"/old/fast/", b"/p/new", crate::error::errno::ENOTDIR),
+                    (b"/old/dangling/", b"/p/new", crate::error::errno::ENOENT),
+                    (PATHS[0], b"/p/existing", crate::error::errno::EEXIST),
+                    (PATHS[0], b"/p/existing/", crate::error::errno::EEXIST),
+                    (PATHS[0], b"/p/.", crate::error::errno::EEXIST),
+                    (PATHS[0], b"/p/..", crate::error::errno::EEXIST),
+                    (PATHS[0], b"/old/regular/new", crate::error::errno::ENOTDIR),
+                    (PATHS[0], b"/missing/new", crate::error::errno::ENOENT),
+                    (b"/missing", b"/p/.", crate::error::errno::ENOENT),
+                    (b"/old", b"/p/.", crate::error::errno::EISDIR),
+                    (
+                        PATHS[0],
+                        b"/parent-link/existing",
+                        crate::error::errno::EEXIST,
+                    ),
+                ] {
+                    assert_eq!(
+                        call(
+                            fs,
+                            h,
+                            reference(fs, source),
+                            reference(fs, p),
+                            entry,
+                            src,
+                            dst
+                        )
+                        .err(),
+                        Some(expected)
+                    );
+                    assert_eq!(metadata(fs), before);
+                    assert!(dev.bytes() == bytes);
+                    assert_eq!(counters(&dev), counts);
+                    observations += 1;
+                }
+            });
+        }
+    }
+    assert_eq!(observations, 114);
+    eprintln!("link explicit path priorities entry={entry:?}: {observations} observations; API contracts separate from syscall errno/ordering");
+}
+#[test]
+fn string_path_priorities_and_refusals_remain_explicit() {
+    path_errors(Entry::String);
+}
+#[test]
+fn byte_path_priorities_and_refusals_remain_explicit() {
+    path_errors(Entry::Bytes);
+}
+#[test]
+fn c_path_priorities_and_refusals_remain_explicit() {
+    path_errors(Entry::CPath);
+}
+fn counted_errors(entry: Entry) {
+    let mut observations = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (dev, fs, p, _) = specimen(flavor, bs);
+            fs.apply_chmod("/peer/kept", 0o600).unwrap();
+            let source = fs.resolve(PATHS[0]).unwrap();
+            let target = reference(&fs, source);
+            let parent = reference(&fs, p);
+            let stale_source = InodeRef::new(source, target.generation.unwrap() ^ 1);
+            let stale_parent = InodeRef::new(p, parent.generation.unwrap() ^ 1);
+            let before = metadata(&fs);
+            let bytes = dev.bytes();
+            let _fs = with_test_mount(fs, |h, fs| {
+                for (t, d, name, expected) in [
+                    (
+                        stale_source,
+                        stale_parent,
+                        b"".as_slice(),
+                        crate::error::errno::EINVAL,
+                    ),
+                    (
+                        stale_source,
+                        stale_parent,
+                        b"a/b",
+                        crate::error::errno::EINVAL,
+                    ),
+                    (
+                        stale_source,
+                        stale_parent,
+                        b"a\0b",
+                        crate::error::errno::EINVAL,
+                    ),
+                    (
+                        stale_source,
+                        stale_parent,
+                        &[b'n'; 256],
+                        crate::error::errno::ENAMETOOLONG,
+                    ),
+                    (stale_source, target, b"new", crate::error::errno::ESTALE),
+                    (parent, target, b"new", crate::error::errno::EISDIR),
+                    (target, stale_parent, b"new", crate::error::errno::ESTALE),
+                    (target, target, b"new", crate::error::errno::ENOTDIR),
+                    (target, parent, b"existing", crate::error::errno::EEXIST),
+                    (target, parent, b".", crate::error::errno::EEXIST),
+                    (target, parent, b"..", crate::error::errno::EEXIST),
+                ] {
+                    assert_eq!(
+                        call(fs, h, t, d, entry, PATHS[0], name).err(),
+                        Some(expected)
+                    );
+                    assert_eq!(metadata(fs), before);
+                    assert!(dev.bytes() == bytes);
+                    observations += 1;
+                }
+                if matches!(entry, Entry::CAt) {
+                    for (name, len, expected) in [
+                        (std::ptr::null(), 1, crate::error::errno::EINVAL),
+                        (
+                            b"x".as_ptr().cast(),
+                            usize::MAX,
+                            crate::error::errno::ENAMETOOLONG,
+                        ),
+                    ] {
+                        assert_eq!(
+                            unsafe {
+                                fs_ext4_link_at(
+                                    h,
+                                    source,
+                                    FS_EXT4_GEN_ANY,
+                                    p,
+                                    FS_EXT4_GEN_ANY,
+                                    name,
+                                    len,
+                                    std::ptr::null_mut(),
+                                )
+                            },
+                            -1
+                        );
+                        assert_eq!(fs_ext4_last_errno(), expected);
+                        assert_eq!(metadata(fs), before);
+                        assert!(dev.bytes() == bytes);
+                        observations += 1;
+                    }
+                }
+            });
+        }
+    }
+    assert_eq!(
+        observations,
+        if matches!(entry, Entry::CAt) { 78 } else { 66 }
+    );
+    eprintln!("link counted priorities entry={entry:?}: {observations} explicit-API observations");
+}
+#[test]
+fn counted_source_parent_and_name_priorities_remain_explicit() {
+    counted_errors(Entry::At);
+}
+#[test]
+fn c_counted_generation_pointer_and_name_priorities_remain_explicit() {
+    counted_errors(Entry::CAt);
+}
+struct Convert<'a> {
+    calls: &'a AtomicUsize,
+    value: InodeRef,
+}
+impl From<Convert<'_>> for InodeRef {
+    fn from(v: Convert<'_>) -> Self {
+        v.calls.fetch_add(1, Ordering::SeqCst);
+        v.value
+    }
+}
+#[test]
+fn invalid_names_precede_both_into_and_invalid_source_precedes_parent_into() {
+    let mut observations = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (_, fs, p, _) = specimen(flavor, bs);
+            let source = fs.resolve(PATHS[0]).unwrap();
+            let a = AtomicUsize::new(0);
+            let b = AtomicUsize::new(0);
+            for name in [b"".as_slice(), b"bad/name", b"bad\0name", &[b'n'; 256]] {
+                assert!(fs
+                    .apply_link_at(
+                        Convert {
+                            calls: &a,
+                            value: reference(&fs, source)
+                        },
+                        Convert {
+                            calls: &b,
+                            value: reference(&fs, p)
+                        },
+                        name
+                    )
+                    .is_err());
+                observations += 1;
+            }
+            assert_eq!((a.load(Ordering::SeqCst), b.load(Ordering::SeqCst)), (0, 0));
+            let stale = InodeRef::new(source, reference(&fs, source).generation.unwrap() ^ 1);
+            assert!(matches!(
+                fs.apply_link_at(
+                    Convert {
+                        calls: &a,
+                        value: stale
+                    },
+                    Convert {
+                        calls: &b,
+                        value: reference(&fs, p)
+                    },
+                    b"new"
+                ),
+                Err(Error::Stale)
+            ));
+            assert_eq!((a.load(Ordering::SeqCst), b.load(Ordering::SeqCst)), (1, 0));
+            observations += 1;
+            fs.apply_link_at(
+                Convert {
+                    calls: &a,
+                    value: reference(&fs, source),
+                },
+                Convert {
+                    calls: &b,
+                    value: reference(&fs, p),
+                },
+                b"new",
+            )
+            .unwrap();
+            assert_eq!((a.load(Ordering::SeqCst), b.load(Ordering::SeqCst)), (2, 1));
+            observations += 1;
+        }
+    }
+    assert_eq!(observations, 36);
+    eprintln!("link dual Into: {observations} explicit-name/source priority observations");
+}
+fn path_forms(entry: Entry) {
+    let mut links = 0;
+    for flavor in [
+        features::FsFlavor::Ext2,
+        features::FsFlavor::Ext3,
+        features::FsFlavor::Ext4,
+    ] {
+        for bs in [1024, 4096] {
+            let (dev, fs, p, _) = specimen(flavor, bs);
+            let source = fs.resolve(PATHS[0]).unwrap();
+            let counts = counters(&dev);
+            let _fs = with_test_mount(fs, |h, fs| {
+                for dst in [b"/parent-link/New///".as_slice(), b"p/new", b"/p//third"] {
+                    call(
+                        fs,
+                        h,
+                        reference(fs, source),
+                        reference(fs, p),
+                        entry,
+                        PATHS[0],
+                        dst,
+                    )
+                    .unwrap();
+                    links += 1;
+                }
+                for name in [b"New".as_slice(), b"new", b"third"] {
+                    assert_eq!(fs.lookup_at(p, name).unwrap(), source);
+                }
+                assert_eq!(fs.read_inode_verified(source).unwrap().0.links_count, 4);
+                assert_eq!(counters(&dev), counts);
+            });
+        }
+    }
+    assert_eq!(links, 18);
+    eprintln!("link explicit path forms entry={entry:?}: {links} parent-symlink/trailing/rooted/distinct-case links");
+}
+#[test]
+fn string_path_forms_retain_trailing_rooted_parent_contract() {
+    path_forms(Entry::String);
+}
+#[test]
+fn byte_path_forms_retain_trailing_rooted_parent_contract() {
+    path_forms(Entry::Bytes);
+}
+#[test]
+fn c_path_forms_retain_trailing_rooted_parent_contract() {
+    path_forms(Entry::CPath);
+}

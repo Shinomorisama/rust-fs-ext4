@@ -578,11 +578,11 @@ tasks:
     # Which targets: scripts/test-targets.sh, derived from the tests
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
-    # Create controls: 1,494 passes measured 1,742 lines / 132,491 bytes;
-    # previous 1,740 / 131,000 limits fail with exit 65. Identical complete-log
-    # replay passes the measured caps above; retain selection and floor.
+    # Promoted link controls: 1,639 passes measured 1,887 lines / 145,690 bytes;
+    # previous 1,860 / 143,000 limits fail with exit 65. Identical complete-log
+    # replay passes 2,000 / 155,000; retain every occurrence, selection and floor.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 1860 143000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      - 'EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh test:unit unit 2000 155000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
       - 'bash scripts/core.sh test-floor unit 440'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).

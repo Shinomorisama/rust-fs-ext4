@@ -108,6 +108,38 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Guarded public hard-link native migration — 2026-10-27
+
+The bounded implementation now uses one shared context for all five Rust/C
+forms, a completed link-only owned plan, measured source/parent metadata fixes,
+optional full-primary-SB validation/preparation, complete marker/commit/
+publication effects and optional C owned target readback. Both formerly dormant
+patches are promoted historical artifacts; **do not reapply them**. Fresh reds
+repeat 32 passes/91 failures; all 123 original controls and thirteen real helper/
+Runtime diagnostics now pass. No public signature, shared nlink/allocator/path
+helper, manifest/lock, CI selection/floor or write gate is changed.
+
+The [implementation ledger](extprogress.md#guarded-public-hard-link-native-migration--2026-10-27)
+records exact scope, corrected diagnostic/scanner assumptions, 216 remeasured
+I/O injections, four actual post-commit publication profiles, all 1,639 native
+occurrences/662 controls with prior-multiset retention, full lint and the measured
+unit-only cap repair. Real planners distinguish no-SB fits from growth/conversion
+SB/debits; foreign/malformed-present-SB failures precede callbacks, and actual
+error/flush/publication failures latch before a retained context drops. Runtime
+exclusion executes on the real new link clock path and the reverse family paths.
+C readback stays under exclusion; errors after commit do not undo/retry a link.
+Low-word directory-version wrap/high-word coverage remains an independent
+qualification boundary; ordinary increment semantics are the measured policy.
+
+This is a **native implementation checkpoint**, not closure of the scoped
+implementation/evidence review. Exact-source full CI/retention is pending, as is
+focused independent Rust/C driver-emitted-link/growth qualification and saved-
+byte review. Reference-only Linux bytes and successful self-built fixtures do
+not establish those outcomes. Review actual CI failures before changing budgets;
+only the native unit cap was raised from its measured all-green wrapper failure.
+Keep casefold writes blocked and stages 4–5 not yet quantified; broad ownership,
+full mapping/index-growth, lifecycle/recovery/fuzz and platform gates remain.
+
 ### Executed native hard-link policy reds and reference-CI closure — 2026-10-27
 
 Exact reference source `9fd59cf` now passes all eleven jobs/ci-ok in full run
