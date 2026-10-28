@@ -108,6 +108,37 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Inline-parent link conversion contract/qualification plan — 2026-10-28
+
+Reviewed current `43280ec` source without changing writer/test/workflow/pin bytes.
+The guarded link planner stages source and parent together; inline insertion
+tries head, continuation and possible expansion before building a new one-block
+directory. Conversion removes only `system.data`, replaces INLINE_DATA with the
+selected block map, allocates exactly one block through buffered accounting and
+rereads staged source/parent metadata before final time/version/checksum updates.
+The present native fit/conversion controls pass, but the older Linux inline test
+links a small name and separately converts through create. Generic fault sweeps
+use a plain parent; none establishes this exact conversion's write set.
+
+The [bounded plan](extprogress.md#inline-parent-public-link-conversion-contract-and-qualification-plan--2026-10-28)
+specifies sixteen Rust/C, 1/4 KiB, direct/journal, 256-byte checksummed,
+head-only/populated-continuation layouts. In-place fit, 255-byte-name conversion
+and post-conversion fit plan 48 driver links/160 snapshots, not executed results.
+Input shape, continuation capacity, actual shared-table placement, complete
+allocation/metadata/EA/checksum preservation, dirty/closed/cold Linux evidence,
+conversion-specific errors/faults, exact floor-one job and source-bound retention
+are required before qualification. Exclude 128-byte/no-body-xattr substitutes;
+fail on unsupported guest input rather than silently converting it in setup.
+
+Exact preceding full CI **40761780868** passes all eleven jobs/ci-ok; seven
+source/digest/all-CRC-verified archives retain 1,639 units/2,488 whole successes,
+662 controls in five contexts and actual wrappers/floors/trailing checks. Four
+existing focused native tests freshly pass with exact one-test floors. No new
+fixture, native red/fix, independent Linux dispatch or conversion qualification
+is claimed. Next implement the bounded test/profile after native contract
+preparation. Broader growth/counter-wrap/scoped review and all write, ownership,
+recovery/fuzz and Windows/card/SteamOS gates remain; stages 4–5 stay unquantified.
+
 ### Corrected linear-growth saved-evidence closure — 2026-10-28
 
 Source `09cf8dc` now passes all thirteen focused jobs in **40744071010** and
