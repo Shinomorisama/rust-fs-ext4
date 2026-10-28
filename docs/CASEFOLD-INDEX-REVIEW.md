@@ -108,6 +108,49 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Independent Linux hard-link reference policy — 2026-10-27
+
+Corrected source `9fd59cf5b5d3c1f00846c9015233594f06adb70e` passes focused job
+`122576714109` in [run 40615435825](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/40615435825).
+Artifact `12785027612`, SHA-256
+`78f9944e0e46f2a3ff4ac15fe188a600ae47b750f881e399ee5d77a25ff6ecff`,
+verifies exact source/nine hashes and all 2,163 ZIP CRCs. All **eight layouts /
+80 images / 56 Linux links / 560 error observations / 960 debugfs reports**
+actually execute and pass a complete read-only saved-byte audit, including
+80 judged non-repairing e2fsck checks and fresh cold alias identity/payload.
+Driver reads of closed images preserve every image byte; no production writer
+is invoked by this reference. Actual focused wrapper and floor one pass with
+zero failed/ignored. This is non-growing ordinary-directory reference evidence.
+
+Measured link/linkat(0) profiles preserve regular/fast/slow/dangling/FIFO inode
+identity, generation/owners/data/EA and exact raw/255-byte spelling; nlink and
+source ctime advance, destination-parent mtime/ctime and directory version
+advance, parent nlink and old parent/peers remain. Exact bitmap/group/itable-unused
+accounting proves no allocation/second EA reference. The first source `0183060`
+failed an over-strict test assertion: saved Linux bytes show directory version
+6→7 while source version stays 5. Corrected source explicitly requires the
+measured directory increment, distinct from inode generation; all eight layouts
+now execute and pass. No driver repair is hidden in that fixture correction.
+
+Measured syscall errors remain separate from explicit Rust/C API contracts,
+particularly source-directory errno, name/Into/source-before-parent ordering,
+root-based paths/destination trailing splitting, pointer/ceiling/generation
+checks and optional post-commit C target readback. Casefold write/growth gates
+remain intact. This reference does not qualify new Rust/C emitted bytes,
+arbitrary growth, ownership admission or crash/recovery behavior.
+
+The [reference ledger](extprogress.md#independent-linux-hard-link-reference-and-saved-byte-audit--2026-10-27)
+records source/error/format observations and replay/evidence limits. Fresh local
+and exact CI units retain all **1,503 successes / 526 controls once** with lint
+and 159 CI CLI checks passed. Preceding `8791f06` full run `40610284789` now
+succeeds. Corrected-source full run `40615435814` remains running; complete
+2,350-pass whole-suite/five-context/floor/trailing retention is pending.
+Next verify that exact full evidence, then execute measured native policy reds
+and compose them with the unchanged dormant 84-control safety patch before
+LinkPlan/optional-SB/context/effect/readback migration. No link guard/native
+semantic repair is implemented; stages 4–5 remain not yet quantified and
+casefold writes/broader platform and lifecycle qualification remain gated.
+
 ### Executed dormant native public hard-link safety preparation — 2026-10-27
 
 At fetched `90acfc1` (exact full CI `40575650714` now succeeds), the
