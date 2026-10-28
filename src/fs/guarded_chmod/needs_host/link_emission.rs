@@ -8,6 +8,8 @@ use std::path::Path;
 
 #[path = "link_growth.rs"]
 mod growth;
+#[path = "link_inline.rs"]
+mod inline_conversion;
 
 const PATHS: [&[u8]; 12] = [
     b"/policy",

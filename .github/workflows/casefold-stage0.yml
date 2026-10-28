@@ -7,6 +7,13 @@ on:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
       - src/fs.rs
+      - src/inline_mut.rs
+      - src/inline_data.rs
+      - src/xattr.rs
+      - src/dir.rs
+      - src/checksum.rs
+      - src/alloc.rs
+      - src/bgd.rs
       - src/capi.rs
       - src/fs/**
       - src/operation.rs
@@ -47,6 +54,44 @@ env:
   CARGO_BUILD_JOBS: "4"
 
 jobs:
+  link-inline-conversion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # Initial cap matches the larger 352-image linear profile (2,157 lines /
+    # 295,955 bytes observed); measure this new job from its retained full log.
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact inline conversion source identity
+        run: |
+          mkdir -p tmp/link-inline-conversion
+          git rev-parse HEAD > tmp/link-inline-conversion/source-commit.txt
+          sha256sum src/fs.rs src/capi.rs src/fs/guarded_chmod.rs src/fs/guarded_chmod/needs_host.rs src/fs/guarded_chmod/needs_host/link_emission.rs src/fs/guarded_chmod/needs_host/link_emission_guest.py src/fs/guarded_chmod/needs_host/link_growth.rs src/fs/guarded_chmod/needs_host/link_growth_guest.py src/fs/guarded_chmod/needs_host/link_policy_guest.py src/fs/guarded_chmod/needs_host/setxattr.rs src/fs/guarded_chmod/needs_host/link_inline.rs src/fs/guarded_chmod/needs_host/link_inline_guest.py src/fs/guarded_chmod/tests/link_inline.rs src/fs/guarded_chmod/tests/link_calls.rs src/inline_mut.rs src/inline_data.rs src/xattr.rs src/dir.rs src/checksum.rs src/alloc.rs src/bgd.rs Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml > tmp/link-inline-conversion/source-sha256.txt
+      - name: Check public Rust and C inline-parent fit, conversion and postfit
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/link-inline-conversion
+        run: |
+          scripts/tier.sh casefold:link-inline-conversion casefold-link-inline-conversion 4200 340000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::link_emission::inline_conversion::linux_checks_public_link_inline_conversion -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-link-inline-conversion 1
+      - name: Keep inline input, allocator, dirty/closed/cold images and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-inline-conversion
+          path: |
+            tmp/link-inline-conversion/
+            tmp/logs/casefold-link-inline-conversion.log
+          if-no-files-found: error
+          retention-days: 30
   link-linear-growth:
     runs-on: ubuntu-24.04
     timeout-minutes: 40

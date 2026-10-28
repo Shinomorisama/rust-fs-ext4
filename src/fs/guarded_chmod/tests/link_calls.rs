@@ -4,6 +4,8 @@ use crate::capi::*;
 use std::ffi::CString;
 const NAME: &str = "user.audit";
 const STAMP: i64 = 1_700_000_100;
+#[path = "link_inline.rs"]
+mod inline_conversion;
 fn specimen(flavor: features::FsFlavor, bs: u32) -> (Arc<Device>, Filesystem, u32, Arc<Clock>) {
     let size = if bs == 1024 { 8 << 20 } else { 32 << 20 };
     let dev = Arc::new(Device {

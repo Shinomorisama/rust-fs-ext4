@@ -108,6 +108,37 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Inline-parent native controls and exact Linux test preparation — 2026-10-28
+
+Eight new native tests now cover same-table inline fit/convert/postfit across
+forty API/layout cases, malformed/full-allocation planning refusals, 52 actual
+planning-read failures, 176 writes, 56 flush errors, 56 flush unwinds, four C
+readback errors and four post-commit publication unwinds. Fault positions are
+measured on actual converting calls, with reached-position and retirement checks.
+Synthetic declared journals exercise the transaction engine; they are not claimed
+as Linux-clean volumes. The final focused run passes eight tests. The cached
+readback probe, conservative exhaustion error assumption and poisoned-mount
+inspector corrections are documented in the ledger; no production fix is claimed.
+
+The separate `link_inline.rs`/guest test and exact `link-inline-conversion` job
+implement the planned sixteen-layout/three-phase, 48-link/160-image matrix.
+Actual input shape/shared-table/body-attribute checks, exact one-block accounting,
+protected source/parent/EA/table/namespace metadata, dirty/closed/cold evidence,
+24 source hashes, pinned tools/siblings and a one-test floor are required.
+Top-level inline/helper push paths are included. Existing linear job bodies,
+production writers, shared commit/allocation helpers, dependencies and gates
+remain unchanged. The new Linux matrix has not executed locally; compile and
+selection do not qualify it. Existing allocator exhaustion still returns its
+conservative corruption error, not independently qualified Linux ENOSPC behavior.
+
+See the [implementation/evidence ledger](extprogress.md#inline-parent-public-link-native-controls-and-independent-test-preparation--2026-10-28).
+Next inspect exact new-source inline/repeated-linear/full CI, repair only real
+failures and audit all source-bound saved bytes plus complete retention (expected
+1,647 unit/2,497 whole and 670 controls once per context). No new independent
+inline qualification, broader growth/counter-wrap/recovery/fuzz or Windows/card/
+SteamOS compatibility is claimed; casefold writes remain blocked and stages
+4–5 remain unquantified.
+
 ### Inline-parent link conversion contract/qualification plan — 2026-10-28
 
 Reviewed current `43280ec` source without changing writer/test/workflow/pin bytes.
