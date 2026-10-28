@@ -5,7 +5,7 @@ import stat
 import sys
 
 root = os.fsencode(sys.argv[1])
-# EXPECTED / ATTRS / ALIASES / FREE / BS / COUNT come from saved test literals.
+# EXPECTED / ATTRS / ALIASES / FREE / BS / COUNT / GROW are saved test literals.
 
 def snapshot(name):
     s = os.stat(root + name, follow_symlinks=False)
@@ -32,6 +32,8 @@ def listing(name):
         os.close(fd)
 
 policy = {b"existing", b"existingdir", b"link-dir"}
+fillers = [f"fill-{n:03d}-".encode() + b"f" * 246 for n in range(3 if BS == 1024 else 15)] if GROW else []
+policy.update(fillers)
 for _, alias in ALIASES:
     if alias.startswith(b"/policy/"):
         policy.add(alias.rsplit(b"/", 1)[1])
@@ -39,6 +41,8 @@ assert listing(b"/policy") == policy
 assert listing(b"/names") == ({b"n" * 255} if COUNT >= 3 else set())
 assert listing(b"/old") == {b"regular", b"fast", b"slow", b"dangling", b"fifo"}
 assert listing(b"/peer") == {b"kept"}
+for name in fillers:
+    assert snapshot(b"/policy/" + name) == snapshot(b"/peer/kept")
 payload = b"link-reference-data:" + b"p" * 4096
 for name in [b"/old/regular", b"/peer/kept"] + [alias for source, alias in ALIASES if source == b"/old/regular"]:
     with os.fdopen(os.open(root + name, os.O_RDONLY | os.O_NOATIME), "rb") as f:

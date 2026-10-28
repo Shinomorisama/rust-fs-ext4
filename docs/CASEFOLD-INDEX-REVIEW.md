@@ -108,6 +108,35 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Full-linear-parent public-link growth test preparation — 2026-10-28
+
+A new exact `link_emission::growth::linux_checks_public_link_growth` test and
+pinned `link-linear-growth` job prepare sixteen Rust/C full-linear-parent
+layouts. Linux fills one block; raw record checks prove no 264-byte slot for
+the first 255-byte alias. All five public forms cycle through a real growing
+insertion across layouts. Exact one-block primary-SB/group/bitmap debit,
+unchanged inode allocation/peer/EA bytes, complete source/parent metadata and
+dirty/closed/journal/cold Linux/debugfs/judged-e2fsck evidence are asserted.
+The original allocation-free test remains and shares the same checked runner.
+No production writer, shared commit helper, manifest/lock or write gate changes.
+
+All 1,639 native occurrences/662 controls remain; compile, exact one-test
+selection, full lint and guest Python syntax pass. Planned 112 links/352
+images are **not credited results**; actual focused/full CI and saved-byte
+audits are pending. See the [growth preparation ledger](extprogress.md#full-linear-parent-public-hard-link-growth-test-preparation--2026-10-28)
+for the complete plan, thirteen source hashes, accounting invariants and next
+audits. Preceding cap source 2137e23 now passes exact full run 40649608984,
+with 2,487 whole successes/all five-context controls/actual floors/trailing
+checks retained in seven verified archives; new-source full retention should
+add one host test (2,488), not infer a pass from that earlier source.
+
+This is test preparation, not the scoped implementation/evidence review or
+growth qualification. Independent real linear-growth execution/audit is next;
+inline/index/indirect/extent/deep/uninit growth, counter wrap and later review
+remain. All broader ownership/admission/seal/mapping/lifecycle/recovery/fuzz
+and Windows/card/SteamOS gates remain, with casefold writes blocked and stages
+4–5 not quantified. Both link patches stay historical/promoted.
+
 ### Public-link full-CI retention and native cap follow-up — 2026-10-28
 
 Exact docs-source **741381c**, full run **40640607199**, now passes all eleven

@@ -1,10 +1,13 @@
-//! Independent ordinary public-link emission; allocation-free layouts only.
+//! Independent ordinary public-link emission, including bounded linear growth.
 use super::super::timestamp_report::debugfs_time;
 use super::setxattr::make;
 use super::*;
 use crate::capi::*;
 use crate::inode::Inode;
 use std::path::Path;
+
+#[path = "link_growth.rs"]
+mod growth;
 
 const PATHS: [&[u8]; 12] = [
     b"/policy",
@@ -340,8 +343,12 @@ fn linux_checks_public_link_metadata() {
     }
 }
 fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
+    run_profile(capi, bs, size, journal, false);
+}
+fn run_profile(capi: bool, bs: u32, size: u16, journal: bool, grow: bool) {
     let base = fs_ext4_test_support::temp_dir().join(format!(
-        "link-emission-{}-{bs}-{size}-{journal}",
+        "link-{}-{}-{bs}-{size}-{journal}",
+        if grow { "growth" } else { "emission" },
         if capi { "capi" } else { "rust" }
     ));
     let image = base.with_extension("img");
@@ -367,6 +374,9 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
             .count(),
         1
     );
+    if grow {
+        growth::fill(&image, &base, bs);
+    }
     judged(&image, &base, "input");
     std::fs::copy(&image, base.with_extension("input.img")).unwrap();
     let fs = Filesystem::mount(Arc::new(FileDevice::open_path(&image).unwrap())).unwrap();
@@ -403,6 +413,11 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
     assert!(first + 700 < i64::from(i32::MAX));
     let initial_free = free(&image);
     let initial_alloc = allocation(&fs);
+    let original_parent = records[0].1.clone();
+    let original_block = fs.map_inode_logical(&original_parent, 0).unwrap().unwrap();
+    if grow {
+        growth::full_parent(&fs, &original_parent, original_block);
+    }
     let eas: Vec<_> = [0, 3, 7]
         .iter()
         .map(|&n| {
@@ -415,7 +430,16 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
         .collect();
     drop(fs);
     report(&image, &base, "input", &records);
-    let aliases = aliases();
+    let mut aliases = aliases();
+    if grow {
+        aliases[0].name = vec![b'g'; 255];
+        // Cycle all three Rust and both C entry forms across the eight layouts;
+        // each selected form must perform a real first-block allocation.
+        let layout =
+            usize::from(bs == 4096) + 2 * usize::from(size == 256) + 4 * usize::from(journal);
+        aliases[0].entry = layout % if capi { 2 } else { 3 };
+    }
+    let mut grown_alloc = None;
     for (index, alias) in aliases.iter().enumerate() {
         let clock = Arc::new(LinkClock {
             stamp: first + index as i64 * 100,
@@ -505,20 +529,20 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
                         (clock.stamp, 0, clock.stamp, 0)
                     );
                     assert_eq!(version(&found), version(raw) + 1);
-                    stable(
-                        raw,
-                        &found,
-                        &[
-                            (12, 4),
-                            (16, 4),
-                            (36, 4),
-                            (124, 2),
-                            (130, 2),
-                            (132, 4),
-                            (136, 4),
-                            (152, 4),
-                        ],
-                    );
+                    let mut allowed = vec![
+                        (12, 4),
+                        (16, 4),
+                        (36, 4),
+                        (124, 2),
+                        (130, 2),
+                        (132, 4),
+                        (136, 4),
+                        (152, 4),
+                    ];
+                    if grow && n == 0 && index == 0 {
+                        allowed.extend([(4, 4), (28, 4), (40, 60), (108, 4), (116, 2)]);
+                    }
+                    stable(raw, &found, &allowed);
                 } else {
                     assert_eq!(found, *raw, "protected peer/source changed");
                 }
@@ -527,8 +551,25 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
             for a in &aliases[..=index] {
                 assert_eq!(fs.resolve(&a.path()).unwrap(), current[a.source].0);
             }
-            assert_eq!(free(&image), initial_free);
-            assert_eq!(allocation(fs), initial_alloc);
+            if grow {
+                let next = growth::account(
+                    fs,
+                    &image,
+                    &base,
+                    &original_parent,
+                    &current[0].1,
+                    original_block,
+                    &initial_alloc,
+                    initial_free,
+                );
+                if let Some(previous) = &grown_alloc {
+                    assert_eq!(&next, previous, "later alias allocated again");
+                }
+                grown_alloc = Some(next);
+            } else {
+                assert_eq!(free(&image), initial_free);
+                assert_eq!(allocation(fs), initial_alloc);
+            }
             for (nr, raw) in &eas {
                 assert_eq!(fs.read_block(*nr).unwrap(), *raw);
             }
@@ -573,7 +614,10 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
         if let Some(jsb) = jsb {
             assert!(jsb.is_clean());
         }
-        assert_eq!(allocation(&closed), initial_alloc);
+        assert_eq!(
+            allocation(&closed),
+            *grown_alloc.as_ref().unwrap_or(&initial_alloc)
+        );
         for (ino, _, raw) in &records {
             assert_eq!(closed.read_inode_verified(*ino).unwrap().1, *raw);
         }
@@ -601,7 +645,7 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
                 hex(&a.path())
             ));
         }
-        let expected=format!("EXPECTED = [{}]\nATTRS = [{}]\nALIASES = [{}]\nFREE = ({}, {})\nBS = {bs}\nCOUNT = {}\n",expected.join(","),attrs.join(","),pairs.join(","),initial_free.0,initial_free.1,index+1);
+        let expected=format!("EXPECTED = [{}]\nATTRS = [{}]\nALIASES = [{}]\nFREE = ({}, {})\nBS = {bs}\nCOUNT = {}\nGROW = {grow_python}\n",expected.join(","),attrs.join(","),pairs.join(","),initial_free.0-u64::from(grow),initial_free.1,index+1,grow_python=if grow { "True" } else { "False" });
         std::fs::write(
             base.with_extension(format!("{}.expected.py", alias.phase)),
             &expected,
@@ -648,7 +692,7 @@ fn profile(capi: bool, bs: u32, size: u16, journal: bool) {
             original,
             "cold-copy validation changed actual driver image"
         );
-        eprintln!("link emission capi={capi} bs={bs} inode={size} journal={journal} phase={}: aliases={} source={} ctime={} no allocations; dirty/closed/cold bytes retained",alias.phase,index+1,target.ino,clock.stamp);
+        eprintln!("link emission capi={capi} bs={bs} inode={size} journal={journal} phase={}: aliases={} source={} ctime={} allocated-blocks={}; dirty/closed/cold bytes retained",alias.phase,index+1,target.ino,clock.stamp,u8::from(grow));
     }
     std::fs::remove_file(image).unwrap();
 }
