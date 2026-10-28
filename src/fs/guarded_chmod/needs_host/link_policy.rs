@@ -63,6 +63,17 @@ fn groups(fs: &Filesystem) -> Vec<(u64, u32, u32)> {
     );
     counts
 }
+// The published ext4 inode format places the Linux change counter at 0x24,
+// with its covered high word at 0x98. It is distinct from i_generation.
+fn directory_version(raw: &[u8]) -> u64 {
+    let low = u32::from_le_bytes(raw[36..40].try_into().unwrap());
+    let high = if raw.len() >= 156 && u16::from_le_bytes(raw[128..130].try_into().unwrap()) >= 28 {
+        u32::from_le_bytes(raw[152..156].try_into().unwrap())
+    } else {
+        0
+    };
+    u64::from(low) | (u64::from(high) << 32)
+}
 fn stable_raw(before: &[u8], now: &[u8], allowed: &[(usize, usize)]) {
     let mut a = before.to_vec();
     let mut b = now.to_vec();
@@ -80,6 +91,7 @@ fn reference(bs: u32, size: u16, journal: bool) {
     make(&image, bs, size, journal);
     let mut originals: Vec<(u32, Inode, Vec<u8>)> = Vec::new();
     let mut previous: Vec<Inode> = Vec::new();
+    let mut previous_versions = [0; 2];
     let mut initial_groups = Vec::new();
     let mut bitmaps: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
     let mut ea_blocks: Vec<(u64, Vec<u8>)> = Vec::new();
@@ -237,12 +249,30 @@ fn reference(bs: u32, size: u16, journal: bool) {
                 stable_raw(
                     raw,
                     &now,
-                    &[(12, 4), (16, 4), (124, 2), (130, 2), (132, 4), (136, 4)],
+                    &[
+                        (12, 4),
+                        (16, 4),
+                        (36, 4),
+                        (124, 2),
+                        (130, 2),
+                        (132, 4),
+                        (136, 4),
+                        (152, 4),
+                    ],
                 );
                 assert_eq!(times(&inode)[0], times(original)[0]);
+                previous_versions[index] = if step == 0 {
+                    directory_version(&now)
+                } else {
+                    previous_versions[index]
+                };
                 if step > 0 {
                     let changed = (index == 0 && matches!(step, 2 | 3 | 5 | 6 | 7 | 8))
                         || (index == 1 && step == 4);
+                    assert_eq!(
+                        directory_version(&now),
+                        previous_versions[index] + u64::from(changed)
+                    );
                     for t in [1, 2] {
                         if changed {
                             assert!(times(&inode)[t] > times(&previous[index])[t]);
@@ -256,6 +286,9 @@ fn reference(bs: u32, size: u16, journal: bool) {
                     &now, raw,
                     "protected old parent/peer/existing inode changed"
                 );
+            }
+            if index <= 1 {
+                previous_versions[index] = directory_version(&now);
             }
             current.push(inode);
         }

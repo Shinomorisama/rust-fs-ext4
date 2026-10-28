@@ -55,6 +55,19 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **The first link reference run exposed a test expectation error; its saved bytes establish the correction.**
+  Exact source `0183060`, focused run `40614604473`, job `122574039759`,
+  reaches the first successful Linux link and fails the reference test's
+  byte-preservation assertion. Verified artifact `12784752592` retains the
+  input/names/first images and complete failure log. The destination directory
+  version changes **6→7 at raw offset 0x24**; the regular source version stays
+  5, source ctime/nlink update, old parent/peer remain unchanged. The published
+  ext4 inode format identifies this counter separately from `i_generation`.
+  The test now explicitly requires one destination-directory version increment
+  per link, preserving source identity and all other field checks. Production
+  code is unchanged. Repeat exact Linux CI and audit the full matrix; this
+  partial archive does not qualify all eight layouts or close reference work.
+
 - **Reference-only Linux hard-link policy collection is added; actual VM evidence is pending.**
   The new `link_policy::linux_records_link_policy` test uses eight 1/4 KiB,
   128/256-byte inode and direct/journal layouts. Ten phases per layout retain
