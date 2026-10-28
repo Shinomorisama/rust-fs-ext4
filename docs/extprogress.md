@@ -55,6 +55,27 @@ permission to relax write gates, modify siblings or push to `main`.
 
 ## Current checkpoint
 
+- **Reference-only Linux hard-link policy collection is added; actual VM evidence is pending.**
+  The new `link_policy::linux_records_link_policy` test uses eight 1/4 KiB,
+  128/256-byte inode and direct/journal layouts. Ten phases per layout retain
+  **80 planned images**, seven successful links per layout (**56 aliases**),
+  **35 error cases through both link/linkat(0)** (**560 observations**) and
+  **960 debugfs inode reports**, followed by a separate cold namespace check.
+  Linux creates every reference byte; the driver only reads closed images and
+  proves those reads preserve image bytes. Source identity/data/owners/EA,
+  source ctime/nlink, destination-parent mtime/ctime, old parent/peers, exact
+  group/bitmap accounting and final-symlink/raw/255-byte behavior are covered.
+  A floor-one pinned Stage 0 job saves all images/reports, the complete log,
+  exact source commit and nine source hashes. New Rust code compiles; Python
+  is syntax checked without host execution. Fresh native validation retains
+  **1,503 successes / 526 controls once**, zero failed/ignored, and full lint
+  passes. The dormant 84-control safety patch is unchanged and inactive.
+  **Next:** inspect this exact source's focused CI, repair actual failures and
+  audit the saved reference bytes/reports before measured native policy reds,
+  patch composition or guard migration. Counts above are planned until that
+  execution/audit completes; no fresh Linux result or semantic repair is claimed.
+  Casefold writes stay blocked; stages 4–5 remain not yet quantified.
+
 - **Dormant public hard-link safety/positive preparation is executed and reproducible.**
   At fetched **`90acfc1`**, whose exact full CI `40575650714` now passes, the
   saved [native link patch](CASEFOLD-LINK-RED.patch) executes **84 controls**:

@@ -3,6 +3,7 @@ mod chown;
 mod create;
 mod create_policy;
 mod flags;
+mod link_policy;
 mod mkdir;
 mod mkdir_policy;
 mod removexattr;
