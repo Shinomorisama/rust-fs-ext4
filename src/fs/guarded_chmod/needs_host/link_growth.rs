@@ -40,7 +40,12 @@ pub(super) fn fill(image: &Path, base: &Path, bs: u32) {
 
 pub(super) fn full_parent(fs: &Filesystem, parent: &Inode, block: u64) {
     assert_eq!(parent.size, u64::from(fs.sb.block_size()));
-    assert_eq!(parent.blocks, u64::from(fs.sb.block_size() / 512));
+    // This controlled input has one directory-data block and one external EA
+    // block. Linux i_blocks/stat.st_blocks account for both in 512-byte units;
+    // the saved 3fe3f92 input reports four sectors for this 1 KiB profile.
+    assert_ne!(parent.file_acl, 0);
+    assert_ne!(parent.file_acl, block);
+    assert_eq!(parent.blocks, 2 * u64::from(fs.sb.block_size() / 512));
     assert!(!parent.has_inline_data());
     assert_eq!(parent.flags & crate::inode::InodeFlags::INDEX.bits(), 0);
     assert_eq!(fs.map_inode_logical(parent, 1).unwrap(), None);

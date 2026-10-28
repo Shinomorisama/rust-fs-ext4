@@ -108,6 +108,29 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Linear-growth EA-sector expectation correction — 2026-10-28
+
+First source 3fe3f92 fails exact growth job 122955259496 in Stage 0 40727685681
+at the new input-shape assertion, before any driver link. All twelve other
+Stage 0 jobs pass. Source/digest/all-eleven-CRC/thirteen-file-hash-verified
+artifact 12833757215 retains a Linux-clean one-block parent with a separate
+external EA: inode 2049 maps data block 8453 and EA block 8456, and both raw
+inode and Linux stat report four sectors. The new test incorrectly expected
+two. Exact native replay on that saved input reproduces red then passes after
+requiring the separate EA and counting both blocks. The temporary probe is
+restored; no production code, actual growth debit, test selection or floor is
+changed. See the [correction ledger](extprogress.md#linear-growth-external-attribute-sector-expectation-correction--2026-10-28)
+for source/digest, full evidence and bounded next checks.
+
+Both exact full-suite contexts fail the same new library test (1,343 pass /
+one fail); later integration/native trailing checks are unrun. Fresh corrected
+native units retain all 1,639 occurrences/662 controls, with full lint passed.
+Corrected-source focused Linux and full retention remain pending. This repairs
+an input expectation only and does not qualify any driver-emitted growth.
+Saved-byte audits, broader growth/counter-wrap and scoped review still follow;
+all ownership/admission/seal/mapping/lifecycle/recovery/fuzz and real-platform
+gates remain, with casefold writes blocked and stages 4–5 not quantified.
+
 ### Full-linear-parent public-link growth test preparation — 2026-10-28
 
 A new exact `link_emission::growth::linux_checks_public_link_growth` test and
