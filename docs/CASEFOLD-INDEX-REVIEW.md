@@ -103,9 +103,43 @@ backports. This closes their pending CI/retention/image review, not broader
 ownership/admission, index growth, complete-operation lifecycle/recovery or
 Windows/card qualification. No new production code, guard, test, dependency,
 workflow, write gate or independent dispatch is introduced by this review.
-Next execute/save/reapply/repeat the dormant native link safety preparation,
-then restore the **1,503-occurrence / 526-control** active baseline and lint.
-Actual link semantic policy and emitted-image qualification remain later steps.
+The native link preparation below now executes/repeats the saved patch and
+restores the **1,503-occurrence / 526-control** active baseline with lint.
+Independent reference-only link policy collection is next; semantic repair
+and emitted-image qualification remain later steps.
+
+### Executed dormant native public hard-link safety preparation — 2026-10-27
+
+At fetched `90acfc1` (exact full CI `40575650714` now succeeds), the
+[native link safety patch](CASEFOLD-LINK-RED.patch) actually executes twice
+after reverse/reapply to identical bytes: **84 controls / 20 passes / 64 current
+public safety failures / zero ignored**. All **200 measured Rust/C write/flush/
+legal-unwind positions**, four proven post-commit publication unwinds and 54
+primary positive profiles execute. Both Into priorities, ten qualified reverse
+families, eight actual device/reentry profiles and C target readback are reached;
+no unreached clock/generation hooks or fake future helper count as reds.
+
+Positive storage controls cover legitimate allocation-free no-SB staging, inline
+conversion, ordinary index leaf splits, shared source/parent table slices, legacy
+indirect growth and fragmented depth-one extent promotion/later append, plus
+uninit-group block allocation without new inode/EA/parent-link accounting.
+Source identity/data/owners/generation and raw/255-byte names remain. C returned
+readback failure proves one committed entry/count increment with output sentinels
+retained; requested read exclusion and unwind retirement expose current gaps.
+The unsupported-policy refusal is **not executed casefold growth**. Future
+private optional-SB/growth diagnostics wait for an actual LinkPlan boundary.
+
+Active source/tests/manifest/lock are restored; full native multisets retain
+**1,503 successes / all 526 controls once**, zero failed/ignored, with active
+full lint and dormant clippy passed. This is native self-consistency evidence,
+not Linux reference/emission qualification, a guard or a timestamp repair.
+The [executed checkpoint](extprogress.md#executed-dormant-public-hard-link-safety-preparation--2026-10-27)
+records hashes, exact outcomes/profiles, replay and scope. The patch stays dormant;
+prior promoted family patches must not be reapplied. Next execute reference-only
+Linux link/linkat-zero-flags policy collection and audit its saved bytes before
+native measured reds/composition, guarded migration and independent emission.
+Stages 4–5 remain not yet quantified; casefold writes and broader qualification
+gates remain blocked/open as before.
 
 ### Public hard-link staging, marker and dispatch design audit — 2026-10-27
 
@@ -117,7 +151,8 @@ symlink in that case; a source without that slash still preserves its final
 symlink. Destination splitting and counted-name/Into priorities are unchanged.
 Use those updated contracts for future dormant link controls. The upstream
 compatibility closure above now closes the kernel-budget/full-CI and cancelled-
-reference gates; executed dormant native link preparation is next.
+reference gates. The executed dormant native preparation above now supersedes
+that next-task status; reference-only Linux link policy collection is next.
 
 Audited clean fetched `c15e588e721ee6300c6dee86214d3a04b0939ec6` using Sol 6.1.
 Its exact full CI `40476503989` is still in progress at inspection. Production,
