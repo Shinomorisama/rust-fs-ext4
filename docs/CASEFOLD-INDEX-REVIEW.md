@@ -108,6 +108,30 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Corrected linear-growth saved-evidence closure — 2026-10-28
+
+Source `09cf8dc` now passes all thirteen focused jobs in **40744071010** and
+all eleven full jobs/ci-ok in **40744071049**; setup-only `aaf5e2a` also passes
+full **40748257814**. Both focused archives are API-source/digest/all-CRC and
+thirteen-file-hash verified against both trees. Read-only raw-format auditing
+checks every **sixteen-layout / 352-image / 112-link** matrix, exact first-growth
+one-bit/SB/group debit, unchanged inode allocation/tables/peer/EA bytes,
+applicable metadata checksums, dirty/closed/journal state and actual cold Linux
+metadata/C snapshots. Each matrix retains **1,536 debugfs / 240 five-pass
+e2fsck** reports. Both actual exact-test wrappers and one-test floors pass.
+Complete multiset retention against `2137e23` preserves **1,639 unit / 2,488
+whole** successes and **662 controls once in five contexts** in both later full
+runs, including actual floors and trailing shell/CLI checks. No writer, guard,
+test, pin, budget or workflow changes during this checkpoint.
+
+See the [full evidence ledger](extprogress.md#corrected-linear-growth-saved-byte-and-full-retention-closure--2026-10-28)
+for artifact IDs/digests, detailed counts, checksum/telemetry treatment and limits.
+This closes the corrected healthy linear-growth execution/evidence checkpoint;
+it does not close the later scoped implementation review or broader stages 4–5.
+Inline conversion qualification is next. Indexed/deeper/uninitialized-group
+and counter-wrap growth, ownership/admission/seal/lifecycle/recovery/fuzz and
+Windows/card/SteamOS remain open; casefold writes remain blocked.
+
 ### Linear-growth EA-sector expectation correction — 2026-10-28
 
 First source 3fe3f92 fails exact growth job 122955259496 in Stage 0 40727685681
