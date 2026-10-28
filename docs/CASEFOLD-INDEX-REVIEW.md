@@ -108,6 +108,39 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Public-link full-CI retention and native cap follow-up — 2026-10-28
+
+Exact docs-source **741381c**, full run **40640607199**, now passes all eleven
+jobs/ci-ok. Only two documentation files differ from emission source e6db258.
+Seven source/digest/all-CRC-verified tier archives retain every **1,639 unit /
+2,487 whole** success, the new host test once in both whole suites, all **662
+controls once in five contexts**, actual wrappers/floors and trailing twenty
+native shell/159 installed-CLI checks. Standalone CLI 159, ARM images 527,
+oracle 225, kernel 36, third-implementation nine and wasm five also pass.
+The same ignored slow fuzz case remains a qualification gate.
+
+Exact e6db258 full run **40637075795** passes every test but native job
+**122647162297** fails its complete log's byte cap: **3,916 / 238,064** against
+3,950 / 238,000. Its actual later floor/shell/native-CLI steps are unrun.
+The later identical-source native suite passes at **3,915 / 237,948**; output
+variance does not negate the earlier failure. Complete unmodified log replay
+reproduces 65 at the old limit and passes at **3,950 / 239,000**, retaining
+all 2,487 successes and the 1,060 floor. Only that byte cap changes. Guest,
+unit, other caps, complete output, selection and all floors remain unchanged.
+See the [full retention ledger](extprogress.md#public-link-full-suite-retention-and-measured-native-budget-repair--2026-10-28)
+for exact sources, artifact IDs/digests, log hash and missing-versus-executed
+trailing checks. No new driver tests execute locally and no production source
+changes. The new cap commit's actual CI remains pending until observed.
+
+This closes full-suite retention for the new allocation-free host test; it
+does not replace the pending scoped source/evidence review or qualify growth.
+After exact cap-CI verification, independently qualify real full-linear-parent
+hard-link allocation with exact allocator/SB debit and protected inode/peer/EA
+preservation, followed by inline/index/legacy/extent/deep/uninit and counter
+wrap in later bounded checkpoints. Broader ownership/admission/seal/mapping,
+lifecycle/recovery/fuzz and Windows/card/SteamOS gates remain. Keep casefold
+writes blocked and stages 4–5 not quantified; both link patches remain promoted.
+
 ### Allocation-free public-link exact Linux emission closure — 2026-10-28
 
 Source **`e6db258`** passes exact focused job **122646396891** in **40637075787**.

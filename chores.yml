@@ -804,7 +804,11 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3950 238000 -- scripts/test.sh --locked --release'
+      # Link-emission source e6db258, full run 40637075795: 3,916 lines /
+      # 238,064 bytes after all 2,487 successes; old 238,000 cap returned 65.
+      # The docs-only successor's identical suite measured 237,948 bytes.
+      # Retain the line cap, full output and test floor; allow measured variance.
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3950 239000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
