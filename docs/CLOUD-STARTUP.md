@@ -191,3 +191,12 @@ No local KVM means Linux/e2fsprogs/kernel qualification uses the existing CI VM.
 Never mount images or run host e2fsprogs here. Do not alter Windows driver locks
 or siblings during cloud setup. Successful setup is distinct from independent
 qualification, publication, or access in a fresh regular chat.
+
+The static-library freshness shell test supports the native runner's explicit
+`FS_CORE_ROOT` and external Cargo cache. Its isolated fixture copies that core,
+normalizes only its own manifest path, and scopes build output to its own
+cache. The real sibling, active manifest/lock and immutable core stay intact.
+`chore test:scripts` also needs the generated `ext4-basic.img` and
+`ext4-csum-seed.img`: obtain source-matched, digest-verified CI fixture artifacts
+or generate them with the prescribed CI VM workflow before running that tier.
+Missing fixtures fail the check; do not skip it or generate them with host tools.

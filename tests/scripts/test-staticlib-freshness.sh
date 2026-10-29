@@ -32,7 +32,7 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CORE="$REPO/../rust-fs-core"
+CORE="${FS_CORE_ROOT:-$REPO/../rust-fs-core}"
 LIB=fs_ext4
 
 fails=0
@@ -41,7 +41,8 @@ fail() { echo "FAIL  $*" >&2; fails=$((fails + 1)); }
 # NOTHING SKIPS: what this needs and cannot find is a failure naming the
 # task that provides it.
 command -v chore >/dev/null 2>&1 || { echo "FAIL  chore is not on PATH (scripts/ci-install-chore.sh)" >&2; exit 1; }
-[ -f "$CORE/Cargo.toml" ] || { echo "FAIL  ../rust-fs-core is missing (chore siblings)" >&2; exit 1; }
+[ -f "$CORE/Cargo.toml" ] || { echo "FAIL  $CORE/Cargo.toml is missing (chore siblings or verify FS_CORE_ROOT)" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "FAIL  python3 is needed to select the isolated core path" >&2; exit 1; }
 triple="$(rustc -vV | sed -n 's/^host: //p')"
 [ -n "$triple" ] || { echo "FAIL  rustc -vV names no host triple" >&2; exit 1; }
 
@@ -61,12 +62,32 @@ cp -R "$REPO/Cargo.toml" "$REPO/Cargo.lock" "$REPO/chores.yml" "$REPO/rust-toolc
 cp -R "$REPO/tests/support" "$ext4/tests/"
 cp -R "$CORE/Cargo.toml" "$CORE/src" "$CORE/include" "$sandbox/rust-fs-core/"
 [ -f "$CORE/rust-toolchain.toml" ] && cp "$CORE/rust-toolchain.toml" "$sandbox/rust-fs-core/"
+# A native runner can select a core outside the ordinary sibling location.
+# The isolated copy always uses its own copied core, so source edits below
+# exercise that copy. Preserve the dependency requirement and the lockfile.
+python3 - "$ext4/Cargo.toml" <<'PY' || exit 1
+import pathlib
+import re
+import sys
+
+manifest = pathlib.Path(sys.argv[1])
+selected, count = re.subn(
+    r'(?m)^(rust-fs-core = \{ path = )"[^"\n]+"',
+    r'\1"../rust-fs-core"',
+    manifest.read_text(),
+)
+if count != 1:
+    raise SystemExit("FAIL  expected one rust-fs-core path in the isolated manifest")
+manifest.write_text(selected)
+PY
 ln -s "$cache" "$ext4/target"
 
 # Quiet: chore and cargo go to the log, which a failure names.
 staticlib() {
     echo "== chore staticlib ($1)" >> "$log"
-    chore -C "$ext4" staticlib "TRIPLE=$triple" >> "$log" 2>&1
+    # Keep the task's relative target/ output inside this isolated fixture,
+    # even when the outer native runner uses a separate Cargo build cache.
+    CARGO_TARGET_DIR="$cache" chore -C "$ext4" staticlib "TRIPLE=$triple" >> "$log" 2>&1
 }
 
 if ! staticlib "first build"; then
