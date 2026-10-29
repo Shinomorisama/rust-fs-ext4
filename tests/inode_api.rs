@@ -105,11 +105,41 @@ fn mount(bytes: Vec<u8>) -> (Arc<MemDev>, Filesystem) {
 }
 
 /// Resolve `path` through `lookup_at` alone, one component at a time, the
-/// way a handle-based host walks.
+/// way a handle-based host walks: a symlink before the final component is
+/// read with `read_link` and its target walked in its place, as the
+/// kernel's own walk does (#531).
 fn walk(fs: &Filesystem, path: &str) -> Result<u32> {
-    let mut ino = ROOT;
-    for name in path.split('/').filter(|c| !c.is_empty()) {
-        ino = fs.lookup_at(ino, name.as_bytes())?;
+    walk_following(fs, path, false)
+}
+
+/// [`walk`], following a symlink as the final component too when
+/// `follow_last` is set, as the kernel walks a name's parent (#564).
+fn walk_following(fs: &Filesystem, path: &str, follow_last: bool) -> Result<u32> {
+    let push = |pending: &mut Vec<Vec<u8>>, p: &[u8]| {
+        let parts = p.split(|&b| b == b'/').filter(|c| !c.is_empty());
+        pending.extend(parts.rev().map(<[u8]>::to_vec));
+    };
+    let mut pending = Vec::new();
+    push(&mut pending, path.as_bytes());
+    let (mut ino, mut followed) = (ROOT, 0);
+    while let Some(name) = pending.pop() {
+        let child = fs.lookup_at(ino, &name)?;
+        if (pending.is_empty() && !follow_last) || !fs.stat_ino(child)?.is_symlink() {
+            ino = child;
+            continue;
+        }
+        followed += 1;
+        if followed > fs_ext4::fs::MAX_SYMLINKS {
+            return Err(Error::SymlinkLoop);
+        }
+        let target = fs.read_link(child)?;
+        if target.is_empty() {
+            return Err(Error::NotFound);
+        }
+        if target[0] == b'/' {
+            ino = ROOT;
+        }
+        push(&mut pending, &target);
     }
     Ok(ino)
 }
@@ -117,7 +147,10 @@ fn walk(fs: &Filesystem, path: &str) -> Result<u32> {
 /// `(parent inode, final name)` for `path`, resolved by inode.
 fn walk_parent<'a>(fs: &Filesystem, path: &'a str) -> Result<(u32, &'a [u8])> {
     let cut = path.rfind('/').unwrap();
-    Ok((walk(fs, &path[..cut])?, &path.as_bytes()[cut + 1..]))
+    Ok((
+        walk_following(fs, &path[..cut], true)?,
+        &path.as_bytes()[cut + 1..],
+    ))
 }
 
 #[derive(Clone, Debug)]
@@ -430,6 +463,11 @@ fn stale() -> i32 {
 }
 
 #[test]
+fn a_file_size_beyond_the_mapping_limit_is_efbig() {
+    assert_eq!(Error::FileTooLarge.to_errno(), fs_ext4::error::errno::EFBIG);
+}
+
+#[test]
 fn a_freed_and_reused_inode_is_stale_under_its_old_generation() {
     let (dev, fs) = mount(formatted(FsFlavor::Ext4));
     let f = fs.apply_create_at(ROOT, b"f", 0o644).unwrap();
@@ -560,6 +598,54 @@ fn names_are_bytes_and_are_validated() {
 }
 
 #[test]
+fn symlink_targets_leave_room_for_the_terminating_byte() {
+    // The kernel comparison is in tests/symlink_target_kernel.rs (#536).
+    for block_size in [1024u32, 2048, 4096] {
+        let dev = MemDev::with(vec![0u8; SIZE as usize]);
+        format_filesystem_with_flavor(
+            dev.as_ref(),
+            None,
+            Some([0x36; 16]),
+            SIZE,
+            block_size,
+            FsFlavor::Ext4,
+        )
+        .unwrap();
+        let fs = Filesystem::mount(dev.clone()).unwrap();
+        let limit = block_size as usize - 1;
+        for len in [limit - 1, limit, limit + 1, limit + 2] {
+            let target = "x".repeat(len);
+            for by_inode in [false, true] {
+                let name = format!("link-{len}-{by_inode}");
+                let before = dev.snapshot();
+                let result = if by_inode {
+                    fs.apply_symlink_at(ROOT, name.as_bytes(), target.as_bytes())
+                } else {
+                    fs.apply_symlink(&target, &format!("/{name}"))
+                };
+                if len <= limit {
+                    let ino = result.unwrap();
+                    assert_eq!(fs.read_link(ino).unwrap(), target.as_bytes());
+                } else {
+                    assert!(
+                        matches!(result, Err(Error::NameTooLong)),
+                        "block size {block_size}, length {len}, by inode {by_inode}: {result:?}"
+                    );
+                    assert!(
+                        before == dev.snapshot(),
+                        "a refused target changed the image"
+                    );
+                    assert!(matches!(
+                        fs.lookup_at(ROOT, name.as_bytes()),
+                        Err(Error::NotFound)
+                    ));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn dot_and_dotdot_are_refused_where_they_would_corrupt() {
     let (dev, fs) = mount(formatted(FsFlavor::Ext4));
     let d = fs.apply_mkdir_at(ROOT, b"d", 0o755).unwrap();
@@ -676,4 +762,90 @@ fn truncate_by_inode_refuses_what_truncate_by_path_refuses() {
     assert_eq!(fs.stat_ino(f).unwrap().size, 100);
     fs.apply_truncate_ino(f, 9000).unwrap();
     assert_eq!(fs.stat_ino(f).unwrap().size, 9000);
+}
+
+/// The directory a path-addressed operation edits is the one the kernel
+/// edits: a symlink naming the parent's last component is followed too,
+/// so `unlink dirlink/x` removes `full/x` and `mkdir chain/sub` files
+/// `sub` in `full`. Only the operation's own final name is not followed
+/// (#564).
+#[test]
+fn a_symlink_naming_the_parent_is_followed_by_every_path_operation() {
+    let (_dev, fs) = mount(formatted(FsFlavor::Ext4));
+    fs.apply_mkdir("/full", 0o755).unwrap();
+    fs.apply_create("/full/x", 0o644).unwrap();
+    fs.apply_create("/full/y", 0o644).unwrap();
+    fs.apply_symlink("full", "/dirlink").unwrap();
+    fs.apply_symlink("/dirlink", "/chain").unwrap();
+    fs.apply_symlink("y", "/full/ylink").unwrap();
+    fs.apply_symlink("self", "/self").unwrap();
+
+    fs.apply_unlink("/dirlink/x").unwrap();
+    assert_eq!(errno_of(walk(&fs, "/full/x")), Error::NotFound.to_errno());
+    fs.apply_mkdir("/chain/sub", 0o755).unwrap();
+    assert!(fs
+        .stat_ino(walk(&fs, "/full/sub").unwrap())
+        .unwrap()
+        .is_dir());
+    fs.apply_rmdir("/chain/sub").unwrap();
+    assert_eq!(errno_of(walk(&fs, "/full/sub")), Error::NotFound.to_errno());
+
+    // The final name is the link itself, removed rather than followed.
+    fs.apply_unlink("/chain/ylink").unwrap();
+    assert_eq!(
+        errno_of(walk(&fs, "/full/ylink")),
+        Error::NotFound.to_errno()
+    );
+    assert!(walk(&fs, "/full/y").is_ok());
+
+    assert_eq!(
+        errno_of(fs.apply_unlink("/self/x")),
+        Error::SymlinkLoop.to_errno()
+    );
+}
+
+#[test]
+fn a_trailing_slash_requires_a_directory_and_follows_the_final_symlink() {
+    let (_dev, fs) = mount(formatted(FsFlavor::Ext4));
+    let full = fs.apply_mkdir("/full", 0o755).unwrap();
+    let file = fs.apply_create("/full/x", 0o644).unwrap();
+    let link = fs.apply_symlink("full", "/dirlink").unwrap();
+    fs.apply_symlink("dirlink/", "/chain").unwrap();
+    fs.apply_symlink("/dirlink/", "/absolute").unwrap();
+    fs.apply_symlink("full/x", "/filelink").unwrap();
+    fs.apply_symlink("full/x/", "/bad-target").unwrap();
+    fs.apply_symlink("missing", "/dangling").unwrap();
+    fs.apply_symlink("self", "/self").unwrap();
+
+    for path in ["/full/", "/dirlink/", "/dirlink//", "/chain/", "/absolute/"] {
+        assert_eq!(
+            fs.lookup_path_bytes(path.as_bytes()).unwrap(),
+            full,
+            "{path}"
+        );
+    }
+    assert_eq!(fs.lookup_path_bytes(b"/dirlink").unwrap(), link);
+    assert_eq!(fs.lookup_path_bytes(b"/full/x").unwrap(), file);
+    assert_eq!(fs.lookup_path_bytes(b"/").unwrap(), ROOT);
+    for path in ["/full/x/", "/filelink/", "/bad-target/", "/bad-target/."] {
+        assert_eq!(
+            errno_of(fs.lookup_path_bytes(path.as_bytes())),
+            Error::NotADirectory.to_errno(),
+            "{path}"
+        );
+    }
+    // A slash inside the expanded target also requires a directory,
+    // even when the caller follows the final link without a slash.
+    assert_eq!(
+        errno_of(fs.lookup_dir_path_bytes(b"/bad-target")),
+        Error::NotADirectory.to_errno()
+    );
+    assert_eq!(
+        errno_of(fs.lookup_path_bytes(b"/dangling/")),
+        Error::NotFound.to_errno()
+    );
+    assert_eq!(
+        errno_of(fs.lookup_path_bytes(b"/self/")),
+        Error::SymlinkLoop.to_errno()
+    );
 }

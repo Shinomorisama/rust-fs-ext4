@@ -1,15 +1,9 @@
 # Changelog
 
+Changes not yet released are fragments in [`changelog.d/`](changelog.d/), one per
+pull request; a release gathers them into a section here.
+
 ## [Unreleased]
-
-### Changed
-
-- **The family's scripts run in place from rust-fs-core, and this repository
-  keeps no copy.** `scripts/core.sh` and `scripts/tier.sh` are gone; CI and
-  chores run `../rust-fs-core/scripts/NAME.sh` at the pinned version
-  (rust-fs-core 0.3.3, #212).
-- **A release's notes are its CHANGELOG section**, and a tag the CHANGELOG
-  does not describe stops before anything is published (rust-fs-core#209).
 
 ## [0.8.0] — 2026-10-06
 

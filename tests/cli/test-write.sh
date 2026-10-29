@@ -1,7 +1,11 @@
-# fs.ext4 write and mkdir, as installed: round trips compared with cmp at
-# every block-size boundary, a file in a subdirectory, a replacement by a
-# shorter file, typed ls entries on the populated image, refusals, and a
-# clean fsck.ext4 afterwards.
+# fs.ext4 write, mkdir and truncate, as installed: round trips compared
+# with cmp at every block-size boundary, a file in a subdirectory, a
+# replacement by a shorter file, typed ls entries on the populated image,
+# refusals, mkdir --parents making a missing chain (and nothing, without
+# writing, for a chain already there), truncate shrinking to zero and
+# across a block boundary and growing with zeros, write --at writing
+# into a file at a position (inside it, across its end and into a hole),
+# and a clean fsck.ext4 afterwards.
 source "$(dirname "$0")/lib.sh"
 
 img="$SANDBOX/write.img"
@@ -43,17 +47,267 @@ jq_check "every ls entry has typed fields" \
 fs.ext4 "$img" ls /d >"$SANDBOX/lsd.json" 2>/dev/null
 jq_check "ls /d shows e as a directory" 'any(.[]; .name == "e" and .type == "dir")' "$SANDBOX/lsd.json"
 
-# Refusals: status 1, a structured error, nothing on stdout, image unchanged.
+# Refusals: a structured error, nothing on stdout, image unchanged; status 4
+# where the volume's state forbids a namespace verb (state_code), 1 for write.
 cp "$img" "$SANDBOX/before.img"
 fs.ext4 "$img" mkdir /d >"$SANDBOX/x.out" 2>"$SANDBOX/x.err"
-check "mkdir of an existing path exits 1" test $? -eq 1
+check "mkdir of an existing path exits 4" test $? -eq 4
 check "mkdir of an existing path prints nothing on stdout" test ! -s "$SANDBOX/x.out"
-jq_check "mkdir of an existing path says so" '.code == 1 and (.error | test("already exists"))' "$SANDBOX/x.err"
+jq_check "mkdir of an existing path says so" '.code == 4 and (.error | test("already exists"))' "$SANDBOX/x.err"
 echo x | fs.ext4 "$img" write /missing/f >"$SANDBOX/y.out" 2>"$SANDBOX/y.err"
 check "write under a missing parent exits 1" test $? -eq 1
 check "write under a missing parent prints nothing on stdout" test ! -s "$SANDBOX/y.out"
 jq_check "write under a missing parent is a structured error" '.code == 1 and (.error | test("not found"))' "$SANDBOX/y.err"
 check "the refusals left the image as it was" cmp -s "$img" "$SANDBOX/before.img"
+fs.ext4 "$img" mkdir /m1/m2 >"$SANDBOX/x.out" 2>"$SANDBOX/x.err"
+check "plain mkdir under a missing parent exits 4" test $? -eq 4
+jq_check "plain mkdir makes no parent" '.code == 4 and (.error | test("not found"))' "$SANDBOX/x.err"
+check "plain mkdir under a missing parent left the image as it was" cmp -s "$img" "$SANDBOX/before.img"
+
+# mkdir --parents makes every missing directory on the way, mode 0755, and
+# reports only those; one that is already there is passed through.
+root_links="$(fs.ext4 "$img" stat / | jq .nlink)"
+fs.ext4 "$img" mkdir --parents /p/q/r >"$SANDBOX/p.json" 2>"$SANDBOX/p.err"
+rc=$?
+check "mkdir --parents /p/q/r exits 0 ($(cat "$SANDBOX/p.err"))" test "$rc" -eq 0
+jq_check "mkdir --parents reports the path and each directory it made" \
+    '.path == "/p/q/r" and .created == ["/p", "/p/q", "/p/q/r"] and (keys | length) == 2' \
+    "$SANDBOX/p.json"
+for dir in "/p 3" "/p/q 3" "/p/q/r 2"; do
+    read -r name links <<<"$dir"
+    fs.ext4 "$img" stat "$name" >"$SANDBOX/stat.json" 2>/dev/null
+    jq_check "$name is a directory, mode 0755, with $links links" \
+        ".type == \"dir\" and .mode == \"0755\" and .nlink == $links" "$SANDBOX/stat.json"
+done
+check "the root has one link more, for /p" \
+    test "$(fs.ext4 "$img" stat / | jq .nlink)" = "$((root_links + 1))"
+fs.ext4 "$img" mkdir -p /d/e/s/t >"$SANDBOX/p.json" 2>/dev/null
+jq_check "mkdir -p under an existing chain makes only what is missing" \
+    '.path == "/d/e/s/t" and .created == ["/d/e/s", "/d/e/s/t"]' "$SANDBOX/p.json"
+fs.ext4 "$img" mkdir -p /u/../v >"$SANDBOX/p.json" 2>/dev/null
+jq_check "mkdir -p makes a directory that .. then leaves" \
+    '.created == ["/u", "/u/../v"]' "$SANDBOX/p.json"
+for name in /u /v; do
+    check "$name was made" test "$(fs.ext4 "$img" stat "$name" 2>/dev/null | jq -r .type)" = dir
+done
+fs.ext4 "$img" mkdir -p --text /w/x >"$SANDBOX/p.txt" 2>/dev/null
+check "mkdir -p --text names each directory made" \
+    test "$(cat "$SANDBOX/p.txt")" = "$(printf 'created /w\ncreated /w/x')"
+
+# A chain that is already there is success, and nothing is written.
+cp "$img" "$SANDBOX/chain.img"
+for p in /p/q/r /p/q/r/ /p/./q/.. /; do
+    fs.ext4 "$img" mkdir -p "$p" >"$SANDBOX/p.json" 2>"$SANDBOX/p.err"
+    rc=$?
+    check "mkdir -p $p, already there, exits 0 ($(cat "$SANDBOX/p.err"))" test "$rc" -eq 0
+    jq_check "mkdir -p $p reports nothing made" ".path == \"$p\" and .created == []" "$SANDBOX/p.json"
+done
+fs.ext4 "$img" mkdir -p --text /p/q >"$SANDBOX/p.txt" 2>/dev/null
+check "mkdir -p --text says when nothing was made" \
+    test "$(cat "$SANDBOX/p.txt")" = "/p/q exists; nothing created"
+check "a chain already there was not written to" cmp -s "$img" "$SANDBOX/chain.img"
+
+# Refusals: anything but a directory on the way, a name too long or an
+# empty path is refused before anything is made, so no partial chain is
+# left behind and the image is byte-identical. A symlink is never followed.
+fs.ext4 "$img" ln -s /d /dl >/dev/null 2>&1
+cp "$img" "$SANDBOX/before-p.img"
+long="$(printf 'n%.0s' $(seq 256))"
+refused() {
+    local why="$1" p="$2"
+    fs.ext4 "$img" mkdir -p "$p" >"$SANDBOX/x.out" 2>"$SANDBOX/x.err"
+    local rc=$? want
+    want="$(state_code "$why")"
+    check "mkdir -p ${p:0:40} exits $want, not $rc" test "$rc" -eq "$want"
+    check "mkdir -p ${p:0:40} prints nothing on stdout" test ! -s "$SANDBOX/x.out"
+    jq_check "mkdir -p ${p:0:40} is refused: $why" ".code == $want and (.error | test(\"$why\"))" "$SANDBOX/x.err"
+    check "mkdir -p ${p:0:40} left the image byte-identical" cmp -s "$img" "$SANDBOX/before-p.img"
+}
+refused "already exists" /f0
+refused "already exists" /f0/
+refused "not a directory" /f0/x
+refused "not a directory" /f0/x/y
+refused "not a directory" /new/../f0/x
+refused "not a directory" /d/e/deep/x
+refused "name too long" "/n1/n2/$long"
+refused "not a directory" "/f0/$long"
+refused "already exists" /dl
+refused "not a directory" /dl/x
+refused "not found" ""
+
+# truncate sets a regular file's length: a shrink keeps exactly the bytes
+# before the new end and gives back the blocks past it, and a grow reads
+# back as zeros, allocating nothing.
+free_before="$(fs.ext4 "$img" get free_bytes --text)"
+head -c 20000 /dev/urandom >"$SANDBOX/t.src"
+fs.ext4 "$img" write /t <"$SANDBOX/t.src" >/dev/null 2>&1
+truncated() {
+    local p="$1" size="$2" allocated="$3"
+    fs.ext4 "$img" truncate "$p" "$size" >"$SANDBOX/t.json" 2>"$SANDBOX/t.err"
+    local rc=$?
+    check "truncate $p $size exits 0 ($(cat "$SANDBOX/t.err"))" test "$rc" -eq 0
+    jq_check "truncate $p $size reports the path and the size" \
+        ".path == \"$p\" and .size == $size and (keys | length) == 2" "$SANDBOX/t.json"
+    fs.ext4 "$img" stat "$p" >"$SANDBOX/stat.json" 2>/dev/null
+    jq_check "$p is $size bytes, $allocated allocated" \
+        ".type == \"file\" and .size == $size and .allocated_bytes == $allocated" "$SANDBOX/stat.json"
+}
+truncated /t 5000 8192
+check "a shrink across a block boundary keeps the first 5000 bytes" \
+    cmp -s <(head -c 5000 "$SANDBOX/t.src") <(fs.ext4 "$img" read /t)
+truncated /t 12288 8192
+check "a grow reads back zeros past the old end, in its last block and beyond" \
+    cmp -s <(head -c 5000 "$SANDBOX/t.src"; head -c 7288 /dev/zero) <(fs.ext4 "$img" read /t)
+truncated /t 0 0
+check "a shrink to zero leaves nothing to read" test -z "$(fs.ext4 "$img" read /t | head -c 1)"
+check "a shrink to zero gave back every block the file had" \
+    test "$(fs.ext4 "$img" get free_bytes --text)" -eq "$free_before"
+truncated /f4095 8192 4096
+check "a grow of a file write made reads back zeros past its end" \
+    cmp -s <(cat "$SANDBOX/src.4095"; head -c 4097 /dev/zero) <(fs.ext4 "$img" read /f4095)
+truncated /f4096 4096 4096
+check "a truncate to the length the file has keeps its bytes" \
+    cmp -s "$SANDBOX/src.4096" <(fs.ext4 "$img" read /f4096)
+fs.ext4 "$img" truncate --text /f1 0 >"$SANDBOX/t.txt" 2>/dev/null
+check "truncate --text says the new length" test "$(cat "$SANDBOX/t.txt")" = "/f1 is 0 bytes"
+
+# Refusals are decided before the image is opened for writing, so each
+# leaves it byte-identical with nothing on stdout. A symlink is never
+# followed, whether it is the path or on the way. A missing name or a part
+# of the path that is not a directory is the volume's state refusing it,
+# exit 4 (EXIT_REFUSED, #592). A SIZE that is not a
+# byte count is a usage error (exit 2) before the image is opened at all.
+fs.ext4 "$img" ln -s /f4096 /fl >/dev/null 2>&1
+cp "$img" "$SANDBOX/before-t.img"
+truncate_refused() {
+    local code="$1" why="$2" p="$3" size="$4"
+    fs.ext4 "$img" truncate "$p" "$size" >"$SANDBOX/x.out" 2>"$SANDBOX/x.err"
+    local rc=$?
+    check "truncate ${p:0:40} '$size' exits $code, not $rc" test "$rc" -eq "$code"
+    check "truncate ${p:0:40} '$size' prints nothing on stdout" test ! -s "$SANDBOX/x.out"
+    jq_check "truncate ${p:0:40} '$size' is refused: $why" \
+        ".code == $code and (.error | test(\"$why\"))" "$SANDBOX/x.err"
+    check "truncate ${p:0:40} '$size' left the image byte-identical" \
+        cmp -s "$img" "$SANDBOX/before-t.img"
+}
+truncate_refused 1 "is a directory" /d 0
+truncate_refused 1 "is a directory" /d/ 0
+truncate_refused 1 "is a directory" / 0
+truncate_refused 1 "is a directory" /f0/ 0
+truncate_refused 4 "not a directory" /f0/x 0
+truncate_refused 4 "not found" /missing 0
+truncate_refused 4 "not found" /missing/x 0
+truncate_refused 1 "name too long" "/$long" 0
+truncate_refused 4 "not found" "" 0
+truncate_refused 1 "symlink" /fl 0
+truncate_refused 1 "symlink" /dl 0
+truncate_refused 4 "not a directory" /dl/e 0
+for size in -1 12x 1K 18446744073709551616 ""; do
+    truncate_refused 2 "" /f4096 "$size"
+done
+
+# write --at writes stdin into a file at a byte position and truncates
+# nothing: inside one block, across a block boundary, across the end, at
+# it, past it (the gap reads back as zeros and allocates nothing) and into
+# that gap. What the file must then hold is what dd writes on the host.
+head -c 20000 /dev/urandom >"$SANDBOX/a.want"
+fs.ext4 "$img" write /a <"$SANDBOX/a.want" >/dev/null 2>&1
+fs.ext4 "$img" write /e </dev/null >/dev/null 2>&1
+: >"$SANDBOX/e.want"
+written_at() {
+    local p="$1" want="$2" at="$3" len="$4" size="$5" allocated="$6"
+    head -c "$len" /dev/urandom >"$SANDBOX/a.patch"
+    dd if="$SANDBOX/a.patch" of="$want" bs=1 seek="$at" conv=notrunc 2>/dev/null
+    fs.ext4 "$img" write --at "$at" "$p" <"$SANDBOX/a.patch" >"$SANDBOX/a.json" 2>"$SANDBOX/a.err"
+    local rc=$?
+    check "write --at $at $p exits 0 ($(cat "$SANDBOX/a.err"))" test "$rc" -eq 0
+    jq_check "write --at $at $p reports the path, the position, the bytes and the size" \
+        ".path == \"$p\" and .at == $at and .bytes == $len and .size == $size and (keys | length) == 4" \
+        "$SANDBOX/a.json"
+    check "$p reads back as dd wrote $len bytes at $at" cmp -s "$want" <(fs.ext4 "$img" read "$p")
+    fs.ext4 "$img" stat "$p" >"$SANDBOX/stat.json" 2>/dev/null
+    jq_check "$p is $size bytes, $allocated allocated, after the write at $at" \
+        ".size == $size and .allocated_bytes == $allocated" "$SANDBOX/stat.json"
+}
+written_at /a "$SANDBOX/a.want" 100 50 20000 20480
+written_at /a "$SANDBOX/a.want" 4000 200 20000 20480
+written_at /a "$SANDBOX/a.want" 19000 3000 22000 24576
+written_at /a "$SANDBOX/a.want" 22000 100 22100 24576
+written_at /a "$SANDBOX/a.want" 30000 10 30010 28672
+written_at /a "$SANDBOX/a.want" 25000 100 30010 32768
+written_at /e "$SANDBOX/e.want" 8192 4097 12289 8192
+printf xy >"$SANDBOX/xy"
+fs.ext4 "$img" write --text --at 0 /e <"$SANDBOX/xy" >"$SANDBOX/a.txt" 2>/dev/null
+check "write --at --text says what was written where" \
+    test "$(cat "$SANDBOX/a.txt")" = "wrote 2 bytes at 0 into /e (12289 bytes)"
+
+# Nothing on stdin is nothing to write, so the image is not opened for
+# writing at all.
+cp "$img" "$SANDBOX/before-a.img"
+fs.ext4 "$img" write --at 5 /a </dev/null >"$SANDBOX/a.json" 2>"$SANDBOX/a.err"
+rc=$?
+check "write --at with nothing on stdin exits 0 ($(cat "$SANDBOX/a.err"))" test "$rc" -eq 0
+jq_check "write --at with nothing on stdin reports no bytes and the size it found" \
+    '.bytes == 0 and .size == 30010' "$SANDBOX/a.json"
+check "write --at with nothing on stdin left the image byte-identical" \
+    cmp -s "$img" "$SANDBOX/before-a.img"
+
+# Refusals are decided before the image is opened for writing, so each
+# leaves it byte-identical with nothing on stdout. A missing file is not
+# created and a symlink is never followed. A position past the largest
+# file an extent can address is refused; one that is not a byte count is
+# a usage error (exit 2).
+write_at_refused() {
+    local code="$1" why="$2" p="$3" at="$4"
+    fs.ext4 "$img" write --at "$at" "$p" <"$SANDBOX/xy" >"$SANDBOX/x.out" 2>"$SANDBOX/x.err"
+    local rc=$?
+    check "write --at '$at' ${p:0:40} exits $code, not $rc" test "$rc" -eq "$code"
+    check "write --at '$at' ${p:0:40} prints nothing on stdout" test ! -s "$SANDBOX/x.out"
+    jq_check "write --at '$at' ${p:0:40} is refused: $why" \
+        ".code == $code and (.error | test(\"$why\"))" "$SANDBOX/x.err"
+    check "write --at '$at' ${p:0:40} left the image byte-identical" \
+        cmp -s "$img" "$SANDBOX/before-a.img"
+}
+write_at_refused 1 "is a directory" /d 0
+write_at_refused 1 "is a directory" / 0
+write_at_refused 1 "is a directory" /a/ 0
+write_at_refused 4 "not a directory" /a/x 0
+write_at_refused 4 "not found" /missing 0
+write_at_refused 4 "not found" /missing/x 0
+write_at_refused 1 "name too long" "/$long" 0
+write_at_refused 4 "not found" "" 0
+write_at_refused 1 "symlink" /fl 0
+write_at_refused 1 "symlink" /dl 0
+write_at_refused 4 "not a directory" /dl/e 0
+write_at_refused 1 "too large" /a 1125899906842624
+write_at_refused 1 "too large" /a 18446744073709551615
+for at in -1 12x 1K 18446744073709551616 ""; do
+    write_at_refused 2 "" /a "$at"
+done
+
+# --offset is where the filesystem starts: a MiB of zeros before it is
+# never touched.
+off="$SANDBOX/offset.img"
+{ head -c 1048576 /dev/zero; cat "$img"; } >"$off"
+fs.ext4 --offset 1048576 "$off" mkdir -p /o1/o2 >"$SANDBOX/o.json" 2>"$SANDBOX/o.err"
+rc=$?
+check "mkdir -p with --offset exits 0 ($(cat "$SANDBOX/o.err"))" test "$rc" -eq 0
+check "mkdir -p with --offset made the chain" \
+    test "$(fs.ext4 --offset 1048576 "$off" stat /o1/o2 2>/dev/null | jq -r .type)" = dir
+fs.ext4 --offset 1048576 "$off" truncate /f4096 100 >/dev/null 2>"$SANDBOX/o.err"
+rc=$?
+check "truncate with --offset exits 0 ($(cat "$SANDBOX/o.err"))" test "$rc" -eq 0
+check "truncate with --offset kept the first 100 bytes" \
+    cmp -s <(head -c 100 "$SANDBOX/src.4096") <(fs.ext4 --offset 1048576 "$off" read /f4096)
+fs.ext4 --offset 1048576 "$off" write --at 10 /f4096 <"$SANDBOX/xy" >/dev/null 2>"$SANDBOX/o.err"
+rc=$?
+check "write --at with --offset exits 0 ($(cat "$SANDBOX/o.err"))" test "$rc" -eq 0
+check "write --at with --offset wrote at 10 bytes into the file" \
+    cmp -s <(head -c 10 "$SANDBOX/src.4096"; printf xy; head -c 100 "$SANDBOX/src.4096" | tail -c 88) \
+    <(fs.ext4 --offset 1048576 "$off" read /f4096)
+check "the MiB before --offset is still zeros" cmp -s <(head -c 1048576 "$off") <(head -c 1048576 /dev/zero)
+fsck.ext4 --offset 1048576 "$off" >/dev/null 2>&1
+check "fsck.ext4 at --offset after mkdir -p exits 0" test $? -eq 0
 
 # The volume is clean afterwards, by our checker and by the flag.
 fsck.ext4 "$img" >"$SANDBOX/fsck.json" 2>/dev/null

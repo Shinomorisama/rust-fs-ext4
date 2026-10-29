@@ -936,6 +936,39 @@ fn assert_unconditional(job: &Yaml, name: &str, workflow: &str) {
         !carries_a_non_gating_key(&keys_of(job)),
         "{workflow} jobs.{name} must not be conditional or allowed to fail"
     );
+    assert_steps_unconditional(job, name, workflow);
+}
+
+/// As `assert_unconditional`, but the job may carry the one condition
+/// rust-fs-core's ci-gate accepts: `if: needs.changes.outputs.code ==
+/// 'true'`, needing `changes`. It is skipped, with the jobs after it, for a
+/// change to documentation alone, and ci-ok accepts that skip only then.
+/// Any other condition, and `continue-on-error`, is still refused.
+fn assert_unconditional_or_skipped_for_documentation(job: &Yaml, name: &str, workflow: &str) {
+    let keys = keys_of(job);
+    assert!(
+        !keys.iter().any(|k| k == "continue-on-error"),
+        "{workflow} jobs.{name} must not be allowed to fail"
+    );
+    if let Some(condition) = field(job, "if") {
+        assert!(
+            matches!(
+                condition.as_str(),
+                Some("needs.changes.outputs.code == 'true'")
+                    | Some("needs.changes.outputs.profile == 'full' && needs.changes.outputs.code == 'true'")
+            ),
+            "{workflow} jobs.{name} may be skipped only for a change to documentation alone, \
+             or for the quick profile that scripts/ci-plan.sh plans for a pull request"
+        );
+        assert!(
+            needs_of(job).iter().any(|n| n == "changes"),
+            "{workflow} jobs.{name} is gated on the changes job, so it must need it"
+        );
+    }
+    assert_steps_unconditional(job, name, workflow);
+}
+
+fn assert_steps_unconditional(job: &Yaml, name: &str, workflow: &str) {
     for (at, step) in steps_of(job, name).iter().enumerate() {
         let keys = keys_of(step);
         // A STEP THAT RUNS NO COMMAND CANNOT GATE, AND MAY BE
@@ -1243,7 +1276,7 @@ fn the_pr_gate_builds_fixtures_once_in_the_harness_vm_and_tests_both_architectur
 
     // jobs.fixtures
     let fixtures = job(&document, "fixtures", &path);
-    assert_unconditional(fixtures, "fixtures", "ci.yml");
+    assert_unconditional_or_skipped_for_documentation(fixtures, "fixtures", "ci.yml");
     let runner = field(fixtures, "runs-on")
         .and_then(Yaml::as_str)
         .unwrap_or("");
@@ -3456,6 +3489,36 @@ fn every_declaration_of_the_am_fs_core_pin_names_the_same_version() {
     );
 }
 
+/// The oldest `rust-fs-core` release that carries the shared tree
+/// source: `TreeSource`, recursive export reporting every item, name
+/// collision refusals, `--preserve=links`, `--preserve=times`, progress
+/// on stderr and cancellation before publication.
+const CORE_WITH_TREE_SOURCE: [u64; 3] = [0, 3, 15];
+
+/// The `rust-fs-core` this crate is pinned to carries the shared tree
+/// source that `export --recursive` (#546) adapts.
+///
+/// 0.3.14 carries only `FileSource` and single-file export, so
+/// recursive export cannot be wired against it without copying the
+/// shared engine into this driver (#570).
+#[test]
+fn the_rust_fs_core_pin_carries_the_shared_tree_source() {
+    let root = manifest_dir();
+    let (_, pinned) = am_fs_core_versions_declared(&read_or_panic(&root.join("Cargo.toml")))
+        .into_iter()
+        .next()
+        .expect("Cargo.toml declares the rust-fs-core pin");
+    let parts: Vec<u64> = pinned
+        .split('.')
+        .map(|p| p.parse().expect("the rust-fs-core pin is numeric"))
+        .collect();
+    assert!(
+        parts.as_slice() >= CORE_WITH_TREE_SOURCE.as_slice(),
+        "rust-fs-core is pinned at {pinned}, older than {CORE_WITH_TREE_SOURCE:?}, the \
+         first release carrying the shared tree source recursive export needs"
+    );
+}
+
 mod core_pin_parser {
     use super::{am_fs_core_versions_declared, as_version};
 
@@ -3575,7 +3638,7 @@ fn ci_cancels_only_a_pull_requests_superseded_run() {
     }
     assert_eq!(
         cancel.as_deref(),
-        Some("${{ github.event_name == 'pull_request' }}"),
+        Some("${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'red:') }}"),
         "ci.yml cancels a run that is not a pull request's"
     );
     let group = group.expect("ci.yml declares a concurrency group");
@@ -3583,5 +3646,89 @@ fn ci_cancels_only_a_pull_requests_superseded_run() {
         group.contains("github.event.pull_request.number || github.sha"),
         "ci.yml's concurrency group is shared between pushes, so a queued push run is \
          cancelled by the next: {group}"
+    );
+}
+
+/// Every `curl` command in a shell script or workflow, comments dropped and
+/// `\` continuations joined, so a flag on the next line still counts.
+fn curl_commands(text: &str) -> Vec<String> {
+    let mut commands = Vec::new();
+    let mut joined = String::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') {
+            continue;
+        }
+        let continued = line.ends_with('\\');
+        joined.push_str(line.trim_end_matches('\\'));
+        joined.push(' ');
+        if continued {
+            continue;
+        }
+        if joined
+            .split(|c: char| c.is_whitespace() || c == '(' || c == '|')
+            .any(|word| word == "curl")
+        {
+            commands.push(joined.trim().to_string());
+        }
+        joined.clear();
+    }
+    commands
+}
+
+/// Whether a `curl` command survives one transient server error: it retries
+/// at least three times, and on any error, not only on a refused connection.
+fn retries_a_transient_error(command: &str) -> bool {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    let retries = words
+        .windows(2)
+        .find(|pair| pair[0] == "--retry")
+        .and_then(|pair| pair[1].parse::<u32>().ok())
+        .unwrap_or(0);
+    retries >= 3 && words.contains(&"--retry-all-errors")
+}
+
+/// The chore download retries a transient HTTP 5xx from the release CDN.
+///
+/// GitHub's release download answers an occasional HTTP 500, and a `curl`
+/// with no retry turns that one answer into a red job before any of the
+/// change under test has run. The checksum check that follows the download
+/// still guards what was fetched, so retrying is safe. This covers the
+/// installer script and any workflow that downloads a chore release itself.
+#[test]
+fn the_chore_download_retries_a_transient_server_error() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut sources = Vec::new();
+    let installer = root.join("scripts/ci-install-chore.sh");
+    if installer.exists() {
+        sources.push(installer);
+    }
+    for entry in std::fs::read_dir(root.join(".github/workflows")).expect("read .github/workflows")
+    {
+        sources.push(entry.expect("a workflow").path());
+    }
+    let mut downloads = 0;
+    let mut bare = Vec::new();
+    for path in &sources {
+        let text = std::fs::read_to_string(path).expect("read a chore download source");
+        let is_installer = path.ends_with("scripts/ci-install-chore.sh");
+        for command in curl_commands(&text) {
+            if !is_installer && !command.contains("chore/releases/download") {
+                continue;
+            }
+            downloads += 1;
+            if !retries_a_transient_error(&command) {
+                bare.push(format!("{}: {command}", path.display()));
+            }
+        }
+    }
+    assert!(
+        downloads > 0,
+        "found no chore download to check; the guard is looking in the wrong place"
+    );
+    assert!(
+        bare.is_empty(),
+        "these chore downloads fail the job on one transient HTTP 5xx; \
+         add `--retry 5 --retry-all-errors --retry-delay 2`: {bare:#?}"
     );
 }

@@ -263,6 +263,30 @@ fn is_dot_or_dotdot(name: &[u8]) -> bool {
     name == b"." || name == b".."
 }
 
+/// The indirect blocks a block-mapped file of `data` blocks needs, with
+/// `pointers` block numbers to an indirect block: none for the 12 direct
+/// blocks, one single-indirect block, a double-indirect block and its
+/// single-indirect blocks, then a triple-indirect block and the double- and
+/// single-indirect blocks under it.
+fn indirect_blocks(data: u64, pointers: u64) -> u64 {
+    let mut left = data.saturating_sub(12);
+    if left == 0 {
+        return 0;
+    }
+    let mut meta = 1;
+    left = left.saturating_sub(pointers);
+    if left == 0 {
+        return meta;
+    }
+    let per_double = pointers.saturating_mul(pointers);
+    meta += 1 + left.min(per_double).div_ceil(pointers);
+    left = left.saturating_sub(per_double);
+    if left == 0 {
+        return meta;
+    }
+    meta + 1 + left.div_ceil(per_double) + left.div_ceil(pointers)
+}
+
 /// Split a `/a/b/c` path into (`/a/b`, `c`). Returns an error for empty or
 /// `"/"` paths (no basename to act on).
 ///
@@ -600,6 +624,10 @@ const PWRITE_CHUNK_MAX_BYTES: u64 = 32 * 1024 * 1024;
 /// The longest volume label [`Filesystem::set_volume_label`] takes: the
 /// 16 bytes of `s_volume_name`.
 pub const VOLUME_LABEL_MAX: usize = 16;
+
+/// The most symbolic links one path lookup follows: the Linux kernel's
+/// `MAXSYMLINKS`. The next one is [`Error::SymlinkLoop`].
+pub const MAX_SYMLINKS: u32 = 40;
 
 /// Clean blocks the buffer cache of a [`Filesystem::mount`] keeps: about
 /// 1 MiB at 4 KiB blocks. `docs/read-path-cost.md` records what it buys on a
@@ -1797,25 +1825,105 @@ impl Filesystem {
     /// file whose name it holds, and one naming nothing is
     /// [`Error::NotFound`]. Every path-addressed `apply_*` resolves through
     /// here; each `&str` form is its byte form with `str::as_bytes` (#418).
+    ///
+    /// A symbolic link met before the final component is followed, as the
+    /// Linux kernel follows it: its target is walked in its place, from the
+    /// root when it starts with `/` and otherwise from the directory that
+    /// holds the link. A trailing slash requires a directory and follows
+    /// the final link too (#559). Without that slash, a verb that operates
+    /// on a link (`unlink`, `lstat`, `readlink`) gets the link itself.
+    /// More than [`MAX_SYMLINKS`] links in one lookup is
+    /// [`Error::SymlinkLoop`], and a link with an empty target is
+    /// [`Error::NotFound`], both as the kernel answers (#531).
     pub fn lookup_path_bytes(&self, path: &[u8]) -> Result<u32> {
-        let mut reader = |ino: u32| self.read_inode_verified(ino).map(|(i, _)| i);
-        crate::path::lookup_bytes_with_csum(
-            self.dev.as_ref(),
-            &self.sb,
-            &mut reader,
-            path,
-            &self.csum,
-        )
+        self.walk_path(path, false)
+    }
+
+    /// Resolve `path` as the directory an operation on a name inside it
+    /// edits: as [`lookup_path_bytes`](Self::lookup_path_bytes), but a
+    /// symbolic link as the final component is followed too, as the kernel
+    /// follows every component of a name's parent, so `unlink dirlink/x`
+    /// edits the directory `dirlink` names (#564).
+    pub fn lookup_dir_path_bytes(&self, path: &[u8]) -> Result<u32> {
+        self.walk_path(path, true)
+    }
+
+    /// The walk behind both lookups; `follow_last` says whether a symlink
+    /// as the final component is followed.
+    fn walk_path(&self, path: &[u8], follow_last: bool) -> Result<u32> {
+        // The components still to walk, the next one last.
+        let mut pending: Vec<Vec<u8>> = Vec::new();
+        let push = |pending: &mut Vec<Vec<u8>>, p: &[u8]| {
+            // Walking `.` after a trailing slash both follows the preceding
+            // link and checks that it names a directory. Keep this requirement
+            // for expanded targets too (cli_path_symlink_kernel.rs, #559).
+            if p.ends_with(b"/") {
+                pending.push(b".".to_vec());
+            }
+            let parts = p.split(|&b| b == b'/').filter(|c| !c.is_empty());
+            pending.extend(parts.rev().map(<[u8]>::to_vec));
+        };
+        push(&mut pending, path);
+
+        let mut current = crate::path::EXT4_ROOT_INODE;
+        let mut followed = 0;
+        while let Some(name) = pending.pop() {
+            let (dir, _) = self.read_inode_verified(current)?;
+            if !dir.is_dir() {
+                return Err(Error::NotADirectory);
+            }
+            // `.` is the directory itself, taken without a lookup as the
+            // kernel takes it: an htree directory files `.` in its dx_root,
+            // where a hashed lookup never looks, so `/` and every path under
+            // an indexed root would be NotFound.
+            let child = if name == b"." {
+                current
+            } else {
+                crate::path::find_entry(
+                    self.dev.as_ref(),
+                    &self.sb,
+                    current,
+                    &dir,
+                    &name,
+                    &self.csum,
+                )?
+            };
+            if pending.is_empty() && !follow_last {
+                return Ok(child);
+            }
+            if !self.read_inode_verified(child)?.0.is_symlink() {
+                current = child;
+                continue;
+            }
+            followed += 1;
+            if followed > MAX_SYMLINKS {
+                return Err(Error::SymlinkLoop);
+            }
+            let target = self.read_link(child)?;
+            if target.is_empty() {
+                return Err(Error::NotFound);
+            }
+            if target[0] == b'/' {
+                current = crate::path::EXT4_ROOT_INODE;
+            }
+            push(&mut pending, &target);
+        }
+        Ok(current)
     }
 
     fn resolve(&self, path: &[u8]) -> Result<u32> {
         self.lookup_path_bytes(path)
     }
 
+    /// Resolve the directory `path` names, following a final symlink.
+    fn resolve_dir(&self, path: &[u8]) -> Result<u32> {
+        self.lookup_dir_path_bytes(path)
+    }
+
     /// Resolve the parent of `path`, for an operation on its final name.
     fn resolve_parent<'p>(&self, path: &'p [u8]) -> Result<(u32, &'p [u8])> {
         let (parent, base) = split_parent_and_base(path)?;
-        Ok((self.resolve(parent)?, base))
+        Ok((self.resolve_dir(parent)?, base))
     }
 
     /// [`resolve_parent`](Self::resolve_parent) for an operation that files
@@ -1826,7 +1934,7 @@ impl Filesystem {
         if base.len() > 255 {
             return Err(Error::NameTooLong);
         }
-        Ok((self.resolve(parent)?, base))
+        Ok((self.resolve_dir(parent)?, base))
     }
 
     /// Read the inode `r` names, refusing a handle that no longer names a
@@ -2011,6 +2119,45 @@ impl Filesystem {
         } else {
             self.apply_truncate_shrink(r.ino, new_size)
         }
+    }
+
+    /// Largest byte length addressable by this inode's block mapping.
+    /// Inline files are converted to extent mapping when they grow beyond
+    /// their inline area, so their eventual limit is the extent limit.
+    pub fn max_file_size_ino(&self, ino: u32) -> Result<u64> {
+        let (inode, _) = self.live_inode(ino.into())?;
+        Ok(self.max_file_size(&inode))
+    }
+
+    /// The kernel's largest length, as measured for every block size,
+    /// mapping format and `huge_file` setting the guest mounts (#538,
+    /// `truncate_refuses_sizes_past_the_mapping_limit_the_kernel_enforces`).
+    /// A file holds at most `2^32 - 1` blocks. Without `huge_file`, its
+    /// block count is also held to what a 32-bit `i_blocks` of 512-byte
+    /// sectors records: an extent file reaches exactly that many blocks,
+    /// and a block-mapped one that many less the indirect blocks a file of
+    /// that size would need. On 4 KiB blocks that is 536 346 110 blocks,
+    /// which the indirect map alone would allow twice over.
+    fn max_file_size(&self, inode: &Inode) -> u64 {
+        let block_size = u64::from(self.sb.block_size());
+        let sectors_per_block = block_size / 512;
+        let sector_cap = (self.sb.feature_ro_compat & features::RoCompat::HUGE_FILE.bits() == 0)
+            .then(|| u64::from(u32::MAX) / sectors_per_block);
+        let max_blocks = if inode.has_extents() || inode.has_inline_data() {
+            sector_cap.unwrap_or(u64::MAX).min(u64::from(u32::MAX))
+        } else {
+            let pointers = block_size / 4;
+            let mapped = 12u64
+                .saturating_add(pointers)
+                .saturating_add(pointers.saturating_mul(pointers))
+                .saturating_add(pointers.saturating_pow(3))
+                .min(u64::from(u32::MAX));
+            match sector_cap {
+                Some(cap) => mapped.min(cap - indirect_blocks(cap, pointers)),
+                None => mapped,
+            }
+        };
+        max_blocks.saturating_mul(block_size)
     }
 
     /// Map a logical block within `inode` to its physical block, choosing
@@ -2604,6 +2751,9 @@ impl Filesystem {
             return Err(Error::InvalidArgument(
                 "apply_truncate_grow: new_size < old_size (use apply_truncate_shrink)",
             ));
+        }
+        if new_size > self.max_file_size(&inode) {
+            return Err(Error::FileTooLarge);
         }
         if inode.has_inline_data() {
             return self.truncate_inline_file(ino, &inode, raw, new_size);
@@ -4190,11 +4340,11 @@ impl Filesystem {
     /// - `Error::NotFound` if the entry isn't present in either region.
     /// - `Error::InvalidArgument` on namespace-prefix issues.
     pub fn apply_removexattr(&self, path: &str, name: &str) -> Result<()> {
-        self.apply_removexattr_bytes(path.as_bytes(), name)
+        self.apply_removexattr_bytes(path.as_bytes(), name.as_bytes())
     }
 
     /// [`apply_removexattr`](Self::apply_removexattr) of a path given as bytes, never decoded.
-    pub(crate) fn apply_removexattr_bytes(&self, path: &[u8], name: &str) -> Result<()> {
+    pub(crate) fn apply_removexattr_bytes(&self, path: &[u8], name: &[u8]) -> Result<()> {
         self.refuse_write()?;
         let ino = self.resolve(path)?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
@@ -4218,7 +4368,7 @@ impl Filesystem {
         // does not parse one there (#380).
         if i_extra_isize != 0 && region_start + 4 <= region_end {
             let region = &mut raw[region_start..region_end];
-            if crate::xattr::plan_remove_in_inode_region(region, name)?
+            if crate::xattr::plan_remove_in_inode_region_raw(region, name)?
                 == crate::xattr::RemoveOutcome::Removed
             {
                 found = true;
@@ -4255,7 +4405,7 @@ impl Filesystem {
         ino: u32,
         inode: &crate::inode::Inode,
         raw: &mut [u8],
-        name: &str,
+        name: &[u8],
     ) -> Result<bool> {
         if inode.file_acl == 0 {
             return Ok(false);
@@ -4263,7 +4413,7 @@ impl Filesystem {
         let block_nr = inode.file_acl;
         let mut block = self.buffer_read_xattr_block(buf, block_nr)?;
         let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
-        match crate::xattr::plan_remove_from_external_block(&mut block, name, 1)? {
+        match crate::xattr::plan_remove_from_external_block_raw(&mut block, name, 1)? {
             crate::xattr::BlockRemoveOutcome::NotFound => Ok(false),
             crate::xattr::BlockRemoveOutcome::Removed if refs > 1 => {
                 // Shared: this inode's remaining attributes move to a
@@ -4308,11 +4458,12 @@ impl Filesystem {
     ///    Returns `Error::NoSpaceLeftOnDevice` if even a full block can't
     ///    hold the new layout.
     pub fn apply_setxattr(&self, path: &str, name: &str, value: &[u8]) -> Result<()> {
-        self.apply_setxattr_bytes(path.as_bytes(), name, value)
+        self.apply_setxattr_bytes(path.as_bytes(), name.as_bytes(), value)
     }
 
-    /// [`apply_setxattr`](Self::apply_setxattr) of a path given as bytes, never decoded.
-    pub(crate) fn apply_setxattr_bytes(&self, path: &[u8], name: &str, value: &[u8]) -> Result<()> {
+    /// [`apply_setxattr`](Self::apply_setxattr) of a path and a name given
+    /// as bytes, never decoded: Linux takes any bytes but NUL in either.
+    pub fn apply_setxattr_bytes(&self, path: &[u8], name: &[u8], value: &[u8]) -> Result<()> {
         self.refuse_write()?;
         let ino = self.resolve(path)?;
         let (inode, mut raw) = self.read_inode_verified(ino)?;
@@ -4345,7 +4496,7 @@ impl Filesystem {
         // Try in-inode first; on overflow fall through to the external block.
         let inline_result = if inline_capable {
             let region = &mut raw[region_start..region_end];
-            crate::xattr::plan_set_in_inode_region(region, name, value)
+            crate::xattr::plan_set_in_inode_region_raw(region, name, value)
         } else {
             Err(Error::NoSpaceLeftOnDevice)
         };
@@ -4361,6 +4512,14 @@ impl Filesystem {
             Ok(_) => {
                 // In-inode rewrite already in `raw`.
                 let mut buf = BlockBuffer::new(self.sb.block_size());
+                // An attribute on a volume without COMPAT_EXT_ATTR is one
+                // debugfs does not list and e2fsck ignores, whichever place
+                // holds it. The external-block path sets the feature (#88);
+                // so does this, in the same transaction, with the
+                // superblock checksum.
+                if self.sb.feature_compat & features::Compat::EXT_ATTR.bits() == 0 {
+                    self.buffer_patch_sb_compat(&mut buf, features::Compat::EXT_ATTR.bits())?;
+                }
                 if self.buffer_remove_from_external_block(&mut buf, ino, &inode, &mut raw, name)? {
                     set_inode_time(&mut raw, InodeTime::Ctime, self.runtime.now_unix_seconds());
                 }
@@ -4374,7 +4533,7 @@ impl Filesystem {
                 // new one, and `raw` carries that into the same commit.
                 if inline_capable {
                     let region = &mut raw[region_start..region_end];
-                    crate::xattr::plan_remove_in_inode_region(region, name)?;
+                    crate::xattr::plan_remove_in_inode_region_raw(region, name)?;
                 }
                 self.apply_setxattr_external_block(ino, &inode, &mut raw, name, value)
             }
@@ -4404,7 +4563,7 @@ impl Filesystem {
         ino: u32,
         inode: &crate::inode::Inode,
         raw: &mut [u8],
-        name: &str,
+        name: &[u8],
         value: &[u8],
     ) -> Result<()> {
         let bs = self.sb.block_size();
@@ -4427,7 +4586,7 @@ impl Filesystem {
             let block_nr = inode.file_acl;
             let mut block = self.buffer_read_xattr_block(&mut buf, block_nr)?;
             let refs = u32::from_le_bytes(block[4..8].try_into().unwrap());
-            crate::xattr::plan_set_in_external_block(&mut block, name, value, 1)?;
+            crate::xattr::plan_set_in_external_block_raw(&mut block, name, value, 1)?;
             if refs > 1 {
                 // Shared: the edit is this inode's alone, so it gets its
                 // own block. One block before and after, so i_blocks holds.
@@ -4461,7 +4620,7 @@ impl Filesystem {
         let block_nr = plan.first_block;
 
         let mut block = vec![0u8; bs as usize];
-        crate::xattr::plan_set_in_external_block(&mut block, name, value, 1)?;
+        crate::xattr::plan_set_in_external_block_raw(&mut block, name, value, 1)?;
         if self.csum.enabled {
             self.csum.patch_xattr_block(block_nr, &mut block);
         }
@@ -4758,7 +4917,7 @@ impl Filesystem {
         // so snapshot the flag first.
         let trailing_slash = path.len() > 1 && path.ends_with(b"/");
         let (parent_path, base_name) = split_parent_and_base(path)?;
-        let parent_ino = self.resolve(parent_path)?;
+        let parent_ino = self.resolve_dir(parent_path)?;
         if trailing_slash {
             // The call fails either way; only the errno depends on what the
             // name is: a directory is EISDIR, as unlink(2) says of any
@@ -5106,14 +5265,16 @@ impl Filesystem {
     /// at the link path.
     ///
     /// Two storage paths:
-    /// - **Fast symlink** (`target.len() <= 60`): target stored inline in
+    /// - **Fast symlink** (`target.len() < 60`): target stored inline in
     ///   the 60-byte `i_block` area; no data-block allocation.
-    /// - **Slow symlink** (`61..=255` bytes): one filesystem block is
+    /// - **Slow symlink** (60 bytes or more): one filesystem block is
     ///   allocated and the target is written there, with an EXTENTS
     ///   i_block pointing at it.
     ///
-    /// POSIX caps symlink targets at SYMLINK_MAX (255 bytes on Linux +
-    /// macOS). Longer returns `Error::NameTooLong` → ENAMETOOLONG.
+    /// The target and a terminating NUL must fit in one filesystem block
+    /// and within the 4096-byte path limit: at most 1023 bytes on a 1 KiB
+    /// volume, or 4095 on a 4 KiB volume. Longer returns
+    /// `Error::NameTooLong` → ENAMETOOLONG.
     pub fn apply_symlink(&self, target: &str, linkpath: &str) -> Result<u32> {
         self.apply_symlink_bytes(target.as_bytes(), linkpath.as_bytes())
     }
@@ -5136,10 +5297,10 @@ impl Filesystem {
                 "a symlink target cannot contain a NUL byte",
             ));
         }
-        // PATH_MAX cap (matches Linux). Slow path allocates exactly one fs
-        // block, so we additionally require target.len() <= block_size — the
-        // 4096 ceiling matches the typical ext4 block size and Linux PATH_MAX.
-        let max_target = 4096usize.min(self.sb.block_size() as usize);
+        // Both the path limit and our single data block must leave room for
+        // the terminating NUL, as symlinkat on the kernel's mount requires
+        // (tests/symlink_target_kernel.rs).
+        let max_target = 4096usize.min(self.sb.block_size() as usize) - 1;
         if target.len() > max_target {
             return Err(Error::NameTooLong);
         }
@@ -6741,7 +6902,7 @@ impl Filesystem {
         if self.live_inode(src_ino.into())?.0.is_dir() {
             return Err(Error::IsADirectory);
         }
-        let dst_parent = self.resolve(dst_parent_path)?;
+        let dst_parent = self.resolve_dir(dst_parent_path)?;
         self.apply_link_at(src_ino, dst_parent, dst_name)
     }
 
@@ -6855,8 +7016,8 @@ impl Filesystem {
         if dst_name.len() > 255 {
             return Err(Error::NameTooLong);
         }
-        let src_parent = self.resolve(src_parent_path)?;
-        let dst_parent = self.resolve(dst_parent_path)?;
+        let src_parent = self.resolve_dir(src_parent_path)?;
+        let dst_parent = self.resolve_dir(dst_parent_path)?;
         self.apply_rename_at(
             src_parent,
             src_name,
@@ -8120,6 +8281,22 @@ mod tests {
         EXTRA_ISIZE_DEFAULT, INODE_SIZE_WITH_CRTIME, INODE_SIZE_WITH_EXTRA, OFF_ATIME, OFF_CRTIME,
         OFF_CTIME, OFF_EXTRA_ISIZE, OFF_GENERATION, OFF_MTIME,
     };
+
+    #[test]
+    fn indirect_blocks_reproduce_the_measured_block_map_limit() {
+        // The guest kernel's largest block-mapped file on 4 KiB blocks
+        // without huge_file is 536 346 110 blocks (#538): the 32-bit
+        // sector count's 536 870 911 blocks less the indirect blocks a
+        // file of that many would need.
+        let cap = u64::from(u32::MAX) / 8;
+        assert_eq!(indirect_blocks(cap, 1024), 524_801);
+        assert_eq!(cap - indirect_blocks(cap, 1024), 536_346_110);
+        assert_eq!(indirect_blocks(12, 1024), 0);
+        assert_eq!(indirect_blocks(13, 1024), 1);
+        assert_eq!(indirect_blocks(12 + 1024, 1024), 1);
+        assert_eq!(indirect_blocks(12 + 1024 + 1, 1024), 3);
+        assert_eq!(indirect_blocks(12 + 1024 + 1024 * 1024, 1024), 1 + 1 + 1024);
+    }
 
     fn read_le32(buf: &[u8], off: usize) -> u32 {
         u32::from_le_bytes(buf[off..off + 4].try_into().unwrap())

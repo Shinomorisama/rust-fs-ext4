@@ -88,22 +88,27 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
-#     unit        765 /  46,832    1,050 /  65,000   ~37% / ~39%: tests get
-#                                                    added, and this is the
-#                                                    tier every one of them
-#                                                    starts in. 530 / 31,331
-#                                                    for #257; 642 / 38,550 on
-#                                                    main at 05d683c (#422);
-#                                                    RE-MEASURED on the stack
-#                                                    of the #70 audit fixes:
-#                                                    CI printed 765 / 46,832
-#                                                    at #417, and the stack
-#                                                    top (#431, with the
-#                                                    inode API's tests) prints
-#                                                    819 / 49,891 on a host
-#                                                    run -- 109 bytes under
-#                                                    850 / 50,000, before CI's
-#                                                    longer paths are counted
+#     unit      1,068 /  62,225    1,390 /  81,000   ~30% / ~30%. RE-MEASURED
+#                                                    for #566 from the
+#                                                    tier-logs-unit artifact
+#                                                    of run 39139038148, job
+#                                                    117709441842, 7803d26:
+#                                                    the stack top holding
+#                                                    #554, #558 and #561, whose
+#                                                    code is e3ad142's (only
+#                                                    this file differs). All
+#                                                    715 tests passed in 40
+#                                                    binaries, no test chatter.
+#                                                    It failed the 1,050-line
+#                                                    cap with exit 65. #565
+#                                                    set 1,400 from #554 alone,
+#                                                    run 39129440115: 1,066 /
+#                                                    62,085. Was 765 /
+#                                                    46,832 at #417, with 819 /
+#                                                    49,891 on the #431 host;
+#                                                    earlier 530 / 31,331 for
+#                                                    #257 and 642 / 38,550 on
+#                                                    main at 05d683c (#422).
 #     images    1,081 /  47,123    1,400 /  60,000   ~29% / ~21%: not raised,
 #                                                    because a row raised
 #                                                    without a measurement
@@ -149,7 +154,37 @@ chore_min_version: 0.6.0
 #                                                    36404048578), which failed
 #                                                    the tier with exit 65 and
 #                                                    nothing red inside it
-#     kernel      352 /  27,924      460 /  36,300   ~31% / ~30%. Two binaries
+#     kernel      907 /  66,234    1,180 /  86,000   ~30% / ~30%. PR #602's
+#                                                    x86_64 merge-queue run
+#                                                    40603891696: 70 passing
+#                                                    tests; the 940 / 66,000
+#                                                    cap failed it with exit
+#                                                    65. Was 725 / 50,891 in
+#                                                    PR #561's
+#                                                    x86_64 merge-queue run
+#                                                    39172256275: 56 passing
+#                                                    tests, with #558's two in
+#                                                    cli_path_symlink_kernel.rs
+#                                                    and #561's two in
+#                                                    symlink_target_kernel.rs.
+#                                                    PR #558's own run
+#                                                    39172255026 printed
+#                                                    698 / 49,165 with only
+#                                                    cli_path_symlink_kernel.rs
+#                                                    added. Both passed every
+#                                                    test and failed the
+#                                                    680 / 49,000 cap with exit
+#                                                    65. Was 519 / 37,587 in
+#                                                    PR #537's
+#                                                    x86_64 merge-queue run
+#                                                    39075070772: 38 passing
+#                                                    tests, including two in
+#                                                    cli_mkdir_kernel.rs. Last
+#                                                    green main run 39066796244
+#                                                    printed 494 / 36,159 for
+#                                                    36 tests; mkdir adds 25
+#                                                    lines and six oracle calls.
+#                                                    Was 352 / 27,924 with two
 #                                                    more: group_layout_oracle.rs
 #                                                    (nine tests, two of them
 #                                                    kernel resizes) and
@@ -257,7 +292,13 @@ vars:
   # release, run as `../rust-fs-core/scripts/ci-gate.sh`. It is v0.2.23 because the
   # release tarball is core's from that release: release.yml calls its
   # release-cli workflow, which runs `../rust-fs-core/scripts/package-cli.sh` (#481).
-  FS_CORE_REF: v0.3.6
+  # v0.3.14 provides the shared bounded single-file export, and v0.3.15 the
+  # shared tree source recursive export adapts (#570). v0.3.17 has
+  # `CliError::refused_by_state`, the exit 4 a namespace verb gives when the
+  # volume's state refuses it (#592). v0.4.1 has `CliError::not_found`, the
+  # kind a reading verb gives a path that does not exist, and agent-core v8;
+  # v0.4.2 is that release building on Rust 1.89, as this crate's msrv needs.
+  FS_CORE_REF: v0.4.2
   LINUX_HARNESS_URL: https://github.com/antimatter-studios/fs-linux-test-harness.git
   # v0.3.0 is the release with `vm.sh session`, which the test runner runs
   # cargo through so a run gives the VM and the machine-wide slot back
@@ -447,8 +488,10 @@ tasks:
     # rather than listed here. CI runs this job with no fixtures present,
     # which is what proves the split.
     cmds:
-      - 'EXPECT_OVERFLOW_CHECKS=1 ../rust-fs-core/scripts/tier.sh test:unit unit 1050 65000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
-      - 'bash ../rust-fs-core/scripts/test-floor.sh unit 440'
+      - 'EXPECT_OVERFLOW_CHECKS=1 ../rust-fs-core/scripts/tier.sh test:unit unit 1390 81000 -- scripts/test.sh --locked $(scripts/test-targets.sh unit)'
+      # #536 and #538 each add one boundary/error-mapping regression in inode_api.rs.
+      # #559 adds one trailing-slash lookup regression in inode_api.rs.
+      - 'bash ../rust-fs-core/scripts/test-floor.sh unit 443'
 
   # EVERY TIER SAYS HOW FEW TESTS STILL COUNT AS HAVING RUN IT (#271).
   #
@@ -523,9 +566,45 @@ tasks:
     # sizes, modes, xattrs, ACLs and SHA-256 of contents against what was
     # written — plus the reverse direction, and a deliberate corruption
     # that must fail.
+    #
+    # BUDGET: 519 lines and 37587 bytes in x86_64 merge-queue run
+    # 39075070772 (kernel.log), with all 38 tests passing. Last green main
+    # run 39066796244 printed 494 lines and 36159 bytes for 36 tests.
+    # cli_mkdir_kernel.rs adds two tests, 25 lines and six oracle calls
+    # (1428 more bytes overall). Keep that oracle evidence; 680 / 49000
+    # gives about 30% headroom over the measured log, replacing 510 / 36300.
+    # cli_xattr_kernel.rs adds one test making two oracle calls, estimated
+    # at 17 lines and about 1.1 KB, within this measured budget.
+    # cli_export_kernel.rs adds a two-test binary and six oracle calls;
+    # its earlier estimate was 40 lines and 3 KB, within this budget.
+    # RE-MEASURED: 698 lines and 49165 bytes in x86_64 merge-queue run
+    # 39172255026 (kernel.log) for PR #558, and 725 lines and 50891 bytes
+    # in run 39172256275 for PR #561, all 56 tests passing; the 680 / 49000
+    # cap failed both with exit 65. 940 / 66000 keeps about 30% headroom
+    # over the larger log, replacing 680 / 49000.
+    # RE-MEASURED: 907 lines and 66234 bytes in x86_64 merge-queue run
+    # 40603891696 (kernel.log) for PR #602, all 70 tests passing; the
+    # 940 / 66000 cap failed it with exit 65. 1180 / 86000 keeps about 30%
+    # headroom over that log, replacing 940 / 66000.
     cmds:
-      - '../rust-fs-core/scripts/tier.sh test:kernel kernel 460 36300 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
-      - 'bash ../rust-fs-core/scripts/test-floor.sh kernel 3'
+      - '../rust-fs-core/scripts/tier.sh test:kernel kernel 1180 86000 -- scripts/test.sh --locked --release $(scripts/test-targets.sh kernel) -- --show-output'
+      # 27 executed in the merge queue on 2026-10-17 (run 38991557768);
+      # cli_ls_recursive_kernel.rs adds one, cli_rm_kernel.rs two,
+      # cli_mv_kernel.rs two, cli_ln_kernel.rs two, cli_mkdir_kernel.rs
+      # two, cli_truncate_kernel.rs three, cli_pwrite_kernel.rs four and
+      # cli_xattr_kernel.rs one and cli_export_kernel.rs two.
+      # cli_import_kernel.rs adds three cases, including a subprocess crash cut,
+      # and cli_path_symlink_kernel.rs two. symlink_target_kernel.rs adds
+      # two cases comparing the 1 KiB and 4 KiB target boundaries (#536).
+      # #538 adds one kernel-boundary case (eight block-size/mapping/feature
+      # combinations) to cli_truncate_kernel.rs.
+      # cli_export_tree_kernel.rs adds one recursive tree export case (#573)
+      # and one links-and-times case (#574), plus one damaged-file case (#571).
+      # #559 adds one trailing-slash symlink comparison in cli_path_symlink_kernel.rs.
+      # cli_export_tree_kernel.rs adds one single-file --preserve refusal case (#577).
+      # cli_import_tree_kernel.rs adds two recursive import cases (#550).
+      # cli_import_preserve_kernel.rs adds two --preserve=times,links cases (#526).
+      - 'bash ../rust-fs-core/scripts/test-floor.sh kernel 63'
 
   test:lwext4:
     desc: 'CROSS-VALIDATION: lwext4 — a third implementation, built in the guest — reads what we wrote, and we read what it wrote'
@@ -620,7 +699,15 @@ tasks:
         # shellcheck disable=SC2086  # the words are the point
         bash ../rust-fs-core/scripts/tier.sh test:vm vm 3900 193000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
-        bash ../rust-fs-core/scripts/test-floor.sh vm 1060
+        # cli_export_kernel.rs adds two cases to the whole-suite floor.
+        # cli_import_kernel.rs adds three more cases.
+        # #536 adds one unit case and two kernel cases.
+        # cli_export_tree_kernel.rs adds one kernel case each for #573, #574 and #571.
+        # #559 adds one unit case and one kernel case.
+        # #577 adds one kernel case.
+        # cli_import_tree_kernel.rs adds two kernel cases (#550).
+        # cli_import_preserve_kernel.rs adds two kernel cases (#526).
+        bash ../rust-fs-core/scripts/test-floor.sh vm 1078
 
   test:
     desc: 'Everything, exactly as CI runs it — natively on Linux, inside the VM anywhere else'
@@ -661,7 +748,15 @@ tasks:
       - task: test:kernel
       - task: test:lwext4
       - '../rust-fs-core/scripts/tier.sh "test:native (whole suite, release)" suite 3700 183000 -- scripts/test.sh --locked --release'
-      - 'bash ../rust-fs-core/scripts/test-floor.sh suite 1060'
+      # cli_export_kernel.rs adds two cases to the whole-suite floor.
+      # cli_import_kernel.rs adds three more cases.
+      # #536 adds one unit case and two kernel cases.
+      # cli_export_tree_kernel.rs adds one kernel case each for #573, #574 and #571.
+      # #559 adds one unit case and one kernel case.
+      # #577 adds one kernel case.
+      # cli_import_tree_kernel.rs adds two kernel cases (#550).
+      # cli_import_preserve_kernel.rs adds two kernel cases (#526).
+      - 'bash ../rust-fs-core/scripts/test-floor.sh suite 1078'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
       # tested as installed. A separate invocation because test:cli reads
@@ -690,10 +785,21 @@ tasks:
     # test-floor.sh sums as it does cargo's. 32 checks executed when the
     # tier was added (#442, the same in CI), 66 with fs.ext4's read verbs,
     # 93 with fsck.ext4, 130 with the write verbs, 158 with the man pages
-    # and completions; the floor is about 95% of that.
+    # and completions; the floor is about 95% of that. 159 executed in the
+    # merge queue on 2026-10-17 (run 38991557768); test-ls-recursive.sh
+    # adds 67, test-rm.sh 72, test-mv.sh 116 and test-ln.sh 154, mkdir
+    # --parents adds 72 to test-write.sh, truncate 92 to test-write.sh and
+    # one to test-docs.sh, write --at 106 to test-write.sh, and xattr 27
+    # to test-stat.sh and one to test-docs.sh, which the floor carries in
+    # full.
+    #
+    # BUDGET: six files printed 29 lines and 1097 bytes (cli.log of run
+    # 38995796787), and a passing file adds three lines and about 80 bytes.
+    # Ten files print 41 lines and about 1420 bytes, one line over the 40
+    # this row allowed, so it allows 46 and 1640.
     cmds:
-      - '../rust-fs-core/scripts/tier.sh test:cli cli 40 1460 -- scripts/test-cli.sh'
-      - 'bash ../rust-fs-core/scripts/test-floor.sh cli 150'
+      - '../rust-fs-core/scripts/tier.sh test:cli cli 46 1640 -- scripts/test-cli.sh'
+      - 'bash ../rust-fs-core/scripts/test-floor.sh cli 858'
 
   test:scripts:
     desc: The shell tests (tests/scripts/*.sh), every one by glob
@@ -804,6 +910,8 @@ tasks:
     # lines to it.
     cmds:
       - bash ../rust-fs-core/scripts/agents-core-check.sh
+      - bash ../rust-fs-core/scripts/changelog-check.sh
+      - bash ../rust-fs-core/scripts/features-check.sh
       # The family scripts are rust-fs-core's alone: fails on a committed copy,
       # or a call to a local copy.
       - bash ../rust-fs-core/scripts/family-check.sh

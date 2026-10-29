@@ -84,10 +84,28 @@ on:
   # PR #131 came back with one check, its review bot, against PR #130's
   # three on the same day.
   pull_request:
+  # The merge queue's run: main plus the queued pull requests, the run that
+  # decides whether they land. The queue reads ci-ok only from a workflow
+  # that triggers here.
+  merge_group:
+  # A full run of any branch on request: the full profile, every VM,
+  # fixture and oracle job, for a stack layer whose pull request ran the
+  # quick one.
+  workflow_dispatch:
 
+# A newer push to a pull request cancels the run still going on the older one,
+# except while the pull request's title starts "red:". Such a pull request
+# holds only its failing test, and its run is the red evidence: it runs the
+# full profile (scripts/ci-plan.sh), so a kernel or VM test fails there, and
+# it gets a group
+# of its own commit and is never cancelled, so the push that adds the fix, made
+# after the title loses "red:", cannot cancel it either. Keyed by the commit
+# because GitHub keeps one pending run per group even with cancelling off: a
+# second push sharing the group would replace the red run while it waits.
+# tests/scripts/test-red-runs-uncancelled.sh fails if that stops being so.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}${{ startsWith(github.event.pull_request.title, 'red:') && format('-red-{0}', github.event.pull_request.head.sha) || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'red:') }}
 
 permissions:
   contents: read
@@ -95,8 +113,87 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CHORE_VERSION: "0.11.0"
+  # The jobs the full profile alone runs (`if: needs.changes.outputs.profile
+  # == 'full'`), declared to rust-fs-core's ci-gate.sh, which `chore lint`
+  # runs in the unit job. ci-gate recognises only the `code` path gate on its
+  # own, so a profile-gated job in ci-ok's needs must be named here. They stay
+  # in ci-ok's needs: scripts/ci-ok.sh still judges each one's result, and
+  # accepts its skip only under the quick plan; under the full plan a skip,
+  # failure or cancellation of any of them still fails ci-ok.
+  CI_GATE_NON_GATING: fixtures wasm cli
 
 jobs:
+  # Does this change need the full pipeline? rust-fs-core's
+  # scripts/code-changed.sh reads the change's paths and says false only when
+  # every one is documentation. The change is the pull request's diff, the
+  # merge queue group's (its base_sha to its head_sha: what the queue is about
+  # to land), or a push to main's (before to after); a tag or a push it cannot
+  # diff runs everything. The jobs that boot the VM or read its fixtures
+  # (test, test-arm64, suite-in-vm) run only when the answer is true, and
+  # ci-ok accepts their skip when, and only when, it is false.
+  changes:
+    name: changes (does this need the full pipeline?)
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.c.outputs.code }}
+      # quick for a pull request, full for a "red:" pull request and for
+      # everything else (scripts/ci-plan.sh).
+      profile: ${{ steps.plan.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: Grade the profile planner and verdict
+        run: bash scripts/test-ci-plan.sh
+      - name: Plan the profile
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          profile="$(bash scripts/ci-plan.sh "$EVENT" "$TITLE")"
+          echo "profile=$profile ($EVENT)"
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+      - name: Classify the change
+        id: c
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PULL_BASE: ${{ github.event.pull_request.base.sha }}
+          PULL_HEAD: ${{ github.event.pull_request.head.sha }}
+          MQ_BASE: ${{ github.event.merge_group.base_sha }}
+          MQ_HEAD: ${{ github.event.merge_group.head_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          range=
+          case "$EVENT" in
+            pull_request) range="$PULL_BASE...$PULL_HEAD" ;;
+            merge_group) range="$MQ_BASE...$MQ_HEAD" ;;
+            push)
+              case "$REF" in
+                refs/heads/*)
+                  if [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != 0000000000000000000000000000000000000000 ] &&
+                    git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+                    range="$PUSH_BEFORE...$PUSH_AFTER"
+                  fi ;;
+              esac ;;
+          esac
+          if [ -n "$range" ]; then
+            git diff --name-only "$range" | tee changed.txt
+            code="$(bash ../rust-fs-core/scripts/code-changed.sh < changed.txt)"
+          else
+            code=true
+          fi
+          echo "code=$code ($EVENT${range:+ $range})"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   unit:
     name: unit (no tools, no fixtures)
     runs-on: ubuntu-24.04
@@ -138,6 +235,10 @@ jobs:
       - name: chore test:unit
         id: tier
         run: chore test:unit
+      - name: chore lint
+        # The quick profile's lint: test and test-arm64 lint too, but run
+        # only in the full profile.
+        run: chore lint
       - name: Keep the tier logs
         # A quiet tier writes its detail to tmp/logs/<tier>.log and prints a
         # verdict; without this the detail dies with the runner and the only
@@ -154,6 +255,8 @@ jobs:
 
   fixtures:
     name: fixtures (harness VM, x86_64 KVM)
+    needs: changes
+    if: needs.changes.outputs.profile == 'full' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -359,6 +462,8 @@ jobs:
 
   wasm:
     name: wasm32 (browser build, tests under Node)
+    needs: changes
+    if: needs.changes.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -470,6 +575,8 @@ jobs:
 
   cli:
     name: cli (the installed tools, on PATH)
+    needs: changes
+    if: needs.changes.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -539,18 +646,18 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [unit, fixtures, test, test-arm64, suite-in-vm, wasm, semver, msrv, cli, provenance]
+    needs: [changes, unit, fixtures, test, test-arm64, suite-in-vm, wasm, semver, msrv, cli, provenance]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Every job ran and succeeded
         env:
           NEEDS: ${{ toJSON(needs) }}
+          # The plan the changes job made: quick or full, and false only for
+          # a change to documentation alone. scripts/ci-ok.sh accepts a skip
+          # only where that plan made one, and refuses a missing plan.
+          PROFILE: ${{ needs.changes.outputs.profile }}
+          CODE: ${{ needs.changes.outputs.code }}
         run: |
           set -euo pipefail
-          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          bad="$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')"
-          if [ -n "$bad" ]; then
-            echo "::error::not green: $bad (failed, cancelled or skipped)"
-            exit 1
-          fi
-          echo "all required jobs succeeded"
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' | bash scripts/ci-ok.sh

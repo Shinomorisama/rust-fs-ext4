@@ -1,5 +1,22 @@
 # rust-fs-ext4 — pure-Rust ext2/3/4 driver
 
+This fork develops **support for casefold-enabled ext4 directories in Rust**, working toward an ext4 microSD card that can be shared between **Windows, Linux and SteamOS**. Casefold allows differently capitalized names to identify the same entry while preserving the filename’s original spelling. Ordinary directories retain their case-sensitive behavior.
+
+This fork’s casefold development—including implementation, tests, focused reviews and development documentation—is performed by **GPT-6.1 Sol under Shinomorisama’s direction**. The underlying ext2/3/4 driver originates from [antimatter-studios/rust-fs-ext4](https://github.com/antimatter-studios/rust-fs-ext4); upstream authorship and licensing are retained.
+
+**This work is experimental.** Supported casefold read paths are implemented, while mutation, directory-index and recovery qualification remain incomplete. **Casefold writes remain deliberately blocked.** Windows integration, real-card round trips and SteamOS hardware compatibility have not yet been qualified.
+
+Active development is on **[`casefold-rw`](https://github.com/Shinomorisama/rust-fs-ext4/tree/casefold-rw)**. To understand the work or build on it, start with:
+
+- **[Current progress and next steps](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/docs/extprogress.md)** — completed work, validation evidence, limitations and remaining tasks.
+- **[Contributor guide](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/AGENTS.md)** — development procedures, testing requirements and clean-room rules.
+- **[Upstream and fork review register](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/docs/UPSTREAM-FORK-REVIEWS.md)** — dated checks, exact revisions, findings and work still needing review.
+
+The original project description and documentation are preserved below. They describe the underlying driver; the linked progress notes document this fork’s current casefold capabilities and restrictions.
+
+
+---
+
 Pure-Rust read/write driver for the ext2, ext3, and ext4 on-disk
 formats. Mounts disk images and block devices, journals writes
 through JBD2, replays the journal on dirty mounts, and exposes a
@@ -16,94 +33,19 @@ or any embedded environment with a `BlockDevice` shim.
 
 ## Status
 
-Read/write driver for the common case across ext2, ext3, and ext4.
-Mount + read is exhaustive against the ext4 feature matrix we test
-against; write is journaled through JBD2 and crash-safe under
-fault-injection sweeps for every multi-block op the driver
-exposes. Specific gaps are listed under "What doesn't work" below.
-
-- 700+ automated tests — 200+ lib unit tests and 450+ integration
-  tests across ~100 test binaries (`cargo test --release`).
-- All 15 multi-block write ops (`5.2.1`–`5.2.15` of the write-support
-  plan) committed atomically through the JBD2 writer with explicit
-  crash-safety sweeps.
-- ext2 and ext3 RW are unlocked (Phase 9.1/9.2/Phase B) via the
-  same flavor-aware extent/indirect dispatcher.
-
-## Features
-
-### Read
-
-- Mount ext2 / ext3 / ext4 images and block devices (block sizes
-  1 KiB, 2 KiB, 4 KiB).
-- Inode parse with extra-fields support; `stat`, `readdir`,
-  `readlink`, `read`, `getxattr`, `listxattr`.
-- Extent trees (depth 0, depth 1, depth ≥ 2 read; uninitialized
-  extents present as zero on read).
-- Indirect-block trees (legacy ext2/3 — direct, indirect,
-  double-indirect, triple-indirect).
-- HTree directory traversal (legacy / `half_md4` / `tea` hash).
-- Inline data (≤ 60 bytes inline file body, plus inline xattr
-  overflow).
-- External xattr blocks; ACL attributes (`system.posix_acl_*`).
-- `metadata_csum` and `csum_seed` verification on every block that
-  has an on-disk checksum (superblock, BGD, inode table, dir tail,
-  extent tail, htree tail, xattr block, journal commit/descriptor
-  blocks).
-- JBD2 journal replay on mount: descriptor / commit / revoke
-  blocks all honoured, including v2 (csum-tail) format.
-- Read-only audit pass (`Filesystem::audit`) reconciles link
-  counts and reports dangling directory entries.
-- Optional LRU block cache (`CachingDevice`) for callback-mode
-  hosts where every read hits a remote/RPC boundary.
-
-### Write
-
-All mutating ops route through the same multi-block transaction
-buffer and commit atomically through `JournalWriter`:
-
-- `chmod`, `chown`, `utimens`, in-inode `setxattr` / `removexattr`.
-- `create`, `unlink`, `mkdir`, `rmdir`.
-- `link` (in-place), `symlink` (inline + slow path), `rename`
-  (POSIX semantics: `EEXIST` on no-clobber, `EINVAL` into own
-  subtree, cross-parent `..` updates).
-- `truncate` shrink and grow (sparse-grow leaves holes; reads
-  return zeros).
-- `setxattr` / `removexattr` on the external xattr block (alloc
-  on first overflow, free when the block becomes empty).
-- File replace (full-content overwrite via fresh extent allocation).
-- Inline-data files: pwrite, replace and truncate in the inode while the
-  result fits, converting the file to extents in the same transaction
-  when it does not.
-- Inline-data directories: entries added and removed in the inode while
-  they fit, converting the directory to a block in the same transaction
-  when they do not.
-- `fallocate(KEEP_SIZE)`, `fallocate(PUNCH_HOLE)`,
-  `fallocate(ZERO_RANGE)`.
-- Extent-tree mutation: depth 0 → 1 promotion and depth-1 inserts.
-
-Crash-safety guarantees: the four-fence JBD2 protocol
-(journal-write → dirty-flag → final-write → clean-flag) is enforced
-per transaction with an explicit flush between each fence. A
-post-remount state is always either pre-op or post-op — never
-torn. Pinned by parameterized fault-injection sweeps (see "Test
-contract" below).
-
-### Filesystem variants
-
-| Variant | Read | Write |
-|---|---|---|
-| ext2 | done | done (indirect-block extents, no journal) |
-| ext3 | done | done (indirect-block extents, JBD2) |
-| ext4 | done | done (extent trees, JBD2) |
-
-ext3 RW landed via Phase B's flavor-aware journal dispatch
-(`jbd2::journal_block_to_physical` and `JournalWriter::open`
-both branch on `EXTENTS_FL`). ext2 has no journal but otherwise
-shares the same write helpers. `tests/mkfs_ext3_oracle.rs` formats both
-flavors, writes through the crate and requires `e2fsck -fn` to pass. An
-ext2/ext3 directory grows through its direct and single-indirect blocks
-only; one that would need the double-indirect block is refused.
+Reads ext2, ext3 and ext4, clean or with a journal to replay (onto the device
+on a writable mount, into memory on a read-only one), with every checksum
+variant, extent trees of any depth, htree and inline-data directories,
+extended attributes and ACLs. Writes are journalled through JBD2 and
+crash-safe under fault-injection sweeps: create, unlink, mkdir, rmdir, link,
+symlink, rename, attributes, positional writes, truncate, fallocate and
+extended attributes, on ext2 and ext3 as well as ext4. `fsck.ext4` checks a
+subset of what e2fsck checks and repairs two kinds of finding; `mkfs.ext4`
+formats all three flavours. **[docs/features.md](docs/features.md) is the
+full list**: every feature, its state (supported, experimental, partial,
+refused, not supported or upcoming), the release it shipped in, its tracking
+issue or write-plan item, and the test that checks it. Every pull request that
+changes behaviour updates it.
 
 ## Command-line tools
 
@@ -136,9 +78,21 @@ for name in $(rust-fs-ext4 generate names); do ln -s rust-fs-ext4 "$name"; done
 mkfs.ext4 --size 64M --label BACKUP disk.img
 fsck.ext4 disk.img                         # -y to repair
 fs.ext4 disk.img ls /
+fs.ext4 disk.img ls -R --max-depth 8 --limit 1000 /etc
+fs.ext4 disk.img stat /etc/fstab
 fs.ext4 disk.img read /etc/fstab > fstab
+fs.ext4 disk.img xattr /usr/bin/ping
+fs.ext4 disk.img xattr /usr/bin/ping security.capability > caps.bin
 fs.ext4 disk.img write /notes.txt < notes.txt
+printf 'v2' | fs.ext4 disk.img write --at 4096 /data.bin
 fs.ext4 disk.img mkdir /backup
+fs.ext4 disk.img mkdir -p /backup/2026/10
+fs.ext4 disk.img rm /notes.txt
+fs.ext4 disk.img rmdir /backup
+fs.ext4 disk.img mv /draft.txt /archive/final.txt
+fs.ext4 disk.img ln /archive/final.txt /latest.txt
+fs.ext4 disk.img ln -s archive/final.txt /current
+fs.ext4 disk.img truncate /var/log/syslog 0
 fs.ext4 disk.img get label --text
 fs.ext4 disk.img set label ARCHIVE
 fs.ext4 --offset 1048576 whole-disk.img info
@@ -147,11 +101,94 @@ rust-fs-ext4 doctor                        # is every tool on PATH ours?
 ```
 
 - **Output.** Metadata is JSON on stdout by default (`--text` for people);
-  `read` and `write` carry raw bytes. A failure is
+  `read`, `write` and `xattr PATH NAME` carry raw bytes. A failure is
   `{"error": "...", "code": N}` on stderr, and `N` is the exit status: 1
-  failed, 2 wrong command line, 3 not implemented. `fsck.ext4` keeps
+  failed, 2 wrong command line, 3 not implemented, 4 refused by the
+  volume's state (`rm`, `rmdir`, `mv`, `ln`, `mkdir`, `truncate` or
+  `write --at` meeting a directory that is not empty, a name already there,
+  a missing target or a part of the path that is not a directory).
+  `fsck.ext4` keeps
   fsck(8)'s statuses instead: 0 clean, 1 corrected, 4 uncorrected, 8
   operational error, 16 usage.
+- **`ls --recursive`** (`-R`) walks the tree under PATH: each entry is the
+  `ls` entry plus `path`, from the root of the volume, and `depth`, PATH's
+  own entries being depth 1 (a PATH that is not a directory is the one
+  entry, at depth 0). The walk is depth first with each directory's names
+  sorted as bytes, so two runs over one volume print the same thing. A
+  symlink is listed and never followed, and a directory whose inode was
+  already visited is listed with `"revisited": true` and not entered
+  again, so a damaged volume whose directories form a cycle still ends.
+  `--max-depth` (default 64) and `--limit` (default 100000) bound it: a
+  tree that exactly fits succeeds, while one more entry past either bound,
+  or a directory that cannot be read, exits 1 with the entries collected
+  so far still on stdout and the bound or the path named on stderr.
+- **`xattr PATH`** lists the extended attributes PATH's own inode holds
+  as `[{"name": "user.comment", "size": 12}, ...]`, each name with its
+  namespace prefix and sorted by its bytes, one that is not UTF-8 shown
+  lossily with its exact bytes in `name_hex`; `--text` prints size, a tab
+  and name. **`xattr PATH NAME`**, NAME matched as the bytes it is, writes
+  that value's raw bytes to stdout, or
+  through `FILE.partial` to `-o FILE` as `read` does; a missing attribute
+  exits 1. Attributes kept in the inode, in an external block and in an EA
+  inode are all read, a symlink's own and never its target's. Values are
+  the bytes stored: an ACL is ext4's compact form, and the tail of an
+  inline file or directory is listed as `system.data`, which a mounted
+  Linux does not show. Setting and removing attributes are not offered.
+- **`write --at BYTES PATH`** writes stdin into the regular file PATH
+  names, starting that many bytes in, and truncates nothing: only the
+  bytes written change, and a write past the end grows the file, the gap
+  reading back as zeros. `--at` is a position inside the file; `--offset`
+  stays where the filesystem starts. It reports `{"path": ..., "at": N,
+  "bytes": N, "size": N}`. Nothing is created and a symlink is never
+  followed. A directory, a missing path, a name too long, a file on the
+  way, an immutable or append-only file and a position past the largest
+  file are refused for the reason Linux gives, before the image is opened
+  for writing; a block-mapped (ext2/ext3-style) or encrypted file is
+  refused with exit 3: this driver cannot write into one.
+- **`mkdir --parents`** (`-p`) makes every missing directory on the way to
+  PATH, mode 0755, and reports `{"path": ..., "created": [...]}` listing
+  those it made: none, with nothing written, when the chain is already
+  there. A file, a symlink or a name too long anywhere on the way is
+  refused for the reason Linux gives, before the image is opened for
+  writing, so a refused command makes no part of the chain. A symlink is
+  never followed, even one naming a directory.
+- **`rm`** removes a name that is not a directory, a symlink rather than
+  what it points at, and the file with its last name; **`rmdir`** removes
+  an empty directory. Each reports `{"path": ..., "removed": true}`. A
+  missing path, a directory given to `rm`, anything but a directory given
+  to `rmdir`, a directory with entries, `.`, `..` and the root are refused
+  for the reason Linux gives, before the image is opened for writing, so a
+  refused command leaves it byte-identical. Nothing is removed recursively.
+- **`mv SOURCE PATH`** gives SOURCE the name PATH, in its own directory or
+  another; PATH is the new name itself, not a directory to move into. A
+  directory moved takes its tree with it, and its `..` and both parents'
+  link counts follow. A name already at PATH is refused unless `--replace`
+  is given, and then it is replaced as rename(2) does: a file by a file, an
+  empty directory by a directory. It reports `{"path": ..., "moved":
+  true}`. A missing source or parent, a directory moved into itself, a
+  directory with entries in the way, a file over a directory and the
+  reverse, `.`, `..` and the root are refused for the reason Linux gives,
+  before the image is opened for writing.
+- **`ln TARGET PATH`** gives the file TARGET names the new name PATH, one
+  more link to the same inode; a symlink named as TARGET is linked itself,
+  never followed. **`ln -s TARGET PATH`** makes PATH a symbolic link whose
+  target is the text TARGET as given, never resolved: held in the inode
+  under 60 bytes, in a block of its own from 60, and at most one byte less
+  than a block (4095 bytes in 4 KiB). Both report `{"path": ..., "linked":
+  true, "inode": N}`. A name already at PATH, a missing TARGET or parent, a
+  hard link to a directory, a file at 65000 links, an empty target and one
+  too long are refused for the reason Linux gives, before the image is
+  opened for writing.
+- **`truncate PATH SIZE`** sets a regular file's length to SIZE bytes: a
+  shrink releases the blocks past the new end, and a grow reads back as
+  zeros and allocates nothing. It reports `{"path": ..., "size": N}`. A
+  SIZE that is not a byte count is a usage error. A directory, a missing
+  path, a name too long, a file on the way, and an immutable or
+  append-only file are refused for the reason Linux gives, before the
+  image is opened for writing; a missing file is not created, and a
+  symlink is never followed, so one at PATH is refused too. The shrink of
+  a block-mapped (ext2/ext3-style) file and any truncate of an encrypted
+  one are refused with exit 3, the same way: this driver cannot do them.
 - **`get`/`info`** report `fs`, `label`, `total_bytes`, `free_bytes`,
   `block_size` and `dirty`, with ext4's own fields under `ext4`.
 - **`set label <value>`** rewrites the label, at most 16 bytes, in the
@@ -164,62 +201,6 @@ rust-fs-ext4 doctor                        # is every tool on PATH ours?
   way, and says what wins and the fix when it does not.
 - `chore test:cli` tests the tools as installed (`doctor` first), and CI
   runs it on every pull request.
-
-## What works
-
-Per-operation, on a clean image:
-
-- `mount` / `mount_rw` / `mount_with_callbacks` /
-  `mount_rw_with_callbacks` / `mount_rw_with_callbacks_lazy`
-  (lazy variant defers journal replay).
-- `stat`, `readdir`, `readlink`, `read`.
-- `getxattr`, `listxattr`, `setxattr` (in-inode + external block),
-  `removexattr` (in-inode + external block).
-- `chmod`, `chown`, `utimens`.
-- `create`, `unlink`, `mkdir`, `rmdir`, `link`, `symlink`, `rename`.
-- `truncate` (shrink and grow).
-- `write` (replace-content; allocates fresh extents and frees old
-  ones in one journaled transaction).
-- `fallocate(KEEP_SIZE)`, `fallocate(PUNCH_HOLE)`,
-  `fallocate(ZERO_RANGE)`.
-- `audit` (read-only fsck — link counts, dangling entries).
-- `fsck_run` (callback-mode audit exposed through the C ABI).
-- `format_filesystem` (in-process `mkfs`; the C-ABI entry FFI hosts
-  call to format a fresh volume is `fs_ext4_mkfs`).
-
-## What doesn't work
-
-Honest gap list — pulled from `docs/ext4-full-write-support.md`
-and the in-tree TODOs:
-
-- **Extent-tree depth ≥ 2 mutation.** Read works; write refuses
-  with a structured error in `extent_mut.rs`. Phase 4 of the
-  write-support plan covers the design (`docs/extent-tree-depth2-design.md`).
-- **HTree internal split.** Leaf split is implemented; once a
-  directory grows past the depth-1 leaf-block capacity (~340
-  extents on 4 KiB blocks), further inserts return `ENOSPC`-shaped
-  errors.
-- **`extend_dir_and_add_entry` buffer-twin.** The fallback path
-  used when an in-place dir-entry insert can't fit still does
-  direct disk writes rather than going through `BlockBuffer`.
-  Refactor pending (~150 LoC of `plan_promote_leaf` adaptation).
-- **JBD2 journal modes.** The writer effectively runs `data=ordered`
-  semantics today; `data=writeback` and `data=journal` are not
-  selectable.
-- **Orphan-list inserts on still-open unlink.** The driver
-  doesn't see open-fd state today; the host (FSKit / FUSE) would
-  need to plumb that through. Reads + replay of pre-existing
-  orphan chains *is* implemented.
-- **Casefold lookups.** The hash function is implemented in
-  `casefold.rs`; HTree wiring is not.
-- **fs-verity, fscrypt, project quota, user/group quota,
-  online-resize, mmap shared writes** — not implemented.
-- **EA refcount sharing on external xattr blocks** — single-owner
-  only; never shares (deferred until a consumer needs it).
-- **Indirect-path file replace is un-journaled.** The
-  indirect-block replace helper writes data blocks directly. Only
-  applies to ext2 mounts (which have no journal anyway) and
-  ext3 mounts that disable the journal.
 
 ## Architecture
 
@@ -341,38 +322,6 @@ credited in the License section.
   the on-disk bitmap against every block claimed by the inode
   tree; pinned by `tests/verify_basic.rs`, also runnable as a
   post-mutation check from any integration test.
-
-## Roadmap
-
-Pulled from `docs/ext4-full-write-support.md` — items not yet
-ticked. Numbering follows the plan doc.
-
-- [ ] **3.5** EA refcount sharing on external xattr blocks.
-- [ ] **4.1–4.6** Extent-tree depth ≥ 2 mutation (index-block
-      split, recursive descent, merge-on-shrink, index csum).
-- [ ] **5.3.1–5.3.3** JBD2 journal modes (`data=ordered`
-      explicit / `data=writeback` / `data=journal`).
-- [ ] **6.3** Orphan-list insert on still-open unlink (gated on
-      host fd-tracking).
-- [ ] **6.4** Link-count audit auto-repair under a recovery
-      transaction.
-- [ ] **7.2** Checked arithmetic in remaining hot sites (rare in
-      practice; cosmetic).
-- [ ] **7.3** Full FFI input-validation sweep.
-- [ ] **7.4** Richer `Error` variants (cosmetic; `Corrupt(&str)`
-      carries enough context today).
-- [ ] **8.2** Cross-call extent-lookup memoization.
-- [ ] **8.4** Coalesce adjacent dirty blocks inside the
-      `BlockBuffer`.
-- [ ] **9.3** Casefold HTree wiring.
-- [ ] **9.4** Project quota.
-- [ ] **9.5** User/group disk quota.
-- [ ] **9.6** fs-verity.
-- [ ] **9.7** fscrypt v2.
-- [ ] **9.8** Online resize.
-- [ ] **9.9** mmap shared writes (host-integration dependent).
-- [ ] `extend_dir_and_add_entry` buffer-twin (the last direct-disk-write
-      helper inside the otherwise-buffered write path).
 
 ## Changelog
 
@@ -612,7 +561,8 @@ Standard cargo:
 cargo build --release
 # produces target/release/libfs_ext4.a (static lib for FFI consumers)
 #         + target/release/libfs_ext4.rlib
-#         + target/release/mkfs_ext4 (the standalone formatter binary)
+# The tools need the `cli` feature: `cargo build --release --features cli`
+# adds target/release/rust-fs-ext4 (mkfs.ext4, fsck.ext4, fs.ext4).
 ```
 
 Cross-compile to a specific target the usual way:

@@ -40,6 +40,9 @@ pub enum Error {
     /// Container (xattr in-inode region, xattr block, etc.) has no free
     /// space for the requested entry — POSIX ENOSPC.
     NoSpaceLeftOnDevice,
+    /// Requested file size exceeds the addressable blocks for its mapping
+    /// format (POSIX EFBIG).
+    FileTooLarge,
     /// Caller passed a malformed argument or attempted a semantically
     /// invalid mutation (POSIX EINVAL — e.g. truncate-grow, moving a dir
     /// into its own subtree, operating on a legacy non-EXTENTS inode).
@@ -61,6 +64,11 @@ pub enum Error {
     /// EMLINK): a file at `MAX_LINKS` (65000) links, or a directory
     /// with that many on a volume without `DIR_NLINK`.
     TooManyLinks,
+
+    /// Path resolution followed more symbolic links than the Linux kernel
+    /// follows in one lookup (40, its `MAXSYMLINKS`): a loop, or a chain
+    /// too long to be anything else (POSIX ELOOP).
+    SymlinkLoop,
 
     /// A structure this driver can read but cannot correctly modify.
     /// Distinct from [`Error::ReadOnly`], which is about the mount, and
@@ -109,6 +117,7 @@ impl std::fmt::Display for Error {
             Error::ReadOnly => write!(f, "read-only filesystem"),
             Error::NameTooLong => write!(f, "name too long"),
             Error::NoSpaceLeftOnDevice => write!(f, "no space left on device"),
+            Error::FileTooLarge => write!(f, "file too large"),
             Error::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),
             Error::InvalidInode(n) => write!(f, "invalid inode number {n}"),
             Error::InvalidBlock(n) => write!(f, "invalid block number {n}"),
@@ -122,6 +131,7 @@ impl std::fmt::Display for Error {
             }
             Error::Stale => write!(f, "stale inode handle"),
             Error::TooManyLinks => write!(f, "too many links"),
+            Error::SymlinkLoop => write!(f, "too many levels of symbolic links"),
         }
     }
 }
@@ -146,7 +156,9 @@ impl Error {
             Error::ReadOnly | Error::JournalNotReplayed => EROFS,
             Error::NameTooLong => ENAMETOOLONG,
             Error::NoSpaceLeftOnDevice => ENOSPC,
+            Error::FileTooLarge => EFBIG,
             Error::TooManyLinks => EMLINK,
+            Error::SymlinkLoop => ELOOP,
             Error::InvalidArgument(_) => EINVAL,
             Error::InvalidInode(_) | Error::InvalidBlock(_) | Error::OutOfBounds => EINVAL,
             Error::BadMagic { .. }
@@ -168,6 +180,7 @@ pub mod errno {
     pub const ENOENT: i32 = 2;
     pub const EIO: i32 = 5;
     pub const EEXIST: i32 = 17;
+    pub const EFBIG: i32 = 27;
     pub const ENOTDIR: i32 = 20;
     pub const EISDIR: i32 = 21;
     pub const EINVAL: i32 = 22;
@@ -175,6 +188,7 @@ pub mod errno {
     pub const EMLINK: i32 = 31;
     pub const ERANGE: i32 = 34;
     pub const ENOSPC: i32 = 28;
+    pub const ELOOP: i32 = 62; // macOS POSIX value (Linux: 40)
     pub const ENAMETOOLONG: i32 = 63; // macOS POSIX value
     pub const ENOTSUP: i32 = 45;
     pub const ENOTEMPTY: i32 = 66; // macOS POSIX value

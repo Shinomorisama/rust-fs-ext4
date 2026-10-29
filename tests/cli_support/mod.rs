@@ -27,14 +27,16 @@ pub fn bin() -> &'static str {
 
 /// The binary under its own (cargo's) name: the repository entry point.
 pub fn entry() -> Command {
-    Command::new(BIN.expect(NO_BIN))
+    let mut cmd = Command::new(BIN.expect(NO_BIN));
+    cmd.env("TMPDIR", fs_ext4_test_support::temp_dir());
+    cmd
 }
 
 /// The program as a user runs it under `name`: argv[0] is what an
 /// installed symlink hands it, and what it dispatches on.
 pub fn tool(name: &str) -> Command {
     use std::os::unix::process::CommandExt;
-    let mut cmd = Command::new(BIN.expect(NO_BIN));
+    let mut cmd = entry();
     cmd.arg0(name);
     cmd
 }
@@ -84,6 +86,55 @@ pub fn image_path(tag: &str) -> String {
     path
 }
 
+/// A fresh path, not yet created, on a filesystem that keeps sub-second
+/// times: what `--preserve=times` reads them from or writes them to. The
+/// scratch root is the repository's `tmp`, and when the suite runs in the
+/// harness guest that is the 9p share, which keeps no nanoseconds; there
+/// the path is in the guest's own `/var/tmp`. Neither keeping them fails,
+/// naming both.
+pub fn sub_second_path(tag: &str) -> String {
+    path_where(
+        tag,
+        "keeps sub-second times, which --preserve=times needs",
+        keeps_sub_second_times,
+    )
+}
+
+/// A fresh path, not yet created, in the scratch directory when `keeps`
+/// holds there, and otherwise in `/var/tmp`, the guest's own disk when the
+/// scratch directory is the harness guest's 9p share. Neither holding
+/// fails, naming both and `what` the test needed.
+pub fn path_where(tag: &str, what: &str, keeps: impl Fn(&Path) -> bool) -> String {
+    let scratch = image_path(tag);
+    let name = Path::new(&scratch).file_name().unwrap().to_owned();
+    let local = Path::new("/var/tmp")
+        .join(name)
+        .to_string_lossy()
+        .into_owned();
+    for path in [&scratch, &local] {
+        if keeps(Path::new(path).parent().unwrap()) {
+            return path.clone();
+        }
+    }
+    panic!("neither {scratch}'s directory nor /var/tmp {what}");
+}
+
+/// Whether a file in `dir` keeps the nanoseconds of the access and
+/// modification times set on it.
+pub fn keeps_sub_second_times(dir: &Path) -> bool {
+    let probe = dir.join(format!(".sub-second-probe-{}", std::process::id()));
+    let at = std::time::UNIX_EPOCH + std::time::Duration::new(1_000_000_000, 123_456_789);
+    let kept = std::fs::create_dir_all(dir).is_ok()
+        && std::fs::File::create(&probe)
+            .and_then(|f| f.set_times(std::fs::FileTimes::new().set_accessed(at).set_modified(at)))
+            .is_ok()
+        && std::fs::metadata(&probe)
+            .and_then(|m| Ok((m.accessed()?, m.modified()?)))
+            .is_ok_and(|(a, m)| a == at && m == at);
+    let _ = std::fs::remove_file(&probe);
+    kept
+}
+
 /// A sparse file of `size` bytes, ready to format.
 pub fn sized_image(tag: &str, size: u64) -> String {
     let path = image_path(tag);
@@ -91,6 +142,20 @@ pub fn sized_image(tag: &str, size: u64) -> String {
         .and_then(|f| f.set_len(size))
         .unwrap_or_else(|e| panic!("size {path}: {e}"));
     path
+}
+
+/// The exit status of a namespace verb's refusal, from the reason the
+/// kernel gave the same call: 4, `refused`, where the volume's state
+/// forbids it (a directory that is not empty, a name already there, a
+/// missing target, a part of the path that is not a directory), as the
+/// CLI contract has it (EXIT_REFUSED); 1 for every other refusal.
+pub fn refusal_code(kernel_reason: &str) -> i32 {
+    match kernel_reason {
+        "Directory not empty" | "File exists" | "No such file or directory" | "Not a directory" => {
+            4
+        }
+        _ => 1,
+    }
 }
 
 pub fn stdout(out: &Output) -> String {
@@ -166,27 +231,34 @@ pub fn corrupt_group_free_blocks(image: &str, extra: u16) {
 /// header is zeroed, with the inode's checksum restamped so it is the
 /// extent tree, not the checksum, that is wrong.
 pub fn destroy_root_extent_header(image: &str) {
+    destroy_extent_header(image, 2);
+}
+
+/// [`destroy_root_extent_header`] for any inode: `ino`'s extent header is
+/// zeroed and its checksum restamped, so the inode itself still reads and
+/// only its contents cannot be found.
+pub fn destroy_extent_header(image: &str, ino: u32) {
     use fs_ext4::block_io::{BlockDevice, FileDevice};
     let fs = fs_ext4::Filesystem::mount(std::sync::Arc::new(
         FileDevice::open(image).expect("open image"),
     ))
     .expect("mount image");
     let (block, offset) =
-        fs_ext4::bgd::locate_inode(&fs.sb, &fs.groups, 2).expect("locate the root inode");
+        fs_ext4::bgd::locate_inode(&fs.sb, &fs.groups, ino).expect("locate the inode");
     let at = block * u64::from(fs.sb.block_size()) + u64::from(offset);
     let dev = FileDevice::open_rw(image).expect("open image rw");
     let mut raw = vec![0u8; usize::from(fs.sb.inode_size)];
-    dev.read_at(at, &mut raw).expect("read the root inode");
+    dev.read_at(at, &mut raw).expect("read the inode");
     raw[0x28..0x28 + 12].fill(0);
     let generation = u32::from_le_bytes(raw[0x64..0x68].try_into().unwrap());
-    if let Some((lo, hi)) = fs.csum.compute_inode_checksum(2, generation, &raw) {
+    if let Some((lo, hi)) = fs.csum.compute_inode_checksum(ino, generation, &raw) {
         raw[0x7C..0x7E].copy_from_slice(&lo.to_le_bytes());
         let extra_isize = u16::from_le_bytes([raw[0x80], raw[0x81]]);
         if raw.len() > 0x84 && extra_isize >= 4 {
             raw[0x82..0x84].copy_from_slice(&hi.to_le_bytes());
         }
     }
-    dev.write_at(at, &raw).expect("write the root inode");
+    dev.write_at(at, &raw).expect("write the inode");
     dev.flush().expect("flush");
 }
 

@@ -20,7 +20,7 @@ with every repository in this family**. Do not edit it here: change the
 canonical copy and propagate it, or `scripts/agents-core-check.sh` will fail.
 Everything after the END marker is specific to this repository.
 
-<!-- BEGIN SHARED BLOCK: agent-core v2 sha256:38af4d2c5377d38ab382baa4eab4aa679841e2b4eba4f4d01dacd255ffa7d32e -->
+<!-- BEGIN SHARED BLOCK: agent-core v8 sha256:1f9d7d85f68196088ee36428968ea4c365c6f99d41b908fd8d2e848a97e5b570 -->
 ## Claiming work
 
 Several agents work these repositories at the same time. Before you start on
@@ -65,6 +65,15 @@ add your own, and say so in the issue.
 **This is a convention, not a fence.** Nothing enforces it. An agent that
 ignores it duplicates work; it cannot corrupt anything. Honour it anyway.
 
+## Findings become issues before a tracking issue closes
+
+A review, an investigation, or the work under an umbrella issue turns up
+things beyond what it set out to do. File each finding as its own issue --
+what was seen, where, and what would show it fixed -- and cite it in the
+tracking issue **before** that issue closes. A finding left in a comment, a
+pull request description or a transcript is lost when the issue that held
+it closes; an open issue is where the next agent looks.
+
 ## Work in a worktree
 
 Every working copy is a **git worktree** of an existing checkout, made with
@@ -99,6 +108,21 @@ Each repository names any further skills of its own below.
 prove that same check is green, *then* confirm the full baseline still passes.
 Never write the fix before you have a red. A fix with no failing test to its
 name is a claim, not a result.
+
+**Red and green happen in one pull request, on one branch.** Push the commit
+that adds the failing test on its own and open the pull request with a title
+that starts `red:`. CI runs it on that pull request, and the run of a `red:`
+pull request is never cancelled, so its failure stays on record. Then put the
+fix on the **same branch**, with the test untouched: squash the branch to one
+commit, take `red:` off the title, and push. The same pull request goes green.
+
+- Never put a fix in a second pull request, stacked or not, and never push the
+  test to a `red/*` branch of its own: the red evidence is the pull request's
+  own run.
+- Never push the test and the fix together. The red has to be visible in CI,
+  not claimed in the description.
+- A `red:` pull request holds a failing test, so it can never merge: nothing
+  is built on it and nothing queues it until it has lost `red:`.
 
 ## Nothing skips
 
@@ -148,6 +172,72 @@ it**. Do not silence output to fit, and do not route around `tier.sh`.
 - **No AI attribution and no co-author trailers**, in commits or in pull
   request descriptions.
 - `main` takes **squash merges only**.
+- **Bring a branch up to date before every push.** `git fetch origin`, and
+  if its base has moved -- the layer below it in the stack, or `main` at the
+  bottom -- rebase onto the base first, resolving any conflicts then, while
+  they are small. Synced first, the run
+  tests the branch close to how it will land. And a branch synced at every
+  push never goes stale: each sync takes in only what landed since the last
+  one, so conflicts stay few and small. Sync when you are pushing anyway; a
+  push made only to bring a branch up to date buys a whole CI run and
+  nothing else.
+- **`main` merges through a merge queue.** A stack whose pull requests'
+  own CI is green goes into the queue: `gh stack merge <stack> --yes` adds
+  every layer up to the one named. Never queue a stacked pull request with
+  the REST `merge-async` call: it answers "enqueued" and queues nothing. The
+  queue tests each group on a temporary branch, `main` plus the queued pull
+  requests in order, and squash-merges each one only when that run is green,
+  so what lands is exactly the tree CI ran. That run is what "branches must be up to
+  date" used to buy, at one run per group instead of one per pull request per
+  merge: never update a branch only so that it can merge. Every workflow
+  that gates `main` triggers on `merge_group`, or the queue never sees its
+  result and nothing merges.
+
+## One stack per repository
+
+Every repository lands its pull requests as one stack, whether or not they
+touch the same files. Conflicts are then paid for once, when a pull request
+joins the stack, instead of again in the merge queue after every merge.
+
+- **A new pull request goes on the top.** Ask
+  `../rust-fs-core/scripts/stack-base.sh` (run in place; in rust-fs-core
+  itself, `scripts/stack-base.sh`): it prints the head branch of the top of
+  the stack, or `main` when nothing is open. Rebase onto that branch, resolve
+  every conflict locally while you do, and build and lint the result before
+  you push. A merge that is clean on your machine is clean in CI, so a
+  conflict that reaches the queue means the base was stale or the technique
+  was wrong. Then link the pull request into the stack: `gh stack link
+  <stack> <pull request>`.
+- **One squashed commit per layer.** Squash the branch to one commit on the
+  layer below before it joins, so the layers above replay without resolving
+  anything again.
+- **The queue still tests every layer.** It runs the full pipeline on `main`
+  plus each layer and the layers below it, and squash-merges each layer as
+  its own commit, so nothing lands untested and `main` stays bisectable.
+- **A red layer stops the stack.** Fix it in place, on its own branch, then
+  replay every layer above it with `git rebase --update-refs` and push them
+  together. Do not move a red layer to the top: the layers above were
+  resolved against it. Take a layer out only when its fix cannot come soon,
+  and say so on its pull request.
+- **Never delete a branch a pull request is based on.** Deleting it closes
+  every pull request above it, and none can be reopened while it is gone.
+
+## Changelog entries are fragments
+
+A pull request never edits `CHANGELOG.md`. It adds one file under
+`changelog.d/`, named for its branch (`fix/run-end-bound` writes
+`changelog.d/fix-run-end-bound.md`), holding one or more `### Added`,
+`### Changed`, `### Fixed` (or any other) headings, each over `- ` entries.
+Pull requests open at the same time then never conflict over the top of one
+file. A change no consumer would notice -- tests, CI, documentation -- adds
+no fragment.
+
+A release gathers them: `../rust-fs-core/scripts/changelog-gather.sh
+VERSION` writes every fragment into a dated `## [VERSION]` section of
+`CHANGELOG.md` and deletes the fragments, in the release commit. An entry is
+a fragment until it ships and a line of `CHANGELOG.md` after, never both.
+`chore lint` runs `changelog-check.sh`: every fragment is well formed, and
+`CHANGELOG.md` holds no unreleased entries of its own.
 
 ## Project rules
 
@@ -156,8 +246,36 @@ it**. Do not silence output to fit, and do not route around `tier.sh`.
   copying it is not.
 - **Each of these is a standalone project.** Never mention a consuming
   application in the README, the source, or CLI help.
-<!-- END SHARED BLOCK: agent-core v2 -->
+<!-- END SHARED BLOCK: agent-core v8 -->
 
+
+## Keep the features page current
+
+`docs/features.md` lists every feature with its state, the release it
+shipped in, its tracking issue and the test that checks it. **A pull
+request that adds, fixes, refuses or removes behaviour records its row in
+the same pull request** -- as a fragment, never as an edit to the page. A
+finding that leaves something unsupported gets a row too, naming its
+issue.
+
+A pull request adds one file under `features.d/`, named for its branch
+like its changelog fragment (`fix/run-end-bound` writes
+`features.d/fix-run-end-bound.md`), holding one or more `## Section`
+headings of the page, each over rows in that section's columns, with the
+PR number under **Since** (`Unreleased (#N)`). A row whose first cell, the
+Feature, matches an existing row replaces it in place; a new one is
+appended to the section. `remove: KEY` deletes a row and `rename: KEY`
+followed by a row replaces it under a new key, both by the exact Feature
+text. One fragment writes a row: to change a row another unreleased
+fragment writes, edit that fragment. Pull requests open at the same time
+then never conflict over neighbouring rows of one table.
+
+A release applies them: `../rust-fs-core/scripts/features-gather.sh
+VERSION` writes every fragment into the page, turns every `Unreleased`
+into the version, and deletes the fragments, in the release commit.
+`chore lint` runs `features-check.sh`: every fragment applies to the page,
+and the page holds no `Unreleased` row of its own. The convention is
+rust-fs-core's `docs/features-fragments.md`.
 
 ## Clean room
 
