@@ -1,5 +1,20 @@
 # rust-fs-ext4 — pure-Rust ext2/3/4 driver
 
+This fork develops **support for casefold-enabled ext4 directories in Rust**, working toward an ext4 microSD card that can be shared between **Windows, Linux and SteamOS**. Casefold allows differently capitalized names to identify the same entry while preserving the filename’s original spelling. Ordinary directories retain their case-sensitive behavior.
+
+This fork’s casefold development—including implementation, tests, focused reviews and development documentation—is performed by **GPT-6.1 Sol under Shinomorisama’s direction**. The underlying ext2/3/4 driver originates from [antimatter-studios/rust-fs-ext4](https://github.com/antimatter-studios/rust-fs-ext4); upstream authorship and licensing are retained.
+
+**This work is experimental.** Supported casefold read paths are implemented, while mutation, directory-index and recovery qualification remain incomplete. **Casefold writes remain deliberately blocked.** Windows integration, real-card round trips and SteamOS hardware compatibility have not yet been qualified.
+
+Active development is on **[`casefold-rw`](https://github.com/Shinomorisama/rust-fs-ext4/tree/casefold-rw)**. To understand the work or build on it, start with:
+
+- **[Current progress and next steps](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/docs/extprogress.md)** — completed work, validation evidence, limitations and remaining tasks.
+- **[Contributor guide](https://github.com/Shinomorisama/rust-fs-ext4/blob/casefold-rw/AGENTS.md)** — development procedures, testing requirements and clean-room rules.
+
+The original project description and documentation are preserved below. They describe the underlying driver; the linked progress notes document this fork’s current casefold capabilities and restrictions.
+
+---
+
 Pure-Rust read/write driver for the ext2, ext3, and ext4 on-disk
 formats. Mounts disk images and block devices, journals writes
 through JBD2, replays the journal on dirty mounts, and exposes a
