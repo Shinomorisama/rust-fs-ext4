@@ -762,7 +762,11 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        scripts/tier.sh test:vm vm 4120 248000 -- \
+        # Inline-link source 6c71cbe, full run 40785791674: all 2,497
+        # successes produce 4,095 lines / 248,844 bytes; old 248,000
+        # returns 65. Identical-log replay passes at 251,000, preserving
+        # every byte, the line limit and the executed-test floor.
+        scripts/tier.sh test:vm vm 4120 251000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 
