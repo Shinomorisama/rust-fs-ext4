@@ -108,6 +108,84 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Scoped public-link implementation/evidence review — 2026-10-28
+
+Reviewed fetched source **`9f0a12486f398216dadf9595afdea97dcd71225b`**.
+Its production/test/workflow/pin bytes match combined repair **`8e04f9a`**,
+whose full **40792791359** passes all eleven jobs/ci-ok and the exact complete
+retention audit below. This review finds **no new blocker within the declared
+healthy ordinary-directory/caller-exclusion scope**. It closes that scoped
+public-link source/evidence review; it does not qualify casefold writes,
+arbitrary corruption, concurrent unguarded writers or broader growth.
+
+| Reviewed boundary | Source/evidence conclusion |
+|---|---|
+| Five Rust/C entry forms | String delegates to bytes; path and counted routes enter the shared context before filesystem callbacks or arbitrary `Into`. Counted names precede both conversions, source identity/type/count precedes parent conversion, and path splitting/source-directory/destination walking retain their existing priorities. C pointer and bounded-input checks remain outside filesystem entry. |
+| Identity and absence | `live_inode` checks allocation/liveness/generation, directories are refused as sources, and the shared non-directory link ceiling remains enforced. Only `NotFound` establishes destination absence; other lookup errors propagate. Existing API errno/path conventions are preserved rather than silently replaced with syscall rules. |
+| Owned staging | `LinkPlan` owns the target number and one complete buffer. Source nlink, inline/linear entries, mappings and allocator edits remain staged until effect entry. Final source/parent reads use the staged table and each write splices only its inode, preserving same-table edits. One Runtime reading supplies source ctime and parent mtime/ctime; the existing source generation and EA ownership remain. |
+| Optional primary SB | Allocation-free links legitimately omit it. Real growth/conversion plans retain their one-block debit. When present, the complete physical block is size/magic checked, its SB clean bit cleared and checksum restamped, preserving adjacent 4 KiB bytes and planned counters. This trusted internal boundary is not a general ownership seal. |
+| Effects and publication | Marker write/flush and the complete commit, including pending-allocation publication, remain inside effect handling. Error or unwind latches mount failure before external catchers can reuse it, including a retained private context. Publication occurs after commit; direct ordering is preserved without claiming power-loss atomicity. |
+| Optional C attributes | The existing target is read into an owned snapshot under the same context. Output filling performs no later filesystem read. Readback error can follow exactly one committed link; it leaves output sentinels untouched and does not undo or retry the link. An unwind retires the mount. |
+
+The source walk covers the link entries in `fs.rs`, `guarded_chmod.rs` and
+`capi.rs`; operation health/exclusion; live-inode/name/duplicate checks; buffered
+inode splicing; linear insertion/one-block append; inline load/fit/expansion/
+conversion and attribute removal; buffered allocation/counter helpers; and
+commit/publication/direct ordering. The three host tests and their guest
+builders/readback checks are matched to the archived source inventories and
+actual saved-byte audits. Reads of our current Rust source, retained bytes and
+black-box guest reports do not involve forbidden implementation source.
+
+Fresh focused runs execute **105 `link_calls` safety controls, including eight
+inline controls**, and **39 `policy_link_calls` controls**: **144 passed**, zero
+failed or ignored, exact prior-name multisets retained. Actual floors **105**
+and **39** pass. Logs measure **112 lines / 10,294 bytes** and **46 / 3,829**,
+inside the existing unit ceilings. Whole-module filters use their complete
+prefixes so unlink tests are not accidentally counted as hard-link controls.
+These runs include the original ordering/refusal/callback/error/unwind/readback
+controls and broader native positive shapes, without promoting self-built
+indexed/deeper/uninitialized-group cases to independent qualification.
+
+Fresh complete units retain every **1,647** baseline occurrence and all **670
+controls once**, with no failures or ignored tests and actual floor 440. Full
+lint passes. Production/test/workflow bytes, manifest/lock and sibling contents
+are unchanged; this checkpoint records review findings and the next bounded
+task in the existing documentation.
+
+The independent scope remains precise: allocation-free and one-to-two-block
+linear matrices each cover **sixteen Rust/C × block/inode/journal layouts /
+112 links / 352 images**; inline conversion covers **sixteen Rust/C × 1/4 KiB ×
+direct/journal × head/continuation layouts / 48 links / 160 images**. First-
+growth/conversion API forms rotate across layouts; this is not a full Cartesian
+API-by-layout oracle matrix. All **24 inline** and **thirteen files in each
+linear** source-hash inventory match the reviewed bytes. Their prior 864-image
+allocation/metadata/EA/checksum/dirty/closed/cold audits are retained evidence,
+not a newly executed Linux dispatch or image-audit repetition. Exact whole-
+suite retention and real trailing checks remain those of **40792791359**.
+
+The following remain open: counter wrap/high-word coverage; indexed/deeper and
+new uninitialized-group growth evidence; allocation exhaustion's existing
+conservative corruption classification; complete ownership/admission/seal/
+mapping qualification; lifecycle/recovery and the ignored slow fuzz case;
+Windows/card/SteamOS integration. Public operations outside the shared guard,
+other mounts and device writers still require caller exclusion. None of the
+three healthy image profiles demonstrates safe arbitrary-map admission,
+concurrent observation or crash recovery. Casefold writes remain blocked and
+stages 4–5 remain **not yet quantified**.
+
+**Next bounded task:** add native directory-change-counter boundary controls
+and a separate reference-only Linux wrap observation through the existing
+harness before changing version policy. Cover low-word last increment/carry,
+the 128-byte no-high-word profile, covered high-word increment and full-width
+wrap; bound additional short-extra-area cases explicitly. Preserve generation,
+source count/ctime, parent times, unrelated inode bytes/checksums, zero extra
+allocation and pre-effect refusals. Seed counters on controlled scratch images,
+verify the input and retain before/closed/cold raw bytes plus Linux/debugfs/
+judged e2fsck evidence; observations are not established until actually run.
+Do not infer Linux wrap semantics from our existing wrapping arithmetic or
+relax the operation epoch's separate no-wrap rule. Broader growth follows as
+its own later matrix.
+
 ### Inline-link complete-CI and retention closure — 2026-10-28
 
 Combined repair `8e04f9a` passes all eleven jobs and `ci-ok` in
