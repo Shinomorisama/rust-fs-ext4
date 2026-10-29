@@ -82,6 +82,27 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **The driver counter-boundary matrix is implemented and locally exercised; independent CI is next in this three-checkpoint run.**
+  The separate exact Linux test plans **16 Rust/C layout profiles / 48 links /
+  192 refusals / 240 input/refused/dirty/closed/cold images**, with all five API
+  forms represented in every boundary category through bounded rotation.
+  Local replay of the prior source/digest/all-CRC-verified Linux inputs executes
+  all **48 actual driver links / 192 zero-effect refusals**, including seed-byte
+  preservation, same-table edits, low/high/full-width wrap, one clock call,
+  generation/EA/allocation/payload and health preservation. The temporary replay
+  probe is removed. Fresh complete units retain the exact **1,651 successes /
+  674 controls once**, and full lint passes. Only host-test and focused-job
+  registration/evidence code changes; production writer, policy, epoch rules,
+  dependency pins and old limits are unchanged. The sixteenth pinned job retains
+  22 source hashes; the original reference also hashes the compiled child, and
+  all fourteen other job bodies remain byte-identical. Planned guest counts
+  (**720 debugfs / 192 judged clean e2fsck / 240 cold rows / twelve C snapshots**)
+  are not executed results yet. Continue through exact-source focused/full CI,
+  repair demonstrated failures, and audit saved bytes/complete retention before
+  closing this checkpoint. Expected whole count is **2,503**, with unchanged
+  **1,651 units / 674 controls in five contexts** and the same ignored fuzz gate.
+  Stages 4–5 remain not quantified and casefold writes remain blocked.
+
 - **The complete counter-source CI retention gate is closed by verified actual logs.**
   Exact source **`bbc25e8`**, full **40820596239**, passes all eleven jobs;
   focused **40820596147** passes all fifteen. Seven tier archives pass API
@@ -12782,7 +12803,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The exact counter source `bbc25e8` now closes full **40820596239** and focused **40820596147**: all **11/15 jobs** pass, seven source/digest/CRC-verified archives retain every occurrence (**2,502 whole / 1,651 unit successes; 674 controls once in five contexts**), and actual wrappers/floors/trailing twenty shell / 159 installed-CLI checks pass. The same ignored fuzz gate remains. **Next prepare and execute bounded Rust/C driver-emitted counter-boundary images** against the audited Linux reference (**24 boundary links / 96 images / 288 debugfs / 96 clean e2fsck / 96 known refusals / 120 cold rows**). Preserve source identity/generation/count/times, parent times, same-table splices, protected bytes/checksums/EA/allocation, zero-effect refusals and cold readback; keep the operation epoch's separate no-wrap policy. Retain every suite/cap/floor and repair only demonstrated failures. New main/notes CI **40862413814 / 40862413612** remains separate pending evidence at this checkpoint; inspect any actual failure before proceeding. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before repeating research: eight external forks / 49 tips were checked with scope and exclusions recorded. Main's core v0.4.2 baseline stays separate from **casefold core v0.3.0**. Indexed/deeper/uninitialized growth, exhaustion classification, ownership/admission/seal/lifecycle/recovery/fuzz/write/platform gates remain. Stages 4–5 stay not quantified, casefold writes blocked.
+1. Reuse this session's verified setup and authorization. The driver counter-boundary host matrix and sixteenth focused job are implemented, with **48 real Rust/C links / 192 refusals** passing local replay of actual saved Linux inputs, full units **1,651 / 674 controls** retained and lint passed. This run is authorized to continue through all three checkpoints: **implementation → independent CI → saved-byte/full-retention audit**. Next inspect exact new-source focused/full CI, repair only demonstrated failures, then audit all planned **240 images / 720 debugfs / 192 clean e2fsck / 240 cold rows / twelve C snapshots** and exact baseline retention (expected **2,503 whole successes / 1,651 units / 674 controls in five contexts**). Dirty images have raw/verified metadata reports, not a clean e2fsck verdict. All five entry forms rotate across the boundary categories; this is not a full API-by-layout Cartesian matrix. Keep original names, source generation/count/times, parent times, shared-table splices, checksums/EA/allocation, one Runtime call, zero-effect refusals and cold readback. Preserve every suite/cap/floor and the ignored fuzz gate; no production arithmetic or operation-epoch change is indicated. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader growth/ownership/admission/seal/lifecycle/recovery/fuzz/write/platform gates remain; stages 4–5 stay not quantified and casefold writes blocked.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

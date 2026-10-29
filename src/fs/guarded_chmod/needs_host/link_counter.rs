@@ -1,6 +1,9 @@
-//! Linux alone changes the namespace. Counter seeds are raw setup, not driver link emission.
+//! Linux-only reference; a separate child qualifies driver-emitted boundary bytes.
 use super::*;
 use std::io::{Seek, SeekFrom, Write};
+
+#[path = "link_counter_emission.rs"]
+mod driver_emission;
 
 const GUEST: &str = include_str!("link_counter_guest.py");
 const TRACKED: [&[u8]; 3] = [b"/policy", b"/policy/source", b"/peer"];
