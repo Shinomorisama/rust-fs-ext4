@@ -808,11 +808,11 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      # Link-emission source e6db258, full run 40637075795: 3,916 lines /
-      # 238,064 bytes after all 2,487 successes; old 238,000 cap returned 65.
-      # The docs-only successor's identical suite measured 237,948 bytes.
-      # Retain the line cap, full output and test floor; allow measured variance.
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3950 239000 -- scripts/test.sh --locked --release'
+      # Inline-link source 6c71cbe, full run 40785791674: all 2,497
+      # successes produce 3,927 lines / 239,529 bytes; old 239,000
+      # returns 65. Identical-log replay passes at 242,000, preserving
+      # every byte, the line limit and the executed-test floor.
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3950 242000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
