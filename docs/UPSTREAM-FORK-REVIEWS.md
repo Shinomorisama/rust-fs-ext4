@@ -116,6 +116,23 @@ and all existing siblings were left unchanged.
 4. For main, diff from upstream `90073d6` to the new source, keeping dependency
    versions and upstream validation context explicit. For casefold, preserve its
    separate pins and test/effect gates and backport only a demonstrated need.
-5. Resume the bounded project checkpoint in `extprogress.md`: first complete
-   exact full-log retention auditing of the now-green `bbc25e8` CI, then qualify
-   driver-emitted counter-boundary images. This review enables no writes.
+5. Resume the bounded project checkpoint in `extprogress.md`: the `bbc25e8` full-log retention audit is now closed as recorded below; qualify
+   driver-emitted counter-boundary images next. This review enables no writes.
+
+## CI follow-up on 2026-10-29
+
+This follow-up checks validation evidence; it does not refresh the external-fork
+inspection timestamp or expand its scope. Exact casefold source `bbc25e8` now
+has full **40820596239** and focused **40820596147** closed: **2,502 successes**
+in each whole suite, **1,651** in each unit context, **674 controls once in five
+contexts**, all prior occurrence multisets retained, actual wrappers/floors and
+real trailing checks passed. Seven tier archives have source/run/digest/all-CRC
+verification. The existing ignored slow fuzz remains open. See
+[the current project handoff](extprogress.md) for the detailed evidence and next
+Rust/C driver-emission task.
+
+The main import's own full run **40862413814** and notes-source casefold full
+**40862413612** are still running without reported failures at this observation.
+They are not credited as complete and must be checked at their exact source.
+The main source `5045433` and unchanged casefold implementation remain separate
+validation contexts, with core v0.4.2 and v0.3.0 respectively.

@@ -69,6 +69,33 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Counter-source full-CI retention closure — 2026-10-29
+
+Exact corrected source **`bbc25e8`** now has verified full **40820596239**
+passing all eleven jobs and focused **40820596147** passing all fifteen.
+Seven API-source/run/digest/all-CRC-verified archives retain the full preceding
+multisets plus exactly four native counter controls and one host reference:
+**2,502 successes in each whole suite**, **1,651 in each of three unit contexts**,
+and all **674 controls once in five contexts**. Ignored cases remain separate:
+the same slow corrupt-input fuzz is ignored in both whole suites and remains
+an open qualification gate.
+
+Actual native and guest wrappers/floors pass at **3,931 lines / 240,070 bytes**
+and **4,101 / 249,758**, inside unchanged ceilings. Native actually executes
+all twenty trailing shell checks and 159 installed-CLI checks. Standalone CLI
+159, ARM images 527, oracle 225, kernel 36, third implementation nine and wasm
+five retain their exact baseline counts and actual floors. No test, selection,
+budget or production repair is needed. Current `5e9c3ac` differs only in docs.
+
+The same-source 96-image Linux reference audit remains valid evidence. This
+closes its full-retention prerequisite, not Rust/C driver-emitted counter
+boundaries. New main and notes CI **40862413814 / 40862413612** are still
+running without reported failures at this observation and are not credited
+as full passes. Next qualify bounded driver emission against the measured
+reference, retaining same-table/identity/time/EA/allocation/checksum/refusal
+and cold evidence. Casefold writes remain blocked; stages 4–5 stay not
+quantified, and ownership/recovery/ignored fuzz/platform gates remain open.
+
 ### Linux counter-reference evidence closure — 2026-10-29
 
 Corrected source **`bbc25e8`** passes the exact counter reference in focused
