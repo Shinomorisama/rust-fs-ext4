@@ -43,6 +43,12 @@ file at the repository root. Keep tested checkpoint updates in the existing
 handoff and push authorized work to `origin/casefold-rw` so later chats can read
 it. Do not merge into or push to `main`.
 
+Before repeating upstream or fork research, read the dated
+[upstream/fork review register](docs/UPSTREAM-FORK-REVIEWS.md) and its exact-tip
+snapshot. Distinguish metadata checks from implementation review and preserve
+the recorded clean-room exclusions. Main baseline updates require the user's
+explicit authorization; they do not authorize merging upstream into casefold.
+
 The user's model preference is **Sol 6.1 for all implementation, testing, and
 review**. Do not recommend a model switch unless the user changes that preference.
 Keep the handoff's focused design reviews and independent validation requirements;

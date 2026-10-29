@@ -1,0 +1,553 @@
+{
+  "schema_version": 1,
+  "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+  "checked_local_date": "2026-10-29",
+  "timezone": "America/Chicago",
+  "core_upstream_source": "90073d67e2af5459c380220222cd23f2a905c37d",
+  "fork_main_before": "763ecf9deb89d4d6dae8790310bcb1c38e173d15",
+  "fork_main_import_commit": "5045433a20428b24d3f072556e151af07d5cf517",
+  "casefold_source_before_notes": "a7fe2585ffd5fab4d5573b8cafbcf85facd23c98",
+  "main_core_pin": "0.4.2",
+  "casefold_core_pin_unchanged": "0.3.0",
+  "windows_upstream_source": "876c6c781d77862ac899d3bdd8188b8b3a902ab5",
+  "our_windows_source": "393665e6cf7277422385154deeb8d2e4401dfa93",
+  "external_repositories": 8,
+  "external_branches": 49,
+  "repositories": [
+    {
+      "repository": "cyberphantom52/rust-fs-ext4",
+      "license": "MIT",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "de7706a9381cd8eba7bc5416e6d653396777f03d",
+      "branches": [
+        {
+          "name": "fix/in-inode-xattr-sets-ext-attr",
+          "sha": "a64a9dc16c42e4bcd4d426e0e5e7c8f57d382d3f",
+          "upstream_only": 6,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": true,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": true
+        },
+        {
+          "name": "main",
+          "sha": "de7706a9381cd8eba7bc5416e6d653396777f03d",
+          "upstream_only": 6,
+          "fork_only": 0,
+          "cleanroom_rewrite_ancestor": true,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "Selected post-clean-room inline-EA feature-bit patch and its guest oracle tests inspected; already present upstream as #596 and the active casefold planner also publishes EXT_ATTR. No patch imported."
+    },
+    {
+      "repository": "zubvit/rust-fs-ext4",
+      "license": "MIT",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "3a95a96dd70a9d86ed0827ed2daa4bbf22b7a617",
+      "branches": [
+        {
+          "name": "chore/github-guard-v2-hooks",
+          "sha": "3222d713d770a67e7551e12494a8cb5c6ac99bef",
+          "upstream_only": 295,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/guard-refresh",
+          "sha": "a6419108d645cf06e2f4321e31fd1c1d1d584c27",
+          "upstream_only": 289,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/refresh-github-guard-hooks",
+          "sha": "2cea40f72a6fa1b9bae1c04abbe6cc5802d470e7",
+          "upstream_only": 290,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/backup-layout-and-reserved-gdt",
+          "sha": "e3e0d160bc2fe6ababdf71eabdfa2b6283c5d7ef",
+          "upstream_only": 282,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/guard-five-spellings",
+          "sha": "54d8f85f6633bdedc33fcde9e903ee7d950f3cd5",
+          "upstream_only": 255,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/guard-lock-vs-pin",
+          "sha": "682bc00178f00e1f2db8050952c3ca6e33add14f",
+          "upstream_only": 259,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/package-mkfs-cli",
+          "sha": "4e38c3964bd8f28fb25b4cdedd4fc391e2ffcad2",
+          "upstream_only": 272,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/readme-0.5.1",
+          "sha": "12f5213544840851feccb757c0835825483aa301",
+          "upstream_only": 260,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/release-0.5.1",
+          "sha": "101ed7e4a61390d7abcda35791034a750ca7fe7d",
+          "upstream_only": 261,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/release-v0.4.1",
+          "sha": "055e35b3ac6d8d60477c365ca2ef13de1e40bb26",
+          "upstream_only": 278,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "fix/journal-multi-descriptor",
+          "sha": "818174096adfae9f0f0b81097deaf44352a697e8",
+          "upstream_only": 158,
+          "fork_only": 3,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "fix/102-the-journal-is-not-replayed-before-the-refusal",
+          "sha": "f5f32ab702fb38d3137938a150629f56a6589661",
+          "upstream_only": 248,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "main",
+          "sha": "3a95a96dd70a9d86ed0827ed2daa4bbf22b7a617",
+          "upstream_only": 245,
+          "fork_only": 0,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "Metadata for all 13 branches checked. Multi-descriptor journal tests and backup/reserved-metadata layout are regression leads; default branch is upstream history. Historical implementation was not inspected."
+    },
+    {
+      "repository": "1vivy/rust-fs-ext4",
+      "license": "MIT",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "26c5f463c198a4ba1aa0396be5c511ad051ce09a",
+      "branches": [
+        {
+          "name": "7.0.0-b5",
+          "sha": "0cddfb24b247babcecee1400ab53de03fd2b0fd6",
+          "upstream_only": 245,
+          "fork_only": 14,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/github-guard-v2-hooks",
+          "sha": "3222d713d770a67e7551e12494a8cb5c6ac99bef",
+          "upstream_only": 295,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/guard-refresh",
+          "sha": "a6419108d645cf06e2f4321e31fd1c1d1d584c27",
+          "upstream_only": 289,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/refresh-github-guard-hooks",
+          "sha": "2cea40f72a6fa1b9bae1c04abbe6cc5802d470e7",
+          "upstream_only": 290,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "codex/gdt-csum",
+          "sha": "b35da72ad2104f94c7bbf3ab9b0444c6146db9c7",
+          "upstream_only": 157,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "codex/journal-recovery-lifecycle",
+          "sha": "84c37af2ef51d0b7fa25c0bdfc1021be7eea0782",
+          "upstream_only": 154,
+          "fork_only": 9,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "codex/portable-runtime",
+          "sha": "d3e362cd20ef85691a889e8ce6fa01a1e2026a0c",
+          "upstream_only": 156,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/backup-layout-and-reserved-gdt",
+          "sha": "e3e0d160bc2fe6ababdf71eabdfa2b6283c5d7ef",
+          "upstream_only": 282,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/guard-five-spellings",
+          "sha": "54d8f85f6633bdedc33fcde9e903ee7d950f3cd5",
+          "upstream_only": 255,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/guard-lock-vs-pin",
+          "sha": "682bc00178f00e1f2db8050952c3ca6e33add14f",
+          "upstream_only": 259,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/multilevel-truncate",
+          "sha": "bc76929f6b140d1cac4a346d7a48b41dc66fcc96",
+          "upstream_only": 155,
+          "fork_only": 6,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/package-mkfs-cli",
+          "sha": "4e38c3964bd8f28fb25b4cdedd4fc391e2ffcad2",
+          "upstream_only": 272,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/readme-0.5.1",
+          "sha": "12f5213544840851feccb757c0835825483aa301",
+          "upstream_only": 260,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/release-0.5.1",
+          "sha": "101ed7e4a61390d7abcda35791034a750ca7fe7d",
+          "upstream_only": 261,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "cth/release-v0.4.1",
+          "sha": "055e35b3ac6d8d60477c365ca2ef13de1e40bb26",
+          "upstream_only": 278,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "fix/102-the-journal-is-not-replayed-before-the-refusal",
+          "sha": "f5f32ab702fb38d3137938a150629f56a6589661",
+          "upstream_only": 248,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "main",
+          "sha": "26c5f463c198a4ba1aa0396be5c511ad051ce09a",
+          "upstream_only": 245,
+          "fork_only": 18,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "wip/gdt-csum-20260929",
+          "sha": "9cf92a3c5a8ad70eb6de104157fdbc2673a5d775",
+          "upstream_only": 245,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "wip/journal-recovery-lifecycle-20260929",
+          "sha": "5f83144239cdb522d920773883975a6ae9c7c6a1",
+          "upstream_only": 245,
+          "fork_only": 3,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "wip/multilevel-truncate-20260929",
+          "sha": "ab352f4c4b892a77b6148da229fb32e1c0d45ef9",
+          "upstream_only": 240,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "Metadata for all 20 branches checked. Checked recovery, failed-handle retirement, flush/cache invalidation, legacy group checksums, multi-level truncate and runtime portability are leads. Branches predate the clean-room rewrite; no implementation approved or imported."
+    },
+    {
+      "repository": "Hybrid-Mount/rust-fs-ext4",
+      "license": "MIT",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "d4e01155c2fc6b0dcc143220e8dc7e62d65cff51",
+      "branches": [
+        {
+          "name": "chore/github-guard-v2-hooks",
+          "sha": "3222d713d770a67e7551e12494a8cb5c6ac99bef",
+          "upstream_only": 295,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/guard-refresh",
+          "sha": "a6419108d645cf06e2f4321e31fd1c1d1d584c27",
+          "upstream_only": 289,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/refresh-github-guard-hooks",
+          "sha": "2cea40f72a6fa1b9bae1c04abbe6cc5802d470e7",
+          "upstream_only": 290,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "main",
+          "sha": "d4e01155c2fc6b0dcc143220e8dc7e62d65cff51",
+          "upstream_only": 288,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "Metadata for all four branches checked. C ABI c_char portability and registry dependency packaging are leads. Current upstream C ABI uses c_char and has ARM CI; historical implementation not inspected."
+    },
+    {
+      "repository": "sntns/rust-fs-ext4",
+      "license": "MIT",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "b57d5bb05358b5df4d4187198c49a7029c767bb6",
+      "branches": [
+        {
+          "name": "chore/github-guard-v2-hooks",
+          "sha": "3222d713d770a67e7551e12494a8cb5c6ac99bef",
+          "upstream_only": 295,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/guard-refresh",
+          "sha": "a6419108d645cf06e2f4321e31fd1c1d1d584c27",
+          "upstream_only": 289,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "chore/refresh-github-guard-hooks",
+          "sha": "2cea40f72a6fa1b9bae1c04abbe6cc5802d470e7",
+          "upstream_only": 290,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "fix-aarch64-dirent-name-c-char",
+          "sha": "9e6a2d2c6bd97530d5d8ded51cef1d631cdf2f77",
+          "upstream_only": 288,
+          "fork_only": 1,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "fix-uninit-bg-flags-not-cleared",
+          "sha": "dbd949fec68626ffb5256afdf8654305fb13d9f1",
+          "upstream_only": 288,
+          "fork_only": 2,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "main",
+          "sha": "b57d5bb05358b5df4d4187198c49a7029c767bb6",
+          "upstream_only": 288,
+          "fork_only": 0,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        },
+        {
+          "name": "remora-etcher",
+          "sha": "5f14a822563312d7b170f418729097eedb83d7f7",
+          "upstream_only": 288,
+          "fork_only": 4,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "Metadata for all seven branches checked. Unsigned c_char targets and uninitialized-group bitmap/flag preservation are regression leads; historical implementation not inspected."
+    },
+    {
+      "repository": "NightProg/rust-fs-ext4",
+      "license": "MIT",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "0ec6e90f666ffbdb01860c89a8286788aefc7f28",
+      "branches": [
+        {
+          "name": "main",
+          "sha": "0ec6e90f666ffbdb01860c89a8286788aefc7f28",
+          "upstream_only": 355,
+          "fork_only": 0,
+          "cleanroom_rewrite_ancestor": false,
+          "review_level": "commit metadata and changed-file names",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "Single default branch is entirely upstream history; no unique commits found. Source implementation not re-reviewed."
+    },
+    {
+      "repository": "rcstor-2023/ext4-win-driver",
+      "license": "GPL-3.0",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "393665e6cf7277422385154deeb8d2e4401dfa93",
+      "branches": [
+        {
+          "name": "main",
+          "sha": "393665e6cf7277422385154deeb8d2e4401dfa93",
+          "upstream_only": 10,
+          "fork_only": 0,
+          "review_level": "GPL metadata only",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "GPL metadata only; default branch has no unique commits and is 10 commits behind upstream. No implementation inspected."
+    },
+    {
+      "repository": "ByronScottJones/ext4-win-driver",
+      "license": "GPL-3.0",
+      "checked_at_utc": "2026-10-29T10:58:23.246978+00:00",
+      "checked_local_date": "2026-10-29",
+      "default_branch": "main",
+      "default_head": "11b0261a0f605f0fdcb9c37990abd463a73af1d6",
+      "branches": [
+        {
+          "name": "main",
+          "sha": "11b0261a0f605f0fdcb9c37990abd463a73af1d6",
+          "upstream_only": 98,
+          "fork_only": 0,
+          "review_level": "GPL metadata only",
+          "implementation_reviewed": false
+        }
+      ],
+      "findings": "GPL metadata only; default branch has no unique commits and is 98 commits behind upstream. No implementation inspected."
+    }
+  ],
+  "not_checked": [
+    "Private/unlisted forks",
+    "Branches created after the recorded inventory",
+    "Non-main feature branches of the upstream roots",
+    "Implementation of GPL Windows-driver forks",
+    "Protected pre-rewrite hash and restated implementations",
+    "Windows/SteamOS/card runtime qualification"
+  ]
+}
