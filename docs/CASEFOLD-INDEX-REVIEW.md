@@ -108,6 +108,35 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Inline-link complete-CI and retention closure — 2026-10-28
+
+Combined repair `8e04f9a` passes all eleven jobs and `ci-ok` in
+[full run 40792791359](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/40792791359).
+Seven exact-source/run/digest/all-CRC-verified tier archives retain every prior
+occurrence: **2,497 successes in each whole suite**, **1,647 in each unit
+context**, and all **670 controls once in five contexts**. Actual per-job
+wrappers and floors pass; native output is **3,928 lines / 239,642 bytes**,
+guest **4,093 / 248,730**, within the measured repaired limits. The real trailing
+twenty native shell and 159 installed-CLI checks pass, alongside standalone CLI
+159, ARM images 527, oracle 225, kernel 36, third implementation nine and wasm
+five. The unchanged ignored slow fuzz case remains a qualification gate.
+
+All 24 inline and thirteen files in each earlier linear archive still match
+the repair source. The completed fourteen-job focused run and 864-image audit
+below remain source-bound evidence; no newly dispatched focused run or repeated
+image audit is claimed. Only measured output limits and the isolated staticlib
+shell fixture differ in executable code from emission source `6c71cbe`.
+See the [closure ledger](extprogress.md#combined-inline-link-full-ci-and-exact-retention-closure--2026-10-28)
+for complete artifact IDs/digests, retention and actual trailing-step evidence.
+
+This closes the bounded inline execution/CI-retention checkpoint. Next perform
+the scoped public-link implementation/evidence review across its healthy
+allocation-free, one-to-two-block linear and inline-conversion profiles, then
+bound remaining indexed/deeper/uninitialized-group growth and counter wrap.
+Exhaustion classification, broader ownership/admission/seal/lifecycle/recovery/
+fuzz and platform gates remain open. This evidence does not broaden admission
+or enable casefold writes; stages 4–5 remain unquantified.
+
 ### Exact inline Linux emission audit; full retention pending — 2026-10-28
 
 Source `6c71cbe` passes all fourteen focused jobs in **40785791695**. Inline
