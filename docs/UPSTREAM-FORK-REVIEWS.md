@@ -32,6 +32,7 @@ was imported into `casefold-rw`.
 | Casefold dependency | Remains core v0.3.0; no automatic upstream merge into casefold |
 | Main local validation | 728 unit successes; exact upstream passing-name multiset retained, zero ignored; actual floor 443; full lint passed |
 | Upstream independent CI | [40661813529](https://github.com/antimatter-studios/rust-fs-ext4/actions/runs/40661813529), exact source above: all 12 jobs including aggregate passed |
+| Fork main independent CI | [40862413814](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/40862413814), exact import `5045433`: all 12 jobs including aggregate passed; API source/run/job conclusions verified on 2026-10-29 |
 | Unit archive | Artifact 12804361422; API source/run, SHA-256 and all ZIP CRCs verified |
 | Candidate-source equality | Implementation, tests, dependencies and workflows exactly match the reviewed upstream tree; only the fork AGENTS pointer and approved README introduction/review link differ |
 | Recovery | Annotated `archive/main/2026-10-29/pre-upstream-90073d6` at the old main tip, plus a verified local bundle |
@@ -116,8 +117,10 @@ and all existing siblings were left unchanged.
 4. For main, diff from upstream `90073d6` to the new source, keeping dependency
    versions and upstream validation context explicit. For casefold, preserve its
    separate pins and test/effect gates and backport only a demonstrated need.
-5. Resume the bounded project checkpoint in `extprogress.md`: the `bbc25e8` full-log retention audit is now closed as recorded below; qualify
-   driver-emitted counter-boundary images next. This review enables no writes.
+5. Resume the bounded project checkpoint in `extprogress.md`: counter-emission
+   source `b14369d` now passes focused/full CI and saved-byte/complete-retention
+   review. Prepare bounded ordinary indexed-parent reference evidence next.
+   This review enables no casefold writes.
 
 ## CI follow-up on 2026-10-29
 
@@ -136,3 +139,29 @@ The main import's own full run **40862413814** and notes-source casefold full
 They are not credited as complete and must be checked at their exact source.
 The main source `5045433` and unchanged casefold implementation remain separate
 validation contexts, with core v0.4.2 and v0.3.0 respectively.
+
+### Main import CI completed — 2026-10-29
+
+The later exact-source check confirms main import **`5045433`** passed all
+**twelve jobs**, including its aggregate, in **40862413814**. This closes the
+pending main CI status above; it is an API source/run/job-conclusion check,
+not a new full image or individual-log audit. It does not refresh the dated
+external-fork snapshot, import more code, or qualify casefold/Windows/card use.
+
+The subsequent API check also confirms notes-only casefold source **`5e9c3ac`**
+passed all **eleven jobs** in **40862413612**. This resolves its earlier pending
+status without claiming a new per-log/image audit. Its implementation remains
+the separately audited `bbc25e8` source; newer counter-emission evidence and
+remaining work belong to the current checkpoint in `extprogress.md`.
+
+### Counter-emission checkpoint completed — 2026-10-29
+
+Exact casefold source **`b14369d`** passes focused **40867303009** (16/16 jobs)
+and full **40867302848** (11/11). Independent audits close **48 Rust/C links /
+192 refusals / 240 saved images** against the fresh Linux reference, retaining
+**2,503 successes in each whole suite / 1,651 units / 674 controls once in five
+contexts**, all prior occurrences, actual limits/floors and trailing checks.
+The ignored fuzz and broader write/platform gates remain open. See the current
+handoff for exact source/artifact identity and the bounded indexed-parent next
+task. This CI follow-up does not refresh the external-fork snapshot or approve
+more source imports; main and casefold retain their separate core pins.

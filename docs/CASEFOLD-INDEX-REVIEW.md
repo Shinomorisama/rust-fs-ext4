@@ -69,6 +69,49 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Public-link counter emission and complete retention closure — 2026-10-29
+
+Exact source **`b14369d`** passes the new Linux emission job in focused
+**40867303009**, actual floor one at **1,133 lines / 170,719 bytes**. The
+source/run/digest/all-CRC/22-hash verified artifact independently audits
+**eight physical layouts / sixteen Rust/C profiles / 48 links / 192 zero-effect
+refusals / 240 images / 720 debugfs / 192 clean e2fsck / 240 cold rows / twelve
+owned C snapshots**. The fresh same-source reference passes its complete
+**96-image / 24-boundary-link** audit, and all 48 driver outcomes match.
+All five forms occur in every boundary category through bounded rotation.
+
+Source/evidence review confirms controlled seed edits, actual shared-table
+splices, protected identity/generation/count/time/checksum/EA/allocator/payload
+bytes, one clock call, healthy completion and cold observer readback. Dirty
+images are raw/debugfs observations, not clean e2fsck or recovery results.
+Local replay and full units retain **1,651 successes / 674 controls once**,
+full lint passes and the temporary probe is removed. Production code, old
+fourteen job bodies, pins, floors and ceilings remain unchanged; only the old
+reference hash inventory adds the compiled child.
+
+All sixteen focused jobs pass; seventeen archives and 31 actual tier
+verdicts/floors/ceilings are verified. Exact full **40867302848** passes all
+eleven jobs including `ci-ok`; seven source/run/digest/all-CRC-verified tier
+archives retain every old occurrence and add only the new host test in whole
+suites: **2,503 successes each**, **1,651 units in three contexts**, all **674
+controls once in five contexts**. Ignored occurrences remain identical and
+separate: the same slow corrupt-input fuzz is unqualified. Actual native/guest
+wrappers/floors pass at **3,936 lines / 240,725 bytes** and **4,103 / 250,065**,
+inside unchanged ceilings. Real trailing **twenty shell / 159 installed-CLI**
+checks and standalone CLI 159, ARM images 527, oracle 225, kernel 36,
+third-implementation nine and wasm five retain their exact baselines/floors.
+No production, budget, filter, floor or test repair is needed. Final lint passes.
+
+This closes the three-step counter-emission checkpoint within its declared
+healthy ordinary-directory/caller-exclusion profile. The detailed review and
+exact artifact identities are in `extprogress.md`; the closing commit changes
+only notes. Next prepare independent ordinary indexed-parent insertion/growth
+reference evidence, explicitly distinguishing retained indexes from the native
+ordinary split/fallback allowance. Deeper/uninitialized growth, arbitrary
+ownership/admission, lifecycle/recovery, ignored fuzz and Windows/card/SteamOS
+remain open. Stages 4–5 remain partial and not quantified; casefold writes
+remain blocked.
+
 ### Counter-source full-CI retention closure — 2026-10-29
 
 Exact corrected source **`bbc25e8`** now has verified full **40820596239**
