@@ -6,6 +6,8 @@ use crate::capi::*;
 use crate::inode::Inode;
 use std::path::Path;
 
+#[path = "link_counter.rs"]
+mod counter_reference;
 #[path = "link_growth.rs"]
 mod growth;
 #[path = "link_inline.rs"]

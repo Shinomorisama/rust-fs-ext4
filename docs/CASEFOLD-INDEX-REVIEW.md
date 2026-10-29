@@ -108,6 +108,39 @@ restores the **1,503-occurrence / 526-control** active baseline with lint.
 Independent reference-only link policy collection is next; semantic repair
 and emitted-image qualification remain later steps.
 
+### Counter-boundary native controls and Linux reference preparation — 2026-10-28
+
+Four new native controls pass **240 links / 120 refusals**, preserving all five
+entry forms, source/parent shared-table edits, metadata/checksums, payload/EA,
+exact counters/bitmaps and refusal-before-clock/effect/health changes. Literal
+low/high boundary sequences cover 128-byte carry, covered 256-byte carry/full
+wrap and extra-size 0/24/28/32 field boundaries. Short-extra-area cases remain
+native-only; covered 256-byte native fixtures are direct, not a new journaled
+emission qualification. Exact unit retention adds only four names: **1,651
+successes / 674 controls**, with all 1,647 prior occurrences retained.
+Full lint and targeted workflow pin/VM-order/no-root checks pass.
+
+The separate reference-only exact host test/job plans **eight Linux layouts /
+24 boundary observations / 96 images / 288 debugfs / 96 judged e2fsck reports**.
+Linux calibrates an ordinary link before raw counter seeding, then records
+known refusals and actual boundary success or an explicit zero-effect error,
+without assuming the driver's arithmetic. Complete table/allocator/EA/raw
+counter and cold stat/namespace/payload evidence is retained. The driver only
+reads the namespace; raw seed setup changes counter/checksum fields in closed
+scratch images. Four snapshots/checks remain mandatory even on an observed
+refusal. No missing-tool fallback or skip is added.
+
+The fifteenth focused job pins existing toolchain/siblings, retains nineteen
+source hashes and requires the exact test/floor one; all fourteen prior job
+bodies remain unchanged. Compilation, exact listing, Python syntax and native
+checks pass locally. Actual Linux execution and saved-byte qualification are
+**pending**. See the [preparation ledger](extprogress.md#native-counter-boundaries-and-independent-linux-reference-preparation--2026-10-28).
+Next audit exact-source focused/full CI and all raw outcomes before deriving
+policy reds or driver-emission qualification. No production version/operation-
+epoch rule, dependency, existing output cap or write gate changes. Broader
+growth/ownership/recovery/fuzz/platform gates remain; stages 4–5 remain
+unquantified and casefold writes remain blocked.
+
 ### Scoped public-link implementation/evidence review — 2026-10-28
 
 Reviewed fetched source **`9f0a12486f398216dadf9595afdea97dcd71225b`**.

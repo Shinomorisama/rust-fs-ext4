@@ -4,6 +4,8 @@ use crate::capi::*;
 use std::ffi::CString;
 const NAME: &str = "user.audit";
 const STAMP: i64 = 1_700_000_100;
+#[path = "link_counter.rs"]
+mod counter_boundary;
 #[path = "link_inline.rs"]
 mod inline_conversion;
 fn specimen(flavor: features::FsFlavor, bs: u32) -> (Arc<Device>, Filesystem, u32, Arc<Clock>) {
