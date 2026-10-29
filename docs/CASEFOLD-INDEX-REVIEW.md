@@ -69,6 +69,31 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Counter-reference reader repair — 2026-10-28
+
+Source `c2f2563` passes fourteen focused jobs in **40816978068** but its new
+counter job **123260234685** fails before any boundary syscall: the public
+directory enumerator rejects the first valid legacy direct-directory input.
+The archive's API/source identity, digest, all ZIP CRCs and nineteen source
+hashes are verified. Normal-counter Linux calibration succeeds; seeded-input
+debugfs/e2fsck and all boundary outcomes remain unobserved.
+
+The corrected private test reader admits only the declared one-block direct or
+depth-zero extent formats and uses existing mapping/verified directory parsing.
+Required checksum tails, exact inventories, bounds and zero-write checks remain.
+The same saved input reproduces red then green; eight retained Linux formats
+pass sixteen independently decoded inventories, and four damaged tails return
+`BadChecksum`. Temporary replay probes are removed. Fresh full units retain
+**1,651 occurrences / 674 controls**, and full lint passes. The counter archive
+now hashes its parser/mapper dependencies too, **21 files**; prior job bodies,
+matrix, floors, filters, limits, production code and pins are unchanged.
+
+The full old-source native/guest jobs are still running at this observation.
+Inspect corrected-source CI and audit actual boundary images/reports before
+deriving counter policy or driver-emission qualification. Planned counts are
+not results. Broader ownership/recovery/fuzz/platform gates remain open,
+stages 4–5 stay not quantified and casefold writes remain blocked.
+
 ### Upstream compatibility and kernel-budget evidence closure — 2026-10-27
 
 Reviewed current `ceb3232` after recovery of the interrupted local audit.

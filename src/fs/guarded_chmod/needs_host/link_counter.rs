@@ -48,6 +48,46 @@ fn judged_reference(image: &Path, base: &Path, phase: &str) {
     .unwrap();
 }
 
+// This reference deliberately includes legacy and extent-mapped one-block
+// directories. Keep its inventory bounded rather than changing public APIs.
+fn directory_inventory(fs: &Filesystem, ino: u32) -> Vec<(Vec<u8>, u32, crate::dir::DirEntryType)> {
+    let (inode, _) = fs.read_inode_verified(ino).unwrap();
+    assert!(inode.is_dir() && !inode.has_inline_data());
+    assert_eq!(inode.flags & crate::inode::InodeFlags::INDEX.bits(), 0);
+    assert_eq!(inode.size, u64::from(fs.sb.block_size()));
+    if inode.has_extents() {
+        let header = crate::extent::ExtentHeader::parse(&inode.block).unwrap();
+        assert_eq!((header.depth, header.entries), (0, 1));
+    } else {
+        assert!(
+            inode.block[4..].iter().all(|b| *b == 0),
+            "only direct block zero belongs to this reference"
+        );
+    }
+    let physical = fs
+        .map_inode_logical(&inode, 0)
+        .unwrap()
+        .expect("reference directory hole");
+    assert!(physical < fs.sb.blocks_count);
+    assert_eq!(fs.map_inode_logical(&inode, 1).unwrap(), None);
+    let block = fs.read_block(physical).unwrap();
+    assert_ne!(
+        fs.sb.feature_incompat & features::Incompat::FILETYPE.bits(),
+        0
+    );
+    if fs.csum.enabled {
+        assert!(
+            crate::dir::has_csum_tail(&block),
+            "reference checksum tail missing"
+        );
+    }
+    crate::dir::parse_block_verified(&block, true, ino, inode.generation, &fs.csum)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.name, e.inode, e.file_type))
+        .collect()
+}
+
 fn snapshot(image: &Path, base: &Path, phase: &str) -> Snapshot {
     let fs = mount(image);
     check_clean(&fs);
@@ -74,18 +114,8 @@ fn snapshot(image: &Path, base: &Path, phase: &str) -> Snapshot {
             (i.file_acl, fs.read_block(i.file_acl).unwrap())
         })
         .collect();
-    let entries = fs
-        .read_dir_ino(records[0].0)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.name, e.inode, e.file_type))
-        .collect();
-    let root_entries = fs
-        .read_dir_ino(2)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.name, e.inode, e.file_type))
-        .collect();
+    let entries = directory_inventory(&fs, records[0].0);
+    let root_entries = directory_inventory(&fs, 2);
     let raw_rows = records
         .iter()
         .map(|(ino, _, raw)| {

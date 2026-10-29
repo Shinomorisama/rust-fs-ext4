@@ -76,7 +76,7 @@ jobs:
         run: |
           mkdir -p tmp/link-counter-reference
           git rev-parse HEAD > tmp/link-counter-reference/source-commit.txt
-          sha256sum src/fs.rs src/capi.rs src/fs/guarded_chmod.rs src/fs/guarded_chmod/needs_host.rs src/fs/guarded_chmod/needs_host/link_emission.rs src/fs/guarded_chmod/needs_host/link_counter.rs src/fs/guarded_chmod/needs_host/link_counter_guest.py src/fs/guarded_chmod/needs_host/setxattr.rs src/fs/guarded_chmod/tests/link_calls.rs src/fs/guarded_chmod/tests/link_counter.rs src/operation.rs src/inode.rs src/bgd.rs src/checksum.rs src/block_io.rs tests/support/src/lib.rs Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml > tmp/link-counter-reference/source-sha256.txt
+          sha256sum src/fs.rs src/capi.rs src/fs/guarded_chmod.rs src/fs/guarded_chmod/needs_host.rs src/fs/guarded_chmod/needs_host/link_emission.rs src/fs/guarded_chmod/needs_host/link_counter.rs src/fs/guarded_chmod/needs_host/link_counter_guest.py src/fs/guarded_chmod/needs_host/setxattr.rs src/fs/guarded_chmod/tests/link_calls.rs src/fs/guarded_chmod/tests/link_counter.rs src/operation.rs src/inode.rs src/dir.rs src/extent.rs src/bgd.rs src/checksum.rs src/block_io.rs tests/support/src/lib.rs Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml > tmp/link-counter-reference/source-sha256.txt
       - name: Observe Linux directory-counter boundaries without driver namespace writes
         env:
           FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/link-counter-reference
