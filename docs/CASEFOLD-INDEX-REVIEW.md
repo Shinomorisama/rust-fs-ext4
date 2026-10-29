@@ -69,6 +69,39 @@ kernel/e2fsprogs implementation source was used in this review.
 
 ## Findings to resolve before broadening admission
 
+### Linux counter-reference evidence closure — 2026-10-29
+
+Corrected source **`bbc25e8`** passes the exact counter reference in focused
+**40820596147**, job **123271909282**, actual floor one and unchanged wrapper
+limits (**605 lines / 78,971 bytes**). Artifact **12874677361** is bound to the
+API source/run and verified by advertised digest, every ZIP CRC and all **21
+source hashes** matching current bytes. Independent raw decoding audits **eight
+layouts / 24 successful boundary links / 96 input/refused/linked/cold images**,
+**288 debugfs / 96 clean e2fsck reports**, **96 known refusals / 120 cold rows**.
+
+For both block sizes and direct/journal profiles, 128-byte low carry wraps to
+zero; 256-byte covered low carry increments the high word, nonzero high carry
+increments it again, and full-width MAX wraps to zero. Last-low increments
+reach low MAX in both formats. These observations agree with the existing
+native contract, so this reference indicates no production arithmetic change.
+All eight normal-counter calibrations pass. Seeded-input copies differ only
+in declared counter/checksum bytes; exact inventories, full tracked inode
+tables, protected source/parent/peer fields, bitmap/descriptor/free counts,
+payloads, EAs, applicable checksums and cold metadata agree with retained reports.
+See the detailed outcome table and audit receipts in `extprogress.md`.
+
+This closes the bounded **Linux-only reference** audit, not driver-emitted
+boundary qualification. At this observation thirteen focused jobs pass; allocation-free link emission
+and fixtures remain running. Full **40820596239** has
+seven successes with ARM/native/guest pending; its verified standalone units
+retain **1,651 occurrences / 674 controls**, but complete whole retention and
+trailing steps are not credited. Next close exact full/focused CI, then prepare
+Rust/C boundary emission against the measured outcomes. Short-extra-area
+controls, arbitrary ownership/mapping admission, recovery/ignored fuzz and
+Windows/card/SteamOS remain separate gates. Stages 4–5 stay not quantified;
+casefold writes remain blocked. Fresh full lint passes; no production/test/
+workflow change is made.
+
 ### Counter-reference reader repair — 2026-10-28
 
 Source `c2f2563` passes fourteen focused jobs in **40816978068** but its new
