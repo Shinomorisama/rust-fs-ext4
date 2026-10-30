@@ -82,6 +82,27 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Ordinary indexed-parent reference is prepared; independent execution is pending.**
+  The existing native indexed-growth control passes both 1 KiB/4 KiB layouts
+  and reports retained INDEX; its assertion still permits split or fallback.
+  The new bounded Linux-only reference covers four ordinary root-only profiles
+  (1/4 KiB, 256-byte checksum inodes, direct/journaled), with actual same-table
+  placement, allocation-free insertion, individual links through first leaf
+  growth, exact pre-growth images, complete route/name/inode checks, allocator/
+  table/EA/payload preservation, refusals and cold Linux observation. The
+  [reference contract and split/fallback review](CASEFOLD-INDEXED-LINK-REFERENCE.md)
+  state the limits. A seventeenth focused job retains exact source identity,
+  reports/images and a one-test floor. Production code, old controls, dependency
+  pins, old job bodies, caps/floors and write gates are unchanged. Local full
+  lint and Python syntax/bounded filename checks pass. Complete native units
+  retain the exact 1,651-success baseline multiset, with zero ignored cases.
+  This prepares the reference; it does not yet qualify Linux results or driver
+  emission.
+  Stages 4–5 remain partial/not quantified; casefold writes remain blocked.
+  **Next:** inspect the exact new source's focused/full CI, audit the saved
+  pre/post images and complete inventories, repair any actual failure, then
+  design the bounded driver emission matrix against the admitted Linux inputs.
+
 - **All three counter-emission checkpoints are complete: implementation, independent CI, and saved-byte/full-retention review.**
   Exact implementation **`b14369d`** passes focused **40867303009**, all sixteen
   jobs, and full **40867302848**, all eleven jobs including `ci-ok`.

@@ -10,6 +10,8 @@ use std::path::Path;
 mod counter_reference;
 #[path = "link_growth.rs"]
 mod growth;
+#[path = "link_index.rs"]
+mod indexed_reference;
 #[path = "link_inline.rs"]
 mod inline_conversion;
 
