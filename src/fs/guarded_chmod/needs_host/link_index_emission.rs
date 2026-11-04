@@ -121,10 +121,13 @@ fn dispatch(
 
 fn compare_linux(driver: &View, linux: &View) {
     assert_eq!(driver.entries, linux.entries);
-    assert_eq!(driver.mapping, linux.mapping);
+    assert_eq!(driver.mapping.len(), linux.mapping.len());
+    assert_eq!(
+        &driver.mapping[..driver.mapping.len() - 1],
+        &linux.mapping[..linux.mapping.len() - 1]
+    );
     assert_eq!(driver.roots, linux.roots);
     assert_eq!(driver.free, linux.free);
-    assert_eq!(driver.allocation, linux.allocation);
     assert_eq!(driver.eas, linux.eas);
     assert_eq!(driver.payloads, linux.payloads);
     assert_eq!(driver.root_directory, linux.root_directory);
@@ -237,12 +240,14 @@ fn profile(source: &Path, linux: &View, name: &[u8], capi: bool, bs: u32, journa
     std::fs::write(
         base.with_extension("observation.json"),
         format!(
-            "{{\"block_size\":{bs},\"journal\":{journal},\"capi\":{capi},\"name\":\"{}\",\"entries_before\":{},\"entries_after\":{},\"routes_before\":{},\"routes_after\":{},\"clock_calls\":1,\"refusals\":3}}\n",
+            "{{\"block_size\":{bs},\"journal\":{journal},\"capi\":{capi},\"name\":\"{}\",\"entries_before\":{},\"entries_after\":{},\"routes_before\":{},\"routes_after\":{},\"driver_added_block\":{driver_block},\"linux_added_block\":{linux_block},\"clock_calls\":1,\"refusals\":3}}\n",
             name.iter().map(|b| format!("{b:02x}")).collect::<String>(),
             input.entries.len(),
             closed.entries.len(),
             input.roots,
             closed.roots,
+            driver_block = closed.mapping.last().unwrap(),
+            linux_block = linux.mapping.last().unwrap(),
         ),
     )
     .unwrap();

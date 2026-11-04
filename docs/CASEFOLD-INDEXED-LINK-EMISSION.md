@@ -33,8 +33,9 @@ successful hard link must then:
   version fields;
 - debit one free block and its exact bitmap/group/global counters, allocate no
   inode, and preserve tracked inode-table, EA, payload, and root-directory data;
-- match the Linux split's complete inventory, logical/physical mapping, route
-  count, allocator state, protected bytes, and parent/source structural fields;
+- match the Linux split's complete inventory, old logical/physical mappings,
+  map length, route count, free counts, protected bytes, and parent/source
+  structural fields; the independently valid new physical block may differ;
 - close to a clean non-recovery image accepted by non-repairing e2fsck; and
 - remain fully resolvable during a separate cold Linux observer mount, with
   driver bytes kept separate from the observer copy.
@@ -52,8 +53,13 @@ uploads all shared Linux inputs plus Rust/C input, refused, dirty, closed and
 cold images, routing inventories, inode/index reports, clean e2fsck output,
 guest observations, and the complete tier log even on failure.
 
-Local compilation with the pinned core succeeds. The Linux/e2fsprogs/KVM matrix
-is intentionally left to the prescribed CI harness and is pending at this
-preparation checkpoint. A successful focused run and saved-byte audit are
-required before this matrix qualifies driver emission or advances the bounded
-indexed-growth evidence.
+Local compilation with the pinned core succeeds. First focused run 41911766228
+reached a clean, routed Rust 1 KiB direct split, then exposed an overstrict test
+comparison: Linux chose new block 8712 while the driver independently chose
+16903 from the same input map `[8709, 8710, 8711]`. Both exact transitions debit
+one block and preserve all old mappings. The failed artifact's advertised
+SHA-256, ZIP CRCs, 124 tracked-source hashes, exact input/refusal identity,
+inventories and clean e2fsck output pass. The comparison now records both new
+blocks while requiring the invariant old-map prefix and independent exact
+allocator transitions. Corrected focused/full CI and the complete eight-profile
+saved-byte audit remain required before this matrix qualifies driver emission.

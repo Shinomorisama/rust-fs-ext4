@@ -82,7 +82,7 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
-- **The ordinary indexed-parent Rust/C emission matrix is prepared; independent execution is pending.**
+- **The first indexed-parent Rust/C emission run reproduced an overstrict physical-block comparison; the bounded repair is prepared.**
   Four shared Linux-built pre-split inputs cover 1/4 KiB direct/journaled
   profiles. Each exact input is copied to Rust and C public-link paths, which
   use the same long destination that made Linux perform its first leaf split.
@@ -91,13 +91,23 @@ for `casefold-rw`, never main or siblings.
   protected table/EA/payload/root preservation, three zero-effect refusals,
   clean close and cold Linux observation. The existing native fallback-tolerant
   control is unchanged; this matrix fails index dropping. Its exact focused job
-  retains all source hashes and phase images with a one-test floor. Local pinned-
-  core compilation and format checking pass; the KVM/Linux/e2fsprogs test is
-  unrun locally and fresh focused/full CI are pending. No production path, write
-  gate, dependency, pin, old job body, floor or ceiling changed. Stages 4–5 stay
-  partial and not quantified. **Next bounded task:** inspect the exact pushed
-  focused/full runs, audit every retained route/allocation/cold image and repair
-  only defects reproduced by that evidence before claiming driver qualification.
+  retains all source hashes and phase images with a one-test floor. Exact source
+  `d887f74` focused **41911766228** fails only this new job after its first Rust
+  1 KiB direct image passes the split transition, clean e2fsck and complete
+  routing. The saved input map is `[8709, 8710, 8711]`; Linux appends block 8712
+  while the driver's independently valid allocator appends 16903. Artifact
+  **13363776136** matches advertised SHA-256
+  **`f37b1b6f8d7814bae17245f6f1c98892f6bc21384454fe121d67f5e240989427`**,
+  all ZIP CRCs and 124 source hashes; input/refusal bytes are identical. Full
+  **41911766086** fails its two whole-suite contexts on the same new host test;
+  units retain 1,651 successes and all earlier focused jobs pass. The repaired
+  comparison keeps exact independent one-bit accounting and requires equal old
+  mapping prefixes/map lengths, but records rather than equates the allocator's
+  valid new physical choice. Local pinned-core validation is fresh; corrected
+  focused/full CI remain pending. No production path, write gate, dependency,
+  pin, old job body, floor or ceiling changed. Stages 4–5 stay partial and not
+  quantified. **Next bounded task:** inspect corrected exact-source runs and
+  audit all eight retained profiles before claiming driver qualification.
 
 - **Ordinary indexed-parent Linux reference and exact-source retention are closed.**
   Exact preparation source **`433364d`** passes focused **41022239092**, all
