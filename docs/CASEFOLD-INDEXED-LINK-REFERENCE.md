@@ -87,6 +87,7 @@ preceding whole-suite success and add only this reference; all 1,651 unit names
 and the 674-control baseline remain. `docs/extprogress.md` records the complete
 counts, artifact identity and limits.
 
-The next bounded task is driver Rust/C emission against these same admitted
-Linux inputs, with a retained-index split required instead of accepting fallback.
-Preserve all existing write gates.
+The Rust/C emission matrix against these admitted Linux inputs is now prepared
+in `CASEFOLD-INDEXED-LINK-EMISSION.md`. Its focused Linux/e2fsprogs execution and
+saved-byte audit remain pending; it requires a retained-index split instead of
+accepting fallback. Preserve all existing write gates.

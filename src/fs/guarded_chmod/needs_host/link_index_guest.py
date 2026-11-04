@@ -121,5 +121,9 @@ elif mode == "cold":
     result = audit()
     assert result == EXPECTED, (result, EXPECTED)
     print(json.dumps(dict(event="cold", **result), sort_keys=True))
+elif mode == "observe":
+    result = audit()
+    assert result["parent"]["flags"] & 0x1000
+    print(json.dumps(dict(event="observe", **result), sort_keys=True))
 else:
     raise AssertionError(mode)

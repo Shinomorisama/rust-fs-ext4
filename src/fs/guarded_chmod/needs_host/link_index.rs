@@ -1,5 +1,8 @@
-//! Linux-only root-index link reference. No writable driver mount or mutation.
+//! Linux-built root-index link reference and bounded public-driver emission.
 use super::*;
+
+#[path = "link_index_emission.rs"]
+mod driver_emission;
 
 const GUEST: &str = include_str!("link_index_guest.py");
 const TRACKED: [&[u8]; 3] = [b"/policy", b"/source", b"/peer"];
