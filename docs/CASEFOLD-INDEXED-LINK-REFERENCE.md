@@ -77,9 +77,16 @@ leaf growth and casefold index dropping remains refused. No guard is relaxed.
 
 ## Validation status
 
-The baseline native control passed before reference changes. Local compilation,
-full unit retention, lint, and exact-commit independent CI must be recorded in
-`docs/extprogress.md`; pending jobs are not evidence of a passed reference.
-After the reference passes and its saved bytes/reports are audited, the next
-bounded task is driver Rust/C emission against these same admitted Linux inputs,
-with split versus fallback asserted explicitly. Preserve all existing write gates.
+The baseline native control passed before reference changes. Exact source
+`433364d` now passes focused run 41022239092 and full run 41022239296. The
+source-bound focused artifact's advertised SHA-256, ZIP CRCs and 123 tracked
+source hashes pass. All four profiles' saved images, inventories, reports,
+refusals, allocation-free insertion, first retained-index split and cold
+readback satisfy the contract above. Exact full artifacts retain every 2,503
+preceding whole-suite success and add only this reference; all 1,651 unit names
+and the 674-control baseline remain. `docs/extprogress.md` records the complete
+counts, artifact identity and limits.
+
+The next bounded task is driver Rust/C emission against these same admitted
+Linux inputs, with a retained-index split required instead of accepting fallback.
+Preserve all existing write gates.

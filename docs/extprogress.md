@@ -82,26 +82,39 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
-- **Ordinary indexed-parent reference is prepared; independent execution is pending.**
-  The existing native indexed-growth control passes both 1 KiB/4 KiB layouts
-  and reports retained INDEX; its assertion still permits split or fallback.
-  The new bounded Linux-only reference covers four ordinary root-only profiles
-  (1/4 KiB, 256-byte checksum inodes, direct/journaled), with actual same-table
-  placement, allocation-free insertion, individual links through first leaf
-  growth, exact pre-growth images, complete route/name/inode checks, allocator/
-  table/EA/payload preservation, refusals and cold Linux observation. The
-  [reference contract and split/fallback review](CASEFOLD-INDEXED-LINK-REFERENCE.md)
-  state the limits. A seventeenth focused job retains exact source identity,
-  reports/images and a one-test floor. Production code, old controls, dependency
-  pins, old job bodies, caps/floors and write gates are unchanged. Local full
-  lint and Python syntax/bounded filename checks pass. Complete native units
-  retain the exact 1,651-success baseline multiset, with zero ignored cases.
-  This prepares the reference; it does not yet qualify Linux results or driver
-  emission.
-  Stages 4–5 remain partial/not quantified; casefold writes remain blocked.
-  **Next:** inspect the exact new source's focused/full CI, audit the saved
-  pre/post images and complete inventories, repair any actual failure, then
-  design the bounded driver emission matrix against the admitted Linux inputs.
+- **Ordinary indexed-parent Linux reference and exact-source retention are closed.**
+  Exact preparation source **`433364d`** passes focused **41022239092**, all
+  seventeen jobs, and full **41022239296**, all eleven jobs including `ci-ok`.
+  Focused artifact **12961804949** matches advertised SHA-256
+  **`477b5dc359dc8e135ea294ccc0f2e75a352f9e79710e17b680d5d5815ed04cf1`**;
+  all ZIP CRCs and **123 tracked-source hashes** pass. Its four ordinary
+  root-only profiles cover 1/4 KiB direct/journaled filesystems with retained
+  INDEX, twelve zero-effect refusals, four allocation-free insertions and
+  twenty-seven bounded long-name insertions. Both 1 KiB profiles split on the
+  first long insertion; 4 KiB direct/journaled profiles split on insertion
+  eleven/fourteen. All grow from two to three root routes and three to four
+  unique mapped blocks, debit exactly one free block/no inode and preserve every
+  prior route/name/inode, tracked table, EA, payload and root byte allowed by the
+  contract. The **twenty phase images / twenty inventories / twenty judged-clean
+  e2fsck reports / twenty htree reports / sixty raw inode records** and all
+  guest JSON agree; eight retained working copies have their expected exact
+  pre-growth/cold identities. Cold Linux observation equals the final inventory
+  and protected bytes.
+  All eight full-run archives match their advertised digests and CRCs. Against
+  the verified **`b14369d`** baseline, both whole-suite name multisets retain
+  every **2,503** success and add only this reference (**2,504**, one unchanged
+  ignored slow fuzz); all three units retain the exact **1,651-success / 674-
+  control** baseline. Actual native/guest logs fit unchanged limits at
+  **3,937 lines / 240,846 bytes** and **4,105 / 250,335**. Architecture,
+  oracle, kernel, third-implementation, wasm and trailing twenty-shell/159-CLI
+  checks pass. Fresh local validation retains all **1,651 units** and full lint
+  passes. This independently
+  qualifies the bounded Linux reference, not driver emission, deeper indexes,
+  fallback/index dropping, recovery or casefold writes. Stages 4–5 remain
+  partial/not quantified and all write/platform gates remain.
+  **Next bounded task:** design and prepare the Rust/C driver-emission matrix
+  against these admitted Linux inputs, explicitly requiring the retained-index
+  split instead of accepting fallback.
 
 - **All three counter-emission checkpoints are complete: implementation, independent CI, and saved-byte/full-retention review.**
   Exact implementation **`b14369d`** passes focused **40867303009**, all sixteen
@@ -12939,7 +12952,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 | Stage | Work | Current position |
 |---|---|---|
-| **0 — Establish Linux reference behavior** | Build Linux-created images, record encoding/settings, measure uncertain behavior, and validate with Linux and e2fsprogs. | Established for the current test profiles; extend the matrix when new write behavior needs qualification. The independent Linux rmdir reference now passes eight profiles, 32 audited images, 184 error observations and 24 closed-target removals at `ccef341`. Independent Linux mkdir reference now passes all eight layouts / forty audited images / 216 error observations / 24 creations at `79ed456`. Exclusive regular-file create reference now passes all eight layouts / 48 audited images / 216 consistent errors / 24 creations and 408 debugfs reports at `e384ed9`, with final cold namespace verification. Independent Linux link/linkat(0) reference now passes eight layouts / 80 audited images / 56 links / 560 consistent errors / 960 debugfs reports at `9fd59cf`, with cold alias identity and exact no-allocation accounting. Corrected counter reference at `bbc25e8` now passes eight layouts / 24 boundary links and a complete 96-image audit; full-suite closure and driver-emitted boundaries now pass at `b14369d`: 48 Rust/C links / 240 audited images, all sixteen focused and eleven full jobs, and exact 2,503-whole / 1,651-unit retention. Broader reference profiles remain separate. |
+| **0 — Establish Linux reference behavior** | Build Linux-created images, record encoding/settings, measure uncertain behavior, and validate with Linux and e2fsprogs. | Established for the current test profiles; extend the matrix when new write behavior needs qualification. The independent Linux rmdir reference now passes eight profiles, 32 audited images, 184 error observations and 24 closed-target removals at `ccef341`. Independent Linux mkdir reference now passes all eight layouts / forty audited images / 216 error observations / 24 creations at `79ed456`. Exclusive regular-file create reference now passes all eight layouts / 48 audited images / 216 consistent errors / 24 creations and 408 debugfs reports at `e384ed9`, with final cold namespace verification. Independent Linux link/linkat(0) reference now passes eight layouts / 80 audited images / 56 links / 560 consistent errors / 960 debugfs reports at `9fd59cf`, with cold alias identity and exact no-allocation accounting. Corrected counter reference at `bbc25e8` now passes eight layouts / 24 boundary links and a complete 96-image audit; full-suite closure and driver-emitted boundaries now pass at `b14369d`: 48 Rust/C links / 240 audited images, all sixteen focused and eleven full jobs, and exact 2,503-whole / 1,651-unit retention. The ordinary indexed-parent reference at `433364d` now passes four root-only profiles / 31 links / twelve refusals / twenty audited phase images, exact focused/full CI and 2,504-whole / 1,651-unit retention. Broader reference profiles remain separate. |
 | **1 — Recognize and validate casefold policy** | Read filesystem encoding and directory flags; reject unknown or inconsistent settings. | Implemented. Write restrictions remain in place. |
 | **2 — Implement frozen Unicode comparison** | Use filesystem-compatible Unicode 12.1 rules, including normalization and full case folding, rather than current platform Unicode tables. | Implemented for the supported valid-UTF-8 subset. Malformed casefold names and normalized dot aliases remain refused. |
 | **3 — Resolve names and retain actual entries** | Share comparison rules across lookup and mutation planning; return stored spelling and inode identity. Validate indexed lookup. | Implemented for supported read shapes, including linear directories and indexes with one intermediate level. Intermediate/parent symlink traversal and 1/4 KiB target boundaries now pass all five exact focused Linux tests at 25a039e, with saved-image verification; complete-suite CI remains separate. Casefold indexed reads scan validated referenced leaves; this does not establish correct write routing. The 2026-10-27 trailing-slash/index-dot adaptation passes focused and full native checks; independent Linux path outcomes now pass in exact focused run 40502467167, with saved-source/report/image verification; repaired full CI, the retained Stage 0 rerun and complete source-matched image/report retention now pass at the latest closure. |
@@ -12950,7 +12963,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. All three counter-emission checkpoints at **`b14369d`** are closed: focused **40867303009** (16/16), full **40867302848** (11/11), all **48 links / 192 refusals / 240 saved images** and the same-source Linux reference audited, exact **2,503 whole / 1,651 unit / 674 controls in five contexts** retained, actual wrappers/floors/trailing checks and final lint passed. **Next bounded task: design and prepare a reference-only Linux matrix for ordinary indexed-parent hard-link insertion and leaf growth.** Start from the existing native positive control, validate Linux-created input indexes before driver writes, and record pre/post index flags, routing, complete inventories, identity/times/version and exact allocation/map/EA/checksum effects. The current ordinary native control permits split or fallback; its success alone does not prove retained-index emission. Establish the exact supported shape and measured behavior before extending driver qualification; casefold indexed growth and index dropping remain refused. Keep deeper mapping and uninitialized-group allocation as separate later matrices. Preserve every test, cap, floor and ignored fuzz gate; no production counter arithmetic or operation-epoch change is indicated. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
+1. Reuse this session's verified setup and authorization. The bounded ordinary indexed-parent Linux reference at **`433364d`** is closed: focused **41022239092** (17/17), full **41022239296** (11/11), four direct/journaled 1/4 KiB profiles, **31 links / twelve refusals / twenty audited phase images**, exact retained-index routing/allocation/cold-readback evidence, and **2,504 whole / 1,651 unit / 674 controls in five contexts** retained with actual limits/floors/trailing checks and final lint passed. **Next bounded task: design and prepare a Rust/C driver-emission matrix against these admitted Linux inputs.** Require retained INDEX and an actual one-leaf split; do not accept or silently qualify fallback/index dropping. Preserve the allocation-free insertion, exact pre-growth point, complete routes/inventories, identity/times/version, one-block debit and map/EA/checksum preservation contract. Keep full-root fallback, intermediate/deeper indexes, uninitialized-group allocation and recovery as separate later matrices. Preserve every test, cap, floor and ignored fuzz gate; no unrelated production change is indicated. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
