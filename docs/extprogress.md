@@ -82,6 +82,33 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **The Linux-only root-capacity/depth-transition reference is prepared — 2026-11-05:**
+  [The bounded contract](CASEFOLD-INDEX-CAPACITY-REFERENCE.md) covers four 32 MiB
+  ordinary 1/4 KiB direct/journaled profiles, at most 16,384 long aliases,
+  256-link batches and eight prefix-replay bisections. It retains the exact
+  full-root input and one triggering link, with complete depth-zero/one index
+  roles/routes/inventories, verified maps (at most four external extent nodes),
+  exact directory/map-block allocation, tracked table/EA/payload/root preservation,
+  judged e2fsck and a cold Linux observer. Four phase images per profile plan
+  sixteen retained images with reports and search traces. These are requirements
+  awaiting observation, not fresh Linux results.
+
+  The nineteenth focused job pins existing siblings/toolchain, retains source
+  identity/hashes, runs one exact test and enforces floor one; every old job
+  body, pin, floor and cap is unchanged. Rust only reads the images; Linux makes
+  all namespace changes inside the harness. No production path or write gate
+  changes. Local pinned-core debug/release compilation, exact one-test selection,
+  Python syntax, formatting, full lint and all three workflow safety guards pass.
+  Full native units retain the exact
+  baseline multiset of **1,669 successes** (1,917 lines/148,855 bytes within the
+  unchanged tier). YAML comparison preserves every preceding job and all other
+  workflow settings. Focused/full CI and all saved-image outcomes are
+  pending. Stages 4–5 remain partial/not quantified. **Next bounded task:**
+  inspect this exact source's focused/full CI and audit the actual capacity,
+  isolated triggering link, complete route graph, allocated bits and cold images
+  before selecting any driver matrix. Preserve all ownership/admission/recovery/
+  ignored-fuzz/casefold-write/platform gates.
+
 - **Indexed-record repair, independent evidence and full retention are closed — 2026-11-05:**
   combined-budget source **`730abdc`** passes exact full **42073101277**, all
   eleven jobs including `ci-ok`. Seven API-bound log archives pass advertised
@@ -108,10 +135,8 @@ for `casefold-rw`, never main or siblings.
   audits retention; the primary verifies consequential archive/log/hash results.
   Usage/cost was unavailable. Stages 4–5 stay partial/not quantified, with all
   ignored-fuzz/casefold-write/ownership/admission/recovery/platform gates intact.
-  **Next bounded task:** design and prepare a Linux-only ordinary root-capacity/
-  depth-transition reference with explicit iteration/allocation bounds and
-  retained routing/e2fsck/cold evidence. Observe actual Linux behavior; do not
-  assume INDEX dropping or qualify driver fallback from synthetic controls.
+  The Linux-only ordinary root-capacity/depth-transition reference is now
+  prepared above; its exact-source CI and actual outcomes remain separate.
 
 - **Guest completes on retry; its measured output repair is prepared — 2026-11-05:**
   exact native-budget source `76d4a04`, full **42017059707**, passes the native
@@ -13165,7 +13190,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The private indexed-record error repair at **`9b5f717`** and combined-budget source **`730abdc`** are closed within the healthy root-only profile: focused **41991672150** passes eighteen jobs with all eight saved Rust/C profiles audited; full **42073101277** passes eleven jobs/`ci-ok`, exact 2,523-whole/1,669-unit retention, all eighteen controls in five contexts, actual wrappers/floors and trailing checks. **Next bounded task: design and prepare a Linux-only ordinary root-capacity/depth-transition reference.** Use healthy Linux-created inputs, explicit iteration/allocation bounds and exact before/after maps, routing/inventory, judged e2fsck and cold readback. Observe Linux's actual outcome rather than assuming INDEX dropping or copying this driver's fallback representation. Driver emission against those new inputs remains separate. Preserve all tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
+1. Reuse this session's verified setup and authorization. The private indexed-record repair and combined-budget closure remain recorded above. The [Linux-only root-capacity/depth-transition reference](CASEFOLD-INDEX-CAPACITY-REFERENCE.md) is now prepared with explicit name/iteration/map/allocation bounds, four ordinary profiles and sixteen retained phase images. **Next bounded task: inspect its exact-source focused/full CI and audit saved evidence.** Establish the actual full-root capacity, isolated triggering link, complete role/route/inventory graph, directory and map allocation, judged e2fsck and cold readback from retained bytes before choosing any driver matrix. No new Linux outcome or driver growth is qualified yet. Diagnose actual failures without weakening existing tests, caps, floors or the ignored-fuzz gate; output-cap changes require measured identical red/green replay. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

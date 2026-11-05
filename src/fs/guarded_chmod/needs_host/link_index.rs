@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "link_index_emission.rs"]
 mod driver_emission;
+#[path = "link_index_capacity.rs"]
+mod root_capacity;
 
 const GUEST: &str = include_str!("link_index_guest.py");
 const TRACKED: [&[u8]; 3] = [b"/policy", b"/source", b"/peer"];

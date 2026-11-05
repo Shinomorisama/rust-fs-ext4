@@ -131,6 +131,44 @@ jobs:
             tmp/logs/casefold-link-index-reference.log
           if-no-files-found: error
           retention-days: 30
+  link-index-capacity-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # Initial ceiling matches the existing bounded index reference tier;
+    # retain and measure the complete log before changing any limits.
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact root-capacity reference source identity
+        run: |
+          mkdir -p tmp/link-index-capacity-reference
+          git rev-parse HEAD > tmp/link-index-capacity-reference/source-commit.txt
+          git ls-files -z src tests/support Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml | xargs -0 sha256sum > tmp/link-index-capacity-reference/source-sha256.txt
+      - name: Observe Linux root saturation and its first depth transition
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/link-index-capacity-reference
+        run: |
+          scripts/tier.sh casefold:link-index-capacity-reference casefold-link-index-capacity-reference 4200 340000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::link_emission::indexed_reference::root_capacity::linux_records_first_root_capacity_transition -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-link-index-capacity-reference 1
+      - name: Keep Linux capacity inputs, exact transition, cold images and search trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-capacity-reference
+          path: |
+            tmp/link-index-capacity-reference/
+            tmp/logs/casefold-link-index-capacity-reference.log
+          if-no-files-found: error
+          retention-days: 30
   link-index-emission:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
