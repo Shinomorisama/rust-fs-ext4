@@ -136,9 +136,76 @@ multiset: **1,669** successes, **1,666** distinct names, all eighteen native
 `indexed_boundary` controls once. The primary corrects an over-restrictive
 helper name filter and confirms these controls by their actual module prefix.
 
-Full run **42098064190** and the remaining focused jobs are still running at
-this checkpoint's inspection. Complete-suite retention, actual whole-output
-budgets and aggregate completion remain separate. This closes only the bounded
-Linux observation/saved-byte review. Driver root-capacity behavior, deeper
-emissions, ownership/admission, recovery and casefold write activation remain
-unqualified. Preserve every existing write and platform gate.
+## Full CI and complete-suite retention — 2026-11-05
+
+Exact reference source **`3a131c9`** passes full run **42098064190**, and the
+documentation-only audit tip **`a155801`** passes full **42100775042**. Both
+runs complete all eleven jobs, including `ci-ok`. Their implementation, tests,
+scripts, dependencies, task limits and workflows are byte-identical. Fourteen
+current log archives and two archives from closed baseline **`730abdc`**, run
+**42073101277**, pass API run/commit binding, advertised SHA-256, ZIP CRC and
+extracted-file identity checks.
+
+| Run / whole tier | Artifact | Passed | Actual lines / bytes | Existing limit | Actual floor |
+|---|---:|---:|---:|---:|---:|
+| 42098064190 / native | 13451214055 | 2524 | 3958 / 242897 | 4000 / 245000 | 1060 |
+| 42098064190 / guest | 13453680299 | 2524 | 4127 / 252501 | 4160 / 255000 | 1060 |
+| 42100775042 / native | 13454866671 | 2524 | 3958 / 242848 | 4000 / 245000 | 1060 |
+| 42100775042 / guest | 13454177578 | 2524 | 4127 / 252501 | 4160 / 255000 | 1060 |
+
+The four whole-suite archives have these API-advertised and verified ZIP digests:
+
+- **13451214055:** `cd5f83f80c1b5dc229975ae611acd019c205b4a30b53099fa3c34516c09a3377`
+- **13453680299:** `d3b97df55cd0f36bfbf00ca904aa747d5039f8bfea64c5cc355a9e2529b064e3`
+- **13454866671:** `545c4877b5a16b0c4efd35a413cf686159ede1a1e497d835a44d7094015aa63e`
+- **13454177578:** `6113dbae033a813894f40f0d496b3e8d25eaa5bf2e20e2fad61a9ef755bee53b`
+
+Every whole suite retains the exact **2,523-success** baseline multiset and
+adds exactly one occurrence of
+`fs::guarded_chmod::needs_host::link_emission::indexed_reference::root_capacity::linux_records_first_root_capacity_transition`.
+No preceding test name or repeated occurrence is lost. The one ignored
+`deep_walk_byte_flip_fuzz_never_panics` remains identical; no fuzz qualification
+is inferred. Standalone/native/aarch64 units retain every **1,669** successful
+occurrence in each run. All eighteen `indexed_boundary` controls occur once in
+each of the five whole/unit contexts per run, ten contexts across both runs.
+
+Actual job logs, not just aggregate status, establish every stated wrapper and
+floor. Each native job continues past the whole suite to all **twenty** shell
+guards and **159** installed-CLI checks/floor 150, then reports six green tiers
+and **4,622** test executions. Standalone CLI retains 159; oracle 225/floor 140,
+kernel 36/floor 33, third implementation nine/floor seven, aarch64 images
+527/floor 450 and wasm five/floor four pass. Every unit floor observes
+1,669/floor 440. No output ceiling, selection, test body or floor changes.
+
+A Terra medium helper performs the archive identity and multiset comparison;
+the primary independently checks all sixteen ZIPs/files, raw counters, actual
+wrappers/floors, trailing logs and unchanged source. Helper usage/cost remains
+unavailable. Scratch identities for this verification are:
+
+- `/tmp/index-capacity-retention/verify_retention.py`: SHA-256 `ee2eefbcffe80e9107bab83d21f07464b5b02e930f2b59f313dd771bbfa1a992`
+- `/tmp/index-capacity-retention/verified-retention.json`: SHA-256 `f01c2cded5529d76b72a00174ad7dc4e537ae642ddf1ea14a76a233f4e1272eb`
+- `/tmp/index-capacity-retention/helper/manifest.json`: the complete artifact/run/source/digest matrix.
+
+Focused run **42098063990** first completes seventeen jobs successfully,
+with 32 actual positive floor verdicts in the saved job logs, including the
+capacity reference and its audited sixteen images. Two jobs
+exhaust their existing total-job timeouts: unlink **127493234783** stops in QEMU
+host setup without executing its emission test; rmdir **127493234490** spends
+about 23 minutes in host setup, then stops during its test at the 25-minute job
+limit. Its partial artifact **13449643164** is not counted as completed evidence.
+Only these two jobs are retried at the same source in attempt two. Unlink
+**127585062884** succeeds with its actual **285-line/28,951-byte** wrapper and
+one-test floor. Artifact **13460456170** contains eighty images and passes
+API source/run identity, advertised SHA-256
+`d0b68c42dee06ace94bed72a33fba91d33d6c27c54f063595d441ac9f8c60770`
+and ZIP CRC checks. This verifies complete retention and execution, not a new
+raw-byte qualification of those older unlink profiles. Rmdir **127585063579**
+is still in host setup at inspection. Eighteen focused jobs now succeed;
+aggregate closure awaits this last retry. Successful first-attempt evidence is
+retained; no test or timeout is weakened.
+
+The bounded Linux reference, saved-byte audit and full-suite retention pass.
+Finish the remaining focused retry before selecting the next driver design.
+Driver root-capacity behavior, deeper emissions, ownership/admission, recovery
+and casefold write activation remain unqualified. Preserve every existing write
+and platform gate.
