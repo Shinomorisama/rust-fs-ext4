@@ -82,6 +82,31 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Ordinary root-only indexed-link source/evidence review — 2026-11-05:**
+  reviewed `066377f`, with implementation unchanged from tested `843a72c`.
+  No new blocker is found within the healthy four-layout/eight-profile Rust/C
+  counted-call matrix. The [scoped review](CASEFOLD-INDEXED-LINK-EMISSION.md#scoped-source-and-evidence-review--2026-11-05)
+  traces local whole-plan staging, same-table inode rereads, guarded marker/
+  commit/publication and owned C readback. Direct writes lack power-loss
+  atomicity; complete buffered staging does not establish recovery or ownership.
+  The review records that only counted Rust/C APIs perform the indexed emission
+  and Linux performs the allocation-free preparatory step. Full-root fallback,
+  planner-error classification, malformed-image refusal, external/staged maps
+  and deeper indexes remain outside this qualification.
+
+  Fresh local exact indexed-growth and nine planner controls pass through the
+  prescribed tiers; full lint and shared-agent integrity checks pass. A single
+  Terra medium helper verified CI/source/archive
+  identities; the primary repeated the digest/CRC and 124 historical-source
+  hash checks. Usage/cost was unavailable; no saving is claimed. Closure-source
+  full CI **41969074813** passes all eleven jobs; policy-source runs
+  **41988244944 / 41988567874** were still running at observation. No production
+  change or new Linux execution is claimed; prior 2,505-whole/1,651-unit evidence
+  remains bound to its exact source. Stages 4–5 stay partial/not quantified.
+  **Next bounded task:** prepare and execute native split-decline/error controls
+  before any new deeper-index/fallback Linux matrix, reproducing suspected
+  defects before a repair and preserving device/marker/clock/health on refusals.
+
 - **Agent policy update — 2026-11-05:** the user authorizes at most one temporary
   GPT-6.1 Terra (`gpt-6.1-terra`) helper with medium reasoning for bounded, read-only
   CI/artifact evidence audits. Use a fresh task brief without conversation
@@ -129,9 +154,8 @@ for `casefold-rw`, never main or siblings.
   Actual focused/native/guest logs fit unchanged limits at **365 lines / 42,289
   bytes**, **3,938 / 240,978** and **4,106 / 250,498**. No production path,
   write gate, dependency, pin, job body, floor or cap changed. Stages 4–5 stay
-  partial and not quantified. **Next bounded task:** perform a scoped source and
-  evidence review of the ordinary root-only split transaction/fallback boundary
-  before selecting any deeper-index or fallback matrix.
+  partial and not quantified. The scoped source/evidence review is now recorded
+  above; native split-decline/error controls are next before any broader matrix.
 
 - **Ordinary indexed-parent Linux reference and exact-source retention are closed.**
   Exact preparation source **`433364d`** passes focused **41022239092**, all
@@ -13016,7 +13040,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The bounded ordinary indexed-parent Linux reference at **`433364d`** and Rust/C retained-index driver emission at **`843a72c`** are closed. Corrected focused **41920573632** passes all eighteen jobs and full **41920573687** passes all eleven; the four shared direct/journaled 1/4 KiB inputs produce eight Rust/C links, 24 refusals, eight cold observers and 64 audited images with exact routing/allocation preservation. Both whole suites retain **2,505 successes**, all **1,651 units / 674 controls in five contexts**, one unchanged ignored fuzz case and all existing floors/trailing checks. **Next bounded task: perform a scoped source and retained-evidence review of the ordinary root-only split transaction and fallback boundary before selecting a deeper-index or fallback matrix.** Keep full-root fallback, intermediate/deeper indexes, uninitialized-group allocation and recovery as separate later matrices. Preserve every test, cap, floor and ignored fuzz gate; no unrelated production change is indicated. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
+1. Reuse this session's verified setup and authorization. The bounded ordinary indexed-parent Linux reference at **`433364d`** and Rust/C retained-index driver emission at **`843a72c`** are closed, with scoped source/evidence review at `066377f` recorded above. Exact focused **41920573632** passes all eighteen jobs and full **41920573687** passes all eleven; the four shared direct/journaled 1/4 KiB inputs produce eight Rust/C links, 24 refusals, eight cold observers and 64 audited images with exact routing/allocation preservation. Both whole suites retain **2,505 successes**, all **1,651 units / 674 controls in five contexts**, one unchanged ignored fuzz case and all existing floors/trailing checks. **Next bounded task: prepare and execute native split-decline/error controls for full parent, duplicate routing bound, unsplittable hash, non-fitting half, bad checksum and malformed selected-leaf records.** Distinguish expected ordinary fallback from corruption refusals, reproduce suspected defects before repairs and preserve device/marker/clock/health on refusals. Keep full-root fallback, intermediate/deeper indexes, uninitialized-group allocation and recovery as separate later Linux matrices. Preserve every test, cap, floor and ignored fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

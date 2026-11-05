@@ -89,3 +89,82 @@ Actual focused/native/guest logs fit unchanged limits at 365 lines/42,289 bytes,
 3,938/240,978 and 4,106/250,498. The bounded ordinary root-only retained-index
 driver emission matrix is closed. Full-root fallback, deeper indexes,
 uninitialized allocation, recovery and casefold writes remain unqualified.
+
+## Scoped source and evidence review — 2026-11-05
+
+Reviewed at `066377f`, whose changes since tested source `843a72c` are only
+documentation and agent policy. This review finds no additional blocker within
+the healthy ordinary root-only profile above. It does not qualify arbitrary
+input admission or the split-decline/fallback cases below.
+
+### Complete link staging and publication
+
+`src/fs/guarded_chmod.rs::link_from_in` enters planning under the existing mount
+operation context. `src/fs.rs::plan_link_at` checks source/parent identity,
+directory-target refusal, link-count room and duplicate lookup before staging.
+Only `NotFound` establishes absence. It stages the source count in a local
+`LinkPlan` buffer, then attempts indexed insertion; only `OutOfBounds` requests
+growth. Errors discard the local plan before the dirty marker or commit.
+
+`buffer_split_htree_leaf_and_add_entry` obtains the buffered inode and index/leaf
+bytes. It prepares owned split leaves and a parent route, inserts the new name,
+restamps checksums, then appends the new leaf and stages the old leaf and route.
+`buffer_append_dir_block` stages allocation, mapping and inode size/block counts.
+After growth, `plan_link_at` rereads both source and parent through the buffer
+before writing times/version/checksums. `buffer_write_inode` updates individual
+slices in the current table block, preserving the actual shared-table case.
+
+`commit_link_in` prepares a staged superblock when present, then places dirty
+marking and the complete buffer commit under the operation's effect boundary.
+Uncertain effect errors/unwinds retire the mount through the existing failure
+latch. The counted C call obtains its optional owned inode snapshot under the
+same context; an attribute-read error after commit does not undo the alias.
+Other unguarded writers and separate mounts/devices still require caller
+exclusion; this is not an ownership or device-exclusivity proof.
+
+The same buffer reaching commit is not a power-loss atomicity guarantee on a
+direct filesystem. `commit_block_buffer` uses the journal when available and
+ordered writes/flushes otherwise. Broad atomicity wording on shared staging
+helpers must be read with that distinction; the explicit direct-write limit in
+`plan_link_at` governs this review. No interrupted indexed-split recovery test
+was added or credited.
+
+### Evidence boundaries and next controls
+
+| Boundary | Review result |
+|---|---|
+| Root-only healthy split | Linux created each exact pre-split input. All eight driver runs retain INDEX, preserve prior mappings and names, and add one route/block with full accounting and cold readback. |
+| API dispatch | This specific matrix uses Rust `apply_link_at` and C `fs_ext4_link_at` with owned attribute readback. Other path/byte entry forms have preceding family tests; they were not independently repeated on indexed inputs here. |
+| In-place step | The allocation-free indexed step in this matrix is performed by Linux during preparation. It is not an additional driver in-place emission profile. |
+| Split vs decline | The planner keeps equal major hashes together. Full parent, duplicate bound, unsplittable hash or non-fitting half may decline into index dropping. No focused profile accepts that outcome. |
+| Malformed input | The split helper turns every leaf-planner error into `Ok(false)`; index insertion also uses `CorruptExtentTree` for expected declines. Public absence/checksum checks reject some damage first. A reachable malformed-image success has not been reproduced by this review; the healthy matrix cannot establish all corruption refusals. |
+| Mapping and ownership | The ordinary split uses the shared mapper, unlike private casefold admission's checked overlay. External maps, role aliases and transaction-current map changes have not been admitted by this matrix. All tested maps remain at inline extent depth zero. |
+| Cold observation | The guest checks every name/inode, payload and EA. After observation the Rust reader compares all tracked table, directory, allocation and protected bytes with the closed image. The observer works on a copy; successful cold mounting is not crash recovery. |
+
+**Next bounded task:** prepare and execute native controls distinguishing an
+expected split decline from corruption/error propagation. Cover a full parent,
+duplicate routing bound, unsplittable hash, non-fitting half, bad checksum and
+malformed selected-leaf records. Require exact outcomes plus unchanged
+device/marker/clock/health for genuine refusals; inspect buffer changes at the
+private helper boundary separately from a public plan discarded on error.
+Keep controls that intentionally reach supported ordinary fallback distinct
+from refusals, and assert the resulting INDEX state explicitly. First reproduce
+any suspected defect, then make only the demonstrated repair. Preserve existing
+passing tests and caps. Deeper-index/fallback Linux matrices and recovery remain
+subsequent qualification tasks.
+
+Fresh local checks used the pinned cloud runner and repository tier scripts:
+`review-indexed-link` passes its exact one-test control (18 lines/769 bytes,
+retained INDEX at both block sizes); `review-htree-plans` passes all nine
+planner tests (29 lines/1,478 bytes). Logs are under `tmp/logs/`. These are native
+controls, not fresh Linux evidence or a rerun of the full unit suite. Full lint,
+the shared-agent-block integrity check and `git diff --check` also pass.
+
+One Terra helper with medium reasoning and no conversation-history fork checked
+CI identities, archive digest/CRCs and the 124 manifest entries against historical
+Git object bytes. The primary agent independently repeated the artifact/hash
+checks and retained all correctness conclusions. Helper usage/cost was not
+exposed, so no cost saving is asserted. At the helper's observation, closure
+commit `1ca3079` full run 41969074813 passed all eleven jobs; policy runs
+41988244944 (`1509d13`) and 41988567874 (`066377f`) were still running. Their
+eventual results are separate from the exact `843a72c` implementation evidence.
