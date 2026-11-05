@@ -57,9 +57,9 @@ the model choice does not relax the write gates or evidence needed to enable the
 
 ### Delegating evidence audits
 
-The user authorizes one temporary **GPT-6 Luna (`gpt-6-luna`), medium reasoning**
+The user authorizes one temporary **GPT-6.1 Terra (`gpt-6.1-terra`), medium reasoning**
 helper at a time when a substantial, independent evidence task is available.
-Use `model: "gpt-6-luna"`, `reasoning_effort: "medium"`, and
+Use `model: "gpt-6.1-terra"`, `reasoning_effort: "medium"`, and
 `fork_turns: "none"` when spawning it. Do not launch helpers for trivial work or
 inherit the full conversation. If this model is unavailable, report that fact
 and perform the task with the primary agent; do not silently substitute another

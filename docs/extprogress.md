@@ -83,7 +83,7 @@ for `casefold-rw`, never main or siblings.
 ## Current checkpoint
 
 - **Agent policy update — 2026-11-05:** the user authorizes at most one temporary
-  GPT-6 Luna (`gpt-6-luna`) helper with medium reasoning for bounded, read-only
+  GPT-6.1 Terra (`gpt-6.1-terra`) helper with medium reasoning for bounded, read-only
   CI/artifact evidence audits. Use a fresh task brief without conversation
   history. The [delegation policy](../AGENTS.md#delegating-evidence-audits)
   defines allowed scratch work, required evidence and escalation to the primary
@@ -12903,7 +12903,7 @@ same open-ended session.
 
 ## Model preference and confirmed CI — 2026-10-12
 
-The blanket preference in this historical entry now has the bounded Luna
+The blanket preference in this historical entry now has the bounded Terra
 evidence-audit exception recorded in the current checkpoint and `AGENTS.md`.
 
 The user has chosen **Sol 6.1 for all implementation, testing, and review**.
@@ -13031,7 +13031,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 - Follow the repository's clean-room rules: published specifications, official Unicode data, and black-box Linux/e2fsprogs observations are allowed; kernel/e2fsprogs implementation source is not.
 - This workspace has no local KVM. Use the existing CI harness for Linux/e2fsprogs checks; do not run the oracle tools or mount test images on the host.
 - Check the actual branch, commit, working tree, and CI at the beginning of each session. Give brief plain-language notes in chat, complete one useful checkpoint, and pause before usage becomes excessive.
-- Use Sol 6.1 for implementation, substantive testing and final review; the bounded read-only evidence-audit exception uses GPT-6 Luna with medium reasoning as specified in [AGENTS.md](../AGENTS.md#delegating-evidence-audits). Perform focused reviews for hashing/index design, concurrency and crash consistency, and the decision to enable writes with the primary agent. Do not recommend other model switches unless the user changes this preference.
+- Use Sol 6.1 for implementation, substantive testing and final review; the bounded read-only evidence-audit exception uses GPT-6.1 Terra with medium reasoning as specified in [AGENTS.md](../AGENTS.md#delegating-evidence-audits). Perform focused reviews for hashing/index design, concurrency and crash consistency, and the decision to enable writes with the primary agent. Do not recommend other model switches unless the user changes this preference.
 
 ## Instructions for a new chat
 
