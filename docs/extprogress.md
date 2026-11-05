@@ -82,6 +82,37 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Native indexed split-decline controls and a reproduced private record-error repair — 2026-11-05:**
+  baseline `75d6713` retains all 1,651 native units before changes. The new
+  [eighteen-control matrix](CASEFOLD-INDEXED-LINK-EMISSION.md#native-declineerror-controls-and-record-error-repair--2026-11-05)
+  exercises six private boundary cases at 1/4 KiB, forty public EIO refusals
+  across five API forms/clean-dirty states, and four synthetic Rust/C full-parent
+  fallback observations with explicit INDEX clearing and reopen/accounting checks.
+  Two executed preparation runs retain every preceding outcome and fail only
+  malformed-record classification (14 pass/two fail, then 16 pass/two fail).
+  Both malformed leaf cases preserve buffer/device/clock/marker/health but return
+  `Ok(false)`, requesting fallback. Public preflight already refuses those cases.
+  The targeted split helper repair propagates `CorruptDirEntry`; expected
+  capacity/hash declines and all existing write gates remain unchanged. All
+  eighteen focused native controls now pass, with a floor of eighteen. Full
+  native units pass **1,669**, zero ignored, retaining every **1,651** baseline
+  occurrence and adding only these eighteen controls. Measured output is
+  **1,917 lines / 148,855 bytes**, within unchanged limits; full lint passes.
+  Saved-log comparison confirms every red1 outcome survives red2 and only the
+  two malformed-record expectations change from failing to passing after repair.
+
+  One Terra medium helper reports the preceding review/policy runs
+  **41989121720 / 41988567874 / 41988244944** still running with no failures at
+  observation. Its reported temporary manifest change was the active pinned
+  runner's normal source selection, not unrelated work. Helper usage/cost was
+  unavailable. The fixtures are synthetic direct Ext4 controls, not new Linux
+  qualification; prior healthy root-only evidence stays bound to `843a72c`.
+  Stages 4–5 remain partial/not quantified. **Next bounded task:** inspect this
+  repair's exact focused/full CI, complete baseline test-name retention and
+  indexed-emission artifacts before selecting another Linux matrix. Preserve
+  caps/floors and repair only actually measured wrapper overflows. Casefold
+  writes and platform/recovery/ownership qualification remain blocked.
+
 - **Ordinary root-only indexed-link source/evidence review — 2026-11-05:**
   reviewed `066377f`, with implementation unchanged from tested `843a72c`.
   No new blocker is found within the healthy four-layout/eight-profile Rust/C
@@ -103,9 +134,8 @@ for `casefold-rw`, never main or siblings.
   **41988244944 / 41988567874** were still running at observation. No production
   change or new Linux execution is claimed; prior 2,505-whole/1,651-unit evidence
   remains bound to its exact source. Stages 4–5 stay partial/not quantified.
-  **Next bounded task:** prepare and execute native split-decline/error controls
-  before any new deeper-index/fallback Linux matrix, reproducing suspected
-  defects before a repair and preserving device/marker/clock/health on refusals.
+  The native split-decline/error controls and reproduced private classification
+  repair are now recorded above; their own exact-source CI remains separate.
 
 - **Agent policy update — 2026-11-05:** the user authorizes at most one temporary
   GPT-6.1 Terra (`gpt-6.1-terra`) helper with medium reasoning for bounded, read-only
@@ -13040,7 +13070,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The bounded ordinary indexed-parent Linux reference at **`433364d`** and Rust/C retained-index driver emission at **`843a72c`** are closed, with scoped source/evidence review at `066377f` recorded above. Exact focused **41920573632** passes all eighteen jobs and full **41920573687** passes all eleven; the four shared direct/journaled 1/4 KiB inputs produce eight Rust/C links, 24 refusals, eight cold observers and 64 audited images with exact routing/allocation preservation. Both whole suites retain **2,505 successes**, all **1,651 units / 674 controls in five contexts**, one unchanged ignored fuzz case and all existing floors/trailing checks. **Next bounded task: prepare and execute native split-decline/error controls for full parent, duplicate routing bound, unsplittable hash, non-fitting half, bad checksum and malformed selected-leaf records.** Distinguish expected ordinary fallback from corruption refusals, reproduce suspected defects before repairs and preserve device/marker/clock/health on refusals. Keep full-root fallback, intermediate/deeper indexes, uninitialized-group allocation and recovery as separate later Linux matrices. Preserve every test, cap, floor and ignored fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
+1. Reuse this session's verified setup and authorization. The bounded ordinary indexed-parent Linux reference at **`433364d`** and Rust/C retained-index driver emission at **`843a72c`** are closed, with scoped source/evidence review at `066377f`. Exact focused **41920573632** passes all eighteen jobs and full **41920573687** passes all eleven, retaining 2,505 whole-suite successes and 1,651 units. Native split-decline/error controls are now implemented: eighteen focused controls pass after a reproduced two-case private malformed-record classification repair; forty public refusals and four synthetic fallback observations preserve their explicit contracts. **Next bounded task: inspect the repair's exact-source focused/full CI, baseline test-name retention and indexed-emission artifacts, repairing only reproduced failures or actually measured output-budget overflow before extending qualification.** Synthetic full-root/hash fixtures do not qualify Linux fallback, collisions or deeper indexes. Preserve every test, cap, floor and ignored fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

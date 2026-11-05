@@ -168,3 +168,54 @@ exposed, so no cost saving is asserted. At the helper's observation, closure
 commit `1ca3079` full run 41969074813 passed all eleven jobs; policy runs
 41988244944 (`1509d13`) and 41988567874 (`066377f`) were still running. Their
 eventual results are separate from the exact `843a72c` implementation evidence.
+
+## Native decline/error controls and record-error repair — 2026-11-05
+
+The next bounded task above is now implemented. New native controls live in
+`src/fs/guarded_chmod/tests/link_index_boundary.rs`, under the existing link-call
+test module. These synthetic Ext4/direct, 1/4 KiB fixtures qualify native
+control flow only. Repeated routing references or names deliberately isolate
+private capacity/hash boundaries; they are not healthy Linux-created full-root
+or collision fixtures.
+
+| Controls | Observed outcome |
+|---|---|
+| Full parent, duplicate routing bound, one hash, non-fitting destination half × two block sizes | Eight expected private declines return `Ok(false)` with exact buffer, pending-publication map, device, clock, marker and operation-status preservation. |
+| Bad leaf checksum × two block sizes | Two private controls return `BadChecksum`, preserving that same state. |
+| Checksum-valid bad record length × two block sizes | Both controls reproduced `Ok(false)` before repair. They now return `CorruptDirEntry` while preserving that same state. |
+| Bad checksum/bad record × two block sizes × clean/dirty state × five public link entries | Forty observations return EIO before any write/flush, clock call, marker change or health change. Public preflight already refused these inputs before the repair. |
+| Synthetic full parent × two block sizes × Rust/C counted call | Four successful fallback observations explicitly clear INDEX, add one block and one alias, preserve old alias lookups/source counts/parent links/peer inode, debit one free block and no inode, and retain lookup on clean reopen. This does not independently qualify fallback. |
+
+The first executed preparation runs are retained locally as
+`tmp/logs/indexed-boundary-red1.log` (14 pass/two fail) and
+`indexed-boundary-red2.log` (16 pass/two fail after adding fallback controls).
+Both fail only `bad_record_1k` and `bad_record_4k`; every original preparation
+outcome is retained. State-preservation assertions execute before the expected
+error assertion, so those checks pass even in the red runs. The baseline is
+`75d6713`, before any production edit.
+
+The repair changes only the leaf-split planner result handling in
+`src/fs.rs::buffer_split_htree_leaf_and_add_entry`: propagate
+`Error::CorruptDirEntry` rather than turning it into a fallback request. Other
+planner declines keep their existing behavior. It does not introduce a general
+typed decline taxonomy, change hash splitting, or claim complete malformed-input
+admission. No reachable public malformed-input success was established by these
+controls; the demonstrated defect was private error classification.
+
+`indexed-boundary-green` now passes all eighteen controls, zero ignored, through
+the pinned runner, `scripts/tier.sh` and `scripts/test.sh`; its executed-test
+floor is eighteen (141 lines/11,603 bytes). The full native tier passes 1,669
+tests, zero ignored, at 1,917 lines/148,855 bytes within unchanged limits. Its
+test-name multiset retains every 1,651 baseline occurrence and adds exactly the
+eighteen new controls. Red1-to-red2 outcome retention and the two exact red-to-
+green changes are verified from the saved logs. Full lint, including the tracked
+new file's provenance check, passes. Exact-source focused Linux and full CI after this production
+change remain pending until their own results and retained logs are inspected.
+The previous eight-profile evidence remains bound to `843a72c`.
+
+**Next bounded task:** inspect the repair's exact focused/full CI and compare all
+baseline occurrences and indexed-emission evidence before extending support.
+Repair any actually measured output-budget overflow by identical-log replay;
+do not preemptively change caps, silence output or lower floors. Full-root and
+deeper-index Linux matrices, ownership/admission integration, recovery,
+casefold writes and Windows/card/SteamOS qualification remain open.

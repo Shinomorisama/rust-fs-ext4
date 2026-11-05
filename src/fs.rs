@@ -8412,7 +8412,7 @@ impl Filesystem {
         } else {
             0
         };
-        let Ok(split) = crate::htree_mut::plan_leaf_split_with_encoding(
+        let split = match crate::htree_mut::plan_leaf_split_with_encoding(
             &leaf,
             version,
             &self.sb.hash_seed,
@@ -8420,8 +8420,12 @@ impl Filesystem {
             bs,
             reserved_tail,
             encoding,
-        ) else {
-            return Ok(false);
+        ) {
+            Ok(split) => split,
+            // A malformed record is corruption, not permission to drop the
+            // index. Keep ordinary capacity/hash declines on their old path.
+            Err(error @ Error::CorruptDirEntry(_)) => return Err(error),
+            Err(_) => return Ok(false),
         };
 
         // Where `buffer_append_dir_block` puts the new leaf: a directory's
