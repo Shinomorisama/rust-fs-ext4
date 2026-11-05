@@ -88,6 +88,19 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     native    3,954 / 242,309    4,000 / 245,000   Indexed-record repair 9b5f717,
+#                                                    full run 41991672077:
+#                                                    all 2,505 prior successes
+#                                                    plus 18 native controls,
+#                                                    zero failures, one existing
+#                                                    ignored fuzz case. The old
+#                                                    line/byte caps return 65;
+#                                                    identical-log replay passes
+#                                                    these measured caps. Guest
+#                                                    SSH loss left its run
+#                                                    incomplete; no guest cap
+#                                                    is changed from that log.
+#   Historical whole-suite measurement and then-current budget:
 #     native    3,745 / 223,395    3,950 / 238,000   Guarded-create source f436f4e,
 #     guest     3,913 / 232,693    4,120 / 248,000   full run 40075365376,
 #                                                    2026-10-24; both retain all
@@ -808,11 +821,11 @@ tasks:
       - task: test:oracle
       - task: test:kernel
       - task: test:lwext4
-      # Inline-link source 6c71cbe, full run 40785791674: all 2,497
-      # successes produce 3,927 lines / 239,529 bytes; old 239,000
-      # returns 65. Identical-log replay passes at 242,000, preserving
-      # every byte, the line limit and the executed-test floor.
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 3950 242000 -- scripts/test.sh --locked --release'
+      # Indexed-record source 9b5f717, full run 41991672077: all 2,523
+      # successes produce 3,954 lines / 242,309 bytes; old 3,950/242,000
+      # returns 65. Identical-log replay passes at 4,000/245,000,
+      # preserving every byte, test selection and the executed-test floor.
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4000 245000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then

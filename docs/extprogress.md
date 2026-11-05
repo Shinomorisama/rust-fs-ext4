@@ -82,6 +82,40 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Repair-source focused evidence passes; measured native output repair is prepared — 2026-11-05:**
+  exact `9b5f717` focused **41991672150** passes all eighteen jobs. Indexed
+  artifact **13398462348** matches advertised SHA-256
+  **`6c00bbc1b5dfdb9a0f2885eff81d12014922c3dcd48fcabc9b4fff91e8809dc4`**;
+  all ZIP CRCs/125 listed source hashes and all eight fresh Rust/C image profiles
+  pass the bounded routing/allocation/protected-byte/cold-observer audit. The
+  365-line/42,290-byte focused log passes. The [dated evidence follow-up](CASEFOLD-INDEXED-LINK-EMISSION.md#repair-source-evidence-and-measured-native-budget--2026-11-05)
+  records the exact scope and retained artifacts.
+
+  Full **41991672077** fails its native wrapper only after all **2,523** tests
+  succeed: the exact 2,505-success baseline plus eighteen controls, no losses,
+  one unchanged ignored fuzz. Actual output is **3,954 lines/242,309 bytes**,
+  exceeding **3,950/242,000**; identical-log replay reproduces exit 65 there and
+  passes at the new native-only **4,000/245,000** limits, with byte identity and
+  unchanged floor 1,060 verified. The output-budget/tier-floor shell guards and
+  full lint pass. The guest separately loses Vagrant SSH and
+  exits 255 mid-suite: **2,102 successes / 421 missing expected occurrences**,
+  **3,026 lines/202,896 bytes**. This is incomplete infrastructure evidence, not
+  a guest budget measurement; guest limits remain **4,120/251,000**.
+  The connection-loss cause is unresolved; the new source's full run supplies
+  a fresh guest attempt rather than treating the partial run as a pass.
+
+  Seven full log archives pass advertised digests/CRCs. All three unit contexts
+  retain every baseline name and add eighteen (**1,669** each); oracle 225,
+  kernel 36, third implementation nine, architecture images 527, wasm five and
+  standalone CLI 159 pass. Native trailing shell/installed-CLI checks were not
+  reached, so they and actual full-wrapper/guest completion remain pending.
+  One Terra medium helper handled full-CI auditing; the primary independently
+  checked consequential results and focused images. Usage/cost was unavailable.
+  Stages 4–5 remain partial/not quantified. **Next bounded task:** inspect this
+  native-budget repair's fresh full CI/guest retry and complete retained-log and
+  trailing-check verification before broadening qualification. Casefold writes,
+  ownership/admission, recovery and platform gates remain intact.
+
 - **Native indexed split-decline controls and a reproduced private record-error repair — 2026-11-05:**
   baseline `75d6713` retains all 1,651 native units before changes. The new
   [eighteen-control matrix](CASEFOLD-INDEXED-LINK-EMISSION.md#native-declineerror-controls-and-record-error-repair--2026-11-05)
@@ -109,7 +143,9 @@ for `casefold-rw`, never main or siblings.
   qualification; prior healthy root-only evidence stays bound to `843a72c`.
   Stages 4–5 remain partial/not quantified. **Next bounded task:** inspect this
   repair's exact focused/full CI, complete baseline test-name retention and
-  indexed-emission artifacts before selecting another Linux matrix. Preserve
+  indexed-emission artifacts before selecting another Linux matrix. The focused
+  audit and measured native-budget follow-up above now supersede that pending
+  status; guest completion/full wrappers/trailing checks remain open. Preserve
   caps/floors and repair only actually measured wrapper overflows. Casefold
   writes and platform/recovery/ownership qualification remain blocked.
 

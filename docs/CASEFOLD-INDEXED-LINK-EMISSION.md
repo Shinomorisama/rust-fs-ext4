@@ -219,3 +219,56 @@ Repair any actually measured output-budget overflow by identical-log replay;
 do not preemptively change caps, silence output or lower floors. Full-root and
 deeper-index Linux matrices, ownership/admission integration, recovery,
 casefold writes and Windows/card/SteamOS qualification remain open.
+
+## Repair-source evidence and measured native budget — 2026-11-05
+
+Exact repair source `9b5f717` passes focused run 41991672150, all eighteen jobs.
+Its indexed-emission artifact 13398462348 is bound by the API to that source/run
+and matches SHA-256
+`6c00bbc1b5dfdb9a0f2885eff81d12014922c3dcd48fcabc9b4fff91e8809dc4`.
+All 723 ZIP CRCs and 125 listed source hashes match historical Git object bytes.
+The full focused log passes at 365 lines/42,290 bytes; the exact emission test
+passes in 101.71 seconds. All eight fresh Rust/C profiles retain the exact
+Linux pre-growth/refusal inputs, complete inventories and old mappings; one
+block bit/group/global debit and no inode allocation; tracked inode tables,
+EAs, payloads and root bytes; clean checks and cold Linux observation. Rust/C
+inventories agree in each layout. This refreshes the bounded healthy-profile
+evidence for the changed production source; broader fallback remains unqualified.
+
+Full run 41991672077 fails for two distinct reasons:
+
+- The native whole suite finishes with 2,523 successes, zero failures and one
+  unchanged ignored fuzz case. Its test-name multiset retains all 2,505 baseline
+  successes and adds exactly the eighteen native controls. The wrapper returns
+  65 because 3,954 lines/242,309 bytes exceed the old 3,950/242,000 limits.
+- The guest whole suite loses its Vagrant SSH connection and returns 255 during
+  `htree_index_descent_oracle`. Its incomplete log has 3,026 lines/202,896 bytes,
+  2,102 successes and 421 missing expected occurrences. It cannot establish full
+  retention, a final guest output size or an output-budget failure. Its limits
+  remain 4,120 lines/251,000 bytes. The cause of the lost connection is not
+  established by this log; a fresh run must check whether it repeats.
+
+All seven full-run log archives pass advertised digests and ZIP CRCs. All three
+unit contexts retain every 1,651 baseline occurrence and add exactly eighteen,
+for 1,669 successes each. Oracle 225, kernel 36, third implementation nine,
+architecture images 527, wasm five and standalone CLI 159 pass. Native trailing
+shell/installed-CLI checks after the whole-suite wrapper were not reached; the
+standalone CLI job is a separate result. Full CI and `ci-ok` remain open.
+
+The native limit alone is raised to 4,000 lines/245,000 bytes in `chores.yml`.
+The actual retained complete log reproduces exit 65 at the old limits and passes
+the new limits through `scripts/tier.sh`; both replayed logs compare byte-for-
+byte with the artifact. The unchanged executed-test floor of 1,060 passes with
+2,523 executed successes. No output, tests, filters or guest limits are changed.
+The two existing output-budget/tier-floor shell guards and full lint pass.
+A fresh full run
+after push must still establish the actual wrappers, guest completion and native
+trailing checks; identical-log replay is not a new suite execution.
+
+One Terra medium helper verified full-CI metadata, seven log archives and test-
+name multisets. The primary independently checked the decisive job/guest logs,
+archive digests/CRCs, native retention, budget replay and all eight focused image
+profiles. Usage/cost was unavailable. **Next:** inspect the budget-repair source's
+fresh full CI and guest retry, repair only reproduced failures or measured
+overflows, then complete retained-log/trailing-check qualification. Keep all
+casefold, recovery, ownership/admission and platform gates intact.
