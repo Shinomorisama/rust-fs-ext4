@@ -308,3 +308,46 @@ replay. Usage/cost is unavailable. **Next bounded task:** inspect the combined
 native/guest-budget source's exact full CI, actual wrappers/floors and trailing
 checks before closing the repaired-source validation gate. Keep the ignored
 fuzz, recovery, ownership/admission, casefold-write and platform gates intact.
+
+## Repair and combined-budget validation closure — 2026-11-05
+
+Combined-budget source `730abdc` passes exact full CI 42073101277, all eleven
+jobs including `ci-ok`. Seven API-bound log archives match advertised SHA-256
+and all ZIP CRCs. The native archive is 13443400087, SHA-256
+`f55865c9261d42786e3bb84ef14bca8449f10c810070aea1a2b410a068378150`;
+the guest archive is 13439379272, SHA-256
+`cd7e7b0369b2b7e3f7b437c41e830d83092bc2160c42d46e9b3f28b5c3827ff0`.
+
+Both complete whole-suite success/ignored-name multisets exactly retain the
+2,523-success repair baseline and the one ignored
+`deep_walk_byte_flip_fuzz_never_panics` case. All three unit contexts retain the
+exact 1,669-success baseline. All eighteen new native boundary controls execute
+once in each of the five whole/unit contexts. Actual native/guest wrappers pass
+at 3,957 lines/242,707 bytes and 4,125/252,059; both actual floors observe
+2,523 successes against 1,060. All twenty trailing native shell guards and
+159 installed-CLI checks/floor 150 pass. Standalone CLI 159, oracle 225, kernel
+36, third implementation nine, architecture images 527 and wasm five also pass.
+
+The primary confirms all 125 inputs listed in the independently audited
+`9b5f717` focused artifact still match `730abdc` Git objects. Production code,
+tests, dependency declarations/lock and the focused workflow are unchanged
+between those commits; only measured budgets and documentation changed.
+Focused run 41991672150 and its eight-profile source-bound image audit therefore
+remain the independent Linux evidence for the exact implementation. No fresh
+focused execution at `730abdc` is claimed.
+
+This closes the scoped malformed-record classification repair and its complete
+CI/retention gate. The primary verifies consequential results from the Terra
+medium helper against the actual archives and job logs. Helper usage/cost was
+unavailable. This closure changes documentation only and does not relax writes,
+qualify general corruption admission, healthy full-root fallback, deeper index
+growth or recovery, or clear the existing ignored-fuzz/platform gates.
+
+**Next bounded task:** design and prepare a Linux-only ordinary root-capacity/
+depth-transition reference. Start from healthy Linux-created indexed inputs,
+observe what Linux actually does as its root capacity is reached, retain the
+exact before/after maps and routing inventories, and use the existing harness
+for e2fsck and cold readback. Bound the name/allocation/iteration budget before
+implementation. Do not assume Linux drops INDEX or require this driver's
+fallback representation as the Linux outcome. Driver emission on those new
+inputs remains a separate subsequent matrix.

@@ -82,6 +82,37 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Indexed-record repair, independent evidence and full retention are closed — 2026-11-05:**
+  combined-budget source **`730abdc`** passes exact full **42073101277**, all
+  eleven jobs including `ci-ok`. Seven API-bound log archives pass advertised
+  SHA-256/CRC checks. Native artifact **13443400087**, SHA-256
+  **`f55865c9261d42786e3bb84ef14bca8449f10c810070aea1a2b410a068378150`**,
+  and guest **13439379272**, SHA-256
+  **`cd7e7b0369b2b7e3f7b437c41e830d83092bc2160c42d46e9b3f28b5c3827ff0`**,
+  retain exact **2,523-success** multisets and the same one ignored fuzz case.
+  All three unit contexts retain **1,669** successes exactly; all eighteen new
+  native controls occur once in each of the five whole/unit contexts.
+
+  Actual native/guest wrappers pass at **3,957 lines/242,707 bytes** and
+  **4,125/252,059**, and both actual floors observe **2,523/1,060**. Twenty
+  trailing native shell guards, 159 installed-CLI checks/floor 150, standalone
+  CLI 159, oracle 225, kernel 36, third implementation nine, architecture images
+  527 and wasm five pass. All 125 independently audited focused-source inputs
+  still match `730abdc`; implementation/tests/dependencies/focused workflow
+  are unchanged from `9b5f717`. Its focused **41991672150** passes all eighteen
+  jobs and the complete eight-profile saved-image audit recorded below. No new
+  focused execution is inferred from this documentation/budget follow-up.
+
+  The [closure](CASEFOLD-INDEXED-LINK-EMISSION.md#repair-and-combined-budget-validation-closure--2026-11-05)
+  records artifact identity, actual verdicts and limits. A Terra medium helper
+  audits retention; the primary verifies consequential archive/log/hash results.
+  Usage/cost was unavailable. Stages 4–5 stay partial/not quantified, with all
+  ignored-fuzz/casefold-write/ownership/admission/recovery/platform gates intact.
+  **Next bounded task:** design and prepare a Linux-only ordinary root-capacity/
+  depth-transition reference with explicit iteration/allocation bounds and
+  retained routing/e2fsck/cold evidence. Observe actual Linux behavior; do not
+  assume INDEX dropping or qualify driver fallback from synthetic controls.
+
 - **Guest completes on retry; its measured output repair is prepared — 2026-11-05:**
   exact native-budget source `76d4a04`, full **42017059707**, passes the native
   job and actual **2,523/floor 1,060** verdict at **3,955 lines/242,430 bytes**.
@@ -100,15 +131,14 @@ for `casefold-rw`, never main or siblings.
   all tests/filters and floor 1,060. Native limits stay **4,000/245,000**. The
   budget/floor guards, shared-agent integrity and full lint pass locally. The
   [dated follow-up](CASEFOLD-INDEXED-LINK-EMISSION.md#completed-guest-retry-and-measured-guest-budget--2026-11-05)
-  records artifact identity and the remaining gate: actual fresh guest wrapper/
-  floor and full `ci-ok` have not passed yet.
+  records artifact identity and its then-pending guest wrapper/floor/`ci-ok`
+  gate, now closed by the exact-source follow-up immediately above.
 
   One Terra medium helper audits the logs; the primary verifies consequential
   findings, exact multisets, digests/CRCs and replay. Usage/cost is unavailable.
   No production behavior or write gate changes. Stages 4–5 remain partial/not
-  quantified. **Next bounded task:** inspect the combined budget repair's exact
-  full CI, actual native/guest wrapper/floor verdicts and trailing checks before
-  closing repair validation. All ignored-fuzz/recovery/ownership/admission/
+  quantified. That validation task is now closed above. All
+  ignored-fuzz/recovery/ownership/admission/
   casefold-write/platform gates remain.
 
 - **Repair-source focused evidence passes; measured native output repair is prepared — 2026-11-05:**
@@ -13135,7 +13165,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The bounded ordinary indexed-parent Linux reference at **`433364d`** and Rust/C retained-index driver emission at **`843a72c`** are closed, with scoped source/evidence review at `066377f`. Exact focused **41920573632** passes all eighteen jobs and full **41920573687** passes all eleven, retaining 2,505 whole-suite successes and 1,651 units. Native split-decline/error controls are now implemented: eighteen focused controls pass after a reproduced two-case private malformed-record classification repair; forty public refusals and four synthetic fallback observations preserve their explicit contracts. **Next bounded task: inspect the repair's exact-source focused/full CI, baseline test-name retention and indexed-emission artifacts, repairing only reproduced failures or actually measured output-budget overflow before extending qualification.** Synthetic full-root/hash fixtures do not qualify Linux fallback, collisions or deeper indexes. Preserve every test, cap, floor and ignored fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
+1. Reuse this session's verified setup and authorization. The private indexed-record error repair at **`9b5f717`** and combined-budget source **`730abdc`** are closed within the healthy root-only profile: focused **41991672150** passes eighteen jobs with all eight saved Rust/C profiles audited; full **42073101277** passes eleven jobs/`ci-ok`, exact 2,523-whole/1,669-unit retention, all eighteen controls in five contexts, actual wrappers/floors and trailing checks. **Next bounded task: design and prepare a Linux-only ordinary root-capacity/depth-transition reference.** Use healthy Linux-created inputs, explicit iteration/allocation bounds and exact before/after maps, routing/inventory, judged e2fsck and cold readback. Observe Linux's actual outcome rather than assuming INDEX dropping or copying this driver's fallback representation. Driver emission against those new inputs remains separate. Preserve all tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate. Broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain; stages 4–5 stay partial and not quantified, and casefold writes remain blocked.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
