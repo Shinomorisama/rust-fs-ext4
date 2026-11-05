@@ -49,10 +49,47 @@ snapshot. Distinguish metadata checks from implementation review and preserve
 the recorded clean-room exclusions. Main baseline updates require the user's
 explicit authorization; they do not authorize merging upstream into casefold.
 
-The user's model preference is **Sol 6.1 for all implementation, testing, and
-review**. Do not recommend a model switch unless the user changes that preference.
+The user's model preference is **Sol 6.1 for implementation, testing, and
+review**, with the bounded evidence-audit exception below. Do not recommend
+other model switches unless the user changes that preference.
 Keep the handoff's focused design reviews and independent validation requirements;
 the model choice does not relax the write gates or evidence needed to enable them.
+
+### Delegating evidence audits
+
+The user authorizes one temporary **GPT-6 Luna (`gpt-6-luna`), medium reasoning**
+helper at a time when a substantial, independent evidence task is available.
+Use `model: "gpt-6-luna"`, `reasoning_effort: "medium"`, and
+`fork_turns: "none"` when spawning it. Do not launch helpers for trivial work or
+inherit the full conversation. If this model is unavailable, report that fact
+and perform the task with the primary agent; do not silently substitute another
+helper model.
+
+- Give the helper a short task brief: exact repository/commit, run and artifact
+  IDs, relevant paths, verification commands, acceptance criteria and output
+  limit. Include the clean-room and harness-only oracle restrictions and direct
+  it to read this guide. Historical handoff entries are reference material;
+  this section governs the current delegation exception.
+- Allow read-only CI/log inspection, artifact downloads and extraction into a
+  task-specific scratch directory, existing verification scripts, hash/source
+  identity checks, test-name multiset comparisons and report-completeness checks.
+  It may draft an evidence table in its response. Scripts must not edit tracked
+  files or invoke host oracle tools. Apply the same session access checks.
+- The helper must not edit repository files, implement fixes, change tests or
+  limits, dispatch/rerun workflows, post external messages, commit, push or spawn
+  further helpers. It reports observed discrepancies without deciding whether
+  filesystem behavior is qualified.
+- Require a compact report with exact commit/run/artifact identities, commands
+  and exit statuses, passed/failed/unrun checks, evidence paths and line references,
+  and unresolved discrepancies. Never include credentials or signed URLs.
+- Keep filesystem design, production changes, correctness diagnosis, substantive
+  test execution, final evidence review, qualification decisions, commits and
+  pushes with the Sol 6.1 primary agent. The primary agent verifies consequential
+  findings against actual artifacts/logs before recording a conclusion.
+
+Prefer deterministic scripts for repetitive checks and reuse their results.
+Record helper usage/cost when available and the corrections it needed; savings
+are a goal to measure, not an assumed benefit of delegation.
 
 ### Required project and progress reports
 
