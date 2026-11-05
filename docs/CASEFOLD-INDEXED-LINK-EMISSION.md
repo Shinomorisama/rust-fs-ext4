@@ -62,4 +62,30 @@ SHA-256, ZIP CRCs, 124 tracked-source hashes, exact input/refusal identity,
 inventories and clean e2fsck output pass. The comparison now records both new
 blocks while requiring the invariant old-map prefix and independent exact
 allocator transitions. Corrected focused/full CI and the complete eight-profile
-saved-byte audit remain required before this matrix qualifies driver emission.
+saved-byte audit remained required before this matrix could qualify driver
+emission.
+
+Corrected source `843a72c` passes focused run 41920573632, all eighteen jobs,
+and full run 41920573687, all eleven jobs including `ci-ok`. Focused artifact
+13366128685 matches advertised SHA-256
+`427fbd4db07a90175394c69563f222884c9d81f5b99bee8f9688e87af9946062`;
+all 723 ZIP members, CRCs and 124 tracked-source hashes pass.
+
+The audit covers eight Rust/C driver links, 24 zero-effect refusals, eight cold
+Linux observers, 64 retained images, forty clean e2fsck/index/inventory phases
+and 120 raw inode records. Every profile grows from two to three routes, adds
+one inventory entry and one independently accounted block, retains INDEX and
+all old mappings, and preserves the tracked tables, EAs, payloads and root.
+Rust and C outputs agree per profile. The 1 KiB direct driver/Linux allocators
+choose different valid blocks (8711/16904); the other three profile pairs choose
+the same new block (16907, 527 and 1551). All cold inventories equal their
+closed driver inventories.
+
+All eight full-run archives match their advertised digests and CRCs. Compared
+with successful baseline 41907682056, both whole-suite multisets retain every
+2,504 preceding success and add only this host test, for 2,505 successes; the
+1,651-unit multiset is exact and the one existing ignored fuzz case is unchanged.
+Actual focused/native/guest logs fit unchanged limits at 365 lines/42,289 bytes,
+3,938/240,978 and 4,106/250,498. The bounded ordinary root-only retained-index
+driver emission matrix is closed. Full-root fallback, deeper indexes,
+uninitialized allocation, recovery and casefold writes remain unqualified.
