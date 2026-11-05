@@ -100,6 +100,14 @@ chore_min_version: 0.6.0
 #                                                    SSH loss left its run
 #                                                    incomplete; no guest cap
 #                                                    is changed from that log.
+#     guest     4,125 / 252,197    4,160 / 255,000   Completed retry at 76d4a04,
+#                                                    full run 42017059707:
+#                                                    all 2,523 successes, zero
+#                                                    failures, one unchanged
+#                                                    ignored fuzz case. The old
+#                                                    4,120/251,000 caps return
+#                                                    65; identical-log replay
+#                                                    passes these measured caps.
 #   Historical whole-suite measurement and then-current budget:
 #     native    3,745 / 223,395    3,950 / 238,000   Guarded-create source f436f4e,
 #     guest     3,913 / 232,693    4,120 / 248,000   full run 40075365376,
@@ -775,11 +783,11 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        # Inline-link source 6c71cbe, full run 40785791674: all 2,497
-        # successes produce 4,095 lines / 248,844 bytes; old 248,000
-        # returns 65. Identical-log replay passes at 251,000, preserving
-        # every byte, the line limit and the executed-test floor.
-        scripts/tier.sh test:vm vm 4120 251000 -- \
+        # Completed indexed-record retry 76d4a04, run 42017059707:
+        # all 2,523 successes produce 4,125 lines / 252,197 bytes.
+        # Old 4,120/251,000 returns 65; identical-log replay passes
+        # at 4,160/255,000, preserving every byte, selection and floor.
+        scripts/tier.sh test:vm vm 4160 255000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 

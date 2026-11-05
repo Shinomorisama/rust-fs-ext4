@@ -82,6 +82,35 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Guest completes on retry; its measured output repair is prepared — 2026-11-05:**
+  exact native-budget source `76d4a04`, full **42017059707**, passes the native
+  job and actual **2,523/floor 1,060** verdict at **3,955 lines/242,430 bytes**.
+  All twenty trailing shell guards and 159 installed-CLI checks/floor 150 pass.
+  The guest now finishes all tests and instance shutdown, with no repeated
+  connection loss; the earlier loss's cause remains unresolved. Both whole-suite
+  name multisets equal the **2,523-success** repair baseline, with one unchanged
+  ignored fuzz case; all three unit contexts retain **1,669** successes exactly.
+
+  All seven source/run-bound log archives pass advertised digest/CRC checks.
+  Guest artifact **13414805629**, SHA-256
+  **`4e476727c162a21deae8db9292a56d4f971d859d16162f22e48d759359efa622`**,
+  contains **4,125 lines/252,197 bytes**, exceeding **4,120/251,000** and making
+  the wrapper return 65 after success. Identical-log replay reproduces old-red/
+  new-green at the guest-only **4,160/255,000** limits, preserving every byte,
+  all tests/filters and floor 1,060. Native limits stay **4,000/245,000**. The
+  budget/floor guards, shared-agent integrity and full lint pass locally. The
+  [dated follow-up](CASEFOLD-INDEXED-LINK-EMISSION.md#completed-guest-retry-and-measured-guest-budget--2026-11-05)
+  records artifact identity and the remaining gate: actual fresh guest wrapper/
+  floor and full `ci-ok` have not passed yet.
+
+  One Terra medium helper audits the logs; the primary verifies consequential
+  findings, exact multisets, digests/CRCs and replay. Usage/cost is unavailable.
+  No production behavior or write gate changes. Stages 4–5 remain partial/not
+  quantified. **Next bounded task:** inspect the combined budget repair's exact
+  full CI, actual native/guest wrapper/floor verdicts and trailing checks before
+  closing repair validation. All ignored-fuzz/recovery/ownership/admission/
+  casefold-write/platform gates remain.
+
 - **Repair-source focused evidence passes; measured native output repair is prepared — 2026-11-05:**
   exact `9b5f717` focused **41991672150** passes all eighteen jobs. Indexed
   artifact **13398462348** matches advertised SHA-256

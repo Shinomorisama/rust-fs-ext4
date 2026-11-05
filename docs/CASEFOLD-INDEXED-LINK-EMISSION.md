@@ -272,3 +272,39 @@ profiles. Usage/cost was unavailable. **Next:** inspect the budget-repair source
 fresh full CI and guest retry, repair only reproduced failures or measured
 overflows, then complete retained-log/trailing-check qualification. Keep all
 casefold, recovery, ownership/admission and platform gates intact.
+
+## Completed guest retry and measured guest budget — 2026-11-05
+
+Native-budget source `76d4a04`, full run 42017059707, passes the native job with
+its actual wrapper (3,955 lines/242,430 bytes), actual 2,523/floor-1,060 verdict,
+all twenty trailing shell guards and 159 installed-CLI checks/floor 150. The
+guest now completes all tests and shuts down its instance; the previous lost
+connection does not recur in this run. The cause of the earlier loss remains
+unestablished.
+
+Both complete whole-suite name multisets are identical to the 2,523-success
+repair baseline, with the one ignored `deep_walk_byte_flip_fuzz_never_panics`
+case unchanged. All three unit contexts retain the exact 1,669 successes.
+The seven API-bound full-log archives pass advertised SHA-256 and ZIP CRC checks.
+The guest archive is 13414805629, SHA-256
+`4e476727c162a21deae8db9292a56d4f971d859d16162f22e48d759359efa622`;
+the native archive is 13414245306, SHA-256
+`38914f278adef673927a81b9cf036057fb147449bd41b237c650d7fa6b59ddc2`.
+
+Full CI still fails because the completed guest log is 4,125 lines/252,197 bytes,
+exceeding 4,120/251,000; the wrapper returns 65 after the tests succeed. The
+guest-only limit is now 4,160 lines/255,000 bytes. Identical complete-log replay
+reproduces exit 65 at the old limits and passes the new limits, with exact byte
+identity and the unchanged floor 1,060 verified against 2,523 executed successes.
+The actual CI guest floor follows its wrapper and was not reached in the failed
+run; its successful execution and `ci-ok` remain pending on fresh CI.
+The existing output-budget/tier-floor shell guards, shared-agent integrity check,
+full lint and diff checks pass locally for the budget change.
+
+No production code, test selection, output, pin, dependency, floor or native
+limit changes in this follow-up. The primary verifies the Terra medium helper's
+decisive archive bindings/digests/CRCs, whole/unit multisets, trailing logs and
+replay. Usage/cost is unavailable. **Next bounded task:** inspect the combined
+native/guest-budget source's exact full CI, actual wrappers/floors and trailing
+checks before closing the repaired-source validation gate. Keep the ignored
+fuzz, recovery, ownership/admission, casefold-write and platform gates intact.
