@@ -70,8 +70,75 @@ keeps evidence even on failure. Existing jobs, selection, floors and caps are
 unchanged; the initial focused ceiling reuses 4,200 lines/340,000 bytes from the
 existing bounded reference tier. Whole-suite output must be measured in CI.
 
-The reference is prepared, with local compilation/syntax/native validation
-recorded in `extprogress.md`. Actual root capacity, triggering name/count,
-allocation layout and depth-transition results are pending independent CI and
-saved-evidence review. None of the expected outcomes above is credited as a
-measured Linux result yet. Preserve every existing write and platform gate.
+## Exact-source Linux observation and saved-byte audit — 2026-11-05
+
+Source **`3a131c93c7531d02c3ee5177097c5854f24bad15`** passes the exact focused
+test in run **42098063990**, job **127493234974**. Its actual wrapper passes
+at **297 lines/33,323 bytes**, with one executed test/floor one and zero failures.
+Artifact **13449630990** has API-advertised and locally verified ZIP SHA-256
+**`9d9dd49ae76053f7aaae63bd96b716c02117033b2d13f19c83fc9883a9610c5e`**.
+ZIP CRCs pass. The retained source commit and all **127** unique source hashes
+match the exact Git tree, with no missing or extra paths in the selected set.
+
+The independent saved-byte audit verifies all four layouts and sixteen images:
+
+| Blocks / journal | Root entries at limit | Aliases immediately before → after | Directory blocks before → after | New physical blocks | Existing external extent nodes |
+|---|---:|---:|---:|---|---|
+| 1 KiB / no | 123 | 246 → 247 | 124 → 126 | 8833, 8834 | None |
+| 1 KiB / yes | 123 | 245 → 246 | 124 → 126 | 16967, 16968 | 17414 |
+| 4 KiB / no | 507 | 5357 → 5358 | 508 → 510 | 779, 780 | 1041 |
+| 4 KiB / yes | 507 | 5369 → 5370 | 508 → 510 | 1803, 1804 | 2065 |
+
+Each trigger is exactly the next zero-based name: ASCII `cap-{n:05d}-` followed
+by 245 literal `n` bytes, where `n` is the table's before-alias count. The
+preceding root is full; that single link retains INDEX and promotes depth zero
+to one, leaving one root entry, one interior node and one additional leaf.
+These exact predecessor counts depend on the saved filesystem's hash seed and
+name distribution; they are not universal directory-entry thresholds. All
+four transitions allocate exactly two directory blocks, preserve the previous
+logical-to-physical prefix and external extent-node addresses, and debit two
+previously free bitmap bits with no inode allocation. No extent-root promotion
+or new extent-map allocation was observed in these four transitions.
+
+The primary audit parses raw superblocks, descriptors, initialized bitmaps,
+tracked/root inodes, extent trees, dx nodes and leaf records; verifies CRC32C
+checksums; and reconstructs the complete mapping/role graph and every stored
+name. It matches all **33,699 inventory rows** across sixteen phases to raw
+entries and to guest observations. For every name, saved debugfs major hashes
+select its actual leaf through the raw root/node boundaries, providing an
+oracle comparison independent of the Rust lookup assertions. The sixteen
+non-repairing e2fsck reports contain all five passes; sixteen htree dumps,
+48 tracked debugfs reports and 48 raw inode records agree with the images.
+
+Exact global/group free counts and bitmap flips, complete inode-table slices,
+external EAs, payloads and root-directory bytes satisfy the observation contract.
+Unused INODE_UNINIT group flags/bytes remain unchanged; their absent inode-bitmap
+checksums are not treated as initialized checksums. Cold observers match all
+48 tracked metadata rows, flags, EAs, payloads, spellings and free counts.
+Directory/extent nodes, complete inode tables, allocation metadata and protected
+data remain byte-identical between grown and cold images. Journals are clean.
+The successful alias-call counts including replays are **2,264 / 2,261 / 7,245 /
+7,345**, all below the stated per-profile bound.
+
+The read-only audit uses no host oracle or mount. Its scratch script
+`/tmp/index-capacity-ci/audit_capacity.py` has SHA-256
+`8cdbeceb17d58fd7c0ee8405b1bd231b88f37e3b8aac1c4b29a5cd2724fe72f3`;
+its passing JSON report has SHA-256
+`84ba90066d0d71f9ee1c8117b3acc8bb1cf1812fa1c5106f33defd39c040733c`.
+A Terra medium helper independently checks identity, report completeness and
+actual wrapper/floor evidence; the primary repeats consequential identity checks
+and performs the filesystem audit. Helper usage/cost data is unavailable.
+
+The exact full run's unit artifact **13449340328**, SHA-256
+`eab73c674d6fdd57dfe58348b79b1f78f5f48c7fe122605f94b9ba56dfb53f94`,
+passes advertised digest/ZIP CRC checks and preserves the complete baseline
+multiset: **1,669** successes, **1,666** distinct names, all eighteen native
+`indexed_boundary` controls once. The primary corrects an over-restrictive
+helper name filter and confirms these controls by their actual module prefix.
+
+Full run **42098064190** and the remaining focused jobs are still running at
+this checkpoint's inspection. Complete-suite retention, actual whole-output
+budgets and aggregate completion remain separate. This closes only the bounded
+Linux observation/saved-byte review. Driver root-capacity behavior, deeper
+emissions, ownership/admission, recovery and casefold write activation remain
+unqualified. Preserve every existing write and platform gate.
