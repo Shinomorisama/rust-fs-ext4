@@ -82,6 +82,41 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task intermediate batch complete: last-slot split is scoped and verified — 2026-11-06:**
+  Tasks were committed/pushed in order: design **`d451146`**, six native controls
+  **`889ffb1`**, eight-profile emission **`5caeab1`**, focused launch **`bbda780`**,
+  then this evidence closure. Exact launch source passes focused **42264765485**
+  (21 jobs / 36 actual floors; nineteen retained successes plus two successful
+  setup retries) and full **42264765536** (eleven jobs including `ci-ok`).
+  Superseded batch runs and a stalled remaining setup were cancelled to free
+  capacity; tests, source, limits and floors were preserved.
+
+  Artifact **13526737825** passes API/digest/CRC identity and all **131** source
+  hashes. The primary raw audit passes all **64** Linux/driver phase images:
+  eight Rust/C link-at profiles fill intermediate routes **125→126 / 509→510**,
+  retain INDEX/depth/root and old routes/maps, change only the selected full old
+  leaf, and allocate exactly one new leaf with one-bit/group/global accounting.
+  No new map node is observed. All protected tables/EAs/payloads/root bytes,
+  24 no-effect refusals, four C attribute records and cold Linux names/metadata/
+  flags/free counts agree. All 48 retained e2fsck reports and judged calls pass.
+
+  Seven source/digest/CRC-verified tier archives retain exact **2,538-whole /
+  1,681-unit** multisets (prior 2,531/1,675 plus seven/six), the same ignored
+  fuzz and all **30** index-boundary controls once in five contexts. Actual
+  native/guest wrappers **3,971/244,345** and **4,143/254,399** pass unchanged
+  ceilings and floors. Twenty trailing shell checks, 159 CLI checks and the
+  final six-tier/**4,648-execution** verdict pass; all other tiers/floors remain.
+  Terra medium helpers audited evidence one at a time across the environment
+  resume; the primary independently verified consequential findings and raw
+  bytes. Usage/cost unavailable. See the [scoped closure](CASEFOLD-INDEX-INTERMEDIATE-DRIVER.md#complete-retention-and-scoped-closure--2026-11-06).
+
+  Qualification is healthy ordinary one-intermediate-node last-slot splitting
+  under caller exclusion and closed handles, not new extent-map promotion.
+  **Next bounded task:** review and independently measure already-full-node
+  Linux growth before a public Rust/C fallback matrix. Stages 4–5 stay partial/
+  not quantified; production and broader casefold-write/ownership/admission/
+  lifecycle/recovery/ignored-fuzz/platform gates remain unchanged.
+
 - **Five-task intermediate batch, step 4: focused CI launch — 2026-11-06:**
   `link-index-intermediate-emission` is the twenty-first focused job. It retains
   exact source hashes and Linux/driver/cold evidence, pins existing tooling,
@@ -13439,9 +13474,14 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
+Latest Stage 0/5 checkpoint: the ordinary intermediate-node last-slot matrix
+now passes all 64-image raw audits and exact-source focused/full retention at
+`bbda780`. This extends the measured ordinary subset; stages 4–5 remain partial
+and not quantified, and casefold writes remain blocked. Stages 6–7 are not reached.
+
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The user-authorized five-task [ordinary full-root batch](CASEFOLD-INDEX-CAPACITY-DRIVER.md#full-retention-and-scoped-closure--2026-11-06) is complete: design, six native controls, eight Rust/C link-at emission profiles, focused launch and independent saved-byte/retention audit. Source **`ff0b46f`** passes focused **42202840346** (twenty jobs / 35 actual floors), full **42202840602** (eleven/`ci-ok`), all 56 images and exact **2,531-whole / 1,675-unit** retention with unchanged caps/floors and trailing checks. The existing ordinary root-only fallback is scoped to healthy layouts under caller exclusion and closed reference handles; no new map promotion was observed. **Next bounded task: review ordinary one-intermediate-level insertion/split/full-node behavior and record its bounded native/emitted-byte design before changing production.** Use the independently measured Linux promoted inputs, trace node routing, mapping and whole-plan/effect boundaries, distinguish node-full fallback from Linux growth, and specify complete role/inventory/allocation/protected-byte/cold-readback checks. Subsequent executed controls and emissions remain separate checkpoints. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. The user-authorized five-task [intermediate last-slot batch](CASEFOLD-INDEX-INTERMEDIATE-DRIVER.md#complete-retention-and-scoped-closure--2026-11-06) is complete: design, six native controls, eight Rust/C link-at emission profiles, focused launch and independent saved-byte/retention audit. Source **`bbda780`** passes focused **42264765485** (21 jobs / 36 actual floors), full **42264765536** (eleven/`ci-ok`), all 64 images and exact **2,538-whole / 1,681-unit** retention with unchanged caps/floors and trailing checks. Healthy ordinary one-intermediate-node last-slot splitting is scoped under caller exclusion and closed reference handles; no new map promotion was observed. **Next bounded task: review and independently measure Linux growth at an already-full intermediate node before its public Rust/C fallback qualification matrix.** Reuse the full-node predecessors, trace selected-node/root routing and whole-plan/effect boundaries, distinguish the driver's existing index-dropping fallback from Linux node growth, and specify complete role/inventory/allocation/protected-byte/cold checks before production changes. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
