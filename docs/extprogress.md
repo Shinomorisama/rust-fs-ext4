@@ -82,6 +82,45 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Linux capacity reference and measured CI repair are closed — 2026-11-06:**
+  exact repair source **`7e36864`** passes focused **42151670764**, all **nineteen**
+  jobs and 34 actual positive floor verdicts, plus full **42151670829**, all
+  **eleven** jobs/`ci-ok`. Old-source focused **42098063990** also passes after
+  isolated attempt-three rmdir **127673144277** succeeds. Repaired rmdir job
+  **127676123462** passes its actual 669-line/80,887-byte wrapper and floor one;
+  artifact **13472314985** passes API source/run/digest/CRC and exact 561-file
+  retention checks: sixteen layouts, 112 images, 320 debugfs reports, sixteen
+  input/ledgers and 48 removals. No cancelled aggregate job is counted as passed.
+
+  Fresh capacity artifact **13472399508** passes advertised SHA-256/ZIP CRC,
+  exact source identity and all **127** source hashes. The primary repeats its
+  complete sixteen-image raw audit, including every role/map, oracle hash route,
+  **33,564** inventory rows, checksums, exact allocation, protected bytes and
+  cold metadata/readback. The full-root limits remain 123/507; measured single-
+  link predecessors now hold **240 / 240 / 5,350 / 5,342** aliases in direct/
+  journaled order, each promoting depth zero to one with exactly two new
+  directory blocks, no inode or new map-node allocation. These are saved-seed
+  observations, not universal thresholds.
+
+  Seven full-log archives pass source/run/digest/CRC/file identity. Both whole
+  suites retain exact **2,524-success** multisets and the same ignored fuzz case;
+  all three units retain **1,669**, with eighteen indexed-boundary controls once
+  in all five whole/unit contexts. Actual native/guest wrappers pass at
+  **3,956/242,614** and **4,127/252,501**, whole floors 2,524/1,060. All twenty
+  trailing shell guards, 159 installed-CLI checks/floor 150 and six-tier/4,622
+  final verdicts pass. The [closure](CASEFOLD-INDEX-CAPACITY-REFERENCE.md#repaired-ci-and-fresh-saved-evidence-closure--2026-11-06)
+  binds artifacts, complete fresh audits, other tiers and unchanged limits.
+  A Terra medium helper audits retention; the primary verifies consequential
+  findings and all fresh raw-image/report checks. No helper discrepancy here;
+  usage/cost unavailable. This checkpoint changes documentation only.
+
+  **Next bounded task:** review the ordinary driver's real full-root split/
+  fallback/refusal and owned-plan/effect boundaries against the measured Linux
+  inputs; record a bounded native and Rust/C emitted-byte design before changing
+  production. Linux promotion does not qualify driver index dropping or deeper
+  writes. Stages 4–5 remain partial/not quantified; every casefold-write,
+  ownership/admission, lifecycle/recovery, ignored-fuzz and platform gate remains.
+
 - **Rmdir execution is complete; measured outer CI allowance repair is prepared — 2026-11-05:**
   exact source **`3a131c9`**, focused **42098063990**, attempt-two rmdir job
   **127585063579**, completes its test and upload: actual **669 lines/80,887
@@ -106,16 +145,13 @@ for `casefold-rw`, never main or siblings.
   The [repair record](CASEFOLD-INDEX-CAPACITY-REFERENCE.md#completed-rmdir-evidence-and-outer-ci-allowance-repair--2026-11-05)
   binds completed artifact identity and the actual timeout annotation.
 
-  Isolated old-source attempt three/job **127673144277** remains running under
-  the original allowance; repaired-workflow CI is pending. Current documentation
-  tip **`16d6063`** also passes full **42125608601**, all eleven jobs/`ci-ok`,
-  with unchanged filesystem/test sources; no additional full-log audit is
-  inferred. **Next bounded task:** verify final rmdir/aggregate focused success
-  and retained evidence from the isolated retry or repaired workflow, then
-  review the ordinary driver's measured root-capacity boundary and prepare its
-  bounded native/emitted-byte design. Stages 4–5 stay partial/not quantified;
-  every broader write, ownership/admission, lifecycle/recovery, fuzz and platform
-  gate remains in place.
+  Isolated old-source attempt three/job **127673144277** and repaired-workflow
+  focused/full CI now pass, with complete fresh evidence/retention above.
+  Documentation tip **`16d6063`** separately passes full **42125608601**, all
+  eleven jobs/`ci-ok`, with unchanged filesystem/test sources; no additional
+  full-log audit is inferred for that older documentation tip. Stages 4–5 stay
+  partial/not quantified; every broader write, ownership/admission, lifecycle/
+  recovery, fuzz and platform gate remains in place.
 
 - **Capacity-reference full CI and complete-suite retention pass — 2026-11-05:**
   exact reference source **`3a131c9`**, full **42098064190**, and audited
@@ -13288,7 +13324,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The [Linux capacity reference and complete retention](CASEFOLD-INDEX-CAPACITY-REFERENCE.md#full-ci-and-complete-suite-retention--2026-11-05) at **`3a131c9`** pass the four-layout/sixteen-image audit, full **42098064190**, and audit-tip full **42100775042**, with exact **2,524-whole / 1,669-unit** retention, actual wrappers/floors and trailing checks. Tip **`16d6063`** also passes full **42125608601** with unchanged filesystem/test sources. Focused **42098063990** has eighteen successful jobs; rmdir attempt two **127585063579** completes its test/upload and all 112 images, but its total job exceeds 25 minutes after 20m36s setup plus a 4m13s test. The [measured repair](CASEFOLD-INDEX-CAPACITY-REFERENCE.md#completed-rmdir-evidence-and-outer-ci-allowance-repair--2026-11-05) changes only the outer rmdir CI allowance to 30 minutes; every test, test timeout, cap, floor and pin is preserved. **Next bounded task: inspect isolated old-source retry 127673144277 and repaired-workflow CI, require a successful final rmdir job and focused aggregate, and retain completed evidence.** Diagnose real failures without weakening gates. After closure, review ordinary driver root-capacity fallback/refusal against measured Linux promotion and design a bounded native/emitted-byte matrix before changing production. Driver growth, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. [Capacity-reference and measured CI-repair closure](CASEFOLD-INDEX-CAPACITY-REFERENCE.md#repaired-ci-and-fresh-saved-evidence-closure--2026-11-06) at **`7e36864`** passes focused **42151670764** (nineteen jobs), full **42151670829** (eleven/`ci-ok`), complete fresh sixteen-image capacity review and exact **2,524-whole / 1,669-unit** retention with actual wrappers/floors/trailing checks. Old-source focused **42098063990** also passes; no rmdir retry remains outstanding. **Next bounded task: review and record the ordinary driver's real root-capacity split/fallback/refusal and owned-plan/effect design.** Use the Linux-created full-root predecessors with actual 123/507 route entries and their observed external extent nodes. Trace current behavior, distinguish Linux's promotion from driver index dropping, and specify healthy-positive versus no-effect refusal controls plus a bounded Rust/C emitted-byte matrix, exact maps/roles/inventories, allocation/protected-byte preservation and cold readback. Keep production unchanged during this design checkpoint; subsequent executed native preparation and emitted-byte qualification are separate. Driver capacity behavior, deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

@@ -242,15 +242,92 @@ workflow safety guards and whitespace checks pass. Filesystem implementation,
 test bodies, dependencies and `chores.yml` remain unchanged; no native or oracle
 test is rerun locally for this configuration-only change.
 
-The isolated old-source retry, attempt three/job **127673144277**, is running
-with the old 25-minute allowance. The repaired workflow's CI is pending.
+The isolated old-source retry, attempt three/job **127673144277**, subsequently
+passes with the old allowance, and the repaired workflow passes as recorded
+in the closure below.
 Documentation tip **`16d6063`** separately passes full **42125608601**, all
 eleven jobs/`ci-ok`; its filesystem/test sources match the previously audited
 full runs. No fresh multiset audit is inferred from that additional status.
 
-The Linux reference, saved-byte audit and full-suite retention pass. Aggregate
-focused closure still requires a successful final rmdir job; inspect the
-isolated retry and repaired workflow before selecting the next driver design.
-Driver root-capacity behavior, deeper emissions, ownership/admission, recovery
-and casefold write activation remain unqualified. Preserve every existing
-write and platform gate.
+## Repaired CI and fresh saved-evidence closure — 2026-11-06
+
+Repair source **`7e36864323b0775ee97f74103572d0593e91af81`** passes focused
+**42151670764**, all **nineteen** jobs, and full **42151670829**, all **eleven**
+jobs including `ci-ok`. Saved focused job logs contain **34** actual positive
+floor verdicts. Old-source focused **42098063990**, attempt three, also closes
+successfully after isolated rmdir job **127673144277** passes its actual
+669-line/80,887-byte wrapper and one-test floor. No timeout cancellation is
+counted as a passing aggregate job.
+
+The repaired run's rmdir job **127676123462** passes the same wrapper/floor.
+Completed artifact **13472314985** has verified API source/run binding, ZIP CRC
+and advertised SHA-256
+**`a892a2becae6c03b508b1287148dffcfb275d6a21378742146e92bc09c7da6cb`**.
+Its exact 561-file set retains all sixteen layouts, 112 images, 320 debugfs
+reports, sixteen input/ledger reports and 48 correctly phased removal reports.
+All ledgers, phase/step/name sets and confirmations pass the retained-report
+check. This closes execution/retention for the previously qualified rmdir test;
+it does not extend that operation's raw-byte or ownership/recovery scope.
+
+Fresh capacity job **127676123640** passes at **297 lines/33,323 bytes**, one
+executed test/floor one. Artifact **13472399508**, verified SHA-256
+**`30908f9bc71e36a0466a738d419f248fd19863291b5cc9f43fcd6e5cadee99f5`**,
+passes ZIP CRC and source identity, including every one of the **127** expected
+source hashes with no missing/extra paths. The primary independently repeats
+the complete raw-image audit on its sixteen fresh phase images: metadata and
+directory/map CRCs, complete roles/maps, oracle hash routing, all **33,564**
+inventory rows, exact allocation, protected bytes and cold guest metadata.
+All checks pass with this measured second sample:
+
+| Blocks / journal | Root limit | Predecessor → grown aliases | Added physical blocks | Existing external extent nodes |
+|---|---:|---:|---|---|
+| 1 KiB / no | 123 | 240 → 241 | 17025, 17026 | None |
+| 1 KiB / yes | 123 | 240 → 241 | 16967, 16968 | 17414 |
+| 4 KiB / no | 507 | 5350 → 5351 | 779, 780 | 1041 |
+| 4 KiB / yes | 507 | 5342 → 5343 | 1803, 1804 | 2065 |
+
+Each exact single link retains INDEX, promotes zero to one intermediate level,
+adds one leaf and one interior block, debits exactly two previously free bits
+and allocates no inode or new extent-map node. Protected inode-table slices,
+EAs, payloads and root-directory bytes remain unchanged; cold directory/map,
+allocator/table/protected bytes match grown output. These counts and addresses
+are observations for the retained seeds/layouts, not portable thresholds or
+addresses for a driver implementation.
+
+Seven exact-source full-run log archives pass API run/commit binding,
+advertised SHA-256, ZIP CRC and extracted-file checks. Native artifact
+**13474863568**, SHA-256
+`f961509b51ee79e873e3f42c900d068cf4378c0e1405872639cc53d08d7cf721`,
+and guest **13474869814**, SHA-256
+`11aa6ed2596d7ca0d181a62d23cbd2a55b23b980a63895e908f89e163fa9af7c`,
+retain exactly the prior **2,524-success** multisets and same single ignored
+fuzz test. The three unit contexts retain **1,669** successes exactly, and all
+eighteen `indexed_boundary` controls occur once in all five whole/unit contexts.
+Actual native/guest wrappers pass at **3,956 lines/242,614 bytes** and
+**4,127/252,501**, each observing 2,524/floor 1,060 under unchanged output limits.
+Twenty trailing shell guards, 159 installed-CLI checks/floor 150 and the actual
+six-tier/4,622-execution verdict pass. Standalone CLI 159, oracle 225, kernel
+36, third implementation nine, aarch64 images 527, wasm five and Unicode eight
+pass their actual floors. No test body, output cap, floor, pin or selection
+changes at this closure.
+
+A Terra medium helper audits full-run identity/retention and actual floors;
+the primary verifies consequential archive/counter/wrapper/trailing findings
+and performs the fresh capacity-image audit and rmdir report checks. No helper
+discrepancy is found in this checkpoint; usage/cost is unavailable. Scratch
+evidence is under `/tmp/index-capacity-closure/`, including the full digest
+matrix in `helper/summary.json`. The fresh capacity audit script/report have
+SHA-256 `62d3a92c6496ac635d5087ab197023fc8680e6a6010b7f2ddf842c6a6926ccc4` /
+`bf177e900fdc5112b097a017d60ef022ae67ab837407c9d9ec465ffde678d42f`;
+primary full-retention script/report have SHA-256
+`5115bda1c2a8ad8dcfeeddb3a94128685cde4d211406b1556a518438628ba8b5` /
+`b4705175fda48ebd4039f1943410e7c9d16a6c8537e7afed1f2bce1a6330b2a2`.
+
+This closes the bounded Linux capacity reference, saved-image review, measured
+outer-job repair and exact-source CI/retention prerequisite. Next, review the
+ordinary driver's full-root split/fallback/refusal and owned-plan/effect paths
+against these real capacity inputs, then specify its bounded native and Rust/C
+emitted-byte matrix before changing production. Linux's observed promotion
+does not qualify this driver's index-drop fallback or deeper writes. Stages
+4–5 remain partial/not quantified; ownership/admission, lifecycle, recovery,
+ignored-fuzz, casefold-write and platform gates remain in place.
