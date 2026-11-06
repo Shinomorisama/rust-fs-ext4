@@ -90,9 +90,12 @@ pub(super) fn split(before: &Snapshot, after: &Snapshot, name: &[u8], fs: &Files
 }
 
 fn prepare(bs: u32, journal: bool) -> (PathBuf, Snapshot) {
-    profile_named(bs, journal, "link-intermediate-source");
-    let base =
-        fs_ext4_test_support::temp_dir().join(format!("link-intermediate-source-{bs}-{journal}"));
+    prepare_named(bs, journal, "link-intermediate-source")
+}
+
+pub(super) fn prepare_named(bs: u32, journal: bool, prefix: &str) -> (PathBuf, Snapshot) {
+    profile_named(bs, journal, prefix);
+    let base = fs_ext4_test_support::temp_dir().join(format!("{prefix}-{bs}-{journal}"));
     let image = base.with_extension("seek.img");
     let prior = base.with_extension("prior.img");
     std::fs::copy(base.with_extension("grown.img"), &image).unwrap();

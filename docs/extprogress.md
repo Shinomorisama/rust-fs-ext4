@@ -82,6 +82,19 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-intermediate-node reference preparation — 2026-11-06:**
+  The [reviewed boundary and bounded contract](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md)
+  trace the existing ordinary full-node decline/index-dropping caller and
+  prepare a Linux-only first-growth reference before public fallback emission.
+  Four layouts seek the exact full-node predecessor, validate retained depth
+  with two root routes/two nodes and one new leaf, compare flattened global
+  route boundaries, exact allocation/protected bytes and cold readback. The
+  unique-prefix preparation plans 36 retained images and one new exact-test/
+  floor-one focused job; existing jobs/caps/floors are unchanged. Actual Linux
+  outcomes, raw-image review and exact complete-suite retention are pending.
+  Production/casefold-write gates and Stage 4–5 partial/not-quantified status
+  remain unchanged. Next: inspect source-bound focused/full CI before closure.
+
 - **Five-task intermediate batch complete: last-slot split is scoped and verified — 2026-11-06:**
   Tasks were committed/pushed in order: design **`d451146`**, six native controls
   **`889ffb1`**, eight-profile emission **`5caeab1`**, focused launch **`bbda780`**,

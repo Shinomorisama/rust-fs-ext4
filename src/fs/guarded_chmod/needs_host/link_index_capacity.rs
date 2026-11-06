@@ -9,6 +9,9 @@ mod driver_emission;
 #[path = "link_index_intermediate_driver.rs"]
 mod intermediate;
 
+#[path = "link_index_node_full_reference.rs"]
+mod node_full;
+
 const MAX_NAMES: usize = 16_384;
 const BATCH: usize = 256;
 const MAX_DIR_BLOCKS: usize = 1024;
@@ -385,10 +388,14 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path) {
     let (a, b) = (&before.view, &after.view);
     let fs = mount(image);
     let bs = fs.sb.block_size();
-    assert_eq!((before.depth, after.depth), (0, 1));
-    assert_eq!(a.roots, usize::from(before.limit));
-    assert_eq!(b.roots, 1);
-    assert_eq!(after.index_nodes.len(), 1);
+    if before.depth == 0 {
+        assert_eq!((before.depth, after.depth), (0, 1));
+        assert_eq!(a.roots, usize::from(before.limit));
+        assert_eq!(b.roots, 1);
+        assert_eq!(after.index_nodes.len(), 1);
+    } else {
+        node_full::shape(before, after, image);
+    }
     assert_eq!(after.leaves.len(), before.leaves.len() + 1);
     assert!(before.leaves.iter().all(|n| after.leaves.contains(n)));
     assert_eq!(b.entries.len(), a.entries.len() + 1);
