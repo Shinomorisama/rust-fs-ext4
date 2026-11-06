@@ -82,6 +82,16 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task batch step 3: driver emission matrix implemented — 2026-11-06:**
+  The exact Linux full-root predecessor feeds eight Rust/C profiles. The new
+  test preserves the source reference, retains input/refusal/dirty/closed/cold
+  images, requires INDEX dropping with one linear block and exact allocator/
+  protected-byte accounting, checks C attributes and every cold Linux spelling
+  and metadata field. Preparation uses a separate scratch prefix; prior reference
+  behavior keeps its indexed expectation. All 1,675 units, compilation, Python
+  syntax, formatting and lint pass. Linux outcomes remain pending; no production
+  changes or broader qualification. Next: focused CI launch and evidence audit.
+
 - **Five-task batch step 2: distinct-leaf native controls pass — 2026-11-06:**
   Six new controls cover real 123/507-entry root capacity with distinct leaves,
   routed names and a full selected leaf. Private decline preserves buffer,

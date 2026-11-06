@@ -72,7 +72,12 @@ sizes, including private decline, Rust/C positive fallback and corrupt selected
 leaf refusals. Full units retain every 1,669 baseline occurrence and add exactly
 six controls: 1,675 successes, 1,923 lines/149,531 bytes within unchanged limits.
 Full lint and formatting pass. Driver emission, focused CI and saved-byte
-qualification remain pending. Steps 3–5 proceed as separate commits and pushes
-in the user-authorized batch. Stages 4–5 remain partial and
+qualification remain pending. Step 3 now implements the eight-profile driver
+test with independent Linux preparation, exact one-block fallback accounting,
+protected bytes, retained C attributes and cold metadata/inventory checks.
+Its unique scratch prefix permits concurrent complete-suite execution alongside
+the original reference. Debug compilation, full 1,675-unit retention, Python
+syntax, formatting and lint pass. Actual Linux execution is pending steps 4–5,
+which launch the focused job and audit its evidence. Stages 4–5 remain partial and
 unquantified; ownership/admission, lifecycle/recovery, ignored-fuzz, casefold-write
 and platform gates remain in place.

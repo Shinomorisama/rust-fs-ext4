@@ -3,6 +3,9 @@ use super::*;
 use std::collections::HashSet;
 use std::io::Write;
 
+#[path = "link_index_capacity_driver.rs"]
+mod driver_emission;
+
 const MAX_NAMES: usize = 16_384;
 const BATCH: usize = 256;
 const MAX_DIR_BLOCKS: usize = 1024;
@@ -501,7 +504,11 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path) {
 }
 
 fn profile(bs: u32, journal: bool) {
-    let base = fs_ext4_test_support::temp_dir().join(format!("link-index-capacity-{bs}-{journal}"));
+    profile_named(bs, journal, "link-index-capacity");
+}
+
+fn profile_named(bs: u32, journal: bool, prefix: &str) {
+    let base = fs_ext4_test_support::temp_dir().join(format!("{prefix}-{bs}-{journal}"));
     let image = base.with_extension("working.img");
     let batch = base.with_extension("batch-start.img");
     let replay = base.with_extension("replay.img");

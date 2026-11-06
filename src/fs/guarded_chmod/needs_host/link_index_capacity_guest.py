@@ -49,7 +49,7 @@ def metadata():
 def audit(total):
     assert 0 < total <= LIMIT
     result = metadata()
-    assert result["flags"][0] & 0x1000
+    assert bool(result["flags"][0] & 0x1000) == globals().get("EXPECTED_INDEX", True)
     source = result["records"]["/source"]
     assert source["links"] == total + 1
     fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOATIME)
