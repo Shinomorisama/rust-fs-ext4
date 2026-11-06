@@ -82,6 +82,16 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Next five-task batch, step 1: intermediate last-slot design — 2026-11-06:**
+  The [bounded contract](CASEFOLD-INDEX-INTERMEDIATE-DRIVER.md) reviews ordinary
+  depth-one retained-index splitting and separates already-full-node fallback.
+  Six native controls, eight Rust/C Linux emission profiles, one focused job and
+  source-bound saved-byte/full-retention audit are planned, with a commit/push
+  between tasks. No production change or new qualification is claimed. Previous
+  docs closure `6e2de61` passes full 42213821292. Stages 4–5 remain partial/not
+  quantified and all broader casefold-write/platform gates remain in place.
+  Next: implement and run the distinct-leaf native controls.
+
 - **Five-task batch complete: ordinary full-root fallback is scoped and verified — 2026-11-06:**
   Tasks were committed/pushed in order: design **`b47591c`**, six native controls
   **`45aacef`**, eight-profile emission **`a8a8ff7`**, focused launch **`ff0b46f`**,
