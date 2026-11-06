@@ -57,6 +57,13 @@ Stages 4–5 are partial and not quantified; stages 6–7 have not been reached.
 
 ## Status
 
+Step 4 adds the twenty-first focused job, `link-index-intermediate-emission`,
+with the existing sibling/toolchain pins, source hashes, exact test/floor one,
+40-minute bound and always-retained evidence. Its initial 4,200-line/340,000-byte
+ceiling reuses the bounded capacity tier. Every preceding job, selection, floor
+and ceiling remains unchanged. Pushing launches focused and full validation;
+step 5 must audit their actual source-bound outcomes before scoped closure.
+
 Step 1 records the reviewed design (`d451146`). Step 2's six native controls
 pass, and the complete native-only tier retains every previous 1,675 occurrence
 plus exactly six: 1,681 successes, 1,929 lines/150,107 bytes within unchanged

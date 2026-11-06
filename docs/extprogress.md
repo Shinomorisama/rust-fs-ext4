@@ -82,6 +82,14 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task intermediate batch, step 4: focused CI launch — 2026-11-06:**
+  `link-index-intermediate-emission` is the twenty-first focused job. It retains
+  exact source hashes and Linux/driver/cold evidence, pins existing tooling,
+  and runs one exact test with floor one. All twenty existing jobs and their
+  selections/caps/floors are preserved. Step 5 checks exact-source Linux/full CI,
+  raw saved bytes and whole/unit test-name multisets before scoped qualification.
+  Production and broader write/platform gates remain unchanged.
+
 - **Five-task intermediate batch, step 3: emission matrix implemented — 2026-11-06:**
   A unique-prefix bounded Linux search retains the exact last-slot predecessor
   and Linux output for four layouts. Both Rust/C APIs reuse the preceding
