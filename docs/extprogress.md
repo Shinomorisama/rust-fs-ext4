@@ -82,6 +82,15 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task batch step 4: independent focused CI launches — 2026-11-06:**
+  `link-index-capacity-emission` adds one exact-test/floor-one job with existing
+  sibling/toolchain pins, source hashes and always-retained Linux/driver/cold
+  evidence. The other nineteen jobs and all existing caps/floors are unchanged;
+  semantic YAML comparison and three workflow guards pass. The authorized batch
+  now proceeds to step 5: inspect exact-source Linux/full CI, audit all saved
+  profiles and retain test-name multisets before qualifying the scoped fallback.
+  Production paths and every broader write/platform gate remain unchanged.
+
 - **Five-task batch step 3: driver emission matrix implemented — 2026-11-06:**
   The exact Linux full-root predecessor feeds eight Rust/C profiles. The new
   test preserves the source reference, retains input/refusal/dirty/closed/cold

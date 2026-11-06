@@ -169,6 +169,42 @@ jobs:
             tmp/logs/casefold-link-index-capacity-reference.log
           if-no-files-found: error
           retention-days: 30
+  link-index-capacity-emission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact driver capacity source identity
+        run: |
+          mkdir -p tmp/link-index-capacity-emission
+          git rev-parse HEAD > tmp/link-index-capacity-emission/source-commit.txt
+          git ls-files -z src tests/support Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml | xargs -0 sha256sum > tmp/link-index-capacity-emission/source-sha256.txt
+      - name: Check public Rust and C full-root fallback with Linux
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/link-index-capacity-emission
+        run: |
+          scripts/tier.sh casefold:link-index-capacity-emission casefold-link-index-capacity-emission 4200 340000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::link_emission::indexed_reference::root_capacity::driver_emission::linux_checks_public_full_root_fallback -- --exact --show-output
+          bash scripts/core.sh test-floor casefold-link-index-capacity-emission 1
+      - name: Keep Linux predecessors, driver phases, C attributes and cold reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-capacity-emission
+          path: |
+            tmp/link-index-capacity-emission/
+            tmp/logs/casefold-link-index-capacity-emission.log
+          if-no-files-found: error
+          retention-days: 30
   link-index-emission:
     runs-on: ubuntu-24.04
     timeout-minutes: 40

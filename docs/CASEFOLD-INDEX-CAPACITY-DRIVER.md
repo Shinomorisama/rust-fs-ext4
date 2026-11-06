@@ -81,3 +81,11 @@ syntax, formatting and lint pass. Actual Linux execution is pending steps 4–5,
 which launch the focused job and audit its evidence. Stages 4–5 remain partial and
 unquantified; ownership/admission, lifecycle/recovery, ignored-fuzz, casefold-write
 and platform gates remain in place.
+
+Step 4 adds `link-index-capacity-emission`, the twentieth focused job. It pins
+the existing siblings and toolchain, hashes all tracked source/support/dependency/
+workflow inputs, runs the one exact test with floor one, and always retains
+evidence. Its initial 4,200-line/340,000-byte ceiling reuses the bounded capacity
+tier; every preceding job/body/cap/floor is preserved. Publication launches both
+focused and full CI. Step 5 waits for actual Linux results and audits the saved
+bytes; no emitted-byte outcome is credited before then.
