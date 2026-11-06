@@ -4,6 +4,9 @@ use super::*;
 #[path = "link_index_capacity_native.rs"]
 mod root_capacity;
 
+#[path = "link_index_intermediate_native.rs"]
+mod intermediate;
+
 #[derive(Clone, Copy, Debug)]
 enum Case {
     FullParent,

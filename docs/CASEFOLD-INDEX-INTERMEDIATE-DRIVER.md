@@ -57,7 +57,12 @@ Stages 4–5 are partial and not quantified; stages 6–7 have not been reached.
 
 ## Status
 
-Step 1 records the reviewed design. Steps 2–5 are pending. Previous full-root
+Step 1 records the reviewed design (`d451146`). Step 2's six native controls
+pass, and the complete native-only tier retains every previous 1,675 occurrence
+plus exactly six: 1,681 successes, 1,929 lines/150,107 bytes within unchanged
+limits. Full lint and Unicode verification pass. The first broad local command
+incorrectly selected guest-only tests (missing VM/fixtures); the supported
+native-only tier passes. Steps 3–5 remain pending. Previous full-root
 source `ff0b46f` passed focused 42202840346 and full 42202840602; its docs closure
 `6e2de61` also passed full 42213821292. These are baseline evidence, not results
 for the new intermediate boundary.

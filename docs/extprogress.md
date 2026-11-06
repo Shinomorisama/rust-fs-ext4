@@ -82,6 +82,16 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task intermediate batch, step 2: native controls pass — 2026-11-06:**
+  Six distinct-leaf controls cover full-node private decline, Rust/C last-slot
+  retained-index splits and corrupt selected leaves at 1/4 KiB. Every baseline
+  occurrence is retained: **1,681** native-only successes (1,675 plus six),
+  1,929 lines/150,107 bytes within unchanged limits. Full lint/Unicode pass.
+  A broad local invocation selected unavailable guest fixtures; the prescribed
+  native-only tier passes. No new Linux qualification or production change.
+  Next: bounded independent Linux predecessor and Rust/C emitted-byte matrix;
+  stages 4–5 remain partial/not quantified, casefold/platform gates unchanged.
+
 - **Next five-task batch, step 1: intermediate last-slot design — 2026-11-06:**
   The [bounded contract](CASEFOLD-INDEX-INTERMEDIATE-DRIVER.md) reviews ordinary
   depth-one retained-index splitting and separates already-full-node fallback.
