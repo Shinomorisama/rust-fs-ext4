@@ -82,6 +82,40 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-intermediate-node Linux reference and usage recovery complete — 2026-11-06:**
+  Reference **`5cc71e7`** passes focused **42278162173**, all 22 jobs and 37
+  actual floors; one timing-cancelled create job passed a targeted retry with
+  its 21 successful peers retained. Primary raw review passes all **36** phase
+  images and **132** source hashes. Linux retains depth one/INDEX, grows root
+  routes and intermediate nodes one→two, preserves old global leaf boundaries,
+  and adds exactly one node/leaf with exact two-block debit. Child counts are
+  63/64 at 1 KiB, 255/256 or 256/255 at 4 KiB. Protected tables/EAs/payloads,
+  all names/inodes, CRCs and cold metadata/free counts agree; no new map node.
+
+  Both initial whole suites retain 2,539 passes; native's actual 245,220-byte
+  log exceeded its 245,000-byte ceiling by 220. Identical old-red/new-green
+  replay justifies native bytes **248,000**, with lines/output/floors intact.
+  Repair **`a5cbbfc`** now passes fresh full **42290244875**, all eleven jobs/
+  `ci-ok`. All seven archives pass source/digest/CRC/extracted-byte checks.
+  Both whole suites retain every old 2,538 occurrence plus one: **2,539**;
+  all three units retain **1,681** and all **30** boundary controls occur once
+  in five contexts, with the same ignored fuzz case. Actual native/guest
+  wrappers **3,977/245,220** and **4,143/254,458** pass. Twenty trailing shell
+  checks, 159 CLI checks and the actual six-tier/**4,649-execution** verdict
+  execute; all other tiers/floors remain green. All 132 focused inputs are
+  unchanged by the sole semantic chore-byte repair.
+
+  The Terra medium helper reached its usage limit during read-only collection.
+  The primary resumed with atomic verified downloads, rechecked source/manifest/
+  lock integrity, every raw archive/extracted file and all final retention.
+  No partial source edit or damaged evidence from the interruption was found;
+  cost data is unavailable. The [scoped closure](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md#fresh-full-ci-retention-and-scoped-closure--2026-11-06)
+  records identities and the separate CI timing/byte-limit repairs. Production
+  and casefold-write gates remain unchanged. Stages 4–5 stay partial/not
+  quantified; this is reference evidence, not public fallback qualification.
+  **Next:** native positive/selected-corruption refusal controls for ordinary
+  full-node public fallback, then a separate independent Rust/C emission matrix.
+
 - **Full-node reference: measured native byte-limit repair — 2026-11-06:**
   Source `5cc71e7` passes all 22 focused jobs/37 actual floors and the complete
   36-image/132-source-hash raw audit. Both whole suites retain exactly 2,539
@@ -13501,14 +13535,14 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/5 checkpoint: the ordinary intermediate-node last-slot matrix
-now passes all 64-image raw audits and exact-source focused/full retention at
-`bbda780`. This extends the measured ordinary subset; stages 4–5 remain partial
-and not quantified, and casefold writes remain blocked. Stages 6–7 are not reached.
+Latest Stage 0/5 checkpoint: Linux first-full-node growth passes the 36-image
+raw audit at `5cc71e7` and repaired complete retention at `a5cbbfc`. The public
+driver fallback remains the next qualification boundary. Stages 4–5 remain
+partial/not quantified; casefold writes stay blocked, stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The user-authorized five-task [intermediate last-slot batch](CASEFOLD-INDEX-INTERMEDIATE-DRIVER.md#complete-retention-and-scoped-closure--2026-11-06) is complete: design, six native controls, eight Rust/C link-at emission profiles, focused launch and independent saved-byte/retention audit. Source **`bbda780`** passes focused **42264765485** (21 jobs / 36 actual floors), full **42264765536** (eleven/`ci-ok`), all 64 images and exact **2,538-whole / 1,681-unit** retention with unchanged caps/floors and trailing checks. Healthy ordinary one-intermediate-node last-slot splitting is scoped under caller exclusion and closed reference handles; no new map promotion was observed. **Next bounded task: review and independently measure Linux growth at an already-full intermediate node before its public Rust/C fallback qualification matrix.** Reuse the full-node predecessors, trace selected-node/root routing and whole-plan/effect boundaries, distinguish the driver's existing index-dropping fallback from Linux node growth, and specify complete role/inventory/allocation/protected-byte/cold checks before production changes. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. The [Linux full-intermediate-node reference](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md#fresh-full-ci-retention-and-scoped-closure--2026-11-06) is complete: `5cc71e7` passes focused **42278162173** (22 jobs / 37 actual floors), all 36 images and 132 source hashes; byte-limit repair `a5cbbfc` passes full **42290244875** (eleven/`ci-ok`) and exact **2,539-whole / 1,681-unit** retention, with all trailing checks. Only the measured native byte ceiling changed; functional code and all focused inputs stayed identical. The usage interruption left no partial source edit or damaged evidence; the primary completed all reviews after the helper stopped. **Next bounded task: add native positive and selected-corruption refusal controls for the ordinary full-node public fallback, preserving the existing private no-effect declines and both root-only/last-slot matrices.** Use distinct mapped leaves with a full intermediate node and selected leaf; check INDEX clearing, root/interior conversion, unchanged old maps/leaves/names, exact one-block allocation, source/parent metadata, Rust/C behavior and refusal state. Independent emitted-byte qualification on the measured Linux `node-full.img` predecessors follows separately under the documented contract. No public fallback or new map promotion is qualified by this reference alone. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

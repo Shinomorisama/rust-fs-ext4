@@ -61,11 +61,17 @@ partial/not quantified and casefold writes remain blocked.
 
 ## Status
 
-Boundary reviewed and the Linux-only reference/exact focused job implemented.
+This checkpoint is complete: source **`5cc71e7`** records the reviewed boundary
+and Linux-only reference; measured native-byte repair **`a5cbbfc`** passes fresh
+full CI. The independent Linux/raw-image and complete-retention reviews below
+pass. This closure changes only documentation; the 132 validated focused inputs
+and repaired chore configuration are unchanged from their tested bytes.
+
+The Linux-only reference/exact focused job is implemented.
 Compilation, formatting, full lint/Unicode and all 1,681 native-unit occurrences
 pass with an identical baseline multiset, within unchanged limits. Semantic YAML
 comparison preserves all 21 preceding jobs and top-level settings; three workflow
-guards pass. Independent Linux execution and raw evidence review remain pending.
+guards pass. Independent Linux execution and raw evidence review pass below.
 Baseline `bbda780` passed focused 42264765485/full 42264765536 with
 2,538 whole successes and 1,681 units. Latest docs `a0b700a` have byte-identical
 validated source inputs; their full follow-up 42277073283 was cancelled as
@@ -124,7 +130,7 @@ its passing JSON report has SHA-256
 `0081e130e9559e7ad2f20289255c550b61969b4bb616e5531e6a5759a62ac23c`.
 The existing indexed parser/root-reference and last-slot/protected-byte audit
 helpers are reused from the preceding source-bound reviews. Focused retention
-passes below; the measured native byte-limit repair still requires full CI.
+and the measured native byte-limit repair's fresh full CI also pass below.
 
 ## Focused retention and usage-interruption recovery — 2026-11-06
 
@@ -145,7 +151,8 @@ source binding, CRC and extracted-byte equality. The primary resumed collection
 with atomic writes, refreshed completed job logs and independently validated
 downloaded bytes before crediting them. The later architecture archive and both
 completed unit contexts retain every one of the 1,681 prior occurrences and all
-30 index-boundary controls. Full-suite evidence remains pending at this point.
+30 index-boundary controls. The primary subsequently completed the full-suite
+evidence review recorded below.
 No helper implementation, workflow mutation or tracked-file edit occurred.
 Usage/cost data is unavailable.
 
@@ -171,8 +178,59 @@ byte ceiling is repaired, with a small margin for timing-dependent progress
 lines. Line limits, guest/unit/focused caps, test output, selections and floors
 remain unchanged. `/tmp/node-full-reference/budget-replay.json` records statuses
 and bytes. A fresh full run must execute the repaired wrapper, all trailing
-checks and `ci-ok` before closure. This measured log-size failure is separate
+checks and `ci-ok` before closure; that fresh run now passes below. This measured log-size failure is separate
 from the usage interruption and the retained create-job timing retry.
+
+## Fresh full-CI retention and scoped closure — 2026-11-06
+
+Repair source **`a5cbbfc7db742410610a7f70ea7e880d61d31939`** passes full
+**42290244875**, all **eleven jobs** including `ci-ok`. The sole semantic chore
+change from `5cc71e7` is native bytes 245,000→248,000; every one of the **132**
+focused source/support/dependency/workflow inputs remains byte-identical.
+Focused **42278162173** therefore retains its exact-source 22-job/37-floor
+evidence for the unchanged reference implementation. No focused rerun was
+substituted for complete validation of the repaired native pipeline.
+
+All seven fresh tier archives pass API source/run binding, advertised SHA-256,
+ZIP CRC and extracted-byte verification. Native **13543801615**, SHA-256
+`e6db45b7b5a4eade2c7c9e975ff798e341262cc2985067973cbb8fa2ce17f01b`, and
+guest **13542946898**, SHA-256
+`536b00882843fca81964ae843456183b0069ab7de7babaeb44a6b2827419355d`, each
+retain the exact preceding **2,538-success multiset** plus the single new host
+test: **2,539 successes**, none lost. The same one ignored slow fuzz case
+remains. All three unit contexts retain the identical **1,681** successes; all
+**30** indexed-boundary controls occur once in all five whole/unit contexts.
+
+Actual native/guest wrappers pass **3,977 lines/245,220 bytes** and
+**4,143/254,458**, with **2,539/floor 1,060**. Native is within repaired
+4,000/248,000; guest stays within unchanged 4,160/255,000. All twenty trailing
+shell guards and 159 installed-CLI checks/floor 150 execute, followed by the
+actual six-tier/**4,649-execution** verdict. Oracle 225/floor 140, kernel
+36/floor 33, third implementation nine/floor seven, architecture images
+527/floor 450, wasm five/floor four and Unicode eight/floor eight all pass.
+Unit floor 440, all selections, line limits, output and every other byte ceiling
+remain intact. Only the demonstrated native-byte ceiling changed.
+
+The primary finished evidence collection and independently checked complete
+name multisets, actual wrappers/floors/trailing verdicts and source identity
+after the helper's usage failure. The raw reference ZIP and every extracted
+file were rechecked against its verified archive, as were all 132 source inputs.
+Transient GitHub HTTP 502 reads were retried without crediting incomplete data.
+No partial source edit, manifest/lock change or damaged evidence from the usage
+interruption was found. Primary final verifier/report SHA-256 are
+`317c87557c9632457a814d7d66d0f8c05e99d50235a8171220bcd75fb39d344b` /
+`5d8d9b38d45ef6fe31ef47e09071e531314585eaf0fddfd29e01d257b1de5b81`, at
+`/tmp/node-full-reference/verify_final.py` and `retention-verified.json`.
+The identical-log replay report has SHA-256
+`8df5f05c28599fa364d52fc3920b1430859dd4d4cdd1d25120ba917da8c18a28`.
+
+This closes the Linux first-full-node-growth reference for the four measured
+healthy ordinary layouts. It does not qualify the driver's public full-node
+fallback or new extent-map promotion. Production paths and casefold-write
+gates remain unchanged; stages 4–5 are partial/not quantified, stages 6–7 not
+reached. Next: native positive and selected-corruption refusal controls for the
+ordinary full-node public fallback, preserving existing private no-effect
+declines; independent Rust/C emitted-byte qualification follows separately.
 
 ## Next public-fallback qualification contract
 
