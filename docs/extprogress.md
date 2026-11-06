@@ -82,6 +82,43 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task batch complete: ordinary full-root fallback is scoped and verified — 2026-11-06:**
+  Tasks were committed/pushed in order: design **`b47591c`**, six native controls
+  **`45aacef`**, eight-profile emission **`a8a8ff7`**, focused launch **`ff0b46f`**,
+  then this evidence closure. Exact launch source passes focused **42202840346**,
+  all **twenty** jobs / 35 actual positive floor verdicts, and full **42202840602**,
+  all **eleven** jobs/`ci-ok`. Superseded batch CI was cancelled to free capacity;
+  final-source validation ran the complete suites without reduced selections.
+
+  Artifact **13495931406** passes advertised SHA-256/ZIP CRC/API source identity
+  and all **129** source hashes. The primary independently audits all **56**
+  images: sixteen Linux reference phases plus forty Rust/C input/refusal/dirty/
+  closed/cold phases. Eight public link-at profiles preserve every name/inode,
+  drop INDEX and append exactly one linear block with one-bit/global/group debit,
+  no inode or new map-node allocation. Protected tables/EAs/payloads/root bytes,
+  four retained C attribute records, 24 no-effect refusals and every cold Linux
+  spelling/metadata/free count agree. This measures a different valid result
+  from Linux's two-block promotion; it does not implement that promotion.
+
+  Seven full-log archives pass source/run/digest/CRC/file identity. Both whole
+  suites retain all 2,524 old occurrences and add six native controls plus one
+  host test: **2,531 successes**, same ignored fuzz case. All three units retain
+  **1,675** (old 1,669 plus six); all 24 old/new indexed-boundary controls occur
+  once in all five whole/unit contexts. Actual native/guest wrappers pass at
+  **3,967/244,015** and **4,137/253,480**, floors 2,531/1,060. Twenty trailing shell
+  guards, 159 installed-CLI checks/floor 150 and final six-tier/**4,635** verdict
+  pass, with every other tier/floor retained. The [scoped closure](CASEFOLD-INDEX-CAPACITY-DRIVER.md#full-retention-and-scoped-closure--2026-11-06)
+  records identities and limits. A Terra medium helper audits identity/retention;
+  the primary verifies consequential results and raw bytes. One helper path
+  lookup was corrected; usage/cost unavailable. No production changes.
+
+  Qualification remains healthy ordinary root-only layouts, caller exclusion
+  and closed reference handles; no new map promotion was observed. **Next bounded
+  task:** review ordinary one-intermediate-level insertion/split/full-node
+  behavior, then define its bounded native/emitted-byte matrix. Stages 4–5 stay
+  partial/not quantified; casefold-write, ownership/admission, lifecycle/recovery,
+  ignored-fuzz and platform gates remain unchanged.
+
 - **Five-task batch step 4: independent focused CI launches — 2026-11-06:**
   `link-index-capacity-emission` adds one exact-test/floor-one job with existing
   sibling/toolchain pins, source hashes and always-retained Linux/driver/cold
@@ -13366,7 +13403,7 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. [Capacity-reference and measured CI-repair closure](CASEFOLD-INDEX-CAPACITY-REFERENCE.md#repaired-ci-and-fresh-saved-evidence-closure--2026-11-06) at **`7e36864`** passes focused **42151670764** (nineteen jobs), full **42151670829** (eleven/`ci-ok`), complete fresh sixteen-image capacity review and exact **2,524-whole / 1,669-unit** retention with actual wrappers/floors/trailing checks. Old-source focused **42098063990** also passes; no rmdir retry remains outstanding. **Next bounded task: review and record the ordinary driver's real root-capacity split/fallback/refusal and owned-plan/effect design.** Use the Linux-created full-root predecessors with actual 123/507 route entries and their observed external extent nodes. Trace current behavior, distinguish Linux's promotion from driver index dropping, and specify healthy-positive versus no-effect refusal controls plus a bounded Rust/C emitted-byte matrix, exact maps/roles/inventories, allocation/protected-byte preservation and cold readback. Keep production unchanged during this design checkpoint; subsequent executed native preparation and emitted-byte qualification are separate. Driver capacity behavior, deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. The user-authorized five-task [ordinary full-root batch](CASEFOLD-INDEX-CAPACITY-DRIVER.md#full-retention-and-scoped-closure--2026-11-06) is complete: design, six native controls, eight Rust/C link-at emission profiles, focused launch and independent saved-byte/retention audit. Source **`ff0b46f`** passes focused **42202840346** (twenty jobs / 35 actual floors), full **42202840602** (eleven/`ci-ok`), all 56 images and exact **2,531-whole / 1,675-unit** retention with unchanged caps/floors and trailing checks. The existing ordinary root-only fallback is scoped to healthy layouts under caller exclusion and closed reference handles; no new map promotion was observed. **Next bounded task: review ordinary one-intermediate-level insertion/split/full-node behavior and record its bounded native/emitted-byte design before changing production.** Use the independently measured Linux promoted inputs, trace node routing, mapping and whole-plan/effect boundaries, distinguish node-full fallback from Linux growth, and specify complete role/inventory/allocation/protected-byte/cold-readback checks. Subsequent executed controls and emissions remain separate checkpoints. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial and not quantified, and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
