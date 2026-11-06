@@ -82,6 +82,18 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task batch step 2: distinct-leaf native controls pass — 2026-11-06:**
+  Six new controls cover real 123/507-entry root capacity with distinct leaves,
+  routed names and a full selected leaf. Private decline preserves buffer,
+  publication, device, clock and health; Rust/C fallback retains every alias,
+  old mapping, exact one-block debit and source-link increment; corrupt selected
+  leaves refuse without side effects. Synthetic fixtures are not Linux-clean
+  qualification. Full units retain all 1,669 baseline occurrences plus exactly
+  six controls (1,675 successes); lint/formatting pass with unchanged limits.
+  Step 2 is complete. Next: implement the bounded eight-profile emitted-byte
+  matrix, launch focused CI and audit the resulting evidence. Production and
+  broader write/platform gates remain unchanged.
+
 - **Five-task ordinary full-root batch: design review complete — 2026-11-06:**
   [The driver contract](CASEFOLD-INDEX-CAPACITY-DRIVER.md) traces the existing
   owned-plan full-root decline, staged ordinary index dropping and one-block

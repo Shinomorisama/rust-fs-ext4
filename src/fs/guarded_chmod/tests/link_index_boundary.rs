@@ -1,6 +1,9 @@
 //! Synthetic split-boundary controls; these are not Linux-clean input claims.
 use super::*;
 
+#[path = "link_index_capacity_native.rs"]
+mod root_capacity;
+
 #[derive(Clone, Copy, Debug)]
 enum Case {
     FullParent,
