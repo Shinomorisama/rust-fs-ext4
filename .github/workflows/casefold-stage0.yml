@@ -548,7 +548,9 @@ jobs:
           retention-days: 30
   rmdir-emission:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # Measured QEMU host setup took 23m / 20m36s; the latter run passed
+    # its 4m13s test and uploaded all evidence but exceeded 25m overall.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: scripts/ci-install-chore.sh

@@ -200,12 +200,57 @@ API source/run identity, advertised SHA-256
 `d0b68c42dee06ace94bed72a33fba91d33d6c27c54f063595d441ac9f8c60770`
 and ZIP CRC checks. This verifies complete retention and execution, not a new
 raw-byte qualification of those older unlink profiles. Rmdir **127585063579**
-is still in host setup at inspection. Eighteen focused jobs now succeed;
-aggregate closure awaits this last retry. Successful first-attempt evidence is
-retained; no test or timeout is weakened.
+subsequently completes its test and artifact upload, but exceeds the total-job
+deadline as recorded below. Successful first-attempt evidence is retained.
 
-The bounded Linux reference, saved-byte audit and full-suite retention pass.
-Finish the remaining focused retry before selecting the next driver design.
+## Completed rmdir evidence and outer CI allowance repair — 2026-11-05
+
+Attempt two's rmdir job **127585063579** spends **20 minutes 36 seconds** in
+host setup and **4 minutes 13 seconds** in its test. Its actual wrapper passes
+at **669 lines/80,887 bytes**, one test/floor one, and its upload completes.
+Every recorded step succeeds, but the overall job is cancelled. GitHub's
+check annotation explicitly states: **"The job has exceeded the maximum
+execution time of 25m0s"**. The earlier attempt spent about 23 minutes in
+setup and stopped during the test. Neither overall cancellation is credited
+as a successful aggregate job.
+
+The completed attempt-two artifact **13462410143**, advertised and verified
+SHA-256 **`8a46b4f8cf3fa4c1f4e929ffacaaa4de80620c9a7e31f0f24348e621c36db95f`**,
+passes ZIP CRC and API run/source binding to **42098063990 / `3a131c9`**.
+Its exact **561-file** inventory has no missing/extra paths: sixteen Rust/C ×
+1/4 KiB × 128/256-byte inode × direct/journaled layouts, **112** input/dirty/
+closed images, **320** debugfs reports, sixteen input/ledger reports and
+48 removal observations. Every phase/step/name set and block size agrees with
+the existing test; input JSON plus the appended `LEDGER` lines agree on free
+counts. All 48 removal confirmations and the one-pass/zero-failure verdict are
+retained. This checks completed execution and evidence retention; it does not
+repeat the older rmdir raw-byte qualification or extend its supported scope.
+
+A Terra medium helper checks identity and report completeness; the primary
+repeats consequential checks against the archive and actual job log. A helper
+parser correction was needed; usage/cost is unavailable. Primary scratch
+`/tmp/index-capacity-rmdir-retry/verify_reports.py` has SHA-256
+`61babbe7f306b9c7786acff7164469e19eab906143fc41c1b8cbd613dc449457`;
+its passing JSON report has SHA-256
+`3aa4f81ae359aa119cef07d3e8ad0421fcc0267e5bafcad1f9fc62d9ba938144`.
+
+Only the **outer `rmdir-emission` CI job allowance** changes, **25 → 30 minutes**,
+giving room for the measured setup, test and upload durations. Semantic YAML
+comparison proves every other setting and all nineteen job bodies, pins,
+test timeouts, output caps, floors and selections identical. All three existing
+workflow safety guards and whitespace checks pass. Filesystem implementation,
+test bodies, dependencies and `chores.yml` remain unchanged; no native or oracle
+test is rerun locally for this configuration-only change.
+
+The isolated old-source retry, attempt three/job **127673144277**, is running
+with the old 25-minute allowance. The repaired workflow's CI is pending.
+Documentation tip **`16d6063`** separately passes full **42125608601**, all
+eleven jobs/`ci-ok`; its filesystem/test sources match the previously audited
+full runs. No fresh multiset audit is inferred from that additional status.
+
+The Linux reference, saved-byte audit and full-suite retention pass. Aggregate
+focused closure still requires a successful final rmdir job; inspect the
+isolated retry and repaired workflow before selecting the next driver design.
 Driver root-capacity behavior, deeper emissions, ownership/admission, recovery
-and casefold write activation remain unqualified. Preserve every existing write
-and platform gate.
+and casefold write activation remain unqualified. Preserve every existing
+write and platform gate.
