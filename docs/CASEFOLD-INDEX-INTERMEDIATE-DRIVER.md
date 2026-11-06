@@ -62,7 +62,16 @@ pass, and the complete native-only tier retains every previous 1,675 occurrence
 plus exactly six: 1,681 successes, 1,929 lines/150,107 bytes within unchanged
 limits. Full lint and Unicode verification pass. The first broad local command
 incorrectly selected guest-only tests (missing VM/fixtures); the supported
-native-only tier passes. Steps 3–5 remain pending. Previous full-root
+native-only tier passes. Step 2 is `889ffb1`. Step 3 implements the bounded
+Linux last-slot search and reuses the existing Rust/C emitter's refusal, clock,
+attribute, allocation and protected-byte checks. Its new indexed branch keeps
+the root unchanged, fills the intermediate node, verifies old routes and requires
+exactly the selected full old leaf to change. Input/closed/cold snapshots use
+the complete depth-one observer and independent non-repairing reports. Eight
+driver profiles and 64 total saved source/driver images are expected; actual
+Linux outcomes and qualification remain pending steps 4–5. Debug compilation
+of all library tests, formatting, full lint and eight Unicode checks pass;
+the 1,681 native-only occurrences were verified in step 2. Previous full-root
 source `ff0b46f` passed focused 42202840346 and full 42202840602; its docs closure
 `6e2de61` also passed full 42213821292. These are baseline evidence, not results
 for the new intermediate boundary.

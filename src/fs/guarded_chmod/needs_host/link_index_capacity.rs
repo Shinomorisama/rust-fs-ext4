@@ -6,6 +6,9 @@ use std::io::Write;
 #[path = "link_index_capacity_driver.rs"]
 mod driver_emission;
 
+#[path = "link_index_intermediate_driver.rs"]
+mod intermediate;
+
 const MAX_NAMES: usize = 16_384;
 const BATCH: usize = 256;
 const MAX_DIR_BLOCKS: usize = 1024;

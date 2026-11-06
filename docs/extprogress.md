@@ -82,6 +82,16 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task intermediate batch, step 3: emission matrix implemented — 2026-11-06:**
+  A unique-prefix bounded Linux search retains the exact last-slot predecessor
+  and Linux output for four layouts. Both Rust/C APIs reuse the preceding
+  emitter's refusals, attributes, clock, exact allocation/protected bytes and
+  cold checks, with a new depth-one branch requiring retained INDEX, unchanged
+  root, full node, preserved routes and only the selected full old leaf changed.
+  The prior root-only branch retains its checks. Actual Linux outcomes, 64-image
+  raw audit and complete CI retention remain pending. No production change;
+  broader write/platform gates remain. Next: focused CI job and exact-source audit.
+
 - **Five-task intermediate batch, step 2: native controls pass — 2026-11-06:**
   Six distinct-leaf controls cover full-node private decline, Rust/C last-slot
   retained-index splits and corrupt selected leaves at 1/4 KiB. Every baseline

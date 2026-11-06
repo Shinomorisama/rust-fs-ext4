@@ -1,4 +1,4 @@
-//! Public ordinary full-root fallback against exact Linux predecessors.
+//! Public ordinary boundary emission against exact Linux predecessors.
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -308,12 +308,16 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path, name: &[u8], st
     assert_eq!(a.eas, b.eas);
     assert_eq!(a.payloads, b.payloads);
     assert_eq!(a.root_directory, b.root_directory);
-    stable(
-        &a.directory[0],
-        &b.directory[0],
-        &[(16, 2), (bs as usize - 12, 12)],
-    );
-    assert_eq!(&b.directory[1..a.directory.len()], &a.directory[1..]);
+    if before.depth == 1 {
+        super::intermediate::split(before, after, name, &fs);
+    } else {
+        stable(
+            &a.directory[0],
+            &b.directory[0],
+            &[(16, 2), (bs as usize - 12, 12)],
+        );
+        assert_eq!(&b.directory[1..a.directory.len()], &a.directory[1..]);
+    }
     let locations = a.records[..2]
         .iter()
         .map(|r| crate::bgd::locate_inode(&fs.sb, &fs.groups, r.0).unwrap())
@@ -381,16 +385,31 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path, name: &[u8], st
     }
 }
 
-fn emit(source: &Path, linux: &Snapshot, capi: bool, bs: u32, journal: bool) {
+pub(super) fn emit(
+    source: &Path,
+    linux: &Snapshot,
+    capi: bool,
+    bs: u32,
+    journal: bool,
+    indexed: bool,
+) {
+    let prefix = if indexed {
+        "link-intermediate-driver"
+    } else {
+        "link-capacity-driver"
+    };
     let base = fs_ext4_test_support::temp_dir().join(format!(
-        "link-capacity-driver-{}-{bs}-{journal}",
+        "{prefix}-{}-{bs}-{journal}",
         if capi { "capi" } else { "rust" }
     ));
     let image = base.with_extension("working.img");
     std::fs::copy(source, &image).unwrap();
     let input = capture(&image, &base, "input");
-    assert_eq!(input.depth, 0);
-    assert_eq!(input.view.roots, usize::from(input.limit));
+    assert_eq!(input.depth, u8::from(indexed));
+    assert_eq!(
+        input.view.roots,
+        if indexed { 1 } else { usize::from(input.limit) }
+    );
     let total = input.view.entries.len();
     let name = format!("cap-{total:05}-{}", "n".repeat(245)).into_bytes();
     assert_eq!(name.len(), 255);
@@ -436,7 +455,11 @@ fn emit(source: &Path, linux: &Snapshot, capi: bool, bs: u32, journal: bool) {
         assert_eq!(fs.lookup_at(parent.ino, &name).unwrap(), target.ino);
         assert_eq!(
             fs.stat_ino(parent.ino).unwrap().flags & crate::inode::InodeFlags::INDEX.bits(),
-            0
+            if indexed {
+                crate::inode::InodeFlags::INDEX.bits()
+            } else {
+                0
+            }
         );
         if let Some(a) = attr {
             check_attr(&a, target.ino, &fs.stat_ino(target.ino).unwrap());
@@ -471,14 +494,19 @@ fn emit(source: &Path, linux: &Snapshot, capi: bool, bs: u32, journal: bool) {
     });
     fs.finish().unwrap();
     assert_eq!(clock.calls.load(Ordering::SeqCst), 1);
-    let closed = save(&image, &base, "closed", &input);
+    let closed = if indexed {
+        capture(&image, &base, "closed")
+    } else {
+        save(&image, &base, "closed", &input)
+    };
     transition(&input, &closed, &image, &name, clock.stamp);
     assert_eq!(closed.view.entries, linux.view.entries);
     std::fs::write(base.with_extension("observation.json"),format!("{{\"capi\":{capi},\"block_size\":{bs},\"journal\":{journal},\"clock_calls\":1,\"refusals\":3,\"before\":{total},\"after\":{},\"stamp\":{}}}\n",closed.view.entries.len(),clock.stamp)).unwrap();
     let cold = base.with_extension("cold.img");
     std::fs::copy(&image, &cold).unwrap();
     let expected = format!(
-        "EXPECTED_INDEX = False\nEXPECTED = [{}]\nFLAGS = {:?}\nFREE = ({}, {})\n",
+        "EXPECTED_INDEX = {}\nEXPECTED = [{}]\nFLAGS = {:?}\nFREE = ({}, {})\n",
+        if indexed { "True" } else { "False" },
         TRACKED
             .iter()
             .zip(&closed.view.records)
@@ -504,7 +532,11 @@ fn emit(source: &Path, linux: &Snapshot, capi: bool, bs: u32, journal: bool) {
         0,
         &expected,
     );
-    let observed = save(&cold, &base, "cold-readback", &input);
+    let observed = if indexed {
+        capture(&cold, &base, "cold-readback")
+    } else {
+        save(&cold, &base, "cold-readback", &input)
+    };
     assert_eq!(closed.view.directory, observed.view.directory);
     assert_eq!(closed.view.tables, observed.view.tables);
     assert_eq!(closed.view.allocation, observed.view.allocation);
@@ -512,7 +544,11 @@ fn emit(source: &Path, linux: &Snapshot, capi: bool, bs: u32, journal: bool) {
     assert_eq!(closed.view.payloads, observed.view.payloads);
     assert_eq!(closed.view.root_directory, observed.view.root_directory);
     assert_eq!(closed.map_nodes, observed.map_nodes);
-    eprintln!("full-root fallback capi={capi} bs={bs} journal={journal}: complete namespace, INDEX cleared, one linear block, exact allocator/protected bytes and cold Linux metadata checked");
+    if indexed {
+        eprintln!("intermediate last-slot split capi={capi} bs={bs} journal={journal}: INDEX retained, full node, complete routes, exact allocator/protected bytes and cold Linux metadata checked");
+    } else {
+        eprintln!("full-root fallback capi={capi} bs={bs} journal={journal}: complete namespace, INDEX cleared, one linear block, exact allocator/protected bytes and cold Linux metadata checked");
+    }
     std::fs::remove_file(image).unwrap();
     std::fs::remove_file(cold).unwrap();
 }
@@ -527,7 +563,7 @@ fn linux_checks_public_full_root_fallback() {
             let source = base.with_extension("capacity.img");
             let linux = observe(&base.with_extension("grown.img"));
             for capi in [false, true] {
-                emit(&source, &linux, capi, bs, journal);
+                emit(&source, &linux, capi, bs, journal, false);
             }
         }
     }
