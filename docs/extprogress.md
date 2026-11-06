@@ -82,6 +82,17 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Five-task ordinary full-root batch: design review complete — 2026-11-06:**
+  [The driver contract](CASEFOLD-INDEX-CAPACITY-DRIVER.md) traces the existing
+  owned-plan full-root decline, staged ordinary index dropping and one-block
+  append. Linux's measured promotion remains a separate representation. The
+  bounded native and eight-profile Rust/C emission matrices are specified;
+  production remains unchanged. Step 1 is complete; steps 2–5 are native safety
+  controls, driver emission tests, Linux CI launch and saved-evidence audit.
+  Commit/push after each task is authorized. All broader gates remain intact;
+  stages 4–5 stay partial/not quantified. Next: execute the distinct-leaf native
+  capacity controls, then build the specified emitted-byte matrix.
+
 - **Linux capacity reference and measured CI repair are closed — 2026-11-06:**
   exact repair source **`7e36864`** passes focused **42151670764**, all **nineteen**
   jobs and 34 actual positive floor verdicts, plus full **42151670829**, all
