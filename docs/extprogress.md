@@ -82,6 +82,20 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-node reference: measured native byte-limit repair — 2026-11-06:**
+  Source `5cc71e7` passes all 22 focused jobs/37 actual floors and the complete
+  36-image/132-source-hash raw audit. Both whole suites retain exactly 2,539
+  successes (prior 2,538 plus one); units retain all 1,681. Guest passes at
+  4,144 lines/254,577 bytes. Native's actual 3,977-line/245,220-byte log passes
+  every test but exceeds its 245,000-byte ceiling by 220, exiting 65 before
+  trailing stages. Identical saved-log replay is red at 4,000/245,000 and green
+  at 4,000/248,000; floor 1,060 still observes 2,539. Only that byte ceiling is
+  repaired; all output, selections, other ceilings and floors are preserved.
+  The usage-limited helper made no tracked edits; the primary reverified source,
+  archives and actual logs and completed the raw audit. Fresh repaired full CI,
+  trailing checks and `ci-ok` remain pending. Production/casefold-write gates
+  and Stage 4–5 partial/not-quantified status stay unchanged.
+
 - **Full-intermediate-node reference preparation — 2026-11-06:**
   The [reviewed boundary and bounded contract](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md)
   trace the existing ordinary full-node decline/index-dropping caller and

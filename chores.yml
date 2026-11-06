@@ -88,6 +88,15 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     native    3,977 / 245,220    4,000 / 248,000   Full-node reference 5cc71e7,
+#                                                    run 42278162281, artifact
+#                                                    13538423818: 2,539 passes,
+#                                                    same ignored fuzz. Actual
+#                                                    245,000-byte overflow exits
+#                                                    65; identical-log replay
+#                                                    passes 248,000, preserving
+#                                                    lines/output/floor 1,060.
+#   Historical native measurement and then-current budget:
 #     native    3,954 / 242,309    4,000 / 245,000   Indexed-record repair 9b5f717,
 #                                                    full run 41991672077:
 #                                                    all 2,505 prior successes
@@ -833,7 +842,7 @@ tasks:
       # successes produce 3,954 lines / 242,309 bytes; old 3,950/242,000
       # returns 65. Identical-log replay passes at 4,000/245,000,
       # preserving every byte, test selection and the executed-test floor.
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4000 245000 -- scripts/test.sh --locked --release'
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4000 248000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
