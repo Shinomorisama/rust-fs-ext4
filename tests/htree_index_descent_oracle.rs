@@ -29,6 +29,9 @@ use fs_ext4_test_support::oracle;
 use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 
+#[path = "support/htree_descent_diagnostics.rs"]
+mod diagnostics;
+
 fn names() -> Vec<Vec<u8>> {
     let mut out = Vec::new();
     for i in 0..1500u32 {
@@ -61,12 +64,14 @@ fn run(hash_alg: &str, s_flags: u32) {
         std::fs::write(bigdir.join(std::ffi::OsStr::from_bytes(name)), b"").unwrap();
     }
     let image = format!("{root}.img");
+    let mut evidence = diagnostics::Evidence::new(&image, hash_alg, s_flags, &names);
     std::fs::File::create(&image)
         .and_then(|f| f.set_len(64 * 1024 * 1024))
         .unwrap();
 
     let ok = |call: fs_ext4_test_support::Oracle, what: &str| {
         let out = call.output();
+        evidence.output(what, &out);
         (
             out.status.code(),
             format!(
@@ -82,22 +87,27 @@ fn run(hash_alg: &str, s_flags: u32) {
         .arg(&image);
     let (code, log) = ok(call, "mkfs.ext4");
     assert_eq!(code, Some(0), "{log}");
-    for request in [
+    evidence.snapshot("formatted");
+    for (index, request) in [
         format!("ssv def_hash_version {hash_alg}"),
         format!("ssv flags {s_flags}"),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let call = oracle(debugfs).args(["-w", "-R"]).arg(&request).arg(&image);
-        let (code, log) = ok(call, "debugfs ssv");
+        let (code, log) = ok(call, &format!("debugfs-ssv-{index}"));
         assert!(
             code == Some(0) && !log.contains("Invalid"),
             "{request}: {log}"
         );
     }
-    oracle(e2fsck)
-        .args(["-fyD"])
-        .arg(&image)
-        .judged()
-        .repaired("e2fsck -fyD");
+    evidence.snapshot("configured");
+    let rebuilt = oracle(e2fsck).args(["-fyD"]).arg(&image).judged();
+    evidence.output("rebuild", &rebuilt.output);
+    evidence.snapshot("indexed");
+    rebuilt.repaired("e2fsck -fyD");
+    evidence.reports();
 
     let fs = Filesystem::mount(Arc::new(
         fs_ext4::block_io::FileDevice::open(&image).unwrap(),
@@ -121,6 +131,7 @@ fn run(hash_alg: &str, s_flags: u32) {
     );
     let data = file_io::read_all(&fs, &inode).unwrap();
     let blocks: Vec<&[u8]> = data.chunks(bs).collect();
+    let inventory = evidence.directory(&fs, bigdir_ino, &inode, &data, &names);
 
     let mut wrong = Vec::new();
     for name in &names {
@@ -137,10 +148,22 @@ fn run(hash_alg: &str, s_flags: u32) {
             .unwrap_or_default()
             .iter()
             .any(|e| &e.name == name);
+        evidence.query(
+            name,
+            fs_ext4::hash::name_hash(name, inventory.version, &fs.sb.hash_seed),
+            leaf,
+            found,
+            inventory
+                .locations
+                .get(name)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        );
         if !found {
             wrong.push(String::from_utf8_lossy(name).into_owned());
         }
     }
+    evidence.complete(wrong.len());
     assert!(
         wrong.is_empty(),
         "[{tag}] {} of {} names descend to a leaf that does not hold them, e.g. {:?}",

@@ -172,3 +172,43 @@ previous Terra audit reached its usage limit and is not retried here. Stages
 4–5 remain partial/not quantified, casefold writes blocked and stages 6–7 not
 reached. Windows/SteamOS/card, deeper writes, generic ownership/admission and
 lifecycle/recovery/ignored-fuzz qualification remain open.
+
+## Retained descent diagnostics preparation — 2026-11-07
+
+The six existing algorithm/signedness tests now retain their observations
+without changing the 1,500-name generator or the selected-leaf mismatch
+assertion. Test-only support records formatted, configured and rebuilt 64 MiB
+images with SHA-256 sidecars; formatter/configuration/rebuild streams and
+statuses; judged non-repairing checks; filesystem UUID, seed and effective
+algorithm; complete raw directory/inode bytes, logical/physical mappings,
+root/node routes and leaf inventories. Each query records raw name bytes,
+computed major/minor hash, selected leaf, actual containing leaves and the
+original membership verdict. Independent debugfs tree/stat reports and a raw
+1,500-request/answer hash batch retain separate oracle observations.
+
+`scripts/test.sh` removes its owned scratch directory on failure as well as
+success. Evidence therefore lives in a separate repository-local
+`tmp/htree-descent-evidence/` directory, with unique profile instances. Completed
+snapshots survive cleanup; normal panic unwinding also attempts to retain the
+current working image and records copy errors without masking the original
+panic. A standalone local probe uses the actual helper to verify that completed
+and failure-time bytes remain after deleting their original scratch directory;
+it invokes no oracle or mount. No new test names enter the six-test binary.
+
+A new twenty-fourth focused job runs that complete binary with floor six,
+the existing pins, 4,200/340,000 initial ceiling, exact source hashes (including
+the oracle test/helper, workflows, dependency/chores/toolchain and scripts) and
+an always-retained artifact. Every previous focused job body is semantically
+unchanged; only the new job and two relevant path triggers are added. Native
+and guest full-CI jobs add separate evidence uploads when these tests are
+reached, preserving every existing tier-log archive path and all test commands.
+Thus a failure unique to a full-suite seed can also retain its witness.
+
+Compilation, formatting, full lint/eight Unicode checks and exact **1,685**
+native unit successes pass, with unchanged **1,932-line / 150,431-byte** output.
+The six existing test names, all generated names and the final mismatch
+assertion are unchanged; workflow semantic comparisons and budget/VM-order
+guards pass. Linux execution and actual saved-artifact review remain pending.
+This is diagnostic preparation, not a hash/routing correction or new two-node
+write qualification. A green diagnostic run does not explain the earlier red;
+a retained failing witness and independent classification are still required.

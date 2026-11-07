@@ -255,6 +255,14 @@ jobs:
           name: tier-logs-x86_64
           path: tmp/logs/*.log
           if-no-files-found: error
+      - name: Keep reached descent diagnostic evidence
+        if: always() && steps.tier.outcome != 'skipped' && hashFiles('tmp/htree-descent-evidence/**/profile.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: htree-descent-native-evidence
+          path: tmp/htree-descent-evidence/
+          if-no-files-found: error
+          retention-days: 30
       - name: chore vm:status (the VM is down again)
         run: '! chore vm:status'
 
@@ -354,6 +362,14 @@ jobs:
           name: tier-logs-suite-in-vm
           path: tmp/logs/*.log
           if-no-files-found: error
+      - name: Keep reached descent diagnostic evidence
+        if: always() && steps.tier.outcome != 'skipped' && hashFiles('tmp/htree-descent-evidence/**/profile.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: htree-descent-guest-evidence
+          path: tmp/htree-descent-evidence/
+          if-no-files-found: error
+          retention-days: 30
       - name: chore vm:status (the VM is down again)
         run: '! chore vm:status'
 

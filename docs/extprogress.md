@@ -82,6 +82,28 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Descent-oracle retained diagnostics prepared — 2026-11-07:**
+  The existing six tests retain formatted/configured/rebuilt images, phase
+  hashes, raw names/directory/inode/mapping/routes/leaves, filesystem seed/
+  algorithm, per-query membership and independent tool hash/tree reports.
+  All 1,500 generated names and the original mismatch assertion remain intact.
+  A separate repository-local evidence directory survives the test runner's
+  scratch cleanup; the actual-helper unwind probe verifies preserved completed
+  and failure-time bytes after the original directory is deleted.
+
+  New focused job `htree-descent-diagnostics` runs all six with floor six,
+  pinned tools/source hashes and always-retained evidence. All 23 preceding
+  focused jobs remain semantically unchanged. Separate reached-test evidence
+  uploads in full native/guest CI preserve existing logs, commands and limits.
+  Compilation, fmt, full lint/eight Unicode checks and exact **1,685** native
+  successes pass at unchanged **1,932 / 150,431** output; six-test/name/assertion
+  retention, workflow comparisons and budget/VM-order guards pass. See the
+  [diagnostic preparation](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#retained-descent-diagnostics-preparation--2026-11-07).
+  Exact-source Linux execution and artifact completeness remain pending. No
+  hash/routing correction, reproduced new failure or two-node qualification is
+  claimed. The original signed half-MD4 mismatch remains unresolved. Stages
+  4–5 stay partial/not quantified, writes blocked, stages 6–7 not reached.
+
 - **Two-node design review complete; latest descent oracle gate is red — 2026-11-07:**
   The [two-node review and bounded matrix](CASEFOLD-INDEX-TWO-NODE-REVIEW.md)
   traces ordinary insertion with leaf space and a leaf split under either of
@@ -13675,17 +13697,17 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: the two-node source/input review and bounded
-matrix are recorded, without new write qualification. Full-node scoped evidence
-at `6c29e7f`/`a72c2fa` remains historical. Latest `673c16f` full 42339773792
-instead fails an ordinary signed half-MD4 descent oracle check; preserved logs
-confirm the mismatch but omit the failing filesystem/seed/routes. Diagnostic
-capture and classification must precede the next two-node implementation.
+Latest Stage 0/3/5 checkpoint: diagnostic capture for the unresolved ordinary
+descent mismatch is prepared, preserving all six existing tests/assertions and
+names. Local compilation/lint/exact 1,685 units and an actual-helper failure-
+preservation probe pass. Source-matched focused Linux execution and retained
+artifact review remain pending before classifying a new witness. The two-node
+design/input review is complete, but its mutation matrix remains unimplemented.
 Stages 4–5 stay partial/not quantified; casefold writes blocked, stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The [two-node design/input review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md) is complete and defines insertion with leaf space versus leaf splitting under either nonfull selected node: sixteen Linux cases and 32 Rust/C profiles, with explicit query/routing/protected-byte/allocation/cold evidence. **Next bounded task: preserve and diagnose the current ordinary htree descent failure before new two-node implementation.** Exact docs-source `673c16f` full **42339773792** is red: native oracle `half_md4_signed` misses one of 1,500 names in its selected leaf; five sibling variants pass. Verified artifact **13561293488** retains only logs, so prepare always-retained formatter/rebuild images, fixture names, seed/algorithm/signedness, raw index/leaf inventories and independent tool hashes/routes in a focused six-test/floor-six harness job. Preserve all existing assertions, names, outputs, ceilings and floors; classify a retained failing witness before changing code or oracle expectations. A green retry is not diagnosis. Earlier full-node passing focused **42328021164** and full **42334817695** remain source-scoped historical evidence, not success for this failed run or new two-node writes. Unsupported private declines can invoke public fallback and do not prove public refusal; broader ownership/admission/seal/lifecycle/recovery/write/platform gates remain open. Stages 4–5 stay partial/not quantified and casefold writes blocked. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. The [retained descent diagnostics](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#retained-descent-diagnostics-preparation--2026-11-07) preserve all six test names, 1,500 fixture names and the mismatch assertion while recording phase images, seeds, raw routes/leaves, per-query membership and independent hash/tree reports. Local compile/fmt/lint/exact **1,685** units and actual-helper failure-preservation checks pass. **Next bounded task: verify the new exact-source focused six-test job and its actual saved artifact; inspect reached-test native/guest evidence for a failing witness.** Require source/digest/CRC/extracted-byte identity, all six profiles/18 completed phase images and 9,000 query/oracle records on a complete run; label partial evidence accurately on failure. The original `673c16f` full **42339773792** signed half-MD4 miss remains unresolved; no green rerun alone is diagnosis. Reproduce/classify a retained witness before a scoped correction or the planned sixteen-Linux/32-Rust-C two-node mutation matrix. Preserve all existing assertions, selections, outputs, ceilings, floors and ignored-fuzz gate; earlier full-node results remain historical. Unsupported private declines do not establish public refusal; ownership/admission/seal/lifecycle/recovery/write/platform gates remain open. Stages 4–5 stay partial/not quantified and casefold writes blocked. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

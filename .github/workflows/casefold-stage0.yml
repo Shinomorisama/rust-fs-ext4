@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/casefold-stage0.yml
       - tests/casefold_fixture_oracle.rs
+      - tests/htree_index_descent_oracle.rs
+      - tests/support/htree_descent_diagnostics.rs
       - src/fs.rs
       - src/inline_mut.rs
       - src/inline_data.rs
@@ -55,6 +57,42 @@ env:
   CARGO_BUILD_JOBS: "4"
 
 jobs:
+  htree-descent-diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact descent diagnostic source identity
+        run: |
+          mkdir -p tmp/htree-descent-evidence
+          git rev-parse HEAD > tmp/htree-descent-evidence/source-commit.txt
+          git ls-files -z src tests/support tests/htree_index_descent_oracle.rs Cargo.toml Cargo.lock rust-toolchain.toml chores.yml .github/workflows/casefold-stage0.yml .github/workflows/ci.yml scripts/test.sh scripts/tier.sh scripts/core.sh scripts/vm-setup.sh scripts/guest-suite.sh | xargs -0 sha256sum > tmp/htree-descent-evidence/source-sha256.txt
+      - name: Record all six independent descent fixtures without relaxing assertions
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/htree-descent-working
+        run: |
+          scripts/tier.sh casefold:htree-descent-diagnostics htree-descent-diagnostics 4200 340000 -- scripts/test.sh --locked --release --test htree_index_descent_oracle -- --show-output
+          bash scripts/core.sh test-floor htree-descent-diagnostics 6
+      - name: Keep formatter, configured and rebuilt images and routing observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htree-descent-diagnostics
+          path: |
+            tmp/htree-descent-evidence/
+            tmp/logs/htree-descent-diagnostics.log
+          if-no-files-found: error
+          retention-days: 30
   link-index-node-full-emission:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
