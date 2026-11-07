@@ -257,3 +257,48 @@ This contract does not implement or qualify public fallback. Multi-node input
 parents, deeper trees, new extent-map promotion, collision continuation, malformed
 layouts, general ownership/admission, lifecycle/recovery, ignored fuzz and
 casefold-write/platform activation remain separate.
+
+## Native public-fallback control preparation — 2026-11-06
+
+Four new native controls exercise the existing full-node public path at 1/4 KiB:
+`fallback_1k/4k` and `corrupt_full_1k/4k`. They reuse the distinct, checksummed
+126/510-route node fixtures and genuinely full selected leaves, and preserve
+all existing private declines, root-only controls and retained-index last-slot
+tests. Both Rust `apply_link_at` and C `fs_ext4_link_at` execute independently:
+four successful fallback profiles and eight checksum/record refusals.
+
+Success requires INDEX clearing; precise root/interior record-span conversion
+with valid directory tails; only dot/dotdot in the root and an empty converted
+interior block; unchanged old leaf bytes and physical mappings; one appended
+linear leaf; every old/new name resolving to the source; and preserved peer
+inode bytes. Exact global/group debit is one block, one previously free bitmap
+bit flips, inode bitmaps stay identical and used-directory/inode counts stay
+unchanged. Parent/source actually share an inode-table block. Source raw changes
+are limited to link count/ctime/checksum; parent raw fields are bounded, version
+increments once, parent mtime/ctime and source ctime use the single clock stamp.
+C attribute identity, generation, flags, mode/ownership, size/blocks/links and
+atime/mtime/ctime agree with the post-call source. Remount finds every alias.
+
+Checksum failures and checksum-valid malformed selected records both return
+EIO through Rust/C, preserving the complete device bytes, zero writes/flushes,
+zero clock calls, dirty-marker state and operation health. Successful mounts
+remain healthy. These fixtures are synthetic; they are not Linux-clean claims
+or journal/recovery qualification.
+
+All ten intermediate controls pass. The native-only tier retains the exact
+prior **1,681-success multiset** plus exactly four: **1,685 successes**, with
+all **34** index-boundary controls once. Actual local wrapper **1,932 lines /
+150,431 bytes**, floor 440, remains within unchanged 2,000/155,000 limits.
+Formatting, full lint and eight Unicode checks pass. An initial bitmap-index
+type mismatch was corrected before the passing runs; no production change.
+Baseline docs `f10ea83` pass full CI 42300980842. New-source focused/full CI
+results remain pending, and independent Linux checking of public
+full-node fallback emissions remains the next checkpoint.
+
+Next, use the measured `node-full.img` predecessors for eight Rust/C profiles,
+extending the emitter's operation mode explicitly to preserve existing root-
+only fallback and retained-index branches. Retain refusal/dirty/closed/cold
+images, C attributes, exact allocator/protected-byte checks and complete test-
+name multisets. Keep unsupported geometry, general ownership/admission,
+lifecycle/recovery and casefold-write/platform gates unchanged. Stages 4–5
+remain partial/not quantified; stages 6–7 have not been reached.

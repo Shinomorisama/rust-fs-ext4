@@ -142,7 +142,15 @@ fn decline(bs: u32) {
     assert_eq!(fs.chmod_operation().unwrap().operation.status(), status);
 }
 
-fn positive(bs: u32) {
+fn unchanged_except(a: &[u8], b: &[u8], fields: &[(usize, usize)]) {
+    let mut expected = a.to_vec();
+    for &(at, len) in fields {
+        expected[at..at + len].copy_from_slice(&b[at..at + len]);
+    }
+    assert_eq!(expected, b);
+}
+
+fn positive(bs: u32, full: bool) {
     for capi in [false, true] {
         let Indexed {
             dev,
@@ -152,18 +160,43 @@ fn positive(bs: u32) {
             clock,
             mut names,
             query,
-        } = indexed(bs, false);
+        } = indexed(bs, full);
         let before = fs.stat_ino(parent.ino).unwrap();
+        let (source_before, source_raw) = fs.read_inode_verified(target.ino).unwrap();
+        let parent_raw = fs.read_inode_verified(parent.ino).unwrap().1;
         let mapping: Vec<_> = (0..before.size / u64::from(bs))
             .map(|n| fs.map_inode_logical(&before, n).unwrap().unwrap())
             .collect();
         let free = counters(&dev);
         let root = fs.read_block(mapping[0]).unwrap();
+        let protected = if full {
+            clock.now.store(STAMP, Ordering::SeqCst);
+            assert_eq!(
+                crate::bgd::locate_inode(&fs.sb, &fs.groups, parent.ino)
+                    .unwrap()
+                    .0,
+                crate::bgd::locate_inode(&fs.sb, &fs.groups, target.ino)
+                    .unwrap()
+                    .0
+            );
+            Some(
+                mapping
+                    .iter()
+                    .map(|p| fs.read_block(*p).unwrap())
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            None
+        };
+        let group_free = group_counters(&fs);
+        let bitmap = fs.read_block(fs.groups[0].block_bitmap).unwrap();
+        let inode_bitmap = fs.read_block(fs.groups[0].inode_bitmap).unwrap();
         let peer = fs
             .read_inode_verified(fs.resolve(b"/peer").unwrap())
             .unwrap()
             .1;
         let fs = with_test_mount(fs, |h, fs| {
+            let mut attr: fs_ext4_attr_t = unsafe { std::mem::zeroed() };
             if capi {
                 assert_eq!(
                     unsafe {
@@ -175,7 +208,11 @@ fn positive(bs: u32) {
                             parent.generation.unwrap(),
                             query.as_ptr().cast(),
                             query.len(),
-                            std::ptr::null_mut(),
+                            if full {
+                                &mut attr
+                            } else {
+                                std::ptr::null_mut()
+                            },
                         )
                     },
                     0
@@ -184,11 +221,127 @@ fn positive(bs: u32) {
                 fs.apply_link_at(target, parent, &query).unwrap();
             }
             let now = fs.stat_ino(parent.ino).unwrap();
-            assert_eq!(now.flags, before.flags);
-            assert_eq!(fs.read_block(mapping[0]).unwrap(), root);
-            let node = fs.read_block(mapping[1]).unwrap();
-            let (count, _) = crate::htree::parse_node_entries(&node).unwrap();
-            assert_eq!(count.count, count.limit);
+            if let Some(old) = &protected {
+                assert_eq!(
+                    now.flags,
+                    before.flags & !crate::inode::InodeFlags::INDEX.bits()
+                );
+                for (n, fields) in [
+                    (0, vec![(16, 2), (bs as usize - 12, 12)]),
+                    (1, vec![(4, 2), (bs as usize - 12, 12)]),
+                ] {
+                    let block = fs.read_block(mapping[n]).unwrap();
+                    unchanged_except(&old[n], &block, &fields);
+                    assert_eq!(
+                        u16::from_le_bytes(block[fields[0].0..fields[0].0 + 2].try_into().unwrap()),
+                        (bs - if n == 0 { 24 } else { 12 }) as u16
+                    );
+                    let entries = crate::dir::parse_block_verified(
+                        &block,
+                        true,
+                        parent.ino,
+                        now.generation,
+                        &fs.csum,
+                    )
+                    .unwrap();
+                    if n == 0 {
+                        assert_eq!(entries.len(), 2);
+                        assert_eq!(
+                            (&entries[0].name[..], entries[0].inode),
+                            (b".".as_slice(), parent.ino)
+                        );
+                        assert_eq!(
+                            (&entries[1].name[..], entries[1].inode),
+                            (b"..".as_slice(), 2)
+                        );
+                    } else {
+                        assert!(entries.is_empty());
+                    }
+                }
+                for (n, p) in mapping.iter().enumerate().skip(2) {
+                    assert_eq!(fs.read_block(*p).unwrap(), old[n]);
+                }
+                assert_eq!(
+                    (now.mtime, now.mtime_nsec, now.ctime, now.ctime_nsec),
+                    (STAMP, 0, STAMP, 0)
+                );
+                source_preserved(fs, target.ino, &source_raw, source_before.links_count);
+                let source = fs.stat_ino(target.ino).unwrap();
+                assert_eq!((source.ctime, source.ctime_nsec), (STAMP, 0));
+                if capi {
+                    assert_eq!(
+                        (
+                            attr.inode,
+                            attr.generation,
+                            attr.link_count,
+                            attr.inode_flags
+                        ),
+                        (
+                            target.ino,
+                            source.generation,
+                            source.links_count,
+                            source.flags
+                        )
+                    );
+                    assert_eq!(
+                        (attr.mode, attr.uid, attr.gid, attr.size, attr.blocks_512),
+                        (
+                            source.mode & 0o7777,
+                            source.uid,
+                            source.gid,
+                            source.size,
+                            source.blocks
+                        )
+                    );
+                    assert_eq!(
+                        (
+                            attr.atime,
+                            attr.atime_nsec,
+                            attr.mtime,
+                            attr.mtime_nsec,
+                            attr.ctime,
+                            attr.ctime_nsec
+                        ),
+                        (
+                            source.atime,
+                            source.atime_nsec,
+                            source.mtime,
+                            source.mtime_nsec,
+                            source.ctime,
+                            source.ctime_nsec
+                        )
+                    );
+                }
+                let raw = fs.read_inode_verified(parent.ino).unwrap().1;
+                unchanged_except(
+                    &parent_raw,
+                    &raw,
+                    &[
+                        (4, 4),
+                        (12, 8),
+                        (28, 4),
+                        (32, 8),
+                        (40, 60),
+                        (108, 4),
+                        (116, 2),
+                        (124, 2),
+                        (130, 2),
+                        (132, 8),
+                        (152, 4),
+                    ],
+                );
+                let version = |r: &[u8]| {
+                    u64::from(u32::from_le_bytes(r[36..40].try_into().unwrap()))
+                        | (u64::from(u32::from_le_bytes(r[152..156].try_into().unwrap())) << 32)
+                };
+                assert_eq!(version(&raw), version(&parent_raw) + 1);
+            } else {
+                assert_eq!(now.flags, before.flags);
+                assert_eq!(fs.read_block(mapping[0]).unwrap(), root);
+                let node = fs.read_block(mapping[1]).unwrap();
+                let (count, _) = crate::htree::parse_node_entries(&node).unwrap();
+                assert_eq!(count.count, count.limit);
+            }
             assert_eq!(now.size, before.size + u64::from(bs));
             assert_eq!(now.blocks, before.blocks + u64::from(bs / 512));
             assert_eq!(now.links_count, before.links_count);
@@ -196,6 +349,30 @@ fn positive(bs: u32) {
                 assert_eq!(fs.map_inode_logical(&now, n as u64).unwrap(), Some(*p));
             }
             assert_eq!(counters(&dev), (free.0 - 1, free.1));
+            let appended = fs
+                .map_inode_logical(&now, mapping.len() as u64)
+                .unwrap()
+                .unwrap();
+            let (group, bit, _) = fs.group_chunks(appended, 1).unwrap()[0];
+            assert_eq!(group, 0);
+            let mut expected_bitmap = bitmap.clone();
+            assert!(!crate::alloc::bit_is_set(
+                &expected_bitmap,
+                u32::try_from(bit).unwrap()
+            ));
+            expected_bitmap[(bit / 8) as usize] |= 1 << (bit % 8);
+            assert_eq!(
+                fs.read_block(fs.groups[0].block_bitmap).unwrap(),
+                expected_bitmap
+            );
+            assert_eq!(
+                fs.read_block(fs.groups[0].inode_bitmap).unwrap(),
+                inode_bitmap
+            );
+            assert_eq!(
+                group_counters(fs),
+                (group_free.0 - 1, group_free.1, group_free.2)
+            );
             assert_eq!(
                 fs.read_inode_verified(fs.resolve(b"/peer").unwrap())
                     .unwrap()
@@ -207,7 +384,7 @@ fn positive(bs: u32) {
             names.sort();
             let mut actual = Vec::new();
             for n in 0..now.size / u64::from(bs) {
-                if n < 2 {
+                if !full && n < 2 {
                     continue;
                 }
                 let b = fs
@@ -240,10 +417,15 @@ fn positive(bs: u32) {
         fs.finish().unwrap();
         let fs = Filesystem::mount(dev).unwrap();
         assert_eq!(fs.lookup_at(parent.ino, &query).unwrap(), target.ino);
+        if full {
+            for name in &names {
+                assert_eq!(fs.lookup_at(parent.ino, name).unwrap(), target.ino);
+            }
+        }
     }
 }
 
-fn corrupt(bs: u32) {
+fn corrupt(bs: u32, full: bool) {
     for checksum in [false, true] {
         for capi in [false, true] {
             let Indexed {
@@ -254,7 +436,7 @@ fn corrupt(bs: u32) {
                 clock,
                 query,
                 ..
-            } = indexed(bs, false);
+            } = indexed(bs, full);
             let inode = fs.stat_ino(parent.ino).unwrap();
             let physical = fs.map_inode_logical(&inode, 2).unwrap().unwrap();
             let mut block = fs.read_block(physical).unwrap();
@@ -317,17 +499,34 @@ fn full_node_4k() {
 }
 #[test]
 fn last_slot_1k() {
-    positive(1024);
+    positive(1024, false);
 }
 #[test]
 fn last_slot_4k() {
-    positive(4096);
+    positive(4096, false);
 }
 #[test]
 fn corrupt_leaf_1k() {
-    corrupt(1024);
+    corrupt(1024, false);
 }
 #[test]
 fn corrupt_leaf_4k() {
-    corrupt(4096);
+    corrupt(4096, false);
+}
+
+#[test]
+fn fallback_1k() {
+    positive(1024, true);
+}
+#[test]
+fn fallback_4k() {
+    positive(4096, true);
+}
+#[test]
+fn corrupt_full_1k() {
+    corrupt(1024, true);
+}
+#[test]
+fn corrupt_full_4k() {
+    corrupt(4096, true);
 }

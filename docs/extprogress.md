@@ -82,6 +82,30 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Native full-node public-fallback controls prepared — 2026-11-06:**
+  Four controls add Rust/C success and selected-corruption refusals at 1/4 KiB
+  on distinct full-node fixtures. Four successful API profiles clear INDEX,
+  convert root/interior spans and checksum tails, preserve old leaves/maps and
+  every alias, append one linear block with exact bitmap/group/global debit,
+  preserve peer/source metadata, update parent/source times/version once and
+  validate C attribute readback. Eight CRC/malformed-record refusals preserve
+  full device bytes, clock, writes/flushes, marker and health. Remount resolves
+  every spelling. Existing private declines/root-only/last-slot controls remain.
+
+  All ten intermediate controls pass. Native units retain every prior 1,681
+  occurrence plus exactly four: **1,685**, with all **34** indexed-boundary
+  controls once. The actual local wrapper **1,932/150,431**, floor 440, fits
+  unchanged limits; formatting, full lint and eight Unicode checks pass. The
+  baseline docs tip `f10ea83` passes full 42300980842. New-source focused/full
+  CI results are pending; independent public emitted-byte Linux checking
+  remains separate. No production change or new Linux write qualification.
+  See the [native contract/results](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md#native-public-fallback-control-preparation--2026-11-06).
+  **Next:** implement eight Rust/C full-node fallback emission profiles from the
+  measured Linux predecessors, with an explicit emitter mode preserving both
+  existing branches, complete protected-byte/allocation/cold checks and exact
+  source-bound retention. Stages 4–5 stay partial/not quantified; casefold writes
+  and ownership/admission/lifecycle/recovery/ignored-fuzz/platform gates remain.
+
 - **Full-intermediate-node Linux reference and usage recovery complete — 2026-11-06:**
   Reference **`5cc71e7`** passes focused **42278162173**, all 22 jobs and 37
   actual floors; one timing-cancelled create job passed a targeted retry with
@@ -13536,13 +13560,14 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
 Latest Stage 0/5 checkpoint: Linux first-full-node growth passes the 36-image
-raw audit at `5cc71e7` and repaired complete retention at `a5cbbfc`. The public
-driver fallback remains the next qualification boundary. Stages 4–5 remain
-partial/not quantified; casefold writes stay blocked, stages 6–7 not reached.
+raw audit at `5cc71e7` and repaired complete retention at `a5cbbfc`. Four new
+native public-fallback controls now pass with 1,685 units and lint; their CI
+results and independent emitted-byte qualification remain pending. Stages 4–5
+remain partial/not quantified; casefold writes stay blocked, stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The [Linux full-intermediate-node reference](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md#fresh-full-ci-retention-and-scoped-closure--2026-11-06) is complete: `5cc71e7` passes focused **42278162173** (22 jobs / 37 actual floors), all 36 images and 132 source hashes; byte-limit repair `a5cbbfc` passes full **42290244875** (eleven/`ci-ok`) and exact **2,539-whole / 1,681-unit** retention, with all trailing checks. Only the measured native byte ceiling changed; functional code and all focused inputs stayed identical. The usage interruption left no partial source edit or damaged evidence; the primary completed all reviews after the helper stopped. **Next bounded task: add native positive and selected-corruption refusal controls for the ordinary full-node public fallback, preserving the existing private no-effect declines and both root-only/last-slot matrices.** Use distinct mapped leaves with a full intermediate node and selected leaf; check INDEX clearing, root/interior conversion, unchanged old maps/leaves/names, exact one-block allocation, source/parent metadata, Rust/C behavior and refusal state. Independent emitted-byte qualification on the measured Linux `node-full.img` predecessors follows separately under the documented contract. No public fallback or new map promotion is qualified by this reference alone. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. The [native full-node public-fallback controls](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md#native-public-fallback-control-preparation--2026-11-06) now pass four added tests through Rust/C at 1/4 KiB: precise INDEX/root/interior conversion, old maps/leaves/names, exact allocation, metadata/C attributes, clock/health and no-effect corruption refusals. Native units retain all prior occurrences plus four (**1,685**), all 34 boundary controls once, with full lint passed; new-source CI is pending. The underlying Linux reference remains verified at `5cc71e7` (36 images / 132 hashes; focused 42278162173) and repaired full `a5cbbfc` (42290244875, all eleven/`ci-ok`). **Next bounded task: implement eight independent Rust/C full-node fallback emission profiles on the measured Linux `node-full.img` predecessors.** Use an explicit emitter operation mode to preserve both preceding root-only fallback and retained-index branches; require refusal/dirty/closed/cold images, C attributes, exact allocator/protected-byte accounting and every cold Linux name/metadata/free count. Verify exact-source focused/full CI, complete test-name multisets and all trailing checks before scoped qualification. Native synthetic results do not qualify Linux compatibility or new map promotion. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
