@@ -273,3 +273,10 @@ not quantified; casefold writes blocked, stages 6–7 not reached.
 Next: review ordinary insertion with two intermediate nodes using the measured
 Linux `node-grown.img` layouts, define admitted/refused cases and the next bounded
 native/Linux matrix before implementation. This does not extend the current scope.
+
+The [2026-11-07 two-node review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md) completes that
+design/input checkpoint and records a new failure in follow-up docs CI
+42339773792 at `673c16f`: signed half-MD4 descent misses one selected-leaf name.
+Its logs omit the failing image/seed/routes, so retained diagnostic capture and
+classification are the next gate before two-node implementation. The passing
+source/run evidence above remains scoped to those exact earlier executions.
