@@ -82,6 +82,27 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-node emission retention passes; measured guest byte repair prepared — 2026-11-06:**
+  Search repair `6c29e7f` passes focused **42328021164**, all **23** jobs and
+  **38** actual floors. Exact fresh raw audits pass **76** full-node and **64**
+  retained-index images, each with all **133** source hashes. Full **42328021160**
+  now passes the previous fixture-search regression and retains exact whole
+  **2,544** / unit **1,685** multisets, all **34** controls in five contexts and
+  the unchanged ignored fuzz. All other tiers, twenty trailing shell checks,
+  159 CLI checks and the native six-tier/**4,658-execution** verdict agree.
+
+  Native passes **3,983 / 245,927**. Guest passes every test but its actual
+  **4,151 / 255,415** exceeds 255,000 bytes by **415**, exiting 65 before the
+  floor and making guest/`ci-ok` red. All seven exact-source archives are
+  digest/CRC/extracted-byte verified. Identical complete-log replay is red at
+  4,160/255,000 and green at **4,160/258,000**, preserving every byte, selection,
+  other cap and floor; replay observes 2,544 against 1,060. Only guest bytes
+  change. The 87 CI-profile/seven harness-contract tests and budget/VM-order
+  guards pass; all 133 focused input hashes remain unchanged. See the
+  [measured repair](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#measured-guest-byte-budget-repair--2026-11-06).
+  Fresh budget-repair full CI remains required before scoped closure. Stages
+  4–5 stay partial/not quantified, casefold writes blocked, stages 6–7 not reached.
+
 - **Full-node emission raw audit passes; guest search repair prepared — 2026-11-06:**
   Exact source `cea817e` passes focused **42322352737**, all 23 jobs after one
   cancelled create-reference retry. The new emission job **128249627359** and
@@ -13593,16 +13614,16 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/5 checkpoint: full-node Rust/C emission at `cea817e` passes all
-23 focused jobs / 38 actual floors and the 76-image / 133-input-hash raw audit.
-Complete CI exposes a guest last-slot fixture-search failure; the capacity-bound
-repair passes compilation, lint and all 1,685 units / 34 controls. Fresh repaired
-focused/full CI and exact whole-suite retention remain pending. Stages 4–5 stay
-partial/not quantified; casefold writes blocked, stages 6–7 not reached.
+Latest Stage 0/5 checkpoint: search repair `6c29e7f` passes all 23 focused jobs /
+38 floors, 76 full-node and 64 retained-index audited images / 133 input hashes,
+and exact 2,544-whole / 1,685-unit retention. An actual guest-only 415-byte
+overflow is repaired by identical-log replay at 4,160/258,000; fresh full CI
+remains pending. Stages 4–5 stay partial/not quantified; casefold writes blocked,
+stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. Full-node emission source `cea817e` passes focused **42322352737** (23 jobs / 38 actual floors) and the primary **76-image / 133-input-hash** audit: eight Rust/C profiles, 24 no-effect refusals, four C attributes and complete protected-byte/allocation/cold Linux agreement. Full **42322352741** has an actual guest failure in preceding last-slot preparation: a valid 4 KiB journaled predecessor exceeds its arbitrary 64-call search. The [capacity-derived repair](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#guest-suite-search-bound-regression-and-repair--2026-11-06) preserves all checks/output/floors/caps and passes compile/fmt/lint/eight Unicode checks plus the exact **1,685-unit / 34-control** multiset. **Next bounded task: verify fresh repaired-source focused/full CI and all saved evidence before full-node fallback closure.** Require all 23/11 jobs, complete **2,544-whole / 1,685-unit** multisets, all 34 controls in five contexts, the ignored-fuzz gate and every trailing check; investigate actual failures rather than guessing budget changes. Raw emitted-byte success does not repair failed complete-suite retention or qualify unobserved map promotion. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. Search repair `6c29e7f` passes focused **42328021164** (23 jobs / 38 actual floors), the primary **76-image** full-node and **64-image** retained-index audits with all **133** source hashes, and complete whole **2,544** / unit **1,685** multisets with all **34** controls in five contexts. Full **42328021160** passes every test and all trailing native checks, but the actual guest log exceeds its byte ceiling by 415 and makes guest/`ci-ok` red. The [measured guest-only repair](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#measured-guest-byte-budget-repair--2026-11-06) changes 255,000→258,000 bytes after identical complete-log old-red/new-green replay; lines/output/selections/other caps/floors and all focused inputs remain unchanged. **Next bounded task: verify fresh budget-repair full CI and all retained evidence before scoped full-node fallback closure.** Require all eleven jobs/`ci-ok`, the exact whole/unit/34-control multisets, the ignored-fuzz gate and every actual floor/trailing verdict; retain the source-matched 23 focused jobs and complete raw audits. Do not infer CI success from replay or qualify unobserved map promotion. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

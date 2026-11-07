@@ -142,3 +142,77 @@ floor or ceiling is removed or relaxed. Compilation, formatting, full lint and
 eight Unicode checks pass; native units retain the exact **1,685** successes and
 all **34** boundary controls once, at unchanged **1,932 / 150,431** output.
 Fresh repaired-source CI is required.
+
+## Fresh repaired-source evidence — 2026-11-06
+
+Repair **`6c29e7f439ec035e1627fce1b57a3746e746d054`** is pushed to
+`casefold-rw`. Fresh focused **42328021164** and full **42328021160** bind that
+source. All **23** focused jobs and **38** actual floor verdicts pass, including
+repaired retained-index **128267765728**, full-node reference **128267765779**
+and full-node emission **128267765839**. Whole-suite gates remain pending at
+this preparation point.
+
+The primary independently verified the advertised source/digest, ZIP CRCs and
+every extracted byte of both repaired emission artifacts:
+
+| Artifact | ID | SHA-256 |
+|---|---|---|
+| Full-node emission | 13556486296 | `ec12e75cf962c0e2b51d9ad592bda012ebbe2a7b045c4613e1be83152fe06a84` |
+| Retained-index emission | 13556312484 | `f8b71ccba0d4ac6796c83a225c12e9605350e93bd30f09fbf9c44b60ef64b569` |
+
+Both raw reviews pass all **133** current input hashes: **76** full-node images
+and **64** retained-index images. In each matrix, source preparation reaches
+the exact last-slot boundary within the capacity-derived budget; complete
+sequential seek records and the final Linux before/after metadata agree.
+Full-node source seeks are 4/3/17/48; retained-index seeks are 2/4/20/22 for
+1 KiB direct/journaled then 4 KiB direct/journaled. Full-node emission uses
+**661 lines / 92,487 bytes**, retained-index **522 / 72,087**, within unchanged
+limits. The full-node names and Linux route counts are:
+
+| Block size | Journal | Alias count before → after | Linux child routes after growth |
+|---|---|---|---|
+| 1 KiB | No | 249 → 250 | 64 / 63 |
+| 1 KiB | Yes | 261 → 262 | 63 / 64 |
+| 4 KiB | No | 5,417 → 5,418 | 256 / 255 |
+| 4 KiB | Yes | 5,314 → 5,315 | 256 / 255 |
+
+All eight Rust/C full-node profiles again add exactly one linear block, preserve
+old leaves/maps/protected bytes and agree with cold Linux metadata and namespace
+inventory. Linux instead adds two indexed directory blocks; neither transition
+adds an extent-map node. All eight preceding retained-index profiles retain
+INDEX and pass their complete route/split/allocator/protected-byte/cold checks.
+The primary performed these audits; the previously usage-limited Terra helper
+was not retried, and helper cost data is unavailable. Complete repaired-source
+whole-suite retention is still required before scoped closure.
+
+## Measured guest byte-budget repair — 2026-11-06
+
+Full **42328021160** now completes on exact repair source `6c29e7f`: the
+fixture-search regression passes, and both whole suites retain exactly every
+preceding **2,539** success plus four native controls and the full-node host
+test: **2,544** successes. All three unit contexts retain **1,685**, all **34**
+boundary controls occur once in five contexts, and the same single fuzz test
+remains ignored. Native oracle/kernel/lwext4 counts remain 225/36/9; ARM images
+527, browser tests five, twenty trailing script checks and 159 CLI checks are
+retained. Script and CLI logs match their baseline bytes. Native executes its
+actual six-tier/**4,658-execution** verdict, at **3,983 lines / 245,927 bytes**.
+
+The guest also passes all 2,544 tests, but its actual **4,151-line /
+255,415-byte** log exceeds the unchanged 255,000-byte cap by **415 bytes**,
+exiting 65 before its floor command. Consequently the guest job and `ci-ok`
+are red; nine other jobs pass. Artifact **13559340897** retains the complete
+guest log, SHA-256
+**`e6b829133dd5a442c1d220391d34f9708a5c8baad838ac3f74dbd6b0109c4a56`**.
+The primary verifies all seven exact-source archives' advertised digest, ZIP
+CRC and extracted bytes before the complete test-name multiset comparison.
+
+Identical complete-log replay is red with exit 65 at **4,160 / 255,000** and
+green at **4,160 / 258,000**. Both replay logs are byte-identical to the saved
+guest log, and the positive replay executes 2,544 against floor 1,060. Only
+the guest byte ceiling is repaired; line caps, all output, selections, other
+ceilings, floors and the ignored-fuzz gate remain intact. Semantic YAML review
+finds exactly that executable change. All **133** focused input hashes remain
+unchanged from `6c29e7f`, preserving focused **42328021164** and both raw audits.
+The 87 CI-profile and seven harness-contract tests, output-budget guard and VM
+setup-order guard pass. Fresh complete CI on the budget-repair source is still
+required before closure; successful replay does not make the failed run green.
