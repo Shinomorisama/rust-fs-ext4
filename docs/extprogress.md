@@ -82,6 +82,33 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-node Rust/C fallback scoped closure complete — 2026-11-06:**
+  Search repair `6c29e7f` passes focused **42328021164**, all **23** jobs /
+  **38** actual floors, and primary raw audits of **76** full-node plus **64**
+  retained-index images. The 133 focused inputs match byte repair `a72c2fa`,
+  which now passes fresh full **42334817695**, all **eleven** jobs / `ci-ok`.
+  All seven fresh archives pass source/digest/CRC/extracted-byte verification.
+  Both whole suites retain every prior occurrence plus exactly five (**2,544**);
+  all three unit contexts retain **1,685**, all **34** boundary controls occur
+  once in five contexts, and the same ignored fuzz gate remains. All other
+  tiers/floors, twenty trailing script checks and 159 CLI checks agree; native
+  executes its actual six-tier/**4,658-execution** verdict. Actual native/guest
+  wrappers **3,981 / 245,648** and **4,150 / 255,280** pass.
+
+  Eight Rust/C full-node profiles preserve every old leaf/map/name/protected
+  byte, clear INDEX, convert root/interior spans/tails and allocate exactly one
+  linear block with exact allocator debit and cold Linux metadata/readback.
+  Linux separately retains INDEX and adds one node/leaf. No new extent-map node
+  occurs. The actual earlier search and 415-byte guest-budget failures remain
+  recorded; the capacity-bound repair and identical-log byte-only replay do not
+  weaken tests/output/floors. See the [complete scoped closure](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#complete-ci-retention-and-scoped-closure--2026-11-06).
+  Healthy ordinary layouts, caller exclusion and closed handles bound this
+  result. No production change or casefold-write enablement; stages 4–5 stay
+  partial/not quantified, stages 6–7 not reached. The primary completed the
+  audits after the earlier Terra usage limit; no replacement helper was used.
+  **Next:** review two-intermediate-node ordinary insertion from the measured
+  Linux `node-grown.img` predecessors and define the next native/Linux matrix.
+
 - **Full-node emission retention passes; measured guest byte repair prepared — 2026-11-06:**
   Search repair `6c29e7f` passes focused **42328021164**, all **23** jobs and
   **38** actual floors. Exact fresh raw audits pass **76** full-node and **64**
@@ -13614,16 +13641,17 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/5 checkpoint: search repair `6c29e7f` passes all 23 focused jobs /
-38 floors, 76 full-node and 64 retained-index audited images / 133 input hashes,
-and exact 2,544-whole / 1,685-unit retention. An actual guest-only 415-byte
-overflow is repaired by identical-log replay at 4,160/258,000; fresh full CI
-remains pending. Stages 4–5 stay partial/not quantified; casefold writes blocked,
-stages 6–7 not reached.
+Latest Stage 0/5 checkpoint: full-node emission passes scoped raw review at
+`6c29e7f` (76 full-node / 64 retained-index images, 133 inputs; focused 23 jobs /
+38 floors) and complete repaired full CI at `a72c2fa` (42334817695, eleven jobs /
+`ci-ok`, exact 2,544-whole / 1,685-unit retention). Healthy ordinary one-node
+fallback is qualified within caller-exclusion/closed-handle limits; no new map
+promotion or broader casefold-write qualification. Stages 4–5 stay partial/not
+quantified; casefold writes blocked, stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. Search repair `6c29e7f` passes focused **42328021164** (23 jobs / 38 actual floors), the primary **76-image** full-node and **64-image** retained-index audits with all **133** source hashes, and complete whole **2,544** / unit **1,685** multisets with all **34** controls in five contexts. Full **42328021160** passes every test and all trailing native checks, but the actual guest log exceeds its byte ceiling by 415 and makes guest/`ci-ok` red. The [measured guest-only repair](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#measured-guest-byte-budget-repair--2026-11-06) changes 255,000→258,000 bytes after identical complete-log old-red/new-green replay; lines/output/selections/other caps/floors and all focused inputs remain unchanged. **Next bounded task: verify fresh budget-repair full CI and all retained evidence before scoped full-node fallback closure.** Require all eleven jobs/`ci-ok`, the exact whole/unit/34-control multisets, the ignored-fuzz gate and every actual floor/trailing verdict; retain the source-matched 23 focused jobs and complete raw audits. Do not infer CI success from replay or qualify unobserved map promotion. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. Full-node Rust/C fallback closure now passes focused **42328021164** (23 jobs / 38 actual floors), primary **76-image** full-node and **64-image** retained-index raw audits, all **133** focused inputs and fresh full **42334817695** on `a72c2fa` (eleven jobs / `ci-ok`). Exact **2,544-whole / 1,685-unit** multisets, all **34** controls in five contexts, unchanged ignored fuzz and all trailing/floor verdicts pass. Both prior actual failures and their measured repairs remain documented in the [scoped closure](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#complete-ci-retention-and-scoped-closure--2026-11-06). **Next bounded task: review ordinary insertion with two intermediate nodes using the measured Linux `node-grown.img` predecessors, then define admitted/refused cases and the next native/Linux matrix before implementation.** Distinguish insertion with leaf space from leaf splitting under a nonfull selected node, preserve route/node ownership and refuse unsupported geometry safely. Current one-full-node fallback evidence does not qualify multi-node inputs, deeper growth or unobserved map promotion. Ownership/admission/seal/lifecycle/recovery/write/platform gates remain open; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

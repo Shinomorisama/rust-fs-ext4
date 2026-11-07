@@ -56,15 +56,20 @@ host oracle/mount/KVM or prohibited implementation-source access.
 
 ## Status
 
-Implementation and focused job prepared. Compilation, formatting, full lint,
+Scoped ordinary full-node fallback qualification is complete. Search repair
+`6c29e7f` passes all 23 focused jobs / 38 actual floors and both complete raw
+audits; byte repair `a72c2fa` passes all eleven full jobs / `ci-ok`, with all
+133 focused inputs unchanged. The final closure below records exact evidence.
+
+Preparation compilation, formatting, full lint,
 eight Unicode checks and the exact 1,685-success native-unit multiset pass;
 all 34 indexed-boundary controls are retained. Actual local wrapper is 1,932
 lines/150,431 bytes within unchanged limits. Semantic YAML comparison preserves
 all 22 prior jobs and top-level settings; three workflow guards pass.
-Linux execution and saved-byte review now pass as recorded below. Complete-suite
-retention remains pending. Native controls at `dc82fff` pass 1,685 local units
-and lint. Its focused baseline cancelled the mkdir-policy job; the new source
-reruns the complete focused selection. Pending results do not establish closure.
+Linux execution, saved-byte review and complete-suite retention now pass as
+recorded below. Native controls at `dc82fff` pass 1,685 local units and lint;
+the new focused selection completes all jobs, including the previously
+cancelled baseline mkdir-policy job.
 Stages 4–5 stay partial/not quantified; ownership/admission, lifecycle/recovery,
 ignored fuzz, casefold writes and Windows/SteamOS remain gated.
 
@@ -216,3 +221,55 @@ unchanged from `6c29e7f`, preserving focused **42328021164** and both raw audits
 The 87 CI-profile and seven harness-contract tests, output-budget guard and VM
 setup-order guard pass. Fresh complete CI on the budget-repair source is still
 required before closure; successful replay does not make the failed run green.
+
+## Complete CI retention and scoped closure — 2026-11-06
+
+Budget repair **`a72c2fa7b2b0784a109594598c35a882bf29a700`** passes fresh full
+[**42334817695**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/42334817695),
+all **eleven** jobs including `ci-ok`. Focused
+[**42328021164**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/42328021164)
+passes all **23** jobs / **38** actual floor verdicts on `6c29e7f`. All **133**
+focused inputs match `a72c2fa` byte-for-byte; the only executable chore change
+is the independently replayed guest byte ceiling. Both source-matched raw audits
+remain valid: **76** full-node images and **64** retained-index images.
+
+The primary rechecked all seven fresh archive identities/digests/ZIP CRCs and
+every extracted byte before reviewing actual logs:
+
+| Tier archive | ID | SHA-256 |
+|---|---|---|
+| Native | 13560268468 | `b9d6efa1a8ecb5488958b29799a69e72c487656d0d9c9c70cacf0c2bcd11bf86` |
+| Guest | 13560039216 | `1b4d085e8434eecd51d395c7d3df2e542a7b6997def4a23f0ce45e5e225af219` |
+| Browser | 13559271914 | `557b218f3bf44c53c606335f0d4d40b20c44b1112eb9b49a06532ed1269fc728` |
+| Semver | 13559226861 | `50f07617407bd3f953b613d079d397e921e9b1909747648e3bb7d1b6598505b9` |
+| CLI | 13558852566 | `f1984f789368c4847898e153f112c898c2090464e02ba6d9f532b2f6748b6739` |
+| Unit | 13558619496 | `53ee6bfaca1648da2c017674674f3361b7b7f05490c6a0299775c9030930f960` |
+| ARM | 13558613870 | `06b7992412e13b64b1a443eeb7fafb4487361132e31c3c3ca10417c70b0ca649` |
+
+Both whole suites retain every prior **2,539** success plus exactly four native
+controls and the new full-node host test: **2,544**. All three unit contexts
+retain **1,685**; all **34** indexed-boundary controls occur once in five
+contexts. The same single ignored fuzz case remains a gate. Oracle/kernel/
+lwext4 retain 225/36/9, ARM images 527 and browser tests five. All twenty trailing
+shell and 159 installed-CLI checks execute; script/CLI logs match baseline bytes.
+Every actual floor is positive and met, including Unicode eight. Native executes
+its actual six-tier/**4,658-execution** verdict. The actual whole-suite wrappers
+are **3,981 / 245,648** native and **4,150 / 255,280** guest, within unchanged
+native 4,000/248,000 and repaired guest 4,160/258,000. Both actual whole floors
+observe 2,544 against 1,060. No earlier failed run is relabeled as successful.
+
+Scoped source/evidence review finds no remaining blocker for the existing
+ordinary full-node fallback on these four layouts/eight API profiles: one full
+intermediate input node, healthy checksummed extents, caller exclusion and
+closed reference handles. The driver clears INDEX, converts root/interior
+records, preserves old leaves/maps/names/protected data, allocates one linear
+block with exact debit and passes cold Linux readback. Linux's separate two-node
+growth remains independently measured. No production code or write gate changes;
+no new extent-map promotion is observed or qualified. Multi-node inputs, deeper
+layouts, generic ownership/admission, lifecycle/recovery, ignored fuzz and
+Windows/SteamOS/card qualification remain open. Stages 4–5 remain partial and
+not quantified; casefold writes blocked, stages 6–7 not reached.
+
+Next: review ordinary insertion with two intermediate nodes using the measured
+Linux `node-grown.img` layouts, define admitted/refused cases and the next bounded
+native/Linux matrix before implementation. This does not extend the current scope.
