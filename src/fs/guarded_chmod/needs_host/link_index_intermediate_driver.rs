@@ -102,7 +102,15 @@ pub(super) fn prepare_named(bs: u32, journal: bool, prefix: &str) -> (PathBuf, S
     let mut total = observe(&image).view.entries.len();
     let mut state = node_size(&image);
     assert_eq!(state.1 + 2, state.2);
-    for n in 0..64 {
+    // Every alias has a 255-byte name and needs a 264-byte aligned record.
+    // Before the node fills, at most limit - 1 leaves can hold those records.
+    // One more alias than their combined capacity must reach the full node,
+    // regardless of the Linux-created hash seed or distribution among leaves.
+    // A fixed 64-call search failed on a valid 4 KiB journaled predecessor.
+    let capacity = (usize::from(state.2) - 1) * ((bs as usize - 12) / 264);
+    assert!(total <= capacity && capacity < MAX_NAMES);
+    let seeks = capacity + 1 - total;
+    for n in 0..seeks {
         assert!(total < MAX_NAMES);
         std::fs::copy(&image, &prior).unwrap();
         guest(
@@ -138,7 +146,10 @@ pub(super) fn prepare_named(bs: u32, journal: bool, prefix: &str) -> (PathBuf, S
         }
         state = next;
     }
-    panic!("bounded Linux search did not fill the last intermediate slot");
+    panic!(
+        "capacity-bounded Linux search did not fill the last intermediate slot: \
+         bs={bs} journal={journal} total={total} state={state:?} seeks={seeks}"
+    );
 }
 
 #[test]

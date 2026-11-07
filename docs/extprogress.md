@@ -82,6 +82,28 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-node emission raw audit passes; guest search repair prepared — 2026-11-06:**
+  Exact source `cea817e` passes focused **42322352737**, all 23 jobs after one
+  cancelled create-reference retry. The new emission job **128249627359** and
+  artifact **13553896811** pass source/digest/CRC/extracted-byte verification,
+  all **133** input hashes and the primary **76-image** audit. Eight Rust/C
+  profiles preserve old leaves/maps/protected bytes, add exactly one linear
+  block and pass cold Linux readback; 60 e2fsck reports, 24 no-effect refusals
+  and four C attribute records agree. No new extent-map node occurs.
+
+  Full **42322352741** exposes an actual guest fixture-search failure in the
+  preceding retained-index test: the 4 KiB journaled input exhausts 64 seeks
+  after root promotion at 5,324 aliases. The repair derives a finite insertion
+  bound from fixed record size and node capacity, preserving all transition
+  checks, tests, output, floors and ceilings. See the
+  [saved failure and repair](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#guest-suite-search-bound-regression-and-repair--2026-11-06).
+  Repair compilation, formatting, full lint/eight Unicode checks and exact
+  **1,685** native units / **34** controls pass, with unchanged 1,932-line /
+  150,431-byte output. Complete repaired-source CI and exact whole-suite retention remain pending;
+  no scoped fallback closure is claimed. Stages 4–5 stay partial/not quantified,
+  casefold writes blocked and stages 6–7 not reached. The primary performed
+  the evidence audit; the previously usage-limited Terra helper was not retried.
+
 - **Full-node Rust/C emission matrix prepared — 2026-11-06:**
   The [bounded emission contract](CASEFOLD-INDEX-NODE-FULL-DRIVER.md) implements
   eight Rust/C link-at profiles on exact Linux full-node predecessors. Explicit
@@ -13571,15 +13593,16 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/5 checkpoint: Linux first-full-node growth passes the 36-image
-raw audit at `5cc71e7` and repaired complete retention at `a5cbbfc`. Four new
-native public-fallback controls now pass with 1,685 units and lint; their CI
-results and independent emitted-byte qualification remain pending. Stages 4–5
-remain partial/not quantified; casefold writes stay blocked, stages 6–7 not reached.
+Latest Stage 0/5 checkpoint: full-node Rust/C emission at `cea817e` passes all
+23 focused jobs / 38 actual floors and the 76-image / 133-input-hash raw audit.
+Complete CI exposes a guest last-slot fixture-search failure; the capacity-bound
+repair passes compilation, lint and all 1,685 units / 34 controls. Fresh repaired
+focused/full CI and exact whole-suite retention remain pending. Stages 4–5 stay
+partial/not quantified; casefold writes blocked, stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The [native full-node public-fallback controls](CASEFOLD-INDEX-NODE-FULL-REFERENCE.md#native-public-fallback-control-preparation--2026-11-06) now pass four added tests through Rust/C at 1/4 KiB: precise INDEX/root/interior conversion, old maps/leaves/names, exact allocation, metadata/C attributes, clock/health and no-effect corruption refusals. Native units retain all prior occurrences plus four (**1,685**), all 34 boundary controls once, with full lint passed; new-source CI is pending. The underlying Linux reference remains verified at `5cc71e7` (36 images / 132 hashes; focused 42278162173) and repaired full `a5cbbfc` (42290244875, all eleven/`ci-ok`). **Next bounded task: implement eight independent Rust/C full-node fallback emission profiles on the measured Linux `node-full.img` predecessors.** Use an explicit emitter operation mode to preserve both preceding root-only fallback and retained-index branches; require refusal/dirty/closed/cold images, C attributes, exact allocator/protected-byte accounting and every cold Linux name/metadata/free count. Verify exact-source focused/full CI, complete test-name multisets and all trailing checks before scoped qualification. Native synthetic results do not qualify Linux compatibility or new map promotion. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. Full-node emission source `cea817e` passes focused **42322352737** (23 jobs / 38 actual floors) and the primary **76-image / 133-input-hash** audit: eight Rust/C profiles, 24 no-effect refusals, four C attributes and complete protected-byte/allocation/cold Linux agreement. Full **42322352741** has an actual guest failure in preceding last-slot preparation: a valid 4 KiB journaled predecessor exceeds its arbitrary 64-call search. The [capacity-derived repair](CASEFOLD-INDEX-NODE-FULL-DRIVER.md#guest-suite-search-bound-regression-and-repair--2026-11-06) preserves all checks/output/floors/caps and passes compile/fmt/lint/eight Unicode checks plus the exact **1,685-unit / 34-control** multiset. **Next bounded task: verify fresh repaired-source focused/full CI and all saved evidence before full-node fallback closure.** Require all 23/11 jobs, complete **2,544-whole / 1,685-unit** multisets, all 34 controls in five contexts, the ignored-fuzz gate and every trailing check; investigate actual failures rather than guessing budget changes. Raw emitted-byte success does not repair failed complete-suite retention or qualify unobserved map promotion. Deeper writes, ownership/admission/seal/lifecycle/recovery/write/platform gates remain unqualified; stages 4–5 stay partial/not quantified and casefold writes remain blocked. Preserve tests, caps, floors and the ignored-fuzz gate. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
