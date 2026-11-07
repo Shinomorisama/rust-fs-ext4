@@ -82,6 +82,18 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full-node Rust/C emission matrix prepared — 2026-11-06:**
+  The [bounded emission contract](CASEFOLD-INDEX-NODE-FULL-DRIVER.md) implements
+  eight Rust/C link-at profiles on exact Linux full-node predecessors. Explicit
+  root-fallback/retained-split/node-fallback modes preserve preceding behavior;
+  the new mode checks root/interior conversion, old leaf/map preservation,
+  exact allocation/protected bytes, refusal state, C attributes and cold Linux
+  metadata. Unique-prefix Linux preparation keeps all source reference phases;
+  76 images are expected. One new focused exact-test/floor-one job preserves all
+  22 prior job bodies/caps/floors. Actual Linux/full CI, raw-image audit and scoped
+  review remain pending. No production change or write qualification is claimed;
+  stages 4–5 and all broader casefold-write/platform gates stay unchanged.
+
 - **Native full-node public-fallback controls prepared — 2026-11-06:**
   Four controls add Rust/C success and selected-corruption refusals at 1/4 KiB
   on distinct full-node fixtures. Four successful API profiles clear INDEX,

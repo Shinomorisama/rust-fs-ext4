@@ -147,7 +147,14 @@ fn linux_checks_public_intermediate_split() {
         for journal in [false, true] {
             let (source, linux) = prepare(bs, journal);
             for capi in [false, true] {
-                driver_emission::emit(&source, &linux, capi, bs, journal, true);
+                driver_emission::emit(
+                    &source,
+                    &linux,
+                    capi,
+                    bs,
+                    journal,
+                    driver_emission::Mode::RetainedSplit,
+                );
             }
         }
     }

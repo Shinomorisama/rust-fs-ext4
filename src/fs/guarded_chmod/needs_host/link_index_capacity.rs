@@ -12,6 +12,9 @@ mod intermediate;
 #[path = "link_index_node_full_reference.rs"]
 mod node_full;
 
+#[path = "link_index_node_full_driver.rs"]
+mod node_fallback;
+
 const MAX_NAMES: usize = 16_384;
 const BATCH: usize = 256;
 const MAX_DIR_BLOCKS: usize = 1024;

@@ -84,9 +84,12 @@ pub(super) fn shape(before: &Snapshot, after: &Snapshot, image: &Path) {
 }
 
 fn profile(bs: u32, journal: bool) {
-    intermediate::prepare_named(bs, journal, "link-node-full-source");
-    let base =
-        fs_ext4_test_support::temp_dir().join(format!("link-node-full-source-{bs}-{journal}"));
+    profile_named(bs, journal, "link-node-full-source");
+}
+
+pub(super) fn profile_named(bs: u32, journal: bool, prefix: &str) {
+    intermediate::prepare_named(bs, journal, prefix);
+    let base = fs_ext4_test_support::temp_dir().join(format!("{prefix}-{bs}-{journal}"));
     let image = base.with_extension("node-working.img");
     let prior = base.with_extension("node-prior.img");
     std::fs::copy(base.with_extension("linux-split.img"), &image).unwrap();

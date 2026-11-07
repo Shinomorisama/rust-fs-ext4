@@ -2,6 +2,13 @@
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Mode {
+    RootFallback,
+    RetainedSplit,
+    NodeFallback,
+}
+
 struct DriverClock {
     stamp: i64,
     calls: AtomicUsize,
@@ -239,7 +246,14 @@ fn save(image: &Path, base: &Path, phase: &str, prior: &Snapshot) -> Snapshot {
     s
 }
 
-fn transition(before: &Snapshot, after: &Snapshot, image: &Path, name: &[u8], stamp: i64) {
+fn transition(
+    before: &Snapshot,
+    after: &Snapshot,
+    image: &Path,
+    name: &[u8],
+    stamp: i64,
+    mode: Mode,
+) {
     let (a, b) = (&before.view, &after.view);
     let fs = mount(image);
     let bs = fs.sb.block_size();
@@ -308,7 +322,7 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path, name: &[u8], st
     assert_eq!(a.eas, b.eas);
     assert_eq!(a.payloads, b.payloads);
     assert_eq!(a.root_directory, b.root_directory);
-    if before.depth == 1 {
+    if mode == Mode::RetainedSplit {
         super::intermediate::split(before, after, name, &fs);
     } else {
         stable(
@@ -316,7 +330,42 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path, name: &[u8], st
             &b.directory[0],
             &[(16, 2), (bs as usize - 12, 12)],
         );
-        assert_eq!(&b.directory[1..a.directory.len()], &a.directory[1..]);
+        if mode == Mode::NodeFallback {
+            assert_eq!((before.depth, before.index_nodes.len(), a.roots), (1, 1, 1));
+            let node = before.index_nodes[0] as usize;
+            let (count, _) = crate::htree::parse_node_entries(&a.directory[node]).unwrap();
+            assert_eq!(count.count, count.limit);
+            assert_eq!(
+                u16::from_le_bytes(b.directory[0][16..18].try_into().unwrap()),
+                (bs - 24) as u16
+            );
+            for n in 1..a.directory.len() {
+                if n == node {
+                    stable(
+                        &a.directory[n],
+                        &b.directory[n],
+                        &[(4, 2), (bs as usize - 12, 12)],
+                    );
+                    assert_eq!(
+                        u16::from_le_bytes(b.directory[n][4..6].try_into().unwrap()),
+                        (bs - 12) as u16
+                    );
+                    assert!(crate::dir::parse_block_verified(
+                        &b.directory[n],
+                        true,
+                        a.records[0].0,
+                        a.records[0].1.generation,
+                        &fs.csum
+                    )
+                    .unwrap()
+                    .is_empty());
+                } else {
+                    assert_eq!(a.directory[n], b.directory[n]);
+                }
+            }
+        } else {
+            assert_eq!(&b.directory[1..a.directory.len()], &a.directory[1..]);
+        }
     }
     let locations = a.records[..2]
         .iter()
@@ -391,12 +440,13 @@ pub(super) fn emit(
     capi: bool,
     bs: u32,
     journal: bool,
-    indexed: bool,
+    mode: Mode,
 ) {
-    let prefix = if indexed {
-        "link-intermediate-driver"
-    } else {
-        "link-capacity-driver"
+    let indexed = mode == Mode::RetainedSplit;
+    let prefix = match mode {
+        Mode::RootFallback => "link-capacity-driver",
+        Mode::RetainedSplit => "link-intermediate-driver",
+        Mode::NodeFallback => "link-node-full-driver",
     };
     let base = fs_ext4_test_support::temp_dir().join(format!(
         "{prefix}-{}-{bs}-{journal}",
@@ -405,14 +455,46 @@ pub(super) fn emit(
     let image = base.with_extension("working.img");
     std::fs::copy(source, &image).unwrap();
     let input = capture(&image, &base, "input");
-    assert_eq!(input.depth, u8::from(indexed));
+    assert_eq!(input.depth, u8::from(mode != Mode::RootFallback));
     assert_eq!(
         input.view.roots,
-        if indexed { 1 } else { usize::from(input.limit) }
+        if mode != Mode::RootFallback {
+            1
+        } else {
+            usize::from(input.limit)
+        }
     );
     let total = input.view.entries.len();
     let name = format!("cap-{total:05}-{}", "n".repeat(245)).into_bytes();
     assert_eq!(name.len(), 255);
+    if mode == Mode::NodeFallback {
+        assert_eq!(input.index_nodes.len(), 1);
+        let node = input.index_nodes[0] as usize;
+        let (count, _) = crate::htree::parse_node_entries(&input.view.directory[node]).unwrap();
+        assert_eq!(count.count, count.limit);
+        let fs = mount(&image);
+        let routed = crate::htree::lookup_leaf_with(
+            &name,
+            &input.view.directory[0],
+            &fs.sb.hash_seed,
+            fs.sb.unsigned_hash(),
+            |n| Ok(input.view.directory[n as usize].clone()),
+        )
+        .unwrap()
+        .unwrap();
+        let mut leaf = input.view.directory[routed as usize].clone();
+        assert!(matches!(
+            crate::dir::add_entry_to_block(
+                &mut leaf,
+                input.view.records[1].0,
+                &name,
+                crate::dir::DirEntryType::RegFile,
+                true,
+                12
+            ),
+            Err(crate::error::Error::OutOfBounds)
+        ));
+    }
     let clock = Arc::new(DriverClock {
         stamp: input.view.records.iter().map(|r| r.1.ctime).max().unwrap() + 100,
         calls: AtomicUsize::new(0),
@@ -499,7 +581,7 @@ pub(super) fn emit(
     } else {
         save(&image, &base, "closed", &input)
     };
-    transition(&input, &closed, &image, &name, clock.stamp);
+    transition(&input, &closed, &image, &name, clock.stamp, mode);
     assert_eq!(closed.view.entries, linux.view.entries);
     std::fs::write(base.with_extension("observation.json"),format!("{{\"capi\":{capi},\"block_size\":{bs},\"journal\":{journal},\"clock_calls\":1,\"refusals\":3,\"before\":{total},\"after\":{},\"stamp\":{}}}\n",closed.view.entries.len(),clock.stamp)).unwrap();
     let cold = base.with_extension("cold.img");
@@ -546,8 +628,10 @@ pub(super) fn emit(
     assert_eq!(closed.map_nodes, observed.map_nodes);
     if indexed {
         eprintln!("intermediate last-slot split capi={capi} bs={bs} journal={journal}: INDEX retained, full node, complete routes, exact allocator/protected bytes and cold Linux metadata checked");
-    } else {
+    } else if mode == Mode::RootFallback {
         eprintln!("full-root fallback capi={capi} bs={bs} journal={journal}: complete namespace, INDEX cleared, one linear block, exact allocator/protected bytes and cold Linux metadata checked");
+    } else {
+        eprintln!("full-node fallback capi={capi} bs={bs} journal={journal}: INDEX cleared, root/interior converted, all old leaves preserved, one linear block, exact allocator/protected bytes and cold metadata checked");
     }
     std::fs::remove_file(image).unwrap();
     std::fs::remove_file(cold).unwrap();
@@ -563,7 +647,7 @@ fn linux_checks_public_full_root_fallback() {
             let source = base.with_extension("capacity.img");
             let linux = observe(&base.with_extension("grown.img"));
             for capi in [false, true] {
-                emit(&source, &linux, capi, bs, journal, false);
+                emit(&source, &linux, capi, bs, journal, Mode::RootFallback);
             }
         }
     }
