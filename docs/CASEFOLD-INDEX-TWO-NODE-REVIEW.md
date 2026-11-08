@@ -212,3 +212,93 @@ guards pass. Linux execution and actual saved-artifact review remain pending.
 This is diagnostic preparation, not a hash/routing correction or new two-node
 write qualification. A green diagnostic run does not explain the earlier red;
 a retained failing witness and independent classification are still required.
+
+## Diagnostic execution and independent artifact audit — 2026-11-07
+
+Exact preparation source **`4981c7b67d63a3e8501733f3bdb507f249ebdd59`** passes
+focused [**42357296709**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/42357296709),
+all **24** jobs and **39** actual positive floor verdicts. Diagnostic job
+**128358071475** executes the six unchanged tests against floor six. Its actual
+wrapper is **186 lines / 12,567 bytes**, within unchanged 4,200/340,000 limits.
+All **143** unique source-manifest paths match the exact Git tree with no
+missing or extra inputs, including the oracle test, helper, workflows and scripts.
+
+GitHub API/Git authentication failed during the initial collection, after the
+source was pushed; collection resumed once existing access worked again. The
+primary verifies source/run bindings, advertised SHA-256, ZIP CRCs and every
+extracted byte of the following artifacts:
+
+| Artifact | ID | SHA-256 |
+|---|---|---|
+| Focused descent diagnostics | 13568655816 | `5142b6a5b6b1172b247ceb7edda0502d8fd8e1714ff15db0d714597f000e0635` |
+| Full-CI native descent evidence | 13570007027 | `7f6dc6dfc65bc09e32bedbee4dde94a2057e3c7601722c41bd186aef67f30366` |
+| Full-CI guest descent evidence | 13569434372 | `c601d7f33a3e9b979451e5179829d18f6c99fcfbf9242fc120db8fc217872aa4` |
+| Original failed guest tier log | 13569618093 | `dd51b392cd83fa3e515b9b1cfec4a37e16dba221ec8534d3340904ec5de103af` |
+
+Independent byte review covers all six algorithm/signedness combinations in
+each execution context. Native runs the binary in the oracle tier and again
+in its whole suite; guest runs it once. Every profile retains all three completed
+64 MiB phase images with verified digests and unchanged UUID/seed across phases.
+
+| Context | Profiles | Completed phase images | Query records | Independent hash answers | Selected-leaf misses / hash disagreements |
+|---|---:|---:|---:|---:|---|
+| Focused | 6 | 18 | 9,000 | 9,000 | 0 / 0 |
+| Native oracle and whole suite | 12 | 36 | 18,000 | 18,000 | 0 / 0 |
+| Guest whole-suite prefix | 6 | 18 | 9,000 | 9,000 | 0 / 0 |
+| Total | 24 | 72 | 36,000 | 36,000 | 0 / 0 |
+
+The 24 filesystem seeds and UUIDs are distinct; these counts span all six
+variants rather than 24 signed half-MD4 trials. Raw superblock/inode/extent/
+index/leaf checksums agree. Inode-derived physical mappings reconstruct the
+saved directory bytes; route records and complete raw entry membership agree
+with every saved query. All 1,500 raw names per profile, including long/high-byte
+spellings, and every raw independent hash request/answer are retained and
+compared. All saved non-repairing reports run five passes and are judged clean.
+These observations validate capture completeness on passing profiles. The
+local actual-helper unwind probe separately validates failure-time retention;
+no new failing oracle witness occurs in these artifacts.
+
+## Native retention and incomplete guest run
+
+Full [**42357296778**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/42357296778)
+initially completes with nine jobs successful and guest/`ci-ok` failed. The
+primary verifies all seven tier-log archives and compares successful test-name
+multisets against the preceding complete baseline. Native retains exactly
+**2,544** whole-suite successes and the same ignored fuzz case; all three unit
+contexts retain **1,685**, with all **34** boundary controls intact. Oracle/
+kernel/lwext4 remain 225/36/9; ARM images 527 and browser tests five. Twenty
+trailing shell and 159 CLI checks execute with baseline-identical logs. Native
+executes the actual six-tier/**4,658-execution** verdict. Its actual whole wrapper
+is **3,979 / 245,361**, oracle **3,055 / 239,103**, within unchanged ceilings.
+
+Original guest job **128358614482** passes all six descent tests, then its
+transport stops while `htree_split_write_cut` is running. The saved log ends
+with Vagrant reporting that its provider is not ready for SSH; the wrapper
+exits **255**, with no completed verdict for that test or the rest of the suite.
+This is not whole-suite completion or an output-budget failure. Its already
+completed descent artifacts are valid observations, not a passing guest gate.
+The transport's underlying cause is not established by that message.
+
+After preserving the original log, a failed-job retry retains the nine
+successful jobs and reruns guest/`ci-ok` on the same source. Guest retry job
+**128570238103** is running at this checkpoint; its final result and complete
+guest retention are pending. No source, test, ceiling or floor changes accompany
+the retry, and the original failure remains recorded.
+
+## Result and next bounded task
+
+The diagnostic capture and saved-artifact audit checkpoint is complete. It
+does not resolve the `673c16f` signed half-MD4 selected-leaf mismatch: that
+incident's image/seed were not retained, and the new observations contain no
+failing witness. No production or oracle-expectation correction is claimed.
+
+Next, verify the guest retry and its final source-bound evidence, then prepare
+a finite reproducibility experiment prioritizing signed half-MD4. Preserve
+the six current assertions and names, document candidate seeds/inputs and the
+stop condition, and retain any actual failing image and independent tool
+reports for classification. Seek a failing witness rather than pinning a seed
+that avoids the failure; passing samples cannot establish its cause. A scoped
+correction and new two-node mutation implementation still require that gate.
+No helper is used; all audits are performed by the primary. Stages 4–5 remain
+partial/not quantified, casefold writes blocked, stages 6–7 not reached and
+Windows/SteamOS/card use unqualified.

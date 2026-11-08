@@ -82,6 +82,35 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Descent diagnostic execution and artifact audit complete — 2026-11-07:**
+  Source `4981c7b` passes focused **42357296709**, all **24** jobs / **39**
+  actual floors. New job **128358071475** retains the original six tests and
+  floor six, at **186 / 12,567** output. All **143** source hashes match.
+  Primary source/digest/CRC/extracted-byte and independent raw review passes
+  focused artifact **13568655816**, native **13570007027** and guest
+  **13569434372**: **72** completed images / **36,000** queries and independent
+  hash answers across 24 distinct filesystem seeds/UUIDs. Every saved name,
+  inode-derived map, route, relevant checksum, membership and oracle hash agrees;
+  all non-repairing checks are judged clean. No new failing witness is captured.
+
+  Full **42357296778** native retains all **2,544** whole / **1,685** unit names,
+  all **34** controls, every other tier, twenty shell/159 CLI checks and its
+  actual six-tier/**4,658-execution** verdict. Seven tier archives verify.
+  Guest passes all six descent tests, then ends with a Vagrant/SSH readiness
+  error during `htree_split_write_cut`, exit **255**. Its complete suite and
+  `ci-ok` remain red in that original attempt. Failed-job retry retains the
+  nine successful jobs; guest **128570238103** is running, final guest retention
+  pending. The original failed log is retained as **13569618093**. See the
+  [source-bound audit and retry status](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#diagnostic-execution-and-independent-artifact-audit--2026-11-07).
+
+  GitHub authentication failed during initial collection and later worked
+  again; no source edits were lost. The capture pipeline is validated, while
+  the original signed half-MD4 mismatch remains unexplained. No production/
+  oracle assertion or write-gate change; stages 4–5 stay partial/not quantified,
+  stages 6–7 not reached. **Next:** verify the guest retry, then prepare a finite
+  retained-witness reproduction experiment before a scoped correction or the
+  two-node mutation matrix. Passing observations alone do not classify the red.
+
 - **Descent-oracle retained diagnostics prepared — 2026-11-07:**
   The existing six tests retain formatted/configured/rebuilt images, phase
   hashes, raw names/directory/inode/mapping/routes/leaves, filesystem seed/
@@ -13697,17 +13726,18 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: diagnostic capture for the unresolved ordinary
-descent mismatch is prepared, preserving all six existing tests/assertions and
-names. Local compilation/lint/exact 1,685 units and an actual-helper failure-
-preservation probe pass. Source-matched focused Linux execution and retained
-artifact review remain pending before classifying a new witness. The two-node
-design/input review is complete, but its mutation matrix remains unimplemented.
-Stages 4–5 stay partial/not quantified; casefold writes blocked, stages 6–7 not reached.
+Latest Stage 0/3/5 checkpoint: retained diagnostic capture passes all 24 focused
+jobs / 39 floors and independent audit of 72 images / 36,000 query/hash records
+on `4981c7b`, with 143 input hashes verified. Native complete retention passes;
+guest passes the descent cases but later stops on a Vagrant/SSH error. Its
+failed-job retry is running. The earlier signed half-MD4 mismatch remains
+unexplained; a retained failing witness is still required before correction or
+new two-node mutation implementation. Stages 4–5 stay partial/not quantified;
+casefold writes blocked, stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The [retained descent diagnostics](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#retained-descent-diagnostics-preparation--2026-11-07) preserve all six test names, 1,500 fixture names and the mismatch assertion while recording phase images, seeds, raw routes/leaves, per-query membership and independent hash/tree reports. Local compile/fmt/lint/exact **1,685** units and actual-helper failure-preservation checks pass. **Next bounded task: verify the new exact-source focused six-test job and its actual saved artifact; inspect reached-test native/guest evidence for a failing witness.** Require source/digest/CRC/extracted-byte identity, all six profiles/18 completed phase images and 9,000 query/oracle records on a complete run; label partial evidence accurately on failure. The original `673c16f` full **42339773792** signed half-MD4 miss remains unresolved; no green rerun alone is diagnosis. Reproduce/classify a retained witness before a scoped correction or the planned sixteen-Linux/32-Rust-C two-node mutation matrix. Preserve all existing assertions, selections, outputs, ceilings, floors and ignored-fuzz gate; earlier full-node results remain historical. Unsupported private declines do not establish public refusal; ownership/admission/seal/lifecycle/recovery/write/platform gates remain open. Stages 4–5 stay partial/not quantified and casefold writes blocked. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse this session's verified setup and authorization. The [diagnostic execution/audit](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#diagnostic-execution-and-independent-artifact-audit--2026-11-07) passes focused **42357296709** (24 jobs / 39 actual floors), all **143** source hashes and **72** completed phase images / **36,000** query/oracle records across focused/native/guest. Native full **42357296778** retains exact **2,544** whole / **1,685** unit names and every trailing verdict. The original guest passes descent, then its Vagrant/SSH transport stops later with exit255; its final whole suite is incomplete. **Next bounded task: verify guest retry job 128570238103 and final source-bound evidence, then prepare a finite retained-witness reproduction experiment prioritizing signed half-MD4.** Keep the original failed log/artifact **13569618093** and nine retained successful peers distinct from the retry. The original `673c16f` full **42339773792** selected-leaf miss remains unresolved; all 36,000 new observations match, so no failing witness or correction is claimed. Document candidate seeds/inputs and stop conditions, retain an actual failing image and independent reports, and classify it before changing production/oracle expectations or implementing the planned sixteen-Linux/32-Rust-C two-node matrix. Preserve the six existing tests, all names/assertions, output/selection/caps/floors and ignored-fuzz gate. Ownership/admission/seal/lifecycle/recovery/write/platform gates remain open; stages 4–5 partial/not quantified and casefold writes blocked. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
