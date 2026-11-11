@@ -302,3 +302,158 @@ correction and new two-node mutation implementation still require that gate.
 No helper is used; all audits are performed by the primary. Stages 4–5 remain
 partial/not quantified, casefold writes blocked, stages 6–7 not reached and
 Windows/SteamOS/card use unqualified.
+
+## Guest retry closure and finite reproduction plan — 2026-11-11
+
+This is an evidence/design checkpoint. It implements no new experiment runner,
+changes no executable input or assertion, and qualifies no new writes. The
+original `673c16f` signed half-MD4 miss remains unexplained.
+
+### Retry evidence and present baseline
+
+Full run [**42357296778**, attempt 2](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/42357296778)
+now completes successfully on exact source
+`4981c7b67d63a3e8501733f3bdb507f249ebdd59`. Guest retry **128570238103** and
+aggregate **128588191192** succeed, retaining the nine successful peers. The
+original failed guest **128358614482**, its incomplete suite and transport
+error, and original artifact **13569618093** remain historical failed evidence.
+They are not replaced by the retry's observations.
+
+| Retry artifact | ID | Verified SHA-256 |
+|---|---|---|
+| Complete guest tier log | 13598781476 | `1939e8a8cc62af5c1d707c38cb0bf0767105a4ba3c3927b635e303acb64d17c3` |
+| Guest descent evidence | 13598975326 | `f06cd9efed4eab578d9c276e39b42580fb87afc66bd8734ab227c44287a635c9` |
+
+API source/run binding, actual downloaded ZIP SHA-256, all ZIP CRCs and extracted
+bytes pass. The job log executes the real **2,544-test / floor-1,060** verdict;
+the wrapper measures **4,151 lines / 255,415 bytes** within current limits.
+The saved guest log has 2,544 successes, zero failures and the same one ignored
+`deep_walk_byte_flip_fuzz_never_panics`. All six descent names pass. Its library
+binary has **1,400** successes; do not attribute the separate native unit tier's
+1,685 total to that guest binary.
+
+Read-only saved-byte checks pass six profiles, all eighteen image sidecar
+digests, unchanged UUID/hash seed across each profile's three phases, and six
+distinct UUIDs/seeds. Inode-table bytes match the saved inode; independent
+depth-zero extent parsing confirms all **305** logical/physical mappings and
+reconstructs the saved directory. Raw record parsing confirms all **9,000**
+leaf names/inodes against the inventory. Each of the 9,000 queries selects a
+containing leaf, and every saved independent hash answer and request name
+agrees. Reports retain `Clean` and successful hash-tool statuses. This retry
+audit does **not** independently recompute checksums or index routing, nor
+execute another oracle; the earlier full raw audit is distinct evidence.
+
+Current pre-checkpoint source **`6c6fec8ff36e8fcbaaf028db6906a5c42ffa670f`**
+passes full [**42428433787**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/42428433787),
+all eleven jobs. Native artifact **13599185548**, SHA-256
+`316d44f31fcc0fdfe9cf732cbd9a0573ba3ee3cfcaf1ae52bba583b26d33e935`,
+and guest artifact **13598658676**, SHA-256
+`2a74133f96655bad9f3fbd3622fe980957568ce26ef262388d9c5e61816cf6ab`,
+pass downloaded digest/CRC/extracted-byte checks. Native/guest successful-name
+multisets and the retry agree at 2,544 occurrences / 2,530 distinct names, with
+the same ignored fuzz. Native units retain 1,685 successes; oracle/kernel/
+lwext4 remain 225/36/9. Fresh local native setup/CLI and unit execution pass:
+1,685 occurrences, zero failed/ignored, floor 440, at 1,934 / 150,573 output;
+its passing-name multiset equals that CI unit tier. This is not fresh full-suite
+execution of the documentation commit. Executable inputs (`src`, `tests`,
+dependencies, toolchain, chores, scripts and workflows) are unchanged from
+`4981c7b` through this checkpoint; fresh documentation-commit CI is separate.
+
+Documentation-checkpoint validation passes full `chore lint` through the native
+runner (including provenance, family/aggregate gates, eight Unicode controls,
+formatting and workspace/all-target clippy), `git diff --check`, local document
+targets and the replay/corpus/32-candidate identity and resource calculations.
+No new test execution or filesystem qualification is attributed to the plan.
+
+Current-chat network/source/tool/write-path checks pass. GitHub reports fork
+pull/push authority; write scopes were checked by metadata, without dummy
+mutations. Direct storage downloads return a proxy 403; the GitHub connector
+successfully supplies actual logs/artifact ZIP bytes for verification. No new
+secret, host oracle, sibling reset or PRoot is used. One temporary authorized
+Terra/medium read-only helper checked retained evidence; the primary inspected
+its scripts and reran the consequential checks. It initially stopped at direct
+storage denial and required the connector fallback. Usage/cost is unavailable;
+no cost saving is asserted.
+
+### Finite experiment to implement next
+
+The next implementation checkpoint prepares a separate **test-only** seeded
+runner and bounded focused CI path. Do not change the six current test names,
+their 1,500-name generator, assertions, existing job bodies, selections, limits,
+floors or ignored-fuzz gate. Keep production code and the write gate unchanged.
+The existing complete six-test/floor-six job remains mandatory alongside the
+new experiment. Run formatter, rebuild, hash and consistency tools only in the
+prescribed guest with the existing pinned Rust/core/harness/tool setup.
+
+Use the exact existing 64 MiB / 1 KiB-block corpus, including its long and
+high-byte names. The 1,500-line `names.hex` SHA-256 is
+`8fa9e9ecaaeebae3085ab85d2fc21f4f2946638db6af70c2b3ee0e6ee4b3e30b`.
+Require that identity for every trial. Prioritize signed half-MD4 (effective
+version 1, flags 1); do not substitute casefold Unicode hashing for this ordinary
+directory failure.
+
+1. **One exact-input replay control.** Verify retry artifact **13598975326**
+   and take a private copy of `half_md4-1`'s `configured.img`, SHA-256
+   `7aabbbb9c73d4b7d400d7b74e9d69387c30c87152bb1209194f2bc4952ff19c1`.
+   Its UUID bytes are `c0ecd51e9d34484a87bed3c1ac73065d` and seed bytes
+   `6d2c9f2f80bf492db620a3c18010d6c9`. Retain the original phase images and
+   rebuild only the copy. Compare all names, hashes, routes and verdicts; require
+   semantic agreement, not byte equality of time-varying tool output. This
+   replays a **passing** witness, not the lost original failing fixture. Artifact
+   unavailability stops this prerequisite rather than substituting a new image.
+2. **Exactly 32 predeclared fresh candidates, indices 00–31.** For each index,
+   take the first sixteen bytes of SHA-256 of the ASCII string
+   `casefold-descent-2026-11-11/seed/NN` as raw seed bytes and of
+   `casefold-descent-2026-11-11/uuid/NN` as raw filesystem UUID bytes; `NN` is
+   the two-digit decimal index. UUID notation groups those bytes in order;
+   it does not reverse words or modify UUID version/variant bits. For index
+   00 the seed is `ef274b78-3e6f-9950-4f60-7095197e643e` and UUID is
+   `c2e9fe60-07be-94f9-504e-7f6eb52da206`. Materialize and retain the complete
+   manifest before execution. Check uniqueness, nonzero seeds and no match
+   to the replay control. Do not select/reject candidates using driver hash
+   answers or previous pass/fail outcomes. Confirm the guest's seed-setting
+   interface, then read back raw superblock UUID/seed/algorithm/flags before
+   rebuilding; a mismatch is a setup failure, never a reason to reseed.
+3. **Finite execution and retention.** Run the replay before fresh candidates,
+   then four batches of eight fresh indices in order, with at most nine trials
+   in a batch including the initial replay. Each trial executes all 1,500
+   original membership checks and records an actual floor-one verdict.
+   The maximum is **33 signed trials / 49,500 queries / 99 phase-image slots**;
+   these are planned maxima, not executed evidence. At 64 MiB each that is
+   6.1875 GiB of phase-image bytes across the run, at most 1.6875 GiB for the
+   nine-trial batch, before working copies/tool reports/build/VM space. Check
+   total available space before starting each batch. Archive/upload each batch
+   independently with always-retained evidence; keep data until its upload and
+   downloaded digest verification are confirmed. Use existing tier wrappers
+   and measured limits per invocation; no preemptive budget increases. Bound
+   each batch to forty minutes and do not extend automatically on exhaustion.
+4. **Stop and classify.** Stop scheduling further trials on the first captured
+   membership/hash/routing discrepancy. Preserve the actual failed image,
+   completed phases, partial query records, exact trial manifest, source hashes,
+   tool versions, filesystem settings, complete raw roles/maps/routes/leaves,
+   independent tool reports, checksums and original exit status. Artifact or
+   transport failure also stops execution, recorded as infrastructure/incomplete
+   rather than a filesystem witness. No ignored test, automatic retry, assertion
+   weakening or production repair may turn that attempt green. After 32 fresh
+   candidates without a witness, stop as **failure not reproduced**; the oracle
+   gate remains unresolved and another experiment needs separate review.
+
+Before running the new path, verify deterministic candidate/corpus identity,
+actual seed readback, exact-source capture on success and failure, retention
+after owned scratch cleanup, and per-trial exit/floor handling. Preserve the
+complete baseline test-name multisets and all focused/full checks when adding
+the test-only runner. A setup failure is not a reproduction of the old miss.
+
+Classification requires independent saved-image evidence distinguishing hash
+disagreement, route/record disagreement, corruption and a possible continuation
+case. A continuation explanation requires demonstrating equal major hashes,
+the raw boundary flag, the actual containing leaves and independent lookup;
+it cannot be inferred from a passing retry. Reproduce the same captured failure
+before any scoped correction or change to oracle expectations. The sixteen
+Linux / 32 Rust-C two-node mutation matrix remains later work.
+
+This finite plan is prepared and its corpus/control/seed identities are checked;
+the seeded runner, seed-setting preflight, 33 trials and their independent
+qualification are **unimplemented/unrun**. Stages 4–5 remain partial/not
+quantified, stages 6–7 not reached, casefold writes blocked and real
+Windows/SteamOS/card use unqualified.

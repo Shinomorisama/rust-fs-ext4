@@ -82,6 +82,45 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Guest retry closed and finite reproduction plan prepared — 2026-11-11:**
+  Retry guest **128570238103** and aggregate **128588191192** pass full run
+  **42357296778**, attempt 2, on exact `4981c7b`. The original failed guest
+  transport attempt/log remains separate. Retry artifacts **13598781476** and
+  **13598975326** pass source/run, downloaded digest, ZIP CRC and extracted-byte
+  checks. Eighteen image hashes, six distinct UUIDs/seeds, 305 independently
+  parsed inode mappings, 9,000 raw leaf entries and 9,000 saved independent
+  hash/query records agree. Checksums and index routing are not independently
+  recomputed in this retry audit. The real wrapper/floor passes at **4,151 /
+  255,415**, **2,544** successes, floor **1,060**, and one unchanged ignored
+  fuzz. The guest library binary has **1,400** passes, not the separate native
+  unit tier's 1,685 total.
+
+  Latest pre-checkpoint full **42428433787** at `6c6fec8` passes all eleven
+  jobs; downloaded native/guest archives verify. Native whole, guest whole
+  and retry success-name multisets agree at **2,544** occurrences; fresh local
+  CLI/setup and **1,685** unit successes pass with the same CI unit names.
+  Executable inputs are unchanged from `4981c7b`. Direct storage downloads
+  fail with proxy 403; the GitHub connector provides verified actual bytes.
+  Reported fork write authority, source/tool/reference/download/write-path
+  checks pass without dummy mutations. One authorized Terra/medium helper
+  assists read-only evidence checks, with primary script review/re-execution;
+  usage/cost is unavailable. See the [retry evidence and finite plan](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#guest-retry-closure-and-finite-reproduction-plan--2026-11-11).
+
+  The plan fixes one exact passing-input replay plus **32** deterministic
+  signed half-MD4 seed candidates, the unchanged 1,500-name corpus, finite
+  batch/resource/stop bounds and complete witness retention. Its maximum
+  **33 trials / 49,500 queries / 99 phase-image slots** is planned, not run.
+  Full lint, provenance/format/clippy/eight Unicode controls, diff/link checks
+  and corpus/control/seed/resource calculations pass for this documentation
+  checkpoint; fresh documentation-commit full CI remains separate.
+  This is an evidence/design checkpoint: no runner, production, assertion,
+  selection, limit, floor or write-gate change. The original signed half-MD4
+  miss remains unexplained. **Next:** implement the separate test-only seeded
+  runner and guest seed-readback/retention preflight, retaining all six current
+  tests and the entire baseline, before executing the fixed finite plan.
+  Stages 4–5 remain partial/not quantified, stages 6–7 not reached and
+  casefold/Windows/SteamOS/card writes/use remain unqualified.
+
 - **Descent diagnostic execution and artifact audit complete — 2026-11-07:**
   Source `4981c7b` passes focused **42357296709**, all **24** jobs / **39**
   actual floors. New job **128358071475** retains the original six tests and
@@ -13726,18 +13765,20 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: retained diagnostic capture passes all 24 focused
-jobs / 39 floors and independent audit of 72 images / 36,000 query/hash records
-on `4981c7b`, with 143 input hashes verified. Native complete retention passes;
-guest passes the descent cases but later stops on a Vagrant/SSH error. Its
-failed-job retry is running. The earlier signed half-MD4 mismatch remains
-unexplained; a retained failing witness is still required before correction or
-new two-node mutation implementation. Stages 4–5 stay partial/not quantified;
-casefold writes blocked, stages 6–7 not reached.
+Latest Stage 0/3/5 checkpoint: the formerly pending guest retry now passes,
+with verified complete 2,544-success retention and eighteen saved phase images.
+Latest pre-checkpoint `6c6fec8` full CI and fresh local 1,685 units pass;
+executable inputs remain unchanged. A finite one-replay/32-candidate signed
+half-MD4 experiment is prepared, with exact corpus/seed identities and stop/
+retention bounds. Its separate seeded runner and Linux execution are unrun.
+The earlier signed half-MD4 mismatch remains unexplained; a retained failing
+witness is required before correction or new two-node mutation implementation.
+Stages 4–5 stay partial/not quantified; casefold writes blocked, stages 6–7
+not reached. Documentation/evidence closure does not advance implementation.
 
 ## What comes next
 
-1. Reuse this session's verified setup and authorization. The [diagnostic execution/audit](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#diagnostic-execution-and-independent-artifact-audit--2026-11-07) passes focused **42357296709** (24 jobs / 39 actual floors), all **143** source hashes and **72** completed phase images / **36,000** query/oracle records across focused/native/guest. Native full **42357296778** retains exact **2,544** whole / **1,685** unit names and every trailing verdict. The original guest passes descent, then its Vagrant/SSH transport stops later with exit255; its final whole suite is incomplete. **Next bounded task: verify guest retry job 128570238103 and final source-bound evidence, then prepare a finite retained-witness reproduction experiment prioritizing signed half-MD4.** Keep the original failed log/artifact **13569618093** and nine retained successful peers distinct from the retry. The original `673c16f` full **42339773792** selected-leaf miss remains unresolved; all 36,000 new observations match, so no failing witness or correction is claimed. Document candidate seeds/inputs and stop conditions, retain an actual failing image and independent reports, and classify it before changing production/oracle expectations or implementing the planned sixteen-Linux/32-Rust-C two-node matrix. Preserve the six existing tests, all names/assertions, output/selection/caps/floors and ignored-fuzz gate. Ownership/admission/seal/lifecycle/recovery/write/platform gates remain open; stages 4–5 partial/not quantified and casefold writes blocked. Consult the [dated upstream/fork register](UPSTREAM-FORK-REVIEWS.md) before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse the verified setup and authorization. Guest retry **128570238103** and aggregate **128588191192** now pass full **42357296778** attempt 2 at `4981c7b`; verified retry artifacts retain 2,544 whole successes and all six descent tests. Latest pre-checkpoint `6c6fec8` full **42428433787** and fresh local 1,685 units pass, with unchanged executable inputs. Keep the original failed transport attempt/log and original `673c16f` selected-leaf miss distinct. **Next bounded task: implement the separate test-only seeded runner and guest seed-readback/retention preflight for the [finite reproduction plan](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#finite-experiment-to-implement-next), then execute its exact replay plus at most 32 predeclared signed half-MD4 candidates.** Preserve all six existing tests/names/assertions, the exact 1,500-name corpus, all job bodies/selections/limits/floors and the ignored-fuzz gate. Stop on an actual retained discrepancy or infrastructure failure; all-green exhaustion means failure not reproduced, not a diagnosis. A captured failure and independent classification remain prerequisites for correction or the sixteen-Linux/32-Rust-C two-node matrix. Ownership/admission/seal/lifecycle/recovery/write/platform gates remain open; stages 4–5 partial/not quantified, casefold writes blocked, stages 6–7 not reached. Consult the dated upstream/fork register before external research; main core v0.4.2 and casefold core v0.3.0 stay separate.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
