@@ -303,6 +303,82 @@ No helper is used; all audits are performed by the primary. Stages 4–5 remain
 partial/not quantified, casefold writes blocked, stages 6–7 not reached and
 Windows/SteamOS/card use unqualified.
 
+## Seeded reproduction runner implementation — 2026-11-11
+
+The finite experiment now has a separate Python controller and manual focused
+workflow. The existing oracle binary accepts an explicit experiment identity
+only for its exact signed half-MD4 test; without that environment variable its
+six original profiles retain their previous behavior. All six names, the full
+name-generator body and the mismatch loop/final assertion are retained exactly.
+The existing diagnostic helper, preceding focused workflow, full-CI workflow,
+production sources, dependency pins, limits, floors and ignored-fuzz gate are
+unchanged.
+
+`tests/support/htree_descent_experiment.rs` freezes identities, validates the
+original corpus and replay images, and checks raw pre-rebuild superblock
+UUID/seed/algorithm/flags/block size. Fresh trials pass the prescribed UUID to
+the guest formatter, then set the seed through its debugfs interface. The
+formatted image may therefore retain the formatter's initial random seed;
+configured/indexed images must carry the prescribed seed. Replay starts from
+the reviewed formatted/configured bytes and rebuilds a private copy. It also
+requires semantic agreement with retained query, entry, route and mapping
+records; variable textual tool timestamps are not compared.
+
+Seven native controls cover exact candidate endpoints/uniqueness, strict mode
+parsing, raw byte ordering/settings, original name-byte serialization and
+missing/altered replay input. Eleven Python controls cover finite scheduling,
+fixed identities, safe extraction, authentication prerequisites, preserved
+earlier attempts, edited/missing manifests, incomplete records, independent
+hash/name/membership disagreements, and first-child failure/missing-capture
+stop behavior with original exit preservation. These controls are additive;
+they do not replace or rename any earlier test.
+
+`scripts/htree-descent-experiment.py prepare` records all 32 candidates and
+source hashes before fetching the fixed replay artifact. ZIP digest/CRC and
+replay phase/corpus identities are checked. The GitHub API request carries the
+read-scoped token; redirected storage requests carry no authorization header.
+Each trial records its identity, original exit, retained profile and actual
+floor-one verdict. It compares every independent hash answer and membership
+record and keeps the original assertion failure intact. Completed and failed
+observations are moved outside the owned test scratch directory into the
+batch archive; missing capture or infrastructure failure also stops the batch.
+
+The new `htree-descent-reproduction.yml` has four dependent jobs, each with
+the planned forty-minute execution-step bound, existing pins and unchanged
+per-invocation 4,200/340,000 limits. Each uploads evidence even after failure,
+then downloads its actual archive to verify API/source/SHA-256, ZIP CRCs and
+all retained file bytes before leaving the runner. A failed job prevents later
+batches; an always-run aggregate requires all four successes and explicitly
+reports **failure not reproduced**, not a correction. The existing separate
+six-test diagnostic job remains required alongside this workflow.
+
+Baseline documentation source `00294783fd937787c9be9b0f904f14512703a398`
+now passes full **43067795934**, all eleven jobs. Seven downloaded tier-log
+archives pass source/digest/CRC/extracted-byte checks. Native/guest retain
+2,544 identical successful occurrences and the one same ignored fuzz; all
+three unit contexts retain 1,685. The real native aggregate retains 4,658
+executions, every floor, twenty trailing shell checks and 159 CLI checks.
+One authorized Terra/medium read-only helper performed the baseline archive
+audit; the primary rechecked the consequential archive/name results. No helper
+implements or tests code; usage/cost is unavailable.
+
+The local development loop installs cargo-llvm-cov 0.9.1 and matching Rust
+1.95 LLVM tools without changing dependency pins. Baseline native unit
+execution retains all 1,685 names and measures production-line coverage
+**30,322 / 43,809 = 69.214088%**. This coverage scope excludes test/dependency
+sources and does not instrument the VM tiers; exact-source complete-suite
+CI is separate. Local Rust controls, Python controls, replay preparation,
+syntax, workflow dependencies, retained-generator/assertion checks and full
+lint pass. Post-change instrumented native units retain all 1,685 baseline
+occurrences and add exactly seven, for **1,692 successes**, zero failed/ignored,
+at **1,949 lines / 152,002 bytes**. Production-line coverage remains exactly
+**30,322 / 43,809 = 69.214088%**. The manifest and lock are restored unchanged.
+Actual exact-source focused/full/33-trial CI remain pending at this implementation
+checkpoint. The tracked-tree provenance scan passes all 597 files.
+No guest seed-setting result or failing witness is inferred from compilation.
+Stages 4–5 remain partial/not quantified, stages 6–7 not reached and casefold
+writes and Windows/SteamOS/card qualification remain blocked/open respectively.
+
 ## Guest retry closure and finite reproduction plan — 2026-11-11
 
 This is an evidence/design checkpoint. It implements no new experiment runner,

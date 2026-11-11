@@ -32,6 +32,9 @@ use std::sync::Arc;
 #[path = "support/htree_descent_diagnostics.rs"]
 mod diagnostics;
 
+#[path = "support/htree_descent_experiment.rs"]
+mod experiment;
+
 fn names() -> Vec<Vec<u8>> {
     let mut out = Vec::new();
     for i in 0..1500u32 {
@@ -52,6 +55,16 @@ fn names() -> Vec<Vec<u8>> {
 }
 
 fn run(hash_alg: &str, s_flags: u32) {
+    let trial = std::env::var_os("FS_EXT4_DESCENT_TRIAL").map(|id| {
+        let id = id.to_str().expect("experiment identity must be ASCII");
+        assert_eq!(
+            (hash_alg, s_flags),
+            ("half_md4", 1),
+            "experiment requires the exact signed half-MD4 test filter"
+        );
+        let replay = std::env::var_os("FS_EXT4_DESCENT_REPLAY_DIR").map(std::path::PathBuf::from);
+        experiment::Trial::parse(id, replay.as_deref()).expect("fixed experiment identity")
+    });
     let mkfs = "mkfs.ext4";
     let e2fsck = "e2fsck";
     let debugfs = "debugfs";
@@ -60,6 +73,12 @@ fn run(hash_alg: &str, s_flags: u32) {
     let bigdir = std::path::Path::new(&root).join("bigdir");
     std::fs::create_dir_all(&bigdir).unwrap();
     let names = names();
+    if let Some(trial) = &trial {
+        experiment::check_corpus(&names).unwrap();
+        if let Some(replay) = &trial.replay {
+            experiment::check_replay(replay).unwrap();
+        }
+    }
     for name in &names {
         std::fs::write(bigdir.join(std::ffi::OsStr::from_bytes(name)), b"").unwrap();
     }
@@ -81,26 +100,45 @@ fn run(hash_alg: &str, s_flags: u32) {
             ),
         )
     };
-    let call = oracle(mkfs)
-        .args(["-q", "-F", "-b", "1024", "-d"])
-        .arg(&root)
-        .arg(&image);
-    let (code, log) = ok(call, "mkfs.ext4");
-    assert_eq!(code, Some(0), "{log}");
+    if let Some(replay) = trial.as_ref().and_then(|trial| trial.replay.as_ref()) {
+        std::fs::copy(replay.join("formatted.img"), &image).unwrap();
+    } else {
+        let mut call = oracle(mkfs).args(["-q", "-F", "-b", "1024"]);
+        if let Some(trial) = &trial {
+            call = call.args(["-U", &experiment::uuid(&trial.uuid)]);
+        }
+        let call = call.arg("-d").arg(&root).arg(&image);
+        let (code, log) = ok(call, "mkfs.ext4");
+        assert_eq!(code, Some(0), "{log}");
+    }
     evidence.snapshot("formatted");
-    for (index, request) in [
-        format!("ssv def_hash_version {hash_alg}"),
-        format!("ssv flags {s_flags}"),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let call = oracle(debugfs).args(["-w", "-R"]).arg(&request).arg(&image);
-        let (code, log) = ok(call, &format!("debugfs-ssv-{index}"));
-        assert!(
-            code == Some(0) && !log.contains("Invalid"),
-            "{request}: {log}"
-        );
+    if let Some(replay) = trial.as_ref().and_then(|trial| trial.replay.as_ref()) {
+        std::fs::copy(replay.join("configured.img"), &image).unwrap();
+    } else {
+        let mut requests = vec![
+            format!("ssv def_hash_version {hash_alg}"),
+            format!("ssv flags {s_flags}"),
+        ];
+        if let Some(trial) = &trial {
+            requests.push(format!("ssv hash_seed {}", experiment::uuid(&trial.seed)));
+        }
+        for (index, request) in requests.into_iter().enumerate() {
+            let call = oracle(debugfs).args(["-w", "-R"]).arg(&request).arg(&image);
+            let (code, log) = ok(call, &format!("debugfs-ssv-{index}"));
+            assert!(
+                code == Some(0) && !log.contains("Invalid"),
+                "{request}: {log}"
+            );
+        }
+    }
+    if let Some(trial) = &trial {
+        use std::os::unix::fs::FileExt;
+        let mut raw = [0; 1024];
+        let file = std::fs::File::open(&image).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), 64 * 1024 * 1024);
+        file.read_exact_at(&mut raw, 1024).unwrap();
+        // This is raw pre-rebuild readback, not the driver's interpretation.
+        trial.check_settings(&raw).unwrap();
     }
     evidence.snapshot("configured");
     let rebuilt = oracle(e2fsck).args(["-fyD"]).arg(&image).judged();
