@@ -82,6 +82,42 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Corrected finite experiment and full retention closed — 2026-11-11:**
+  Exact `ae93932e8fc17f73a4d761f479547a52892998fc` passes full **43132271832**
+  (all eleven / `ci-ok`), focused **43132298169** (all 24 / 39 actual floors)
+  and finite **43132294692** (four sequential batches and aggregate). The
+  corrected attempt contains exactly one replay plus candidates **00–31**:
+  **33** actual one-test floor verdicts, **99** trial phase images and
+  **49,500** query/independent hash records. Twelve reference-image copies are
+  separate. All four archives pass source/digest/CRC/extracted-byte checks,
+  599 source hashes, fixed candidate identities and raw map/leaf/root-route/
+  settings observations; raw checksums are not independently recalculated.
+  No failing witness is reproduced. Real uploads verify; delayed metadata
+  handling is covered by regression, without a new live metadata retry claim.
+
+  All seven full-CI archives verify. Native/VM named multisets retain all
+  **2,544** old successes plus seven, **2,551**, with the same ignored fuzz;
+  three unit contexts retain all **1,685** plus seven, **1,692**, zero ignored.
+  Every other tier's names remain, including 225 oracle / 36 kernel / nine
+  lwext4 / 527 ARM images / five browser. Native executes its actual six-tier /
+  **4,672-execution** verdict, twenty trailing shell and 159 CLI checks.
+  Actual whole output is native **3,996 / 246,591**, VM **4,162 / 255,839**,
+  with the real VM floor now reached at **2,551 / 1,060**. Previous red runs
+  and their missing/unavailable native retention remain separate historical
+  failures. See the [complete corrected execution and retention](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#corrected-finite-execution-and-full-retention-closed--2026-11-11)
+  for artifact identities, digests, checks and limits.
+
+  **Stop here:** the user explicitly chose to finish this review after raising
+  usage consumption. No additional experiment or manual CI rerun follows in
+  this checkpoint. **Next bounded task:** review a targeted finite reproduction
+  strategy from the retained hash/routing inventories, declaring candidate
+  and stop bounds before implementing it. The original `673c16f` signed
+  half-MD4 miss is still unexplained; neither a production/oracle correction
+  nor the two-node mutation matrix is qualified. Stages 4–5 remain partial/not
+  quantified, writes blocked, stages 6–7 not reached and Windows/SteamOS/card
+  use unqualified. The closing handoff is documentation-only; tested-source
+  CI above stays distinct from any automatic documentation-commit CI.
+
 - **Bounded visibility and measured VM-line repairs ready — 2026-11-11:**
   The first finite attempt remains red after seventeen passing trials and a
   post-upload metadata 404; its artifacts and the separate full-CI failures
@@ -13853,19 +13889,18 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: the seeded runner passes the exact replay and
-first sixteen candidates, but its first finite run stops after an immediate
-post-upload metadata 404. Earlier full CI also remains red for a measured VM
-line-cap excess and native artifact-service failures. The bounded metadata
-repair and measured 4,180-line VM cap now pass local regression/contract/lint
-checks. Fresh exact-source full/focused CI and the separate fixed 33-trial
-attempt remain next. Original failures are retained; no descent witness is
-captured, stages 4–5 remain partial/not quantified, writes blocked and stages
-6–7 not reached.
+Latest Stage 0/3/5 checkpoint: corrected source `ae93932` passes full CI
+(all eleven jobs), all 24 focused jobs/39 floors, and the complete finite
+replay/32-candidate experiment. All 33 exits/floors, 99 trial images and 49,500
+query/hash records verify; full native/VM retention is 2,551 whole and 1,692
+units with the previous names preserved. No failing witness occurs. The
+original signed half-MD4 miss remains unexplained. Stages 4–5 stay partial/not
+quantified, writes blocked and stages 6–7 not reached. Stop after the current
+review; a targeted reproduction design is the next bounded checkpoint.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. Preserve first finite **43086590841** at `eba3a0e`: the exact replay and candidates00–15 pass, then upload metadata HTTP404 stops later batches; both artifacts independently verify. Preserve failed full **43086570946**, including the native upload-service errors and measured VM line excess. The [bounded visibility and VM-line repairs](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#first-finite-execution-and-bounded-upload-visibility-repair--2026-11-11) pass fourteen controller, 87 CI-profile/seven contract and VM-order controls plus full lint. **Next bounded task: run fresh exact-source full/focused CI and the distinct fixed replay/32-candidate experiment, then audit all retained results.** Do not retry filesystem failures automatically or substitute seeds. Keep original red runs separate; a complete new green finite run means failure not reproduced, not root-cause repair. A retained failing witness and independent classification still gate correction or two-node mutation work. Preserve all assertions/selections/limits except the justified VM line-only cap, every floor, the ignored fuzz and all ownership/admission/lifecycle/recovery/write/platform gates. Stages4–5 remain partial/not quantified, writes blocked, stages6–7 not reached.
+1. Reuse the verified setup and authorization. Exact corrected source `ae93932` passes full **43132271832** (all eleven/ci-ok), focused **43132298169** (all 24 jobs / 39 floors), and finite **43132294692** (all five jobs / 33 trials). The [completed evidence review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#corrected-finite-execution-and-full-retention-closed--2026-11-11) verifies all four finite/seven full archives, 99 trial phases / 49,500 query and independent hash answers, exact 2,551 whole-suite / 1,692 unit retention and all trailing verdicts. No failing witness occurs. Keep first finite **43086590841** and failed full **43086570946** distinct from corrected results. **Next bounded task: review a targeted finite reproduction strategy from retained hash/routing inventories, with explicit candidate selection and stop bounds, before implementing another experiment.** Do not change production/oracle expectations or implement the two-node mutation matrix before a captured failure and independent classification. Preserve every current test/assertion/selection/floor/write gate and the ignored-fuzz gate. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. The user chose to finish the current review and stop; no additional experiment or manual CI rerun belongs to this checkpoint.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

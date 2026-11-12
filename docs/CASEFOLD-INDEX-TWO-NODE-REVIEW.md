@@ -618,3 +618,97 @@ scope are unchanged by these infrastructure-only repairs. A fresh finite run
 will start from the same exact replay and fixed 32 candidates, as a separate
 corrected-source attempt; earlier seventeen passing trials and the failed
 retention check are not silently replaced or added to its completion count.
+
+## Corrected finite execution and full retention closed — 2026-11-11
+
+Exact corrected source **`ae93932e8fc17f73a4d761f479547a52892998fc`** passes
+full [**43132271832**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43132271832),
+all eleven jobs including `ci-ok`; focused
+[**43132298169**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43132298169),
+all 24 jobs and **39 actual positive floors**; and finite
+[**43132294692**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43132294692),
+all four dependent batches and its aggregate. This closes the bounded
+diagnostic execution/retention checkpoint, **not the original descent issue**.
+
+The corrected finite run executes exactly the saved replay, then candidates
+00–31, each once and in order: **33 trials / 99 trial phase images / 49,500
+queries and independent hash answers**. The twelve separately retained
+replay-input image copies are not additional trials. Every original test exit
+is zero and each actual one-test floor passes. Four contexts each retain the
+seven Rust and fourteen Python controls. No actual-artifact metadata wait is
+observed in these corrected job logs; `artifact 123` recheck messages belong
+to mocked regression controls. The bounded delay branch has red/green unit
+evidence, not a claimed diagnosis of the earlier service failure.
+
+| Corrected finite batch | Artifact | Verified SHA-256 |
+|---|---|---|
+| Replay, 00–07 | 13905997812 | `db2815418933375e38cfe8ddfee63a16db0a7da183d38ca20443d0b673d4c235` |
+| 08–15 | 13906184071 | `dbd1a5ad3209ae9b17f9828fcb5a974f71e86140a7c57eb2119f9310d07ce14e` |
+| 16–23 | 13907720863 | `fd8a6ac577b83de1441404a77a87efa816a49559f8290547236f4a27a31e4e05` |
+| 24–31 | 13908240506 | `28a65c5ebf93468780abe828de3b6f4677e554a52d9ec05b164f69b8bd2c3179` |
+
+All four archives pass API/source binding, downloaded digest, ZIP CRC and
+every extracted-file comparison. Each retains **599** exact-tree source
+hashes; their inventories and complete candidate manifests agree. Independent
+candidate reconstruction matches the published SHA-256 formula. Phase-image
+sidecars, raw configured/indexed seed/UUID/algorithm/flags, mapped bytes,
+inode-derived extents, raw leaf names/inodes, root-route records, selected-leaf
+memberships and saved independent hash answers agree. Fresh formatted seeds
+are intentionally distinguished from subsequently configured seeds. Exact
+replay input hashes and semantic route/map/entry/query records agree.
+These raw checks do not independently recalculate filesystem checksums or
+qualify new filesystem mutations. No failing witness is captured.
+
+Focused original-six artifact **13905014509**, SHA-256
+`57c8a3608b97dd9f75f69068b9e58388dc952f772672d389250db073d49bf7d6`,
+passes the same source/digest/CRC/extracted-byte checks, all **144** source
+hashes and its eighteen phase hashes / 9,000 query/hash records. All six names
+and floor six remain, with **186 lines / 12,567 bytes**. Other mutation
+archives are not newly audited or newly qualified by this diagnostic checkpoint.
+
+| Corrected full-CI tier archive | Artifact | Verified SHA-256 |
+|---|---|---|
+| Native x86_64 | 13910265593 | `2f98a9a4524f13dec4f26ba75a19ca79a7b8e3974746c25424a797810bf9d726` |
+| Linux VM | 13909087059 | `0e064eeb358f34197964cf1d574d434017e6c7b910914d51efd7fd624e9704c3` |
+| ARM | 13906910583 | `974d3f531b8d480be10b1f861c41752715d3652031a23418e0495453215fe975` |
+| Dedicated units | 13905677545 | `cba26eaf6d2ae2be150ce9455bc72a9d9488e68e26955003f1e9a3c05081b7c1` |
+| Browser | 13905842053 | `3cc455cb190788d9a08795e64deafbaee533eea08eda734b46507c5793687027` |
+| Installed CLI | 13905303209 | `561e96a80693daa4aa1ff548714704cf98928a31668cc3edc464160c90a04371` |
+| Semver | 13904794732 | `7c07081496cee95e40783cccb6b715fce2041722f541bf8e82cf230808325543` |
+
+All seven archives pass source/digest/CRC/extracted-byte verification. Native
+and VM successful-name multisets agree at **2,551**, retaining every 2,544
+baseline occurrence plus exactly seven controls and the same ignored fuzz.
+All three unit contexts retain **1,692**, every prior 1,685 occurrence plus
+the same seven, with zero ignored. Oracle/kernel/lwext4 retain exact baseline
+names at **225/36/9**; ARM image names retain **527**, and browser retains five.
+The native job executes all actual floors and its **six-tier / 4,672-execution**
+verdict. Twenty trailing shell checks and 159 installed-CLI checks pass; their
+logs are byte-identical to baseline. Static-library freshness evidence is kept.
+Semver retains 196 applicable checks and 58 semver-rule skips; these are not
+new ignored filesystem tests.
+
+Actual native whole output is **3,996 / 246,591**; actual VM whole output is
+**4,162 / 255,839**, with its real **2,551 / floor-1,060** verdict now reached
+inside unchanged byte and corrected line limits. No test output is suppressed.
+The earlier 4,164-line red and identical-log replay remain distinct evidence.
+The earlier native upload failures and the first finite-run metadata 404 remain
+failed historical attempts, not retroactively passing ones.
+
+One authorized Terra/medium helper performs bounded read-only artifact/log
+checks; the primary verifies consequential results, source bindings, native
+named retention and finite trial ordering/exits/floors. Usage/cost information
+is unavailable; no savings are asserted. The user raised usage consumption
+and explicitly chose to finish the current review, then stop. No further
+experiment or manual CI rerun is part of this checkpoint.
+
+**Next bounded task:** review a targeted finite reproduction strategy using
+these retained hash/route inventories, with explicit candidate selection and
+stop bounds, before adding another experiment. Passing this fixed sample
+does not classify the lost original `673c16f` failure. A retained failing image
+and independent classification still precede any scoped hash/routing/oracle
+correction or the sixteen-Linux / 32-Rust-C two-node mutation matrix.
+Stages 4–5 remain partial/not quantified, stages 6–7 not reached, casefold
+writes blocked and Windows/SteamOS/card use unqualified. This closing handoff
+changes documentation only; its automatic CI is separate from tested source
+`ae93932` and is not credited as another implementation verification.
