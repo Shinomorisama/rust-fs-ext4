@@ -712,3 +712,122 @@ Stages 4–5 remain partial/not quantified, stages 6–7 not reached, casefold
 writes blocked and Windows/SteamOS/card use unqualified. This closing handoff
 changes documentation only; its automatic CI is separate from tested source
 `ae93932` and is not credited as another implementation verification.
+
+
+## Targeted collision-bearing seed review — 2026-11-12
+
+This checkpoint reviews retained data and defines a finite experiment; it does
+not implement or execute another search. The corrected run's four archives
+and SHA-256 identities are listed immediately above. Their selected small
+`queries.jsonl`, `routes.jsonl`, `entries.jsonl`, `filesystem.json` and
+`names.hex` files were compared with their archived bytes after archive-digest
+verification. Across **33 profiles / 49,500 queries**, the inventory finds
+**zero** same-major groups, duplicate pairs, cross-leaf same-major groups,
+odd continuation boundaries, special-major queries (`0xfffffffc` or
+`0xfffffffe`), or selected-leaf misses. All profiles have depth zero, 1,024-byte
+blocks, effective signed half-MD4 version 1, and 49–50 root routes.
+The local inventory JSON digest is
+`d54192047c633a2efb7ebecc84467d07e85154ac3ef118cd75a966c6d79ccc4a`;
+its inputs remain reconstructible from the four identified archives. This is
+a narrow saved-data inventory, not another full-image or independent-oracle
+execution. Current documentation source `9a61127` also has green full CI
+[43142530233](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43142530233),
+all eleven jobs; only its metadata was checked here. Detailed artifact and
+name-retention proof above remains bound to tested source `ae93932`.
+
+The published [ext4 directory format](https://docs.kernel.org/filesystems/ext4/directory.html)
+describes equal-major names spilling into following leaves and low-bit
+continuation boundaries. The previous sample contains no such opportunity.
+This motivates a collision-continuation hypothesis; it does **not** diagnose
+the lost `673c16f` miss for `a_name_of_twenty_01196`. The current single-leaf
+lookup promises a leaf that might contain the name; ordinary indexed path
+lookup also has a linear fallback. A new witness must distinguish the test's
+selected-leaf assertion from actual namespace behavior.
+
+### Native candidate selection contract
+
+- Keep the original **1,500 raw-byte names**, 64 MiB / 1 KiB signed half-MD4
+  profile, existing six tests, assertions and write gates. Corpus SHA-256 is
+  `8fa9e9ecaaeebae3085ab85d2fc21f4f2946638db6af70c2b3ee0e6ee4b3e30b`.
+  The current permitted MIT `name_hash` is a screening aid only; its output
+  is neither independent hash evidence nor a reproduced failure.
+- Enumerate indices **00000–65535** in ascending order. For each, take the
+  first sixteen SHA-256 bytes of ASCII
+  `casefold-descent-targeted-2026-11-12/seed/NNNNN` and, separately,
+  `casefold-descent-targeted-2026-11-12/uuid/NNNNN`. Preserve byte order and
+  do not rewrite UUID version bits. Index 00000 gives seed
+  `c65970a3cf3e35a508757024b26e0b02`, UUID
+  `d9be9528c825f38d3a41859eeabff5c9`; index 65535 gives seed
+  `a7ff3f28b71f6055c6782c98aa08b035`, UUID
+  `a8210fe30e1dc2f5385e2c0b4b4538cd`.
+- Select the **first sixteen distinct seeds** having at least one major hash
+  shared by different corpus names. Exclude major `0xfffffffc` from this
+  ordinary-collision criterion and retain those special leads separately:
+  it may be a genuine value or the reserved `0xfffffffe` remap. Record raw
+  major/minor values; do not silently normalize answers or alter the existing
+  differential test's documented normalization or descent assertions.
+- Record source/corpus identities, unique nonzero seed/UUID checks, every
+  scanned index's collision summary, candidate name bytes and hash pairs,
+  special leads, and the final prefix endpoint. Do not rank candidates by
+  predicted formatter packing, observed Linux results or a passing outcome.
+- Stop on sixteen candidates or exhaustion of **65,536 seeds**, with a
+  **five-minute wall cap**, at most **16 MiB of live screening data** (one
+  seed at a time) and **32 MiB of ledger output**; stdout is summary only.
+  Any time/resource stop is explicitly **incomplete**, with no partial
+  runtime-dependent manifest dispatched. Do not automatically extend limits.
+  Exhaustion with fewer candidates retains exactly those found; zero means
+  no candidate, not success. No minimum yield or cross-leaf split is promised.
+- Freeze and hash the complete manifest before Linux execution. Add a
+  separately reviewed test-only manifest path; preserve the old `replay` /
+  `00`–`31` parser and fixed thirty-three-trial workflow unchanged.
+
+### Independent materialization and classification contract
+
+The later Linux experiment is bounded to **sixteen selected candidates plus
+one exact passing replay**, at most **17 trials / 51 trial phase images /
+25,500 queries and independent hash answers**. Reference-input copies remain
+separate. Use at most two sequential batches (nine, then eight), forty minutes
+per batch, space preflight, pinned harness/tools, source bindings, raw
+seed/UUID readback, all 1,500 independent hash answers and actual test floors.
+Retain existing tests, selections, output limits, upload verification and the
+bounded new-artifact metadata visibility check. Do not preemptively raise
+caps, retry filesystems or convert an original red into a passing result.
+
+Linux must independently confirm the predicted duplicate majors and reveal
+where they actually land. A collision contained in one leaf is an inconclusive
+layout observation; keep it, with no replacement candidate or fabricated odd
+boundary. Any unconfirmed predicted collision, hash discrepancy, original
+assertion failure or infrastructure failure captures available evidence and
+stops further trials. Otherwise stop at the frozen manifest's finite end and
+report the observed coverage and whether a failure was reproduced.
+
+For a red result, preserve immutable phase images, original logs/status and
+hash answers. Perform separate postmortem checks on private copies **only in
+the prescribed VM**: compare independent hashes, raw boundaries, physical
+leaves and both colliding names' inode identities; use a cold read-only Linux
+lookup and nonrepairing filesystem checks. Equal majors alone do not prove
+a continuation case: establish actual cross-leaf placement and the relevant
+raw continuation bit, then compare independent Linux name resolution.
+Keep hash, routing/assertion, corruption and infrastructure observations
+separate. A classified new witness explains that instance; it cannot prove
+the cause of the lost original image. Stop for review before any correction.
+
+### Checkpoint boundaries
+
+**Next:** implement and meaningfully test the native selector, execute only
+its bounded native screen, and freeze its complete manifest (or record an
+incomplete/empty outcome). No Linux dispatch belongs to that checkpoint.
+Then review the manifest and prepare/dispatch the bounded Linux trials in a
+separate checkpoint. By default let CI finish between turns, saving exact run
+IDs; live monitoring requires the user's choice. Follow with one consolidated
+evidence review rather than repeating broad audits for every batch.
+
+Today changes documentation only: no helper, new hash sweep, oracle run,
+workflow dispatch/rerun or implementation. Whitespace, local link targets,
+provenance (597 tracked files), formula endpoints, inventory totals/digest
+and executable-scope checks pass; no new Rust test run is claimed.
+A normal documentation push may start automatic CI, which is separate from
+the already reviewed implementation evidence. Stages 4–5 remain partial/not
+quantified, stages 6–7 not reached, casefold writes blocked and real
+Windows/SteamOS/card use unqualified. The two-node mutation matrix still
+requires a captured failing witness and independent classification first.

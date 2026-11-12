@@ -82,6 +82,36 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Targeted collision-bearing seed design reviewed — 2026-11-12:**
+  A narrow inventory of the four corrected finite archives finds no shared
+  major hashes, cross-leaf collision groups, odd continuation boundaries,
+  special-major queries or misses across **33 profiles / 49,500 queries**.
+  Archive digests and selected small files were verified; no new oracle or
+  full-image audit ran. All profiles are depth zero / 1 KiB / signed half-MD4,
+  with 49–50 root routes. The published format's continuation behavior is
+  a hypothesis to target, not a diagnosis of the lost original failure.
+  See the [finite targeted design](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#targeted-collision-bearing-seed-review--2026-11-12)
+  for reproducible inputs, candidate rules and classification requirements.
+
+  **Next bounded task:** implement/test a native selector and run only its
+  five-minute / 65,536-seed screen against the unchanged 1,500-name corpus.
+  Freeze the first sixteen ordinary-collision seeds, or record finite
+  exhaustion/incompleteness; do not dispatch a runtime-truncated selection.
+  A later separate Linux checkpoint has at most sixteen candidates plus one
+  passing replay, two sequential batches, 51 trial images / 25,500 queries.
+  Actual cross-leaf coverage must be measured, not assumed. Preserve every
+  original test/assertion, the old fixed experiment, output floors and gates.
+
+  This checkpoint is documentation-only, with no helper, sweep, new oracle,
+  dispatch or manual rerun. Full CI **43142530233** at documentation source
+  `9a61127` is green (eleven jobs), metadata checked only; detailed prior
+  artifact proof remains bound to `ae93932`. New documentation-push CI is
+  separate and will not be monitored here. Stages 4–5 remain partial/not
+  quantified, stages 6–7 not reached, writes blocked and Windows/SteamOS/card
+  use unqualified. Whitespace, local links, provenance, inventory/formula
+  and executable-scope checks pass. No new Rust test ran; no failing witness
+  or correction is claimed.
+
 - **Corrected finite experiment and full retention closed — 2026-11-11:**
   Exact `ae93932e8fc17f73a4d761f479547a52892998fc` passes full **43132271832**
   (all eleven / `ci-ok`), focused **43132298169** (all 24 / 39 actual floors)
@@ -13889,18 +13919,18 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: corrected source `ae93932` passes full CI
-(all eleven jobs), all 24 focused jobs/39 floors, and the complete finite
-replay/32-candidate experiment. All 33 exits/floors, 99 trial images and 49,500
-query/hash records verify; full native/VM retention is 2,551 whole and 1,692
-units with the previous names preserved. No failing witness occurs. The
-original signed half-MD4 miss remains unexplained. Stages 4–5 stay partial/not
-quantified, writes blocked and stages 6–7 not reached. Stop after the current
-review; a targeted reproduction design is the next bounded checkpoint.
+Latest Stage 0/3/5 checkpoint: the targeted design is reviewed after a narrow
+inventory finds no collision/continuation opportunity in the previous 33
+profiles / 49,500 queries. Prior corrected implementation evidence remains
+closed at `ae93932`; current documentation source `9a61127` also has green CI
+metadata, without a new archive audit. No failure is reproduced or diagnosed.
+Next implement/test and run only the bounded native selector, freezing up to
+sixteen collision-bearing seeds before any separate Linux dispatch. Stages
+4–5 stay partial/not quantified, writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. Exact corrected source `ae93932` passes full **43132271832** (all eleven/ci-ok), focused **43132298169** (all 24 jobs / 39 floors), and finite **43132294692** (all five jobs / 33 trials). The [completed evidence review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#corrected-finite-execution-and-full-retention-closed--2026-11-11) verifies all four finite/seven full archives, 99 trial phases / 49,500 query and independent hash answers, exact 2,551 whole-suite / 1,692 unit retention and all trailing verdicts. No failing witness occurs. Keep first finite **43086590841** and failed full **43086570946** distinct from corrected results. **Next bounded task: review a targeted finite reproduction strategy from retained hash/routing inventories, with explicit candidate selection and stop bounds, before implementing another experiment.** Do not change production/oracle expectations or implement the two-node mutation matrix before a captured failure and independent classification. Preserve every current test/assertion/selection/floor/write gate and the ignored-fuzz gate. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. The user chose to finish the current review and stop; no additional experiment or manual CI rerun belongs to this checkpoint.
+1. Reuse the verified setup and authorization. Follow the [targeted seed design](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#targeted-collision-bearing-seed-review--2026-11-12): implement and meaningfully test a native candidate selector, then execute only its five-minute / 65,536-seed screen on the original 1,500 names. Freeze the first sixteen ordinary-collision seeds or record finite exhaustion/incompleteness. Native screening is not independent hash evidence. Do not dispatch Linux in that checkpoint; a later separate experiment is capped at seventeen trials / 51 phase images / 25,500 queries in two sequential batches. Preserve the original six tests, fixed 00–31 experiment, all assertions/selections/floors/output limits/write gates and the ignored-fuzz gate. The completed prior evidence remains at `ae93932`; historical failed runs remain failed. Do not change production/oracle expectations or implement the two-node mutation matrix before a captured failure and independent classification. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. This design-only checkpoint stops after saving the handoff; no new experiment or manual CI rerun belongs to it.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
