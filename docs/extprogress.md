@@ -82,6 +82,38 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **First seeded execution stopped safely; visibility repair verified locally — 2026-11-11:**
+  Source `eba3a0e` passes focused **43086570805**, all 24 jobs, with six
+  original descent tests/floor six and 144 exact source hashes verified.
+  Finite **43086590841** passes the replay and candidates **00–15**, seventeen
+  trials total, with **51** trial images / **25,500** query and independent
+  hash answers audited. Both artifacts **13886229557** / **13888760248** pass
+  source/digest/CRC/extracted-byte checks and all 599 exact-tree source hashes.
+  Raw mappings, leaf entries, settings and root routes agree; raw checksums
+  are not independently recomputed. No failing descent witness is captured.
+
+  The first batch passes its upload verification. The second passes all eight
+  tests/floors and upload, then an immediate artifact metadata GET returns
+  HTTP 404. It stops the workflow and later batches correctly remain skipped;
+  the aggregate is red. The artifact later downloads and verifies, without
+  establishing the service cause or changing that original verdict. A new
+  regression reproduces the visibility failure before a bounded metadata-only
+  fix; all **14** controller controls now pass, preserving the eleven prior
+  bodies, and full lint passes. No filesystem trial retry, seed change,
+  assertion relaxation or write-gate change is introduced.
+
+  Full **43086570946** is red despite completed tests: native reports its
+  actual six-tier/**4,672-execution** verdict but subsequent artifact uploads
+  fail, leaving native full-name retention unverified. The VM suite retains
+  exact **2,551** successes (2,544 prior plus seven), the same ignored fuzz,
+  and **4,164 / 256,086** output; its 4,160-line wrapper exits 65 before its
+  floor. VM/ARM archive bytes and source verify. Identical-log replay proves
+  old-line-cap red and 4,180-line-cap green without changing bytes/byte limit,
+  selections or floor; the measured task repair and fresh CI remain next.
+  See the [first finite execution and correction](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#first-finite-execution-and-bounded-upload-visibility-repair--2026-11-11).
+  Stages 4–5 remain partial/not quantified, stages 6–7 not reached, writes
+  blocked and Windows/SteamOS/card use unqualified.
+
 - **Finite seeded runner implemented; exact-source execution pending — 2026-11-11:**
   The separate controller and four dependent manual-CI batches implement the
   fixed replay/32-candidate plan. The existing signed half-MD4 test has a

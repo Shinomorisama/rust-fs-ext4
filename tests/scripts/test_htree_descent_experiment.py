@@ -7,6 +7,10 @@ import unittest
 from unittest import mock
 import sys
 from types import SimpleNamespace
+import io
+import hashlib
+import zipfile
+import urllib.error
 
 sys.dont_write_bytecode = True
 
@@ -116,6 +120,49 @@ class ExperimentControls(unittest.TestCase):
                 experiment.check_answers(["ff80"], [query | change], requests, [(b"1234", b"abcd")])
         with self.assertRaisesRegex(RuntimeError, "incomplete"):
             experiment.check_answers(["ff80"], [query], [], [])
+
+    def test_uploaded_artifact_visibility_is_rechecked_before_storage_download(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tmp").mkdir()
+            data = root / "data"
+            data.mkdir()
+            (data / "evidence.txt").write_bytes(b"retained evidence")
+            archive = io.BytesIO()
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("evidence.txt", b"retained evidence")
+            payload = archive.getvalue()
+            metadata = {"expired": False, "workflow_run": {"head_sha": "source"},
+                        "digest": "sha256:" + hashlib.sha256(payload).hexdigest()}
+            missing = urllib.error.HTTPError("https://api.github.com/artifact", 404, "Not Found", {}, None)
+            redirect = urllib.error.HTTPError("https://api.github.com/artifact/zip", 302, "Found", {"Location": "https://storage.example.test/archive"}, None)
+            opener = mock.Mock()
+            opener.open.side_effect = [missing, io.BytesIO(json.dumps(metadata).encode()), redirect]
+            with mock.patch.object(experiment, "ROOT", root), mock.patch.object(experiment, "DATA", data), mock.patch.dict(experiment.os.environ, {"GH_TOKEN": "test"}), mock.patch.object(experiment.subprocess, "check_output", return_value="source\n"), mock.patch.object(experiment.urllib.request, "build_opener", return_value=opener), mock.patch.object(experiment.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as storage, mock.patch("time.sleep"):
+                experiment.verify_upload(123)
+                self.assertEqual(opener.open.call_count, 3)
+                self.assertEqual(storage.call_count, 1)
+                self.assertIsInstance(storage.call_args.args[0], str)
+
+    def test_visibility_wait_is_bounded_and_keeps_permanent_errors_red(self):
+        for code, expected_attempts in ((404, 5), (403, 1)):
+            with self.subTest(http=code), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "tmp").mkdir()
+                opener = mock.Mock()
+                opener.open.side_effect = urllib.error.HTTPError("https://api.github.com/artifact", code, "Unavailable", {}, None)
+                with mock.patch.object(experiment, "ROOT", root), mock.patch.dict(experiment.os.environ, {"GH_TOKEN": "test"}), mock.patch.object(experiment.subprocess, "check_output", return_value="source\n"), mock.patch.object(experiment.urllib.request, "build_opener", return_value=opener), mock.patch("time.sleep"):
+                    with self.assertRaises(RuntimeError):
+                        experiment.verify_upload(123)
+                    self.assertEqual(opener.open.call_count, expected_attempts)
+
+    def test_old_replay_artifact_absence_is_not_retried(self):
+        opener = mock.Mock()
+        opener.open.side_effect = urllib.error.HTTPError("https://api.github.com/artifact", 404, "Not Found", {}, None)
+        with mock.patch.dict(experiment.os.environ, {"GH_TOKEN": "test"}), mock.patch.object(experiment.urllib.request, "build_opener", return_value=opener), mock.patch("time.sleep"):
+            with self.assertRaises(RuntimeError):
+                experiment.download_artifact(123, Path("unused"), "source")
+            self.assertEqual(opener.open.call_count, 1)
 
 
 if __name__ == "__main__":

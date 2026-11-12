@@ -533,3 +533,78 @@ the seeded runner, seed-setting preflight, 33 trials and their independent
 qualification are **unimplemented/unrun**. Stages 4–5 remain partial/not
 quantified, stages 6–7 not reached, casefold writes blocked and real
 Windows/SteamOS/card use unqualified.
+
+## First finite execution and bounded upload-visibility repair — 2026-11-11
+
+Implementation source **`eba3a0ed02c3f0e8f23bdc0776f5dc0dce52899a`** passes
+focused **43086570805**, all 24 jobs. Its six-profile diagnostic job
+**130752396053** passes floor six at 186 / 12,567 output; artifact
+**13887480856**, SHA-256
+`1b87c1591aa23a59eb2f574d1dfa702d571cd284883230550d2ab8b26c8fe552`,
+passes source/digest/CRC/extracted-byte checks and all 144 source hashes.
+All six original profiles, eighteen images, 305 raw extent mappings and 9,000
+names/queries/saved independent hash answers agree. This artifact audit does
+not independently recompute checksums.
+
+Finite run **43086590841** stops with a failed aggregate after batch 1.
+Batch 0 job **130752468759** passes the exact-input replay and candidates
+00–07, including actual downloaded upload verification. Batch 1 job
+**130758078828** passes candidates 08–15 and uploads its artifact, then its
+immediate metadata GET returns HTTP 404. Batches 2–3 are correctly skipped.
+The artifact subsequently becomes readable; the underlying cause of the 404
+is not established. This is an infrastructure/retention-check failure, not
+a reproduced directory descent mismatch. Preserve the failed attempt rather
+than retrospectively calling the run green.
+
+| First-attempt artifact | ID | Verified SHA-256 |
+|---|---|---|
+| Replay and candidates 00–07 | 13886229557 | `739a81083147a4d79365ecc6503a044becad27db0995082d718c031c3b92e8f9` |
+| Candidates 08–15; post-upload GET failed | 13888760248 | `4ea1b65c04b3001f1bcf17a20a350ac34361e48ea4ba4e9a2469d0683c4ef8f4` |
+
+Both artifacts pass API/run/source, downloaded SHA-256, ZIP CRC and every
+extracted-file comparison. Each retains all **599** unique exact-tree source
+hashes and the same independently reconstructed 32-candidate manifest. The
+seventeen trials each retain exit zero, passed status and an actual floor-one
+verdict: **51** trial phase images / **25,500** original names and independent
+hash/query answers. The separate replay-input images are not additional trials.
+Raw configured/indexed seed, UUID, algorithm and flags agree with each manifest;
+fresh formatted seeds are not required to equal the subsequently configured
+seed. Raw inode extents, mapped bytes, leaf name/inode records and root routes
+agree with saved observations. The primary independently reconstructs all
+13,500 batch-0 raw query routes. Exact replay input hashes and semantic records
+agree. No failing witness occurs. Raw checksums are not independently recalculated.
+
+The controller correction waits only for a **newly uploaded artifact's metadata
+404**, with at most five reads and delays 2/4/8/16 seconds, thirty seconds total.
+It does not retry filesystem trials, old replay-artifact absence, HTTP 403,
+source/digest/CRC mismatches or storage downloads. Actual artifact verification
+remains mandatory. The new regression first reproduces the immediate-404
+failure and unbounded-versus-one-read mismatch on the old code, then all
+**14** controller controls pass on the correction, retaining the original eleven
+control bodies unchanged. Bounded exhaustion stays red and permanent failures
+are not retried. Full local lint passes. Trial Rust code, all seed/corpus
+identities, assertions, production sources and write gates are unchanged.
+
+Full **43086570946** on the implementation source is also **failed**, for two
+separate reasons. The native job's real six-tier verdict passes **4,672**
+executions (unit 1,692/440, oracle 225/140, kernel 36/33, lwext4 9/7,
+whole 2,551/1,060, CLI 159/150), then its evidence uploads fail on service
+non-JSON responses and a workflow-run-not-found 404. No native archive survives
+in the API; the complete native successful-name multiset cannot be checked.
+The Linux VM completes all tests but its **4,164-line / 256,086-byte** log
+exceeds the then-current 4,160-line cap, exit 65, so its floor command is not
+reached. The source-bound VM archive **13890566773**, SHA-256
+`97b0449e625904894d6697952c0b2ea443b776a702893adad7e09fff78720519`,
+verifies all bytes and retains exactly the 2,544 previous successes plus seven,
+**2,551**, and the same ignored fuzz. ARM archive **13887442026**, SHA-256
+`256c65c09a963d69468af177dac40b8bba5a661446326df2542875ae75a3b62f`,
+retains exact 1,692-unit / 527-image names. The upload failures' underlying
+service cause is not established by a later successful download.
+
+An identical-log replay proves the VM line-cap failure at 4,160 and passes at
+4,180, preserving all 256,086 bytes, the 258,000-byte ceiling and every selected
+test. The replay's actual floor observes 2,551 against 1,060; this is a log
+replay, not another filesystem execution or an original-run floor verdict.
+The measured VM-line task repair and fresh corrected-source full/finite runs
+are next. The original red runs remain part of the record. Stages 4–5 stay
+partial/not quantified, writes blocked and Windows/SteamOS/card use unqualified.

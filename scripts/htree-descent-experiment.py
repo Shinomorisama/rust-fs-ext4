@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -63,6 +64,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+class ArtifactAPIError(RuntimeError):
+    def __init__(self, status):
+        super().__init__(f"GitHub artifact API returned HTTP {status}")
+        self.status = status
+
+
 def api(path, redirect=False):
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
@@ -82,11 +89,26 @@ def api(path, redirect=False):
             if urllib.parse.urlparse(location).scheme != "https":
                 raise RuntimeError("artifact storage redirect must use HTTPS") from None
             return location
-        raise RuntimeError(f"GitHub artifact API returned HTTP {error.code}") from None
+        raise ArtifactAPIError(error.code) from None
 
 
-def download_artifact(artifact, destination, source, expected=None):
-    metadata = api(f"actions/artifacts/{artifact}")
+def artifact_metadata(artifact, newly_uploaded):
+    # A completed upload can precede REST metadata visibility. This is only
+    # a bounded metadata-read wait; trials and storage downloads are not retried.
+    attempts = 5 if newly_uploaded else 1
+    for attempt in range(attempts):
+        try:
+            return api(f"actions/artifacts/{artifact}")
+        except ArtifactAPIError as error:
+            if error.status != 404 or attempt + 1 == attempts:
+                raise
+            delay = 2 ** (attempt + 1)
+            print(f"artifact {artifact}: metadata not yet visible; recheck in {delay}s")
+            time.sleep(delay)
+
+
+def download_artifact(artifact, destination, source, expected=None, *, newly_uploaded=False):
+    metadata = artifact_metadata(artifact, newly_uploaded)
     if metadata["expired"] or metadata["workflow_run"]["head_sha"] != source:
         raise RuntimeError("artifact expired or source identity differs")
     advertised = metadata["digest"].removeprefix("sha256:")
@@ -259,7 +281,7 @@ def run_batch(batch):
 def verify_upload(artifact):
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     path = ROOT / "tmp" / f"verified-descent-artifact-{artifact}.zip"
-    download_artifact(artifact, path, source)
+    download_artifact(artifact, path, source, newly_uploaded=True)
     with zipfile.ZipFile(path) as archive:
         for info in archive.infolist():
             if not info.is_dir():
