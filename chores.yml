@@ -109,6 +109,18 @@ chore_min_version: 0.6.0
 #                                                    SSH loss left its run
 #                                                    incomplete; no guest cap
 #                                                    is changed from that log.
+#   Current guest measurement and budget:
+#     guest     4,164 / 256,086    4,180 / 258,000   Seven seed controls at eba3a0e,
+#                                                    full run 43086570946,
+#                                                    artifact 13890566773:
+#                                                    all 2,551 successes and
+#                                                    unchanged ignored fuzz.
+#                                                    Actual four-line overflow
+#                                                    exits 65; identical-log
+#                                                    replay passes 4,180 lines,
+#                                                    preserving every byte,
+#                                                    byte cap and floor 1,060.
+#   Historical guest measurement and then-current budget:
 #     guest     4,151 / 255,415    4,160 / 258,000   Full-node emission 6c29e7f,
 #                                                    run 42328021160, artifact
 #                                                    13559340897: 2,544 passes,
@@ -801,11 +813,11 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        # Full-node emission 6c29e7f, run 42328021160/artifact 13559340897:
-        # all 2,544 successes produce 4,151 lines / 255,415 bytes.
-        # Old 4,160/255,000 returns 65; identical-log replay passes
-        # at 4,160/258,000, preserving every byte, selection and floor.
-        scripts/tier.sh test:vm vm 4160 258000 -- \
+        # Seven seed controls at eba3a0e, run 43086570946/artifact 13890566773:
+        # all 2,551 successes produce 4,164 lines / 256,086 bytes.
+        # Old 4,160-line cap returns 65; identical-log replay passes
+        # at 4,180/258,000, preserving every byte, selection and floor.
+        scripts/tier.sh test:vm vm 4180 258000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 

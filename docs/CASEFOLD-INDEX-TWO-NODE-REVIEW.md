@@ -579,7 +579,7 @@ The controller correction waits only for a **newly uploaded artifact's metadata
 It does not retry filesystem trials, old replay-artifact absence, HTTP 403,
 source/digest/CRC mismatches or storage downloads. Actual artifact verification
 remains mandatory. The new regression first reproduces the immediate-404
-failure and unbounded-versus-one-read mismatch on the old code, then all
+failure and missing bounded recheck on the old code, then all
 **14** controller controls pass on the correction, retaining the original eleven
 control bodies unchanged. Bounded exhaustion stays red and permanent failures
 are not retried. Full local lint passes. Trial Rust code, all seed/corpus
@@ -605,6 +605,16 @@ An identical-log replay proves the VM line-cap failure at 4,160 and passes at
 4,180, preserving all 256,086 bytes, the 258,000-byte ceiling and every selected
 test. The replay's actual floor observes 2,551 against 1,060; this is a log
 replay, not another filesystem execution or an original-run floor verdict.
-The measured VM-line task repair and fresh corrected-source full/finite runs
-are next. The original red runs remain part of the record. Stages 4–5 stay
+The measured VM-line task repair now changes only 4,160 to **4,180**; the
+258,000-byte cap, output, selected tests and floor are unchanged. Fresh
+corrected-source full/finite runs are next. The original red runs remain part
+of the record. Stages 4–5 stay
 partial/not quantified, writes blocked and Windows/SteamOS/card use unqualified.
+
+The combined local repairs additionally pass all **87** CI-profile and **seven**
+test-contract controls, the VM-host-before-tools guard and full lint. Rust
+trial/production bytes and the 1,692-success native unit/69.214088% coverage
+scope are unchanged by these infrastructure-only repairs. A fresh finite run
+will start from the same exact replay and fixed 32 candidates, as a separate
+corrected-source attempt; earlier seventeen passing trials and the failed
+retention check are not silently replaced or added to its completion count.

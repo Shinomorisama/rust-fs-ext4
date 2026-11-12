@@ -82,6 +82,25 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Bounded visibility and measured VM-line repairs ready — 2026-11-11:**
+  The first finite attempt remains red after seventeen passing trials and a
+  post-upload metadata 404; its artifacts and the separate full-CI failures
+  are retained below. Metadata-only bounded waits now pass all fourteen
+  controller controls. An identical 4,164-line / 256,086-byte saved VM log
+  proves old-cap red and new-cap green, and only its line limit changes from
+  4,160 to **4,180**, preserving bytes, the 258,000-byte ceiling, selection
+  and floor. All 87 CI-profile / seven test-contract controls, the VM-order
+  guard and full lint pass. Trial Rust/production bytes, seven native controls,
+  1,692-unit retention and 69.214088% production-line coverage are unchanged.
+
+  **Next:** push the two bounded repairs and run fresh exact-source full CI,
+  focused evidence and the same fixed replay/32-candidate experiment. Treat
+  it as a distinct attempt, preserving the original red and its seventeen
+  observations; do not add those to a new run's completion count. No original
+  descent witness or correction is claimed. Stages 4–5 remain partial/not
+  quantified, casefold writes blocked, stages 6–7 not reached and
+  Windows/SteamOS/card use unqualified.
+
 - **First seeded execution stopped safely; visibility repair verified locally — 2026-11-11:**
   Source `eba3a0e` passes focused **43086570805**, all 24 jobs, with six
   original descent tests/floor six and 144 exact source hashes verified.
@@ -109,7 +128,10 @@ for `casefold-rw`, never main or siblings.
   and **4,164 / 256,086** output; its 4,160-line wrapper exits 65 before its
   floor. VM/ARM archive bytes and source verify. Identical-log replay proves
   old-line-cap red and 4,180-line-cap green without changing bytes/byte limit,
-  selections or floor; the measured task repair and fresh CI remain next.
+  selections or floor. The task now changes only 4,160 to **4,180** lines;
+  its 258,000-byte cap and all selections/floors remain unchanged. The bounded
+  visibility fix and measured line repair require fresh exact-source CI and
+  a separately identified finite attempt; the original red runs stay red.
   See the [first finite execution and correction](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#first-finite-execution-and-bounded-upload-visibility-repair--2026-11-11).
   Stages 4–5 remain partial/not quantified, stages 6–7 not reached, writes
   blocked and Windows/SteamOS/card use unqualified.
@@ -13831,17 +13853,19 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: the finite signed half-MD4 runner is implemented
-with seven native and eleven controller controls, retained original six tests,
-fixed corpus/candidates and bounded sequential CI batches. The exact guest retry
-and baseline `0029478` full CI pass with complete source-bound retention.
-New-source full/focused CI, actual seed-readback/replay and finite experiment
-outcomes remain pending. The original mismatch is unresolved; stages 4–5 stay
-partial/not quantified, casefold writes blocked and stages 6–7 not reached.
+Latest Stage 0/3/5 checkpoint: the seeded runner passes the exact replay and
+first sixteen candidates, but its first finite run stops after an immediate
+post-upload metadata 404. Earlier full CI also remains red for a measured VM
+line-cap excess and native artifact-service failures. The bounded metadata
+repair and measured 4,180-line VM cap now pass local regression/contract/lint
+checks. Fresh exact-source full/focused CI and the separate fixed 33-trial
+attempt remain next. Original failures are retained; no descent witness is
+captured, stages 4–5 remain partial/not quantified, writes blocked and stages
+6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. Baseline `0029478` full **43067795934** passes all eleven jobs with verified exact 2,544 whole / 1,685 unit retention. The [test-only seeded runner](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#seeded-reproduction-runner-implementation--2026-11-11) and fixed one-replay/32-candidate controller are implemented; native controls, controller checks, compilation, input preparation and lint pass. **Next bounded task: execute the exact-source full/focused CI and finite experiment, and audit every retained result before any correction.** Preserve all six existing tests/names/assertions, the exact corpus, preceding jobs/selections/limits/floors and ignored fuzz. A captured discrepancy or infrastructure failure stops execution; complete green exhaustion means failure not reproduced. A retained failing witness and independent classification remain prerequisites for repair or two-node mutation work. Ownership/admission/seal/lifecycle/recovery/write/platform gates remain open; stages 4–5 partial/not quantified, writes blocked, stages 6–7 not reached. Main core v0.4.2 and casefold core v0.3.0 stay separate.
+1. Reuse the verified setup and authorization. Preserve first finite **43086590841** at `eba3a0e`: the exact replay and candidates00–15 pass, then upload metadata HTTP404 stops later batches; both artifacts independently verify. Preserve failed full **43086570946**, including the native upload-service errors and measured VM line excess. The [bounded visibility and VM-line repairs](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#first-finite-execution-and-bounded-upload-visibility-repair--2026-11-11) pass fourteen controller, 87 CI-profile/seven contract and VM-order controls plus full lint. **Next bounded task: run fresh exact-source full/focused CI and the distinct fixed replay/32-candidate experiment, then audit all retained results.** Do not retry filesystem failures automatically or substitute seeds. Keep original red runs separate; a complete new green finite run means failure not reproduced, not root-cause repair. A retained failing witness and independent classification still gate correction or two-node mutation work. Preserve all assertions/selections/limits except the justified VM line-only cap, every floor, the ignored fuzz and all ownership/admission/lifecycle/recovery/write/platform gates. Stages4–5 remain partial/not quantified, writes blocked, stages6–7 not reached.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
