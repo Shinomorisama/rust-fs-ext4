@@ -1037,3 +1037,98 @@ blocked and actual Windows/SteamOS/card use unqualified. No helper is used;
 all repetitive archive/name checks are deterministic scripts with primary
 review. No model-cost saving is asserted. Stop after pushing the repair and
 this handoff; fresh corrected-source CI remains pending.
+
+
+## Corrected selector full-CI evidence closed — 2026-11-12
+
+Exact repaired source **`e4712c9ffc7e5aac26b8a6a85d97fcab2b9c5593`** passes
+full [**43363817868**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43363817868),
+all **eleven jobs**, including `ci-ok`. The previously missing native suite
+floor, trailing scripts, native installed-CLI step and six-tier aggregate
+are now actually reached. This closes the selector's full-CI/retention
+checkpoint. It does **not** reproduce or explain the lost descent failure.
+
+Seven exact-source tier archives pass API run/source binding, downloaded
+SHA-256, ZIP CRC, safe extraction and extracted-file byte comparison:
+
+| Tier archive | Artifact | Verified SHA-256 |
+|---|---|---|
+| tier-logs-x86_64 | 14013016620 | `4db9c68c580513553d4fc6d61c687995d9363a0a844c1f1256a0f14068a59a42` |
+| tier-logs-suite-in-vm | 14011971737 | `87e949bc7ed066f962a77f6f30e5aa0c092bc1270ef10097b83e1e1463416984` |
+| tier-logs-aarch64 | 14009289660 | `5db1772196e58973f779ed355a9064cf90f348be507aa41c9a4b24ac2e146c1a` |
+| tier-logs-unit | 14008559703 | `05afc92fbd4108f59efb30c400cbec477cc5353fd0dfcb57b9e4ea1568899a1f` |
+| tier-logs-wasm | 14008454582 | `f090c31dac5f5c5311cfabd9e0ccc86f6b6b42236fc23052f3a31f69252ac5e9` |
+| tier-logs-cli | 14009382489 | `e23b8b859f8d5cb728ad0d235e2a9ef8d8c05a416b430b5107e74edc88a715d8` |
+| tier-logs-semver | 14010025006 | `f3d60d2d3ea4f0ced171e2901c97f908d9546d6a486f2e072fad94c38a9d78df` |
+
+Five completed archives and their actual job floors were verified while the
+longer jobs ran; those saved checks are reused after confirming their API
+identities/digests and cached ZIP hashes remain unchanged. Only the final
+native/VM archives and logs need new substantive review at closure. The
+GitHub connector supplies downloads, avoiding the direct storage proxy 403.
+No credentials, signed URLs or new access requests are recorded here.
+
+Successful-name **multisets** match the preceding reviewed selector source
+`b82480c` exactly. Native and Linux VM whole suites retain **2,558** each:
+every earlier 2,551 occurrence plus the same seven selector controls, and
+the same one ignored fuzz. All three native/dedicated/ARM unit contexts retain
+**1,699** each, every earlier 1,692 plus those seven, with zero ignored tests.
+Oracle/kernel/lwext4 retain **225 / 36 / 9**; ARM images retain **527** and
+the same ignored fuzz; browser retains five. No prior test name disappears
+or changes verdict, and no ignored-name multiset grows.
+
+The repaired native job executes actual floors: Unicode **8 / 8**, units
+**1,699 / 440**, oracle **225 / 140**, kernel **36 / 33**, lwext4 **9 / 7**,
+whole **2,558 / 1,060**, and installed CLI **159 / 150**. Its actual final
+verdict is **six tiers green / 4,686 test executions**. All **twenty trailing
+script checks** pass at **40 lines / 2,213 bytes**, and that complete log is
+byte-identical to the earlier corrected baseline. Native and standalone CLI
+logs also match baseline bytes. Static-library freshness covers the same
+rebuild/header/core/Unicode cases and expected stale-lock refusal; only
+elapsed build durations differ from baseline. The negative-control error
+inside that successful freshness check is expected, not a new failure.
+
+Native whole output is **4,009 lines / 247,329 bytes**, inside the repaired
+**4,020 / 248,000** limits, with its real floor now executed. This is fresh
+execution evidence, distinct from the preceding 4,008-line identical-log
+replay. Linux VM whole reaches its actual **2,558 / 1,060** floor at
+**4,174 / 256,466**, inside unchanged **4,180 / 258,000**. Native unit output
+is **1,961 / 151,937**. Previously verified dedicated units retain
+**1,967 / 152,374**; ARM units **1,961 / 151,936**, images **1,144 / 50,418**.
+Their actual unit/image floors remain **1,699 / 440** and **527 / 450**;
+browser reaches five / four. Semver retains **196 applicable passes / 58
+rule skips**, with elapsed-time-only differences; these are not new ignored
+filesystem tests. The old full **43335337519** remains a failed historical
+attempt, including its unexecuted trailing work; fresh success does not
+retroactively change that result.
+
+The frozen native manifest remains SHA-256
+**`45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`**.
+Its source/file hashes, contiguous 35,298-seed prefix, original name bytes,
+first sixteen candidate identities, group/pair counts and zero-special-lead
+accounting recheck successfully. No screening search is repeated. No targeted
+Linux images, independent answers for these selected seeds, cross-leaf
+placement or failing witness are established by ordinary full-CI retention.
+Production-line coverage remains the previously measured **69.236915%** native
+unit scope; this documentation review does not rerun or extend instrumentation.
+
+**Next bounded task:** implement and test the separate targeted manifest input,
+controller and source-bound Linux workflow using these frozen sixteen seeds
+and one exact passing replay. Preserve the original six tests, corpus,
+mismatch assertions, old replay/00–31 experiment, all output limits/floors,
+ignored gates and casefold write refusals. Follow the existing targeted design:
+at most seventeen trials in two sequential batches, 51 trial phase images /
+25,500 independent query/hash records, actual layout observation, stop/capture
+on a discrepancy or failure, and independent postmortem classification before
+any correction. Prepare and review the runner before dispatch; save exact
+source/run identities and let CI finish between turns rather than monitoring
+long jobs. Do not choose replacement seeds or repeat the native search.
+
+This closing checkpoint changes documentation only. Whitespace, local-link,
+provenance and executable-scope checks pass; no new Rust test, oracle call,
+manual workflow dispatch/rerun or helper is used. Any automatic CI for this
+handoff commit is separate from tested/reviewed source `e4712c9`. Stages 4–5
+remain partial/not quantified, stages 6–7 not reached, casefold writes blocked
+and Windows/SteamOS/real-card use unqualified. The original `673c16f` miss and
+the gate before the two-node mutation matrix remain open. Stop after pushing
+this review closure; implementation belongs to the next bounded checkpoint.
