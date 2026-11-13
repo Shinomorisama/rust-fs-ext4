@@ -82,6 +82,50 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Independent witness postmortem runner prepared — 2026-11-13:**
+  A separate manual `htree-descent-postmortem.yml` workflow and fixed-input
+  controller now prepare the reviewed failed artifact **14031054992** from
+  **43415472096**, immutable source `dea278c`. Archive SHA-256 remains
+  `4490cf7307b2c018878aa33f5cdc31a197a0d3268e7372f9981f040658792a01`;
+  the retained `13835` indexed/failure image remains
+  `9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d`.
+  Admission checks the fixed source/run/original exit 101, archive CRC and
+  inventory, three phase identities, all 1,500 original name/hash answers,
+  the exact failed query, current source and all retained input bytes.
+
+  The test-only example uses the existing VM oracle helpers for **nine tool
+  calls and two fresh read-only mounts**, with opposite first-lookup orders.
+  It retains hashes, named inode reports, raw index/mapping reports, negative
+  lookup controls and before/after nonrepairing checks. Independent probes
+  precede current-driver single-leaf/public-path observations. The existing
+  read-only kernel helper is exported without changing its body or mount
+  semantics. Input/archive/private-image integrity, all eleven statuses and
+  retained streams are checked before completion. Failures retain original
+  child exits/reports; no attempt is retried or overwritten. Actual uploaded
+  bytes/inventory are verified through the existing tested upload verifier.
+
+  Native baseline and rerun both pass **all 1,699 exact name occurrences**,
+  zero failed/ignored. Rerun output is **1,959 lines / 152,933 bytes**, inside
+  unchanged unit limits. **Twelve** offline controller controls and **six**
+  Rust answer controls pass, as do the unchanged fourteen/twenty earlier
+  controller controls, full lint, provenance/guide, Python/YAML and scope
+  checks. Actual cached-artifact admission verifies **49 retained witness
+  files** without any host oracle. No production, original descent assertion,
+  experiment/corpus/manifest, dependency pin, existing floor/limit, ignored
+  gate or write policy changes. No helper is used for this implementation.
+  See the [runner preparation review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#independent-witness-postmortem-runner-prepared--2026-11-13).
+
+  **Next bounded task:** verify clean committed source, prepare its local
+  fixed-input capsule, push and dispatch the new postmortem workflow **once**
+  on that exact source. Do not dispatch/rerun the collision experiment. Let
+  CI finish between turns, then audit its source-bound artifact and fresh
+  independent observations before classifying this instance or choosing a
+  correction. Linux postmortem results are **unrun** at this preparation
+  point; new-source full CI is separate and pending. The original red run,
+  lost earlier witness and two-node-matrix gate stay open. Stages 4–5 remain
+  partial/not quantified, stages 6–7 not reached, writes blocked and actual
+  Windows/SteamOS/card use unqualified.
+
 - **Targeted failure retained; saved-byte review complete — 2026-11-13:**
   The once-dispatched [run **43415472096**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43415472096)
   at immutable **`dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`** is terminal
@@ -14156,8 +14200,10 @@ reviewed full **43381484080** and Stage 0 **43381484039**. Targeted experiment
 then `13835` retains a one-name selected-leaf mismatch, exit 101; eleven
 candidates remain unrun. Archive/source/hash/raw-image review confirms a
 cross-leaf collision and odd continuation route, but fresh independent VM
-postmortem remains unrun. Prepare/review that bounded postmortem before any
-correction; do not rerun the experiment. The original lost failure and
+postmortem remains unrun. Its separate fixed-input runner now passes local
+1,699-name unit retention, twelve controller/six answer controls and full
+lint. Commit/prepare/push and dispatch it once, then review fresh evidence
+before any correction; do not rerun the experiment. The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 

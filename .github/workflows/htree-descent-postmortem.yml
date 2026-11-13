@@ -1,0 +1,65 @@
+name: retained htree witness postmortem
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+  CARGO_TERM_COLOR: never
+  CARGO_BUILD_JOBS: "4"
+
+concurrency:
+  group: htree-descent-postmortem-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  independent-postmortem:
+    if: github.ref == 'refs/heads/casefold-rw'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify the fixed failed-run archive and preserve original evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/htree-descent-postmortem.py prepare
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Verify admission, retention and independent-answer controls
+        run: |
+          scripts/tier.sh postmortem:controller-controls postmortem-controller-controls 4200 340000 -- python3 tests/scripts/test_htree_descent_postmortem.py
+          EXPECT_OVERFLOW_CHECKS=1 scripts/tier.sh postmortem:answer-controls postmortem-answer-controls 4200 340000 -- cargo test --locked --example htree_descent_postmortem
+          bash scripts/core.sh test-floor --refuse-ignored postmortem-answer-controls 6
+          cp tmp/logs/postmortem-controller-controls.log tmp/htree-descent-postmortem/
+          cp tmp/logs/postmortem-answer-controls.log tmp/htree-descent-postmortem/
+      - name: Examine private witness copies once without repair
+        timeout-minutes: 25
+        run: python3 scripts/htree-descent-postmortem.py run
+      - name: Retain immutable input and all fresh observations even on failure
+        id: evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htree-descent-witness-postmortem
+          path: tmp/htree-descent-postmortem/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify the actual uploaded inventory and bytes
+        if: always() && steps.evidence.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/htree-descent-postmortem.py verify-upload ${{ steps.evidence.outputs.artifact-id }}

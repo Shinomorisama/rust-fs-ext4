@@ -42,7 +42,7 @@ use crate::oracle::{guest_quote, guest_shell, repo, session, Run};
 /// would have replayed a journal or updated a timestamp cannot change
 /// the image behind the test's back.
 #[track_caller]
-fn guest_kernel_read(image: &str, script: &str) -> Output {
+pub fn guest_kernel_read(image: &str, script: &str) -> Output {
     run(image, script, false)
 }
 

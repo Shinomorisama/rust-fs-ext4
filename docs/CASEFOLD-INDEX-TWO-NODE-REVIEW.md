@@ -1507,3 +1507,117 @@ is **unrun**, not passed or blocked by the failed experiment. Stages 4–5 stay
 partial/not quantified, stages 6–7 not reached, casefold writes blocked and
 real card/Windows/SteamOS use unqualified. New documentation-push CI is
 separate from the exact-source evidence reviewed here.
+
+## Independent witness postmortem runner prepared — 2026-11-13
+
+This bounded postmortem implementation adds
+only the separate manual workflow, its fixed-input controller, a test-only
+example and guest lookup script, offline controls and the existing helper's
+read-only export. It changes no production filesystem code or original
+oracle assertion. The failed targeted run **43415472096** at exact source
+**`dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`** remains failed, with candidate
+13835's original exit **101**; no experiment is retried or resumed.
+
+### Admission, isolation and evidence contract
+
+`scripts/htree-descent-postmortem.py` binds the previously reviewed artifact
+**14031054992**, SHA-256
+`4490cf7307b2c018878aa33f5cdc31a197a0d3268e7372f9981f040658792a01`.
+It verifies source/run metadata, original exit/profile, 353 unique safe ZIP
+members, CRC and a bounded uncompressed size. The exact three phase hashes,
+failure-copy hash, filesystem profile, 1,500 original requests/names/hash
+answers and sole failed query must agree before extracting the selected
+49-file witness. The previous 613-file source audit is reused through the
+fixed archive identity rather than repeating the broader experiment audit.
+All selected input files are read-only; the original ZIP and failure log/
+record are retained separately from fresh observations.
+
+Preparation and execution bind the clean new source commit, every tracked
+source-file digest, workflow run, capsule digest and complete retained input
+inventory. An existing preparation or execution is refused. Admission failures
+retain an incomplete-preparation record, never a ready manifest. Runtime has
+a 3 GiB disk reserve and one twenty-minute process-group deadline through
+the existing controller executor, with no filesystem retry. A partial/error
+run keeps its status/logs; archive/input integrity is checked again after
+the child, including when it fails. The ordinary 4,200-line / 340,000-byte
+experiment wrapper limits are reused for the new labels; no existing tier's
+selection, ceiling or floor changes.
+
+`examples/htree_descent_postmortem.rs` checks the immutable input hash before
+copying and works only on a private image inside the repository. Its calls
+to e2fsprogs go through `fs_ext4_test_support::oracle`, and its kernel probes
+go through the existing `guest_kernel_read` helper. The support change makes
+that function public and re-exports it; its body, guest copying, read-only
+loop/mount, cleanup and all writable helpers remain byte-identical.
+
+The bounded observation sequence contains:
+
+- Nine fresh VM tool calls: nonrepairing judged consistency before/after;
+  one two-name independent hash batch; both named inode reports; the directory
+  inode, full raw index report and logical 49/50 physical-block reports.
+- Two separate guest copies, loop devices and read-only mounts. Each performs
+  direct `lstat` and `open`/`fstat`/empty-content checks on the two names without
+  a preceding directory walk, with opposite first-name order. It checks the
+  read-only flag, exact inode 337/882, an absent-name ENOENT control and reports
+  the running kernel. No writable mount or repair is introduced.
+- Separate current-driver observations after the independent probes: selected
+  leaf, actual membership, hash and public byte-path lookup inode. The original
+  selected leaf 49 / actual 50 mismatch remains an expected observation of this
+  preserved instance, never a weakened replacement for its original assertion.
+- A final image-integrity report after observation success or panic. Both
+  the immutable input
+  and private image must keep the fixed indexed hash
+  `9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d`.
+  Completion requires all eleven status files, raw streams, both clean verdicts,
+  current-driver observations and independently hashed private bytes.
+
+Fresh stdout/stderr/status files are saved before verdict assertions. Any
+discrepancy stops this postmortem and preserves available reports; it never
+changes the original failed experiment's status. A green postmortem still
+requires a separate consolidated evidence/classification review before any
+correction. It cannot prove the cause of the lost original `673c16f` image.
+
+### Native validation and focused review
+
+The baseline full native unit tier passes **1,699** tests. The rerun retains
+every exact successful-name occurrence once, **1,699**, with no failed or
+ignored tests. Its **1,959 lines / 152,933 bytes** pass the unchanged unit
+wrapper and actual floor. No baseline test or existing ignored gate changes.
+
+Twelve controller controls pass offline, including wrong artifact admission,
+existing-attempt preservation, incomplete preparation, source/run/capsule/input
+changes, missing/extra input files, missing raw reports, retained child failures/
+timeouts/signals, controller exceptions, post-child mutation, nominal orchestration
+and low-space refusal. Child filesystem execution is mocked in these controls;
+their success messages are not live postmortem evidence. The six separately
+executed Rust controls reject missing/duplicate/extra/malformed hash or inode
+answers and changed names/major/minor values. Their actual six-test floor passes.
+The unchanged fourteen legacy and twenty targeted Python controls also pass.
+
+The actual downloaded original ZIP passes native admission of its fixed
+profile and **49 files**, without running a filesystem tool or mounting an
+image. Full `chore lint` passes, including fmt, workspace/all-target Clippy,
+the existing family/CI/Unicode/provenance/guide checks. Python AST, manual-only
+YAML/source/permission/upload structure, whitespace and scope checks pass.
+An initial local example call-site type mismatch was corrected before the
+passing Rust controls and lint; it executed no oracle.
+
+The source review keeps the independent probes ahead of the current-driver
+diagnostics, preserves immutable evidence and original child exits, checks
+actual output completion, and uses only the sanctioned helpers. The new
+workflow checks out `${{ github.sha }}`, checks both prescribed sibling pins,
+uses read-only contents/Actions permissions, uploads on failure and verifies
+the actual uploaded ZIP/inventory with the existing tested verifier. It is
+manual-only, branch-scoped and separate from the old experiment workflows.
+No helper is used, and no cost saving is claimed.
+
+**Next bounded task:** after committing clean reviewed source, prepare the
+local capsule from the cached exact ZIP, push to `origin/casefold-rw` and
+dispatch this new workflow once. Save its immutable source/run ID and leave
+CI to finish between turns. Then audit the exact new artifact, statuses,
+raw reports, cold lookup identities and image hashes in one consolidated
+review before classifying the failure or choosing a correction. Independent
+Linux postmortem results are **unrun**, and new-source full CI remains separate
+and pending at this preparation point. The two-node mutation matrix stays
+gated. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
+casefold writes blocked and real card/Windows/SteamOS use unqualified.
