@@ -82,6 +82,51 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Full CI closed; private collision-aware contract prepared — 2026-11-13:**
+  Exact postmortem source `bf7125e` now passes full **43498618061**, all
+  eleven jobs / `ci-ok`. All seven source-bound tier archives and seven
+  baseline archives verify digest/CRC/inventory/extracted bytes. Exact name/
+  ignored multisets retain **2,558 whole passes / 1,699 units**, the same
+  ignored fuzz, oracle/kernel/lwext4 **225/36/9**, ARM images **527**, browser
+  **five**, CLI **159**, all twenty trailing scripts and actual six-tier
+  **4,686** aggregate. Native whole **4,004 / 246,636** and VM **4,178 /
+  256,893** pass existing caps and actual floors. Documentation tips also
+  pass; their metadata is separate from this detailed source closure.
+
+  A new **private, disconnected** contract validator now checks ordinary
+  **1 KiB / FILETYPE / metadata_csum / root-only** directory bytes. It binds
+  query names and exact major/minor answers, verifies effective version,
+  root/route/leaf structure and complete unique references, preserves the
+  initial candidate, and permits only adjacent odd boundaries for the same
+  major. A full-directory match cannot rescue bad routing. Checksum-clean
+  independent input is a prerequisite: this is not a CRC/ownership/volume
+  or write-admission checker. Casefold/encryption/deeper/other profiles refuse.
+
+  The committed Linux witness directory and **all 1,500 independent query
+  answers** retain their recorded hashes. Native controls recompute current
+  hashes/selections, verify every actual leaf/inode, and admit exactly **one**
+  continuation. They also retain the original false single-leaf predicate,
+  raw non-UTF-8 names, bounded synthetic chains/version tags and **33 named
+  rejection cases**. Three temporary invalid validators each produce the
+  expected **exit 101 / one passed / one failed / zero ignored**, then are
+  restored byte-for-byte. The restored two-control target passes. Native
+  baseline retention is **all 1,699 plus two new controls = 1,701**, zero
+  failed/ignored, measured **1,966 lines / 153,297 bytes** inside unchanged
+  unit caps; full lint passes. See the [CI closure and contract review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#exact-source-full-ci-closed-private-collision-contract-prepared--2026-11-13).
+
+  **Next bounded task:** review the new exact-source full CI and private
+  contract, then integrate a test-only correction into the six existing
+  oracle tests with strict per-name independent-answer parsing and complete
+  corpus/inventory pairing. Prove the fixed old-red/new-contract-green
+  witness without rerunning the old experiment or regenerating its image.
+  Preserve initial selection/actual membership separately from continuation
+  admission. No live assertion, production behavior, original experiment,
+  existing floor/limit, ignored gate or write policy is changed here; no new
+  VM workflow is dispatched. New-source full CI is pending, not covered by
+  the closed `bf7125e` evidence. Stages 4–5 remain partial/not quantified,
+  stages 6–7 not reached, the two-node matrix stays gated, casefold writes
+  blocked and real card/Windows/SteamOS use unqualified.
+
 - **Independent postmortem reviewed; retained assertion failure classified — 2026-11-13:**
   Exact-source postmortem **43498677681**, job **132138410597**, passes at
   **`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**. Artifact **14073332429**,
@@ -14282,9 +14327,13 @@ artifact files, 618 source hashes, 49 witness files, eleven statuses, both
 cold lookup orders, fresh hashes/inodes/raw reports and unchanged image bytes
 verify. The retained instance exposes an overstrict single-leaf assertion
 for a valid collision; current public lookup finds both expected inodes.
-Exact-source full CI **43498618061** remains in progress. Close that evidence,
-then prepare a collision-aware oracle contract/red controls before any
-test-only correction; do not rerun the experiment. The original lost failure and
+Exact-source full CI **43498618061** is now closed with full baseline-name/
+floor/artifact retention. A private collision-aware contract is prepared,
+with all 1,500 saved queries, 33 rejection cases, three invalid-policy red
+checks, 1,701 local units and full lint. It remains disconnected from the
+existing oracle assertion. Review its new-source CI, then integrate and
+independently qualify the test-only correction; do not rerun the old
+experiment. The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 

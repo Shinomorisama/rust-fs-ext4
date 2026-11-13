@@ -1796,3 +1796,156 @@ so no saving is claimed. Documentation-only whitespace, links, provenance,
 shared-guide and scope checks pass. No new workflow/test/oracle is executed
 here. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
 casefold writes blocked and actual Windows/SteamOS/card use unqualified.
+
+## Exact-source full CI closed; private collision contract prepared — 2026-11-13
+
+Postmortem implementation source
+**`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`** now passes full
+[**43498618061**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43498618061),
+all eleven jobs including `ci-ok`. Documentation-source runs **43498977547**
+and **43500824951** also pass, checked as metadata only. This closes the
+previous full-CI gate for `bf7125e`, separately from the new private contract
+below. The original failed collision experiment remains failed.
+
+### Source-bound archive and retained-suite closure
+
+All seven current tier archives and all seven comparison archives from
+reviewed runner `dea278c` / **43381484080** verify API run/source identity,
+advertised/downloaded SHA-256, CRC, safe unique members, complete extracted
+inventory and every extracted byte. Current identities are:
+
+| Archive | Artifact | SHA-256 |
+|---|---|---|
+| native | 14077291408 | `acc31876d35bfacc15466f0114cfa6e12bb96c917de6ebf21c64c5b82e48510c` |
+| guest | 14077494119 | `a0825c356f8509f415ff4aea9f28ac4804a672b77b0b2589e0875dcc1f780954` |
+| ARM | 14074185878 | `d4d38edb257fece90e8030aff4f646d160394273e147a0148cda4738db046b85` |
+| unit | 14073087982 | `216f1e0b027c04734c2b2c05b4c5946c0328cacaabfb5acba40e64c65c205618` |
+| browser | 14073551066 | `3849ae0309a291a7fa08a1cb3275313361ea18fad491815878dfa26f98ef1eab` |
+| CLI | 14073317077 | `f0a15033ee10d618076613360da124cd39850bf3b38c60fa6b1ed99a36aca3bb` |
+| semver | 14072163164 | `7c3abd26902eff481ae12ccd7481594e9aead36d321a4a81f336226bb94df192` |
+
+Every comparable successful/ignored name multiset matches the reviewed
+baseline exactly. Native/VM whole suites retain **2,558 passes** and the
+same one ignored fuzz case. Native/ARM/dedicated units retain **1,699** each,
+zero ignored; oracle/kernel/lwext4 remain **225 / 36 / 9**, ARM images **527**
+with its same ignored case, browser **five**. Installed CLI and all twenty
+trailing script outputs match baseline bytes. Semver retains **196 passes /
+58 rule skips**, and semver/static-library reports differ only in durations.
+
+Actual native job **132139517749** reaches unit 1,699/440, oracle 225/140,
+kernel 36/33, lwext4 9/7, whole 2,558/1,060, all twenty trailing script checks,
+CLI 159/150 and **six green tiers / 4,686 executions**. Guest job
+**132139517619** reaches its real 2,558/1,060 floor. ARM job **132139517788**
+reaches unit 1,699/440 and images 527/450; standalone unit, browser and CLI
+jobs reach their respective actual floors. Native whole output is
+**4,004 lines / 246,636 bytes** inside **4,020 / 248,000**. Guest whole
+output is **4,178 / 256,893** inside unchanged **4,180 / 258,000**.
+No conclusion is inferred merely from successful job metadata. The separate
+native/guest htree-image archives are metadata only in this closure; no new
+image-matrix qualification is claimed.
+
+One authorized Terra/medium helper audits the fourteen archives and retained
+logs. The primary reruns the deterministic audit, asserts the exact name/
+ignored multisets and counts, and reads actual native/guest aggregate/floor
+and trailing-check evidence. No discrepancy or correction is needed; model
+cost is unavailable and no saving is claimed.
+
+### Bounded private contract
+
+`tests/support/htree_descent_contract.rs` is a private, disconnected validator.
+It does not change `tests/htree_index_descent_oracle.rs`, its diagnostics,
+production hashes/routes, experiment controllers, corpus, original failures,
+workflow selection, dependency pins, existing floors/limits or write gates.
+Its admitted profile is deliberately narrow: ordinary **1 KiB**, FILETYPE,
+metadata checksums and a root-only index. Casefold, encryption, missing
+FILETYPE/metadata checksums, other block sizes and intermediate indexes refuse.
+
+The caller must provide independently checked, checksum-clean directory bytes
+and name-bound independent hash answers. This helper does not verify CRCs,
+superblock/inode consistency, physical ownership, live snapshot stability or
+write admission. It is not a general filesystem validator. Its explicit byte
+bound is 2 MiB; exact root capacity and complete unique references further
+bound accepted directories. The current fixture has fifty referenced leaves.
+
+The contract checks name binding and exact computed/independent **major and
+minor** agreement, known effective hash version/signedness, an even query
+major, root/dot/header/count/capacity/route ordering and unique complete bounded
+leaf references. The driver's selected leaf must remain the actual initial
+raw-bound candidate. A permitted continuation is only an immediately following
+odd route whose masked major equals the independently confirmed query major;
+repeated odd continuation boundaries are supported, with traversal stopping
+at the first different boundary. There is no unrestricted-scan rescue.
+
+Every referenced leaf's record spans, live name/type and checksum-tail shape
+are checked. Exactly one live record must match the queried bytes, with a
+nonzero inode, in that bounded candidate/continuation set. Missing or duplicate
+names, illegal initial selection and a match outside that set refuse. Scanning
+the other leaves checks structure/uniqueness; it never expands the admissible
+routing set. The caller still owns complete expected-corpus/inventory pairing
+when integrating all queries into the live oracle.
+
+### Independent fixture and meaningful controls
+
+The committed **52,224-byte** directory fixture is the already reviewed
+13835 Linux witness, SHA-256
+`fde0da6acad7a9b3afea4194ef09ddb5126d72d4d25324fac6800bc9a4cd3424`.
+Its sidecar records both source/run/artifact chains, unchanged image identity,
+profile and selected/actual/inode observations. The accompanying **1,500-row**
+query TSV is **96,302 bytes**, SHA-256
+`d883a719da864c62d2cc24a80e3a14678a560c7ca27c242f6fe38385ad42cb3a`.
+Its major/minor values come from the retained independent `dx_hash` answers,
+with original request/name binding checked; membership/inodes come from the
+raw-image-verified directory/entry inventory. No host oracle, regeneration or
+repair is used to create these byte fixtures.
+
+The positive control checks fixture/table digests, recomputes all **1,500**
+current-driver hashes against those independent answers, and validates every
+query's initial selection, actual leaf and inode. Exactly **one** query needs
+a legal continuation. It explicitly retains the original false single-leaf
+predicate for `café_863`, so this preparation cannot be mistaken for a live
+assertion correction. Additional positives cover the two named independent
+inode observations, non-UTF-8 bytes, multi-leaf continuation chains, normal
+range boundaries and all six effective hash-version tags. The synthetic tag/
+layout controls are structural self-consistency checks, not new Linux profile
+qualification or an independent hash implementation.
+
+The negative table executes **33 named rejection cases** covering answer-name,
+major/minor/version mismatch, odd query major, wrong initial selection, missing
+or duplicate names, unrelated-leaf matches, excluded profiles/depth, unknown
+version, bad root fields/capacity, incomplete/aliased/out-of-range references,
+decreasing/repeated-even/wrong continuation boundaries, malformed record spans,
+tail absorption/types/shapes and partial directory blocks. Synthetic record
+fixtures are not e2fsck-clean volumes; they exercise the bounded parser contract.
+
+Three temporary invalid validators vet these controls: legacy single-leaf-only
+acceptance fails the positive Linux control; bypassed name/hash binding and
+unrestricted leaf acceptance each fail the negative table. Each execution is
+an actual **exit 101**, **one passed / one failed / zero ignored**, captured
+through the tier wrapper. The private module is restored byte-for-byte after
+each. Production and the original oracle are never edited by these checks.
+The restored two-control target passes its actual two-test floor.
+
+The native baseline and final full rerun retain **all 1,699 previous successful
+name occurrences plus exactly the two new controls**, **1,701**, zero failed
+or ignored. Final native unit output **1,966 lines / 153,297 bytes** passes
+unchanged **2,000 / 155,000** caps and its actual floor. Full lint passes,
+including fmt, workspace/all-target Clippy,
+the existing family/CI/Unicode/provenance/guide checks. Existing unit caps,
+all other caps/floors and old test selections remain unchanged. Local fixture
+origin/digests, scope and document links are checked; no new VM/mount/oracle
+is invoked. Exact new-source CI still must establish its own whole-suite
+retention and measured output budgets before integration is qualified.
+
+**Next bounded task:** review this exact source's full CI and private contract,
+then integrate a reviewed correction into the six existing oracle tests with
+strict per-name independent-answer parsing and complete corpus/inventory
+pairing. Prove the preserved old-red/new-contract-green witness without
+rerunning the failed experiment or regenerating its image. Keep initial
+selected/actual observations distinct from legal-continuation admission;
+preserve all original six names, query identities, captures, limits and gates.
+Do not infer general collision writes, deeper shapes or the lost original
+image's cause. No assertion correction or new VM workflow is dispatched in
+this preparation; new-source full CI remains separate from closed `bf7125e`.
+Stages 4–5 remain partial/not quantified, stages 6–7 not reached, the two-node
+matrix stays gated, casefold writes blocked and card/Windows/SteamOS use
+unqualified.

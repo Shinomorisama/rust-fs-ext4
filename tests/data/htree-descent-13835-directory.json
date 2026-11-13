@@ -1,0 +1,49 @@
+{
+  "origin": "Linux-created ordinary indexed directory; fixed retained witness, no repair",
+  "original_source": "dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14",
+  "original_run": 43415472096,
+  "original_artifact": 14031054992,
+  "postmortem_source": "bf7125ee9c6070c29a6e286f6c80386a4cac4a85",
+  "postmortem_run": 43498677681,
+  "postmortem_artifact": 14073332429,
+  "indexed_image_sha256": "9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d",
+  "directory_sha256": "fde0da6acad7a9b3afea4194ef09ddb5126d72d4d25324fac6800bc9a4cd3424",
+  "bytes": 52224,
+  "block_size": 1024,
+  "filetype": true,
+  "metadata_csum": true,
+  "casefold": false,
+  "encrypted": false,
+  "depth": 0,
+  "effective_hash_version": 1,
+  "queries": [
+    {
+      "name_hex": "615f6e616d655f6f665f7477656e74795f3030313231",
+      "major": 4292002400,
+      "minor": 3072242126,
+      "selected": 49,
+      "actual": 49,
+      "inode": 337
+    },
+    {
+      "name_hex": "636166c3a95f383633",
+      "major": 4292002400,
+      "minor": 3853483151,
+      "selected": 49,
+      "actual": 50,
+      "inode": 882
+    },
+    {
+      "name_hex": "6630ff80",
+      "major": 766888728,
+      "minor": 3732967549,
+      "selected": 10,
+      "actual": 10,
+      "inode": 913
+    }
+  ],
+  "query_count": 1500,
+  "queries_tsv_sha256": "d883a719da864c62d2cc24a80e3a14678a560c7ca27c242f6fe38385ad42cb3a",
+  "independent_hashes_origin": "Original retained debugfs dx_hash batch, with request/name binding verified in the postmortem archive",
+  "membership_origin": "Retained directory bytes and entries, checked against unchanged raw image and independent index reports"
+}
