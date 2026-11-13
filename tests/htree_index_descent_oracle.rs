@@ -55,16 +55,27 @@ fn names() -> Vec<Vec<u8>> {
 }
 
 fn run(hash_alg: &str, s_flags: u32) {
-    let trial = std::env::var_os("FS_EXT4_DESCENT_TRIAL").map(|id| {
-        let id = id.to_str().expect("experiment identity must be ASCII");
+    let legacy = std::env::var_os("FS_EXT4_DESCENT_TRIAL")
+        .map(|id| id.into_string().expect("legacy identity must be UTF-8"));
+    let targeted = std::env::var_os("FS_EXT4_DESCENT_TARGETED_TRIAL")
+        .map(|id| id.into_string().expect("targeted identity must be UTF-8"));
+    let manifest = std::env::var_os("FS_EXT4_DESCENT_TARGETED_MANIFEST")
+        .map(|path| std::fs::read(path).expect("read targeted manifest"));
+    let replay = std::env::var_os("FS_EXT4_DESCENT_REPLAY_DIR").map(std::path::PathBuf::from);
+    let trial = experiment::select(
+        legacy.as_deref(),
+        targeted.as_deref(),
+        manifest.as_deref(),
+        replay.as_deref(),
+    )
+    .expect("explicit descent experiment admission");
+    if trial.is_some() {
         assert_eq!(
             (hash_alg, s_flags),
             ("half_md4", 1),
             "experiment requires the exact signed half-MD4 test filter"
         );
-        let replay = std::env::var_os("FS_EXT4_DESCENT_REPLAY_DIR").map(std::path::PathBuf::from);
-        experiment::Trial::parse(id, replay.as_deref()).expect("fixed experiment identity")
-    });
+    }
     let mkfs = "mkfs.ext4";
     let e2fsck = "e2fsck";
     let debugfs = "debugfs";

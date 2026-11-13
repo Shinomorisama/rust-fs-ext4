@@ -5,6 +5,8 @@
 mod experiment;
 
 use experiment::Trial;
+const TARGETED: &[u8] =
+    include_bytes!("../docs/evidence/htree-descent-targeted-2026-11-12/manifest.json");
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -28,6 +30,24 @@ fn fixed_candidates_match_the_published_endpoints() {
     assert_eq!(
         experiment::uuid(&first.uuid),
         "c2e9fe60-07be-94f9-504e-7f6eb52da206"
+    );
+    let targeted = Trial::parse_targeted("05103", None, TARGETED).unwrap();
+    assert_eq!(
+        hex::encode(targeted.seed),
+        "28d4c66054563be79d2ce25b5dd7beaa"
+    );
+    assert_eq!(
+        hex::encode(targeted.uuid),
+        "13c79abb3cb2cebf992d16ba77590979"
+    );
+    let targeted = Trial::parse_targeted("35297", None, TARGETED).unwrap();
+    assert_eq!(
+        hex::encode(targeted.seed),
+        "7778b2b1f5158df8fdd4fc43abcfcdc8"
+    );
+    assert_eq!(
+        hex::encode(targeted.uuid),
+        "025191e461c818cc330c3039a7da4ba7"
     );
     let last = Trial::parse("31", None).unwrap();
     assert_eq!(
@@ -55,6 +75,32 @@ fn all_candidates_are_distinct_nonzero_and_exclude_replay() {
         assert!(uuids.insert(trial.uuid));
     }
     assert_eq!((seeds.len(), uuids.len()), (32, 32));
+    let text = std::str::from_utf8(TARGETED).unwrap();
+    let ids: Vec<_> = text
+        .split("\"candidate_ids\":[")
+        .nth(1)
+        .unwrap()
+        .split(']')
+        .next()
+        .unwrap()
+        .split('"')
+        .filter(|s| s.len() == 5 && s.bytes().all(|b| b.is_ascii_digit()))
+        .collect();
+    assert_eq!(ids.len(), 16);
+    let mut seeds = HashSet::new();
+    let mut uuids = HashSet::new();
+    for id in ids {
+        let trial = Trial::parse_targeted(id, None, TARGETED).unwrap();
+        assert_ne!(trial.seed, [0; 16]);
+        assert_ne!(trial.uuid, [0; 16]);
+        assert_ne!(trial.seed, replay.seed);
+        assert_ne!(trial.uuid, replay.uuid);
+        assert!(seeds.insert(trial.seed));
+        assert!(uuids.insert(trial.uuid));
+        assert!(Trial::parse(id, None).is_err());
+        trial.check_settings(&raw(&trial)).unwrap();
+    }
+    assert_eq!((seeds.len(), uuids.len()), (16, 16));
 }
 
 #[test]
@@ -64,6 +110,36 @@ fn ambiguous_indices_and_wrong_replay_modes_are_refused() {
     }
     assert!(Trial::parse("replay", None).is_err());
     assert!(Trial::parse("00", Some(Path::new("saved"))).is_err());
+    for id in [
+        "", "5103", "051030", "05104", "65536", "00000", "00", "é", " 5103",
+    ] {
+        assert!(Trial::parse_targeted(id, None, TARGETED).is_err(), "{id}");
+    }
+    assert!(Trial::parse_targeted("05103", Some(Path::new("saved")), TARGETED).is_err());
+    assert!(Trial::parse_targeted("replay", None, TARGETED).is_err());
+    assert!(Trial::parse_targeted("05103", None, b"{}").is_err());
+    let saved = Path::new("saved");
+    assert!(Trial::parse_targeted("replay", Some(saved), TARGETED).is_ok());
+    assert!(experiment::select(None, None, None, None)
+        .unwrap()
+        .is_none());
+    assert!(experiment::select(Some("00"), None, None, None)
+        .unwrap()
+        .is_some());
+    assert!(
+        experiment::select(None, Some("05103"), Some(TARGETED), None)
+            .unwrap()
+            .is_some()
+    );
+    for (old, new, manifest, replay) in [
+        (Some("00"), Some("05103"), Some(TARGETED), None),
+        (Some("00"), None, Some(TARGETED), None),
+        (None, Some("05103"), None, None),
+        (None, None, Some(TARGETED), None),
+        (None, None, None, Some(saved)),
+    ] {
+        assert!(experiment::select(old, new, manifest, replay).is_err());
+    }
 }
 
 #[test]

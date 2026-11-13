@@ -1,0 +1,131 @@
+name: targeted htree collision reproduction
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+  CARGO_TERM_COLOR: never
+  CARGO_BUILD_JOBS: "4"
+
+concurrency:
+  group: htree-descent-targeted-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  targeted-batch-0:
+    if: github.ref == 'refs/heads/casefold-rw'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Freeze all candidates and verify the exact replay archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/htree-descent-targeted.py prepare
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Verify finite scheduling and raw identity controls
+        run: |
+          scripts/tier.sh experiment:runner-controls runner-controls 4200 340000 -- python3 tests/scripts/test_htree_descent_experiment.py
+          scripts/tier.sh targeted:runner-controls targeted-runner-controls 4200 340000 -- python3 tests/scripts/test_htree_descent_targeted.py
+          scripts/tier.sh experiment:seed-controls seed-controls 4200 340000 -- scripts/test.sh --locked --release --test htree_descent_seed_controls
+          bash scripts/core.sh test-floor seed-controls 7
+          cp tmp/logs/targeted-runner-controls.log tmp/htree-descent-targeted/targeted-runner-controls.log
+          cp tmp/logs/runner-controls.log tmp/htree-descent-targeted/runner-controls.log
+          cp tmp/logs/seed-controls.log tmp/htree-descent-targeted/seed-controls.log
+      - name: Execute bounded batch 0 without retries
+        timeout-minutes: 40
+        run: python3 scripts/htree-descent-targeted.py batch 0
+      - name: Retain completed phases and any original failing witness
+        id: evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htree-descent-targeted-batch-0
+          path: tmp/htree-descent-targeted/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify actual uploaded bytes before leaving the runner
+        if: always() && steps.evidence.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/htree-descent-targeted.py verify-upload ${{ steps.evidence.outputs.artifact-id }}
+  targeted-batch-1:
+    needs: [targeted-batch-0]
+    if: github.ref == 'refs/heads/casefold-rw'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Freeze all candidates and verify the exact replay archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/htree-descent-targeted.py prepare
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Verify finite scheduling and raw identity controls
+        run: |
+          scripts/tier.sh experiment:runner-controls runner-controls 4200 340000 -- python3 tests/scripts/test_htree_descent_experiment.py
+          scripts/tier.sh targeted:runner-controls targeted-runner-controls 4200 340000 -- python3 tests/scripts/test_htree_descent_targeted.py
+          scripts/tier.sh experiment:seed-controls seed-controls 4200 340000 -- scripts/test.sh --locked --release --test htree_descent_seed_controls
+          bash scripts/core.sh test-floor seed-controls 7
+          cp tmp/logs/targeted-runner-controls.log tmp/htree-descent-targeted/targeted-runner-controls.log
+          cp tmp/logs/runner-controls.log tmp/htree-descent-targeted/runner-controls.log
+          cp tmp/logs/seed-controls.log tmp/htree-descent-targeted/seed-controls.log
+      - name: Execute bounded batch 1 without retries
+        timeout-minutes: 40
+        run: python3 scripts/htree-descent-targeted.py batch 1
+      - name: Retain completed phases and any original failing witness
+        id: evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htree-descent-targeted-batch-1
+          path: tmp/htree-descent-targeted/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify actual uploaded bytes before leaving the runner
+        if: always() && steps.evidence.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/htree-descent-targeted.py verify-upload ${{ steps.evidence.outputs.artifact-id }}
+  targeted-ok:
+    if: always()
+    needs: [targeted-batch-0, targeted-batch-1]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require both finite batches and complete upload verification
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert len(results) == 2 and all(row['result'] == 'success' for row in results.values()), results
+          print('17 targeted signed trials complete; report actual collision layout; original oracle gate remains unresolved')
+          PYTHON
