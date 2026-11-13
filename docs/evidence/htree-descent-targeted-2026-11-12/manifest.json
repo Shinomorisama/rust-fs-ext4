@@ -1,0 +1,17 @@
+{
+"schema":1,
+"status":"complete",
+"outcome":"target_reached",
+"source_commit":"0c4e879bd1591374f59fe973a8deeafc86f560dc",
+"source_sha256":{"examples/htree_descent_select.rs":"ac916e2bce1ce1a929165b096475a06ec500ab321fb9560671d0260a3102f48a","tests/support/htree_descent_selector.rs":"ee184ae9a0db566c7554ab9590ede21d3f1dcba13d277fc94327ecd5f8ece41f","src/hash.rs":"6aa9580be587776ff18c95cc2e9f1d3b1c7c23fdb040b76785d88a663d620e79","tests/htree_index_descent_oracle.rs":"1b1b44791ca8570d531481c740695227b29378c205fe54b1fc02d7f0d8d5fec5"},
+"binary_sha256":"df5b563f0f090072239f42f71d03f40b9ce933c1f446db910b22177228e25ac8",
+"corpus_sha256":"8fa9e9ecaaeebae3085ab85d2fc21f4f2946638db6af70c2b3ee0e6ee4b3e30b",
+"hash_version":1,
+"identity_domain_checked":65536,
+"scanned":35298,
+"last_index":"35297",
+"candidate_ids":["05103","06006","09099","11023","13835","14235","14271","15847","20908","21473","24114","24155","28403","30910","32993","35297"],
+"special_names":0,
+"limits":{"seeds":65536,"candidates":16,"seconds":300,"live_data_bytes":16777216,"output_bytes":33554432},
+"files_sha256":{"names.hex":"8fa9e9ecaaeebae3085ab85d2fc21f4f2946638db6af70c2b3ee0e6ee4b3e30b","screen.tsv":"89275be6449a0acfac3493731940e4dcf50697f71a175577ff35a42b0f59697a","candidates.jsonl":"c91f00197c008125183badbd5dd240fbe6666e13b0bbb6e5b6b857713692ae7b","special.jsonl":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+}

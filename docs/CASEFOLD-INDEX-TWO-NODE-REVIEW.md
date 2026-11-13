@@ -831,3 +831,111 @@ the already reviewed implementation evidence. Stages 4–5 remain partial/not
 quantified, stages 6–7 not reached, casefold writes blocked and real
 Windows/SteamOS/card use unqualified. The two-node mutation matrix still
 requires a captured failing witness and independent classification first.
+
+
+## Native targeted selector and frozen prefix — 2026-11-12
+
+Implementation source **`0c4e879bd1591374f59fe973a8deeafc86f560dc`** adds only
+`examples/htree_descent_select.rs`, `tests/support/htree_descent_selector.rs`
+and `tests/htree_descent_selector_controls.rs`. The original six filesystem
+tests, names generator, mismatch assertions, old `replay` / `00`–`31` path,
+production sources, dependencies, workflows, limits and write gates are
+unchanged. The separate selector reproduces the original corpus digest;
+its hashes are candidate predictions, not independent oracle answers.
+
+The release selector runs **once** from the clean committed source and reaches
+the first sixteen ordinary-collision seeds after **35,298** seeds, prefix
+**00000–35297**, or **52,947,000 native name-hash calculations**. It takes
+7.702 seconds internally / **7.736 seconds** under the external controller;
+the observed process-tree peak RSS is **9,344 KiB**. The controller also
+applies a hard 300-second deadline, killing its owned process group and
+marking the attempt incomplete on expiry. The implementation bounds live
+screening data conservatively below 8 MiB, inside the reviewed 16 MiB limit;
+its streamed output totals **484,912 bytes**, inside 32 MiB. Compiler/runtime
+and process-tree RSS observations are distinct from live screening data.
+
+Exactly **sixteen groups / sixteen pairs** are predicted, each involving two
+different corpus names. There are **zero special-major leads**. No Linux
+image is materialized, no independent hash answer is obtained, and no
+cross-leaf placement, odd boundary or failing witness is established.
+The first sixteen qualifying indices are retained without substitutions:
+
+`05103, 06006, 09099, 11023, 13835, 14235, 14271, 15847, 20908, 21473, 24114, 24155, 28403, 30910, 32993, 35297`.
+
+The committed [frozen evidence directory](evidence/htree-descent-targeted-2026-11-12/manifest.json)
+contains the complete prefix ledger, candidate names/major/minor pairs,
+empty special-lead ledger, original raw-name inventory, manifest and digest,
+execution measurements and compact audit result. Manifest SHA-256 is
+**`45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`**.
+Its source hashes bind compiled selector/module/hash/original-test bytes;
+binary SHA-256 is
+`df5b563f0f090072239f42f71d03f40b9ce933c1f446db910b22177228e25ac8`.
+The immutable source commit and clean-tree check bind the remaining source.
+
+A separate Python audit uses `hashlib` to verify the manifest and every
+retained file digest, source hashes against `git show`, raw-name uniqueness,
+all 65,536 seed/UUID identities and their uniqueness/nonzero properties,
+contiguous prefix ordering, first-sixteen selection, candidate group/pair
+counts, special-lead accounting and original name bytes. All pass. This
+rechecks identities and recorded consistency; it does **not** recalculate
+name hashes independently or turn native screening into Linux evidence.
+
+### Executed validation and retained limits
+
+- Baseline native units at `18d032a`: **1,692**, actual floor 440,
+  **1,946 lines / 151,159 bytes**. Its full CI **43301001097** is also green,
+  metadata checked only; earlier detailed full-artifact proof remains at
+  `ae93932` and is not repeated or credited to this implementation.
+- All **seven** focused controls pass, **15 / 870** output. They exercise
+  fixed endpoints/byte order, corpus identity, major grouping despite minor
+  differences, special-major exclusion, ordered selection, finite exhaustion,
+  resource refusal, incomplete publication and failed output writes.
+- Three actual CLI refusal checks pass: missing argument, dirty source with
+  an incomplete marker and no manifest, and preservation of an existing
+  output directory. Release build, formatting, full workspace/all-target
+  Clippy with CLI features and `-D warnings`, provenance and shared-guide
+  checks pass. No helper is used; no model-cost saving is asserted.
+- Post-change native units pass **1,699**, **1,958 / 151,840** output. The
+  final instrumented run's named multiset independently retains every
+  baseline occurrence plus exactly the seven controls, with no failed or
+  ignored tests. Its complete output is **2,002 / 154,024**: fresh compiler
+  lines cause the local 2,000-line coverage wrapper to exit **65**. That red
+  remains recorded. Identical-byte replay passes a measured **2,020-line**
+  local coverage limit, unchanged 155,000-byte limit and actual floor 1,699;
+  no shared task/CI limit, test selection or assertion changes.
+- The first coverage-export attempt has no profile files and is not coverage
+  evidence. An attempted cleanup/retry still reuses plain binaries and is
+  explicitly stopped, not counted as a passing test run. Explicit compiler
+  instrumentation then produces fresh profiles for the completed run above.
+  The same 86 production files retain 43,809 executable lines; covered lines
+  increase **30,322 → 30,332**, **69.214088% → 69.236915%**. Tests, examples
+  and dependencies are excluded; this is native unit scope, without VM
+  instrumentation or broader filesystem qualification.
+
+Reproduction uses the pinned native runner to build
+`cargo build --locked --release --example htree_descent_select`, then invokes
+`target/casefold-baseline/release/examples/htree_descent_select` directly with
+a **new ignored `tmp/` output directory**, after the runner restores the
+manifest and the source is clean. The binary accepts only the output path;
+seed/candidate/time/data/output bounds cannot be extended by CLI or an
+environment switch. Do not repeat the screen merely to regenerate this
+already frozen manifest. Verify and reuse the committed bytes instead.
+
+**Next bounded task:** review the pushed source's automatic CI and this frozen
+manifest. Full-CI execution/retention for the new source is still unreviewed.
+The prior native whole suite was 3,996 lines against 4,000, while this new
+unit target adds twelve lines locally; this is a concrete output-budget risk,
+not permission to preemptively raise a cap. Inspect any actual failure and
+make only a measured repair before proceeding. Then add the separately
+reviewed test-only manifest input and Linux controller/workflow, preserving
+the old fixed experiment. The later experiment remains capped at sixteen
+selected candidates plus one exact passing replay, two sequential batches,
+51 trial phase images / 25,500 independent query/hash records. Let CI finish
+between turns by default; no live monitoring is part of this checkpoint.
+
+No workflow is manually dispatched/rerun and no filesystem oracle is called
+here. The original `673c16f` miss remains unexplained. A retained Linux witness
+and independent classification still precede any hash/routing/assertion
+correction or the two-node mutation matrix. Stages 4–5 remain partial/not
+quantified, stages 6–7 not reached, writes blocked and Windows/SteamOS/card
+use unqualified. Stop after freezing evidence and pushing this handoff.

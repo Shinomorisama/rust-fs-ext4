@@ -82,6 +82,43 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Native targeted selector and frozen prefix complete — 2026-11-12:**
+  Test-only implementation `0c4e879bd1591374f59fe973a8deeafc86f560dc`
+  screens the unchanged 1,500-name corpus once and finds the first sixteen
+  ordinary-collision seeds after **35,298** seeds, prefix **00000–35297**.
+  The result contains sixteen predicted groups/pairs and zero special leads;
+  native duration is 7.702 s (external 7.736 s), observed peak RSS 9,344 KiB,
+  and native output 484,912 bytes, all inside the reviewed bounds. Frozen
+  [manifest and retained ledgers](evidence/htree-descent-targeted-2026-11-12/manifest.json)
+  have manifest SHA-256
+  `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`.
+  Separate `hashlib`/ledger/source checks pass. These are native predictions:
+  no independent Linux hashes, cross-leaf placement or failure is established.
+
+  All **1,692** baseline native unit occurrences remain, plus seven controls,
+  **1,699**, with no failed/ignored tests. Focused controls, three CLI refusal
+  checks, release build, fmt, full Clippy, provenance and guide checks pass.
+  Production-line unit coverage increases **30,322 → 30,332 / 43,809**,
+  **69.214088% → 69.236915%**. An empty-profile export and stopped plain-binary
+  retry are not passing coverage evidence. Fresh instrumented tests complete;
+  compiler output produces **2,002 / 154,024**, a local 2,000-line wrapper red.
+  Identical complete-byte replay passes measured local 2,020 / 155,000 with
+  actual floor 1,699; shared unit/CI limits and all assertions remain intact.
+  See the [executed selector checkpoint](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#native-targeted-selector-and-frozen-prefix--2026-11-12)
+  for source binding, measurements, distinctions and reproduction instructions.
+
+  **Next bounded task:** review automatic CI for the pushed source and the
+  frozen manifest, resolving any measured output/retention failures before
+  adding the separate Linux trial path. Prior native whole output 3,996 /
+  4,000 lines has little headroom; the new target adds twelve unit lines.
+  Do not preemptively change limits or repeat the screen. Later Linux work
+  stays capped at sixteen candidates plus one exact passing replay, two
+  sequential batches / 51 trial images / 25,500 independent queries. No
+  manual dispatch, new oracle, helper or live CI monitoring occurs here.
+  Stages 4–5 remain partial/not quantified, stages 6–7 not reached, casefold
+  writes blocked and Windows/SteamOS/card use unqualified. The original lost
+  failure remains unresolved; the two-node mutation matrix stays gated.
+
 - **Targeted collision-bearing seed design reviewed — 2026-11-12:**
   A narrow inventory of the four corrected finite archives finds no shared
   major hashes, cross-leaf collision groups, odd continuation boundaries,
@@ -13919,18 +13956,18 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: the targeted design is reviewed after a narrow
-inventory finds no collision/continuation opportunity in the previous 33
-profiles / 49,500 queries. Prior corrected implementation evidence remains
-closed at `ae93932`; current documentation source `9a61127` also has green CI
-metadata, without a new archive audit. No failure is reproduced or diagnosed.
-Next implement/test and run only the bounded native selector, freezing up to
-sixteen collision-bearing seeds before any separate Linux dispatch. Stages
-4–5 stay partial/not quantified, writes blocked and stages 6–7 not reached.
+Latest Stage 0/3/5 checkpoint: test-only native selector `0c4e879` passes its
+controls and a single bounded screen freezes sixteen collision-bearing seeds
+from the first 35,298. All 1,692 baseline unit occurrences remain plus seven;
+production-line unit coverage is 69.236915%. Frozen manifest/source/ledger
+checks pass. Linux hashes, cross-leaf placement and failure classification
+remain unrun. Review new-source automatic CI, including output headroom,
+before adding the separate Linux trial path. Stages 4–5 stay partial/not
+quantified, writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. Follow the [targeted seed design](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#targeted-collision-bearing-seed-review--2026-11-12): implement and meaningfully test a native candidate selector, then execute only its five-minute / 65,536-seed screen on the original 1,500 names. Freeze the first sixteen ordinary-collision seeds or record finite exhaustion/incompleteness. Native screening is not independent hash evidence. Do not dispatch Linux in that checkpoint; a later separate experiment is capped at seventeen trials / 51 phase images / 25,500 queries in two sequential batches. Preserve the original six tests, fixed 00–31 experiment, all assertions/selections/floors/output limits/write gates and the ignored-fuzz gate. The completed prior evidence remains at `ae93932`; historical failed runs remain failed. Do not change production/oracle expectations or implement the two-node mutation matrix before a captured failure and independent classification. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. This design-only checkpoint stops after saving the handoff; no new experiment or manual CI rerun belongs to it.
+1. Reuse the verified setup and authorization. The [native selector checkpoint](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#native-targeted-selector-and-frozen-prefix--2026-11-12) freezes sixteen candidates in the [committed manifest](evidence/htree-descent-targeted-2026-11-12/manifest.json), SHA-256 `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`, after one complete prefix search. Do not repeat or extend it. **Next bounded task: review automatic CI for the pushed source and the frozen manifest; inspect and resolve measured retention/output-budget failures before adding Linux trials.** Prior native whole output was 3,996 / 4,000 lines and the new unit target adds twelve lines locally; preserve limits until actual evidence justifies a repair. Once green, add a separately reviewed test-only manifest path/controller without changing the old replay/00–31 experiment. Later Linux execution is capped at sixteen candidates plus one exact passing replay, two sequential batches, 51 trial phase images / 25,500 independent query/hash answers. Confirm actual collisions and layout independently; a native prediction is not a Linux witness. Preserve every original test/assertion/selection/floor/write gate and ignored-fuzz gate. Do not change production/oracle expectations or implement the two-node mutation matrix before a retained failing image and independent classification. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. This native checkpoint stops after saving/pushing; no manual dispatch, oracle or live CI monitoring belongs to it.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
