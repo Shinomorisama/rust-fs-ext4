@@ -1255,3 +1255,121 @@ witness and independent classification. Stages 4–5 remain partial/not
 quantified, stages 6–7 not reached, writes blocked and Windows/SteamOS/real-
 card use unqualified. This checkpoint ends after its code/handoff push,
 without any manual workflow dispatch or live CI monitoring.
+
+
+## Exact-source runner review closed; targeted experiment dispatched — 2026-11-13
+
+Runner source **`dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`** passes full
+[**43381484080**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43381484080)
+(all eleven jobs / `ci-ok`) and focused Stage 0
+[**43381484039**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43381484039)
+(all 24 jobs). Exact job/source logs verify **39 actual focused floors**,
+with their label/count/floor multiset identical to the reviewed corrected
+focused baseline. Native full reaches its actual **six-tier / 4,686-execution**
+aggregate, whole floor **2,558 / 1,060**, all twenty trailing script checks
+and native installed-CLI floor **159 / 150**. No successful status is used
+as a substitute for checking those actual verdicts.
+
+All seven full tier archives and the focused original-six descent archive
+pass API run/source binding, advertised/downloaded SHA-256, ZIP CRC, safe
+extraction and comparison of every extracted file with its archived bytes:
+
+| Retained archive | Artifact | Verified SHA-256 |
+|---|---|---|
+| tier-logs-x86_64 | 14020250250 | `f3c67f1303681708c9b77651f5fb122ce17c9979fdaed99336e65b7626a965e4` |
+| tier-logs-suite-in-vm | 14021655332 | `b24762adc33265140da1f6644ecd3f54cec5c5db596b3059caf483eb23199c63` |
+| tier-logs-aarch64 | 14017656197 | `db7bfc7182d7e8adf419e44da454607cc5958af669631f7c5f4f118b9c6828a8` |
+| tier-logs-unit | 14017375939 | `ccbf4cf435671b87bc3a0b8a2420651260b4a6e4e14e2f45e2977a0a81275f0d` |
+| tier-logs-wasm | 14017200973 | `c428bf1625395dd1d50ea88de1609828a17799db92326148d3aaa662aeb8966d` |
+| tier-logs-cli | 14016309764 | `cd6e077319b34a7ee18669df1ca0b920f0a54623288207dcd89ba6bec9e4a553` |
+| tier-logs-semver | 14016981092 | `3790e196f31995ade36320a349e725729cd74d46bb36a848825288c71b016df0` |
+| htree-descent-diagnostics | 14016926762 | `f14b78e8ac19b97a7d0f6da2d4fe2a7889c9cfb055963e00602b248d844a7061` |
+
+Native and VM successful-name multisets retain **2,558** each, identical to
+reviewed `e4712c9`, including every previous baseline occurrence and the same
+one ignored fuzz. Native/dedicated/ARM units retain **1,699** each, zero
+ignored. Oracle/kernel/lwext4 retain **225 / 36 / 9**, ARM images **527**
+with the same fuzz, browser five. Native and standalone CLI logs and all
+twenty trailing-script outputs match baseline bytes; semver retains **196
+applicable passes / 58 rule skips**, differing only in elapsed durations.
+Static-library freshness cases and expected stale-lock refusal also match,
+with duration-only differences. No filesystem ignored-name multiset grows.
+
+Actual whole output is native **4,007 lines / 247,050 bytes**, inside
+**4,020 / 248,000**; VM **4,177 / 256,829**, inside unchanged **4,180 /
+258,000**, with both real floors reached. Native/ARM unit output is **1,961 /
+151,936** each; dedicated unit output **1,967 / 152,374**. All actual unit
+floors are 1,699 / 440; ARM images reach 527 / 450, browser five / four,
+and standalone CLI 159 / 150. Every preceding native oracle/kernel/lwext4
+floor is retained. No output limit or selection changes in this checkpoint.
+
+The focused original-six archive verifies **145 exact-tree source hashes**,
+all **eighteen phase-image hashes / 9,000 queries and independent hash answers**,
+raw seed/UUID observations, inode-derived physical mappings, mapped directory
+bytes, raw leaf names/inodes, raw root routes, selected-leaf memberships and
+saved requests/answers. Six distinct seeds/UUIDs remain. All six judged
+consistency verdicts are clean and all original mismatches are zero. Its
+actual six-test floor passes, at **186 lines / 12,567 bytes**. These raw checks
+do not independently recalculate filesystem checksums. Other focused mutation
+archives receive job/floor/source-metadata review only; their saved-image
+matrices are not newly re-audited or newly qualified here.
+
+The frozen sixteen-candidate manifest is rechecked at SHA-256
+`45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`:
+file/source hashes, contiguous prefix, candidate ordering, original name
+bytes, groups/pairs and special-lead accounting remain valid. The twenty
+mocked controller controls are also rerun successfully before dispatch.
+Their `artifact 1` / eight-trial messages remain mocked regression output,
+not execution evidence. No native name-hash screening is repeated.
+
+### One source-bound dispatch
+
+After confirming a clean local tree, local/remote tip `dea278c`, no existing
+targeted attempt at that commit, and the successful exact-source review,
+the separate **`htree-descent-targeted.yml`** workflow (ID **416966692**) is
+dispatched **once** on `casefold-rw`. The accepted run is
+[**43415472096**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43415472096),
+event `workflow_dispatch`, with confirmed immutable head SHA
+**`dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`**. Initial metadata shows the
+run and batch zero in progress. Each job explicitly checks out that event
+SHA; a later documentation push does not change the selected source. There
+is no rerun or second dispatch, and the old 33-trial workflow is not run.
+
+The finite contract is unchanged: one exact passing replay followed by the
+frozen sixteen, **nine then eight** sequential trials, at most **51 trial
+phase images / 25,500 independent query/hash answers**, plus six separately
+counted reference-image copies. Existing deadline, space, original-status,
+actual-floor, capture, stop-on-first-discrepancy/failure and actual-upload
+verification gates apply. A same-leaf collision remains inconclusive; no
+substitution, rescreen, assertion change or automatic filesystem retry is
+allowed. Full CI's ordinary six-test success does not predict the outcome
+of these collision-bearing seeds.
+
+**Execution results are pending review.** Dispatch acceptance and initial
+in-progress metadata are not trial completion, collision confirmation,
+failure reproduction, or filesystem qualification. The long workflow is
+left to finish between turns; this checkpoint does not monitor its trials.
+The implementation retains a failing witness and stops if one appears.
+The original lost `673c16f` miss remains unexplained.
+
+**Next bounded task:** inspect **43415472096** at the exact source above.
+If still active, reuse this completed preflight review and inspect only
+newly completed evidence. Once terminal, perform one consolidated run/
+source/archive/inventory/digest/phase/name/hash/layout/floor review. Preserve
+every actual original exit and distinguish assertion, hash, corruption and
+infrastructure observations. A retained failing instance requires the reviewed
+independent VM postmortem on immutable/private copies before deciding whether
+the hash, routing or assertion needs correction; never turn a red run green.
+If the finite attempt passes, report observed cross-leaf/continuation coverage
+and non-reproduction without extending the pool. Do not dispatch again or
+advance the two-node mutation matrix without the required evidence.
+
+Only the existing handoff/review documents change here. Local links,
+whitespace, provenance and executable-scope checks pass; no new production
+code, dependency, test expectation, ignored gate, output budget or write
+policy changes. No helper is used; repetitive checks are deterministic and
+no model-cost saving is claimed. Documentation-push CI is separate from
+reviewed source `dea278c` and targeted run **43415472096**. Stages 4–5 remain
+partial/not quantified, stages 6–7 not reached, writes blocked and actual
+Windows/SteamOS/card use unqualified. Stop after recording/pushing this
+review and the exact started-run identity.
