@@ -1621,3 +1621,60 @@ Linux postmortem results are **unrun**, and new-source full CI remains separate
 and pending at this preparation point. The two-node mutation matrix stays
 gated. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
 casefold writes blocked and real card/Windows/SteamOS use unqualified.
+
+## Independent witness postmortem dispatched — 2026-11-13
+
+The interrupted session is recovered at clean local implementation
+**`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**. Its native baseline/rerun,
+exact 1,699-name retention, twelve controller/six answer controls, full lint
+and focused source review above are complete. No local test process is still
+running; no postmortem had been dispatched or pushed. Preceding documentation
+commit `69a5639` now passes full **43475302266**, checked as metadata only;
+its green result does not replace review of the new implementation source.
+
+From the clean implementation, actual preparation uses the cached reviewed
+original ZIP, verifies the fixed failed capsule, source/run/exit and original
+profile, and extracts **49 immutable witness files**. The ready manifest and
+`plan()` confirm **618 current source hashes**, the complete 49-file input
+inventory, unchanged archive digest and original trial exit **101**. No tool
+oracle, mount, screening search or trial is executed by this native preparation.
+The original target-run/archive/image identities remain those recorded above.
+
+After confirming the current remote tip, the implementation is pushed normally
+to `origin/casefold-rw`, preserving `69a5639`. The new workflow registers as
+**417693720**, `retained htree witness postmortem`, path
+**`.github/workflows/htree-descent-postmortem.yml`**, state active. A read of
+its runs at this exact source finds no previous attempt. A single successful
+`gh workflow run htree-descent-postmortem.yml --repo
+Shinomorisama/rust-fs-ext4 --ref casefold-rw` dispatch is followed only by
+read-only metadata retrieval, never a second dispatch.
+
+Started [run **43498677681**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43498677681)
+confirms event **`workflow_dispatch`**, head
+**`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`** and initial status
+**in progress**. Source full CI **43498618061** is also initially in progress.
+No postmortem artifact, live observation or passing outcome is claimed here.
+The original failed collision experiment is neither rerun nor resumed, and
+its eleven unexecuted candidates remain unexecuted.
+
+**Next bounded task:** leave these runs to finish between turns, then perform
+one consolidated evidence review. Verify new artifact run/source/digest/CRC,
+complete inventory and extracted bytes, prepared source/input identities,
+actual controller/answer controls and floor, all nine fresh tool statuses/
+reports, both read-only cold lookup orders and absent-name controls, inode
+337/882 observations, current-driver selected/actual/public-path observations,
+before/after judged consistency and unchanged original/private image hashes.
+Keep original exit 101 distinct from the new postmortem status. Inspect any
+failure's actual retained reports before deciding the next action; never
+automatically rerun, repair or regenerate this witness. A successful finite
+postmortem still needs classification review before changing hash, routing
+or the original test assertion, and cannot explain the lost earlier image.
+
+This dispatch record changes only the existing handoff/review documents;
+whitespace, local-link, provenance, shared-guide and scope checks pass.
+No implementation changes after reviewed `bf7125e`, additional helper,
+oracle execution on the host, experiment dispatch, limit or write-gate
+change occurs. Documentation-push CI is separate from these source-bound
+runs. Stages 4–5 remain partial/not quantified; stages 6–7 are not reached,
+the two-node mutation matrix remains gated, casefold writes blocked and
+actual Windows/SteamOS/card use unqualified.

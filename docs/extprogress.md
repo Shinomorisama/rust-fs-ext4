@@ -82,6 +82,38 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Independent witness postmortem dispatched — 2026-11-13:**
+  The interrupted work is recovered as clean implementation commit
+  **`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**. Local tests had finished;
+  no local build or postmortem remained running, and this commit had not yet
+  been pushed. The preceding documentation checkpoint `69a5639` now has
+  successful full CI **43475302266**, inspected as metadata only here.
+  The recorded baseline/retention/lint/control results are reused.
+
+  Actual cached-ZIP preparation and `plan()` verify **618 current source
+  hashes / 49 retained witness-file hashes**, the fixed archive and original
+  exit **101**, with no filesystem execution. After confirming the remote
+  tip and a clean tree, `bf7125e` is pushed to `origin/casefold-rw`. The new
+  manual workflow **417693720 / `htree-descent-postmortem.yml`** is active,
+  and no prior postmortem exists for this source. It is dispatched **once**.
+  Accepted [run **43498677681**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43498677681)
+  confirms `workflow_dispatch`, immutable head **`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**,
+  and initial status **in progress**. Source full CI **43498618061** is also
+  in progress. This records startup, not a passed Linux postmortem.
+
+  **Next bounded task:** let CI finish between turns, then perform one
+  consolidated exact-source/postmortem-artifact review: preparation/control
+  floors, original capsule/exit, retained input hashes, all nine tool calls,
+  both cold lookup orders/negative controls/inode identities, driver
+  observations, judged verdicts and final image hashes. Classify this
+  preserved instance before any correction. A failure retains its original
+  status and partial reports; do not rerun automatically, regenerate the
+  image or dispatch the collision experiment. New documentation-push CI is
+  separate from these source-bound runs. Stages 4–5 remain partial/not
+  quantified, stages 6–7 not reached, the lost earlier witness and two-node
+  matrix gate remain open, writes blocked and actual card/Windows/SteamOS
+  use unqualified.
+
 - **Independent witness postmortem runner prepared — 2026-11-13:**
   A separate manual `htree-descent-postmortem.yml` workflow and fixed-input
   controller now prepare the reviewed failed artifact **14031054992** from
@@ -14200,10 +14232,12 @@ reviewed full **43381484080** and Stage 0 **43381484039**. Targeted experiment
 then `13835` retains a one-name selected-leaf mismatch, exit 101; eleven
 candidates remain unrun. Archive/source/hash/raw-image review confirms a
 cross-leaf collision and odd continuation route, but fresh independent VM
-postmortem remains unrun. Its separate fixed-input runner now passes local
-1,699-name unit retention, twelve controller/six answer controls and full
-lint. Commit/prepare/push and dispatch it once, then review fresh evidence
-before any correction; do not rerun the experiment. The original lost failure and
+postmortem results remain pending. Its separate fixed-input runner passes
+local 1,699-name unit retention, twelve controller/six answer controls and
+full lint. Exact source `bf7125e` now has one started postmortem
+**43498677681** and source full CI **43498618061**, initially in progress.
+Review their fresh evidence after completion before any correction; do not
+rerun the experiment. The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
