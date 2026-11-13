@@ -1678,3 +1678,121 @@ change occurs. Documentation-push CI is separate from these source-bound
 runs. Stages 4–5 remain partial/not quantified; stages 6–7 are not reached,
 the two-node mutation matrix remains gated, casefold writes blocked and
 actual Windows/SteamOS/card use unqualified.
+
+## Independent postmortem reviewed; retained assertion failure classified — 2026-11-13
+
+The separate [postmortem **43498677681**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43498677681)
+passes every step in job **132138410597**, immutable source
+**`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**. Artifact **14073332429**,
+`htree-descent-witness-postmortem`, is **3,604,376 bytes**, SHA-256
+**`1f1f7daa9f4b3bcf57dde299f390956fec685ede2db745e1ef8ba6ad963355e5`**.
+The primary downloads actual bytes through the connected GitHub tool and
+verifies API digest, safe unique members, CRC, all **98 extracted files**
+and the job's actual uploaded-byte verification. No workflow is rerun.
+
+### Source, original evidence and executed controls
+
+Prepared manifest SHA-256
+`0548907cef33dc40f001f79611743485ee37282efe1f1389e5be9d875a5d7124`
+matches its sidecar and identifies the exact new source/run, original source
+`dea278c`, original run **43415472096**, artifact **14031054992** and original
+exit **101**. All **618 source paths/hashes** match `git show bf7125e:<path>`.
+All **49 retained witness files** match both their prepared hashes and the
+embedded original archive, whose digest remains
+`4490cf7307b2c018878aa33f5cdc31a197a0d3268e7372f9981f040658792a01`.
+The copied original failure log and record are byte-identical to the old
+archive. All three phase images and sidecars match their previous identities.
+
+The control log executes **12 Python tests**, OK. The Rust log executes all
+**six answer controls**, zero failed/ignored; the job reaches its actual
+**6/6 floor**. The fresh run's wrapper reaches **51 lines / 3,271 bytes**
+inside unchanged new-label limits. The live log records exactly nine oracle
+calls and two read-only kernel calls, all zero. All eleven raw stdout/stderr/
+status triplets exist with `Some(0)`. These are live observations; the Python
+control log's mocked completion message is not another filesystem execution.
+
+### Fresh independent observations
+
+| Check | Actual retained result |
+|---|---|
+| Independent hashes | Both names major `0xffd2c260`; minor `0xb71eb1ce` for `a_name_of_twenty_00121`, `0xe5af7c8f` for `café_863`. |
+| Named inode reports | Respectively **337 / 882**, regular, zero size, one link each. |
+| Directory/index reports | Directory inode 12 and the full index dump are byte-identical to the original saved reports. The raw odd boundary `0xffd2c261` routes to logical 50. |
+| Independent block maps | Logical **49 / 50** → physical **4434 / 4435**. |
+| First cold mount | Read-only flag confirmed; name 121 first, then name 863; lstat/open/fstat and empty content agree with inodes 337/882; absent-name control is ENOENT. |
+| Second cold mount | A new guest image/loop/mount, reversed first-name order; the same exact identities/content and absent-name control pass. |
+| Running kernel | Both fresh read-only reports identify **6.1.0-53-amd64**; stderr is empty. |
+| Nonrepairing checks | Before and after each execute all five checking passes, exit 0, judged `Clean`, with 1,512/16,384 files and 9,564/65,536 blocks. |
+
+The original indexed image, retained failure copy and fresh private-check
+image all retain SHA-256
+**`9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d`**.
+Final integrity reports agree with independently hashed bytes. The fresh
+parent-inode/index reports and independent block maps agree with the previous
+raw-byte review, reused through that unchanged image identity. No image is
+repaired or regenerated, and no host oracle or mount is used.
+
+Separate current-driver observations preserve both initial selections at
+leaf **49**, actual membership **49 / 50**, and successful public byte-path
+lookups to inode **337 / 882**. These source-bound driver observations are
+kept separate from the independent tools and Linux name resolution.
+
+### Classification and its limits
+
+**This retained instance falsifies the test's single-leaf assertion for a
+valid collision layout.** The two names have the same independently confirmed
+major hash and occupy different leaves, with the raw odd continuation marker
+between them. Linux resolves each to its saved inode in both fresh lookup
+orders, nonrepairing consistency checks are clean, and all image bytes remain
+unchanged. The current driver's public lookup also resolves both names on
+this image. No hash disagreement or infrastructure failure is observed in
+this instance.
+
+The published [ext4 hash-tree directory format](https://docs.kernel.org/filesystems/ext4/directory.html#hash-tree-directories)
+describes the low collision bit and possible scanning of following leaves
+in tree order. The current `src/htree.rs::lookup_leaf` contract returns a leaf
+that **might** contain the name; `find_entry_for_hash` chooses the greatest
+recorded raw bound at or below the query. With even query `0xffd2c260`, the
+odd continuation bound `0xffd2c261` does not select leaf 50 as the initial
+candidate. `src/path.rs` has the existing ordinary-directory fallback after
+a selected-leaf miss. The original test instead requires every name to be
+in that one initially selected leaf, which is stronger than the format and
+helper contract allow. Merely choosing leaf 50 would miss the other colliding
+name; a correction must account for the legal continuation and preserve
+meaningful routing verification.
+
+This classifies candidate **13835** only. It does not prove why the lost
+`673c16f` image failed, qualify other layouts/algorithms beyond their own
+evidence, or establish safe collision insertion, growth, recovery or casefold
+writes. Original run **43415472096** stays failed at exit **101**; the separate
+postmortem stays passed at exit **0**. No production behavior, test assertion
+or expectation is changed to turn the old run green.
+
+### Remaining gate and next bounded task
+
+Exact-source full CI **43498618061** and documentation-source full
+**43498977547** are still **in progress** at review. Completed-job metadata
+does not establish whole-suite floors, exact retained-name closure or a
+passed aggregate. This checkpoint audits the completed postmortem only;
+its source-bound full-CI artifact/retention review remains pending.
+
+**Next bounded task:** close the exact-source full CI when terminal, then
+prepare/review the collision-aware oracle contract and executed negative/
+positive controls before making a test-only correction. Keep all original
+six algorithm/signedness tests, corpus/query identities, independent hash
+evidence, mismatch capture, floors/limits and write gates. Make per-name
+independent hash agreement explicit in the corrected assertion. A valid continuation
+may explain a selected-leaf miss only when the raw boundary/placement/name
+evidence supports it. Wrong hashes, malformed/unsupported structures and
+genuine misrouting must still fail; unrestricted full-directory fallback
+must not substitute for index-routing verification. The two-node mutation
+matrix remains gated until that oracle work has its own tested closure.
+
+One authorized Terra/medium helper checks archive/source/input/control
+inventory; the primary reruns its deterministic audit and independently
+reviews the consequential fresh reports, image hashes and classification.
+No discrepancy or helper correction is needed; model-cost data is unavailable,
+so no saving is claimed. Documentation-only whitespace, links, provenance,
+shared-guide and scope checks pass. No new workflow/test/oracle is executed
+here. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
+casefold writes blocked and actual Windows/SteamOS/card use unqualified.

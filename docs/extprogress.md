@@ -82,6 +82,51 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Independent postmortem reviewed; retained assertion failure classified — 2026-11-13:**
+  Exact-source postmortem **43498677681**, job **132138410597**, passes at
+  **`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**. Artifact **14073332429**,
+  SHA-256 `1f1f7daa9f4b3bcf57dde299f390956fec685ede2db745e1ef8ba6ad963355e5`,
+  verifies all **98 files**, CRC/extracted bytes, **618 source hashes** and
+  **49 retained witness-file hashes** against the original fixed capsule.
+  Twelve Python controls and six Rust controls pass, with the actual six-test
+  floor. The original log/record/exit **101** remain unchanged and separate
+  from the postmortem's exit **0**. See the [consolidated classification review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#independent-postmortem-reviewed-retained-assertion-failure-classified--2026-11-13).
+
+  All nine fresh tool calls and both cold read-only Linux mounts return zero.
+  Both lookup orders find `a_name_of_twenty_00121` → inode **337** and
+  `café_863` → **882**, with empty regular files, correct open/fstat identity,
+  and ENOENT for the absent-name control on Linux **6.1.0-53-amd64**. Fresh
+  independent hashes agree on major **`0xffd2c260`**; physical leaves are
+  **4434/4435**, logical **49/50**. Fresh index/directory-inode reports equal
+  the original reports, retaining the raw **`0xffd2c261` → 50** continuation
+  route. Before/after nonrepairing checks execute all five passes and judge
+  clean. Original/failure/private image bytes retain indexed SHA-256
+  `9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d`.
+
+  **Classification of this retained instance:** the original oracle's
+  single-leaf membership assertion is too strong for a valid cross-leaf
+  collision. Published ext4 format documentation describes following leaves
+  for collisions; the helper promises a leaf that *might* contain the name.
+  Current-driver public byte-path lookup finds both expected inodes while
+  the initial candidate remains leaf 49 for both names. This evidence
+  qualifies this read-only instance, not general collision writes or the
+  cause of the lost earlier `673c16f` image. No assertion or production
+  behavior is corrected in this review.
+
+  **Next bounded task:** close exact-source full CI **43498618061** when
+  terminal, then prepare/review the collision-aware oracle contract and
+  meaningful red controls before a test-only correction. Retain all six
+  algorithm/signedness tests and original corpus/queries; preserve the independent
+  hash evidence and require per-name agreement in the corrected contract;
+  reject wrong hashes, unsupported/malformed indexes and genuine misrouting.
+  Do not replace routing verification with an unrestricted fallback scan or
+  simply ignore a selected-leaf miss. Source full CI and documentation CI
+  **43498977547** are still in progress at this review; their whole-suite/
+  retained-name closure is pending. No workflow is dispatched or rerun.
+  Stages 4–5 remain partial/not quantified, stages 6–7 not reached, the
+  two-node matrix remains gated, casefold writes blocked and actual
+  card/Windows/SteamOS use unqualified.
+
 - **Independent witness postmortem dispatched — 2026-11-13:**
   The interrupted work is recovered as clean implementation commit
   **`bf7125ee9c6070c29a6e286f6c80386a4cac4a85`**. Local tests had finished;
@@ -14232,12 +14277,14 @@ reviewed full **43381484080** and Stage 0 **43381484039**. Targeted experiment
 then `13835` retains a one-name selected-leaf mismatch, exit 101; eleven
 candidates remain unrun. Archive/source/hash/raw-image review confirms a
 cross-leaf collision and odd continuation route, but fresh independent VM
-postmortem results remain pending. Its separate fixed-input runner passes
-local 1,699-name unit retention, twelve controller/six answer controls and
-full lint. Exact source `bf7125e` now has one started postmortem
-**43498677681** and source full CI **43498618061**, initially in progress.
-Review their fresh evidence after completion before any correction; do not
-rerun the experiment. The original lost failure and
+postmortem **43498677681** is now reviewed as passed at `bf7125e`: all 98
+artifact files, 618 source hashes, 49 witness files, eleven statuses, both
+cold lookup orders, fresh hashes/inodes/raw reports and unchanged image bytes
+verify. The retained instance exposes an overstrict single-leaf assertion
+for a valid collision; current public lookup finds both expected inodes.
+Exact-source full CI **43498618061** remains in progress. Close that evidence,
+then prepare a collision-aware oracle contract/red controls before any
+test-only correction; do not rerun the experiment. The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
