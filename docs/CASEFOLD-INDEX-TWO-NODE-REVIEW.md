@@ -1373,3 +1373,137 @@ reviewed source `dea278c` and targeted run **43415472096**. Stages 4–5 remain
 partial/not quantified, stages 6–7 not reached, writes blocked and actual
 Windows/SteamOS/card use unqualified. Stop after recording/pushing this
 review and the exact started-run identity.
+
+## Targeted failure retained; saved-byte review complete — 2026-11-13
+
+The once-dispatched [targeted run **43415472096**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43415472096)
+is terminal **failure**, event `workflow_dispatch`, immutable head
+**`dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`**. Batch-zero job
+**131852143257** stops at the first test failure; batch one is skipped and
+the aggregate fails. The prior green full **43381484080** / Stage 0
+**43381484039** remain evidence for their own selections and do not cancel
+this red experiment. Latest pre-review documentation tip `fde95c6` passes
+its own full **43416109371**, inspected as metadata only here.
+
+### Archive, source and finite execution
+
+Artifact **14031054992**, `htree-descent-targeted-batch-0`, is **4,548,634
+bytes**, SHA-256
+**`4490cf7307b2c018878aa33f5cdc31a197a0d3268e7372f9981f040658792a01`**.
+Downloaded bytes agree with API metadata and the upload log; ZIP CRC,
+353 unique file members, complete extracted inventory and per-file bytes
+verify. Every archived `source-sha256.txt` path/hash matches `git show
+dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14:<path>`: all **613 tracked files**.
+The prepared manifest SHA-256 is
+`a24b863b165ae8ce9e7eee6a114fbacd0d367ddbba95b1d76f9d357170401a10`.
+The frozen manifest remains
+`45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`;
+its constituent digests, sixteen ordered candidate identities and seed/UUID
+formulas verify. Its existing contiguous 35,298-row screen is inspected,
+not rerun. The exact replay archive retains its previously fixed digest.
+
+| Actual trial | Original exit / outcome | Actual floor / retained observation |
+|---|---|---|
+| `replay` | 0 / passed | One executed test; four semantic record files equal the original replay bytes. |
+| `05103` | 0 / passed | One executed test; predicted collision confirmed, both names in one leaf. |
+| `06006` | 0 / passed | One executed test; predicted collision confirmed, both names in one leaf. |
+| `09099` | 0 / passed | One executed test; predicted collision confirmed, both names in one leaf. |
+| `11023` | 0 / passed | One executed test; predicted collision confirmed, both names in one leaf. |
+| `13835` | **101 / stopped** | Original `half_md4_signed` assertion fails; floor and controller layout report are unrun. |
+
+Five actual one-test floors pass. All six actual test logs retain the exact
+`half_md4_signed` selection; the failed log reports zero passed / one failed /
+zero ignored / five filtered. The Rust seed controls execute seven tests;
+the retained Python controller logs report fourteen legacy and twenty targeted
+controls. Their mocked trial messages are not additional Linux executions.
+Eleven candidates remain unrun, with no batch-one evidence or finite-success
+summary. No candidate is replaced, no trial retried, and no pool expanded.
+
+All **eighteen trial phase images** are 64 MiB and match their SHA-256
+sidecars. Across the six profiles, **9,000 original names, requests, independent
+hash answers and query records** are complete and agree on major/minor hashes.
+All six saved nonrepairing consistency verdicts are `Clean`. There are no
+selected-leaf mismatches in the first five trials; the final trial retains
+exactly one. The four passing candidate `collision-layout.json` reports
+have same-leaf pairs and no continuation routes; those layouts are
+inconclusive for continuation behavior. The failed trial has no such layout
+report because the controller preserves exit 101 before reaching that step.
+
+### Preserved failed instance and independent raw-byte checks
+
+Candidate **13835** uses seed **`0fca7f62ba785c0649a14ab6381e9270`**, UUID
+**`80fcf3c1fbdbfa27abe389e479b7ecef`**, signed half-MD4, 1 KiB blocks,
+root-only depth zero, directory inode **12**. The indexed image SHA-256 is
+**`9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d`**;
+`working-at-failure.img` is byte-identical. Original phase sidecars/logs,
+source identities, independent answers and failure status are preserved.
+
+The primary independently reads the saved image's superblock and first group
+inode-table location, compares raw inode 12 with `directory-inode.bin`, and
+decodes its depth-zero extent. That extent maps logical **0–50** to physical
+**4385–4435**; all 51 mappings and the entire mapped directory equal the
+retained diagnostics. Inode flags are **`0x81000`**, with CASEFOLD unset.
+This witness concerns an ordinary indexed directory used by the prerequisite
+oracle, not an end-to-end casefold write.
+
+Raw root entries agree with every retained route. The root has **50** entries;
+its penultimate route is **`0xfaf3e5be` → 49**, and final route is
+**`0xffd2c261` → 50**. Raw aligned/bounded directory records independently
+confirm these two names and identities:
+
+| Name / original bytes | Independent major / minor | Logical / physical leaf | Inode |
+|---|---|---|---|
+| `a_name_of_twenty_00121` / `615f6e616d655f6f665f7477656e74795f3030313231` | `0xffd2c260` / `0xb71eb1ce` | 49 / 4434 | 337 |
+| `café_863` / `636166c3a95f383633` | `0xffd2c260` / `0xe5af7c8f` | 50 / 4435 | 882 |
+
+Saved `hashes.stdout` independently reports both hash pairs, and saved
+`htree.stdout` agrees with both name/inode/hash observations. The query for
+`café_863` selects 49, records actual `[50]`, and reports `found: false`.
+Thus the saved bytes establish a real cross-leaf equal-major pair and the
+raw odd continuation boundary, rather than only predicting a collision.
+They do **not** yet establish fresh cold Linux name resolution, public API
+impact, corruption-free handling under a new oracle run, or which correction
+is appropriate. The earlier lost `673c16f` image remains unexplained.
+
+### Review scope, access and next bounded task
+
+The primary verifies the consequential source/hash/phase/name findings and
+performs the raw witness checks above. One authorized GPT-6.1 Terra/medium
+helper performs read-only inventory/source/hash-answer checks; the primary
+reruns its deterministic scripts and reviews actual output. It makes no
+tracked edit, filesystem qualification decision or external mutation. No
+model-cost data is available, so no cost saving is claimed.
+
+In this chat native Git/API and all eight required repository reads work;
+API metadata reports fork push/maintenance authorization, not a test write.
+Pinned Rust/components and chore verify, as do the checksum-verified chore
+binary and all 128 files from the immutable core archive. Native locked
+offline Cargo metadata preserves manifest/lock, and workspace/temp writes
+and required reference/package routes work. No native unit or new VM suite
+is executed for this documentation-only review. Direct artifact storage at
+`productionresultssa5.blob.core.windows.net` returns Forbidden both normally
+and through the supported permission retry. The connected GitHub artifact
+and job-log tools succeed, and actual artifact bytes are downloaded and
+verified in this workspace; direct CLI storage access remains a known
+limitation. This chat exposes environment status but no saved-environment
+creation/editing tool. No credentials, hosts or sibling checkout are changed.
+
+**Next bounded task:** prepare/review a source- and artifact-bound independent
+postmortem. In the prescribed CI VM only, verify immutable image identities
+before copying, then use private copies for fresh independent hashes,
+directory/inode observations, nonrepairing filesystem checks and cold read-only
+Linux lookup of both colliding names. Compare the inode identities, raw
+routes and actual cross-leaf continuation; retain original bytes, statuses
+and new reports separately. Do not regenerate this filesystem, rerun the
+targeted experiment, substitute candidates or repair the image. Classify
+this instance and stop for review before changing the hash, routing or test
+assertion. The two-node mutation matrix remains gated.
+
+This checkpoint changes only the two existing review/handoff documents.
+Whitespace, local links, provenance, shared-guide and scope checks pass;
+no production, tests, dependencies, floors, output limits, ignored gates or
+write gates change. No new workflow is dispatched or rerun. The VM postmortem
+is **unrun**, not passed or blocked by the failed experiment. Stages 4–5 stay
+partial/not quantified, stages 6–7 not reached, casefold writes blocked and
+real card/Windows/SteamOS use unqualified. New documentation-push CI is
+separate from the exact-source evidence reviewed here.

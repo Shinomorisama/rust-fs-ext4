@@ -82,6 +82,47 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Targeted failure retained; saved-byte review complete — 2026-11-13:**
+  The once-dispatched [run **43415472096**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43415472096)
+  at immutable **`dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`** is terminal
+  **failure**. Replay and candidates `05103`, `06006`, `09099`, `11023`
+  pass their actual one-test floors. Candidate **`13835`** fails the original
+  `half_md4_signed` assertion, exit **101**, and is retained; eleven candidates
+  remain unrun and batch one is skipped. No trial is retried or substituted.
+
+  Artifact **14031054992**, SHA-256
+  `4490cf7307b2c018878aa33f5cdc31a197a0d3268e7372f9981f040658792a01`,
+  verifies all 353 files/CRC/extracted bytes and all **613 exact-source hashes**.
+  The frozen manifest remains unchanged. All **eighteen trial phase images**
+  match sidecars; all **9,000** query/request/independent hash answers retain
+  original names and agree on hashes. The four passing candidate pairs occupy
+  one leaf each, so they do not qualify collision continuation.
+
+  The failed candidate has exactly one membership mismatch: `café_863`
+  (inode **882**) is in logical leaf **50**, physical **4435**, while the
+  single-leaf helper selects **49**. `a_name_of_twenty_00121` (inode **337**)
+  occupies leaf **49**, physical **4434**. Both independent major hashes are
+  **`0xffd2c260`**, and the raw root route to leaf 50 is **`0xffd2c261`**.
+  The primary verifies those bytes from the inode table, extent, mapped
+  directory and records, separately from the driver's JSON diagnostics.
+  The failure copy equals the indexed image, SHA-256
+  `9d60cf8562f3ef70d8f040701a1e549a9e1f1bb2ff747570707da5074f40992d`.
+  The saved nonrepairing filesystem verdict is clean. This is an ordinary
+  indexed-directory witness, with CASEFOLD unset, not a newly qualified
+  casefold operation. See the [consolidated evidence review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#targeted-failure-retained-saved-byte-review-complete--2026-11-13).
+
+  **Next bounded task:** prepare/review the independent postmortem, then use
+  the prescribed CI VM on hash-verified private witness copies for fresh
+  independent hash/inode observations, cold read-only Linux lookup and
+  nonrepairing filesystem checks. Preserve the original assertion and red
+  run; classify this instance before any correction. No postmortem oracle,
+  new experiment, screening search, workflow dispatch or production/test-policy
+  change runs in this checkpoint. The earlier lost failure remains unexplained;
+  the two-node mutation matrix stays gated. Stages 4–5 remain partial/not
+  quantified, stages 6–7 not reached, writes blocked and actual card/Windows/
+  SteamOS use unqualified. Documentation-only checkpoint CI is separate from
+  the reviewed experiment source and failed run.
+
 - **Exact-source runner review closed; targeted experiment dispatched — 2026-11-13:**
   Exact `dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14` passes full **43381484080**
   (all eleven / `ci-ok`) and Stage 0 **43381484039** (all 24 / 39 actual
@@ -14109,14 +14150,16 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: exact runner `dea278c` passes reviewed full
-CI **43381484080**, all eleven jobs/seven archives/retained names, and Stage 0
-**43381484039**, all 24 jobs / 39 actual floors. Original-six saved-image
-checks and frozen-candidate preflight pass. The targeted experiment is now
-started once as **43415472096**, immutable source `dea278c`; results remain
-pending review. Next inspect that run and consolidate actual evidence after
-completion, with independent classification before any correction. Stages
-4–5 stay partial/not quantified, writes blocked and stages 6–7 not reached.
+Latest Stage 0/3/5 checkpoint: exact runner `dea278c` passes the previously
+reviewed full **43381484080** and Stage 0 **43381484039**. Targeted experiment
+**43415472096** is now reviewed as failed: five actual trial floors pass,
+then `13835` retains a one-name selected-leaf mismatch, exit 101; eleven
+candidates remain unrun. Archive/source/hash/raw-image review confirms a
+cross-leaf collision and odd continuation route, but fresh independent VM
+postmortem remains unrun. Prepare/review that bounded postmortem before any
+correction; do not rerun the experiment. The original lost failure and
+two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
+writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
