@@ -1132,3 +1132,126 @@ remain partial/not quantified, stages 6–7 not reached, casefold writes blocked
 and Windows/SteamOS/real-card use unqualified. The original `673c16f` miss and
 the gate before the two-node mutation matrix remain open. Stop after pushing
 this review closure; implementation belongs to the next bounded checkpoint.
+
+
+## Targeted manifest runner prepared and locally validated — 2026-11-13
+
+Implementation **`fc52766dc8d5284600be78c8162d1ec543227041`** adds the separate
+`htree-descent-targeted.py` controller, its twenty Python controls and manual
+`htree-descent-targeted.yml` workflow. The original fixed controller/workflow
+remain byte-identical. The existing Rust experiment support gains an explicit
+targeted admission lane; the oracle's input selection uses it without changing
+the original 1,500-name generator, mismatch loop/assertion, or six test names.
+All seven existing seed-control names/assertions remain and gain targeted
+checks. No production source, dependency pin, output limit, floor, ignored
+gate or casefold write policy changes.
+
+The new lane requires the **exact frozen manifest bytes**, SHA-256
+`45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`,
+and admits only its sixteen canonical five-digit IDs or the exact passing
+replay. Seed/UUID bytes use the reviewed SHA-256 formula and preserve their
+raw order. Legacy `replay` / `00`–`31` admission remains separate. Mixed,
+missing, orphaned or non-UTF-8 inputs fail before any filesystem tool call;
+the explicit signed half-MD4-only guard remains. No arbitrary seed/UUID or
+expanded search range is exposed.
+
+The manual workflow is restricted to `casefold-rw`, checks out immutable
+`${{ github.sha }}`, retains the existing pinned Rust/core/harness setup,
+and defines two sequential batches of **nine then eight**. Each job has a
+60-minute ceiling and its execution step a **40-minute** ceiling. The
+controller also checks a 40-minute batch deadline and terminates only its
+owned process group on timeout, escalating after five seconds if necessary.
+It preserves timeout/original test status and available profiles; no trial
+is retried. Batch one depends on batch zero's successful tests **and upload
+verification**. The final aggregate requires both batches.
+
+Preparation verifies/copies the immutable frozen inputs and reviewed replay
+ZIP, all three 64 MiB phase-image digests, exact configured-image/corpus
+identities, clean source commit, all tracked-source hashes and workflow run
+identity. Before execution those identities, complete source inventory and
+bytes are checked again. Space preflight reserves all trial phases plus
+3 GiB for working/build/VM needs. Each trial retains its record, raw settings,
+original status, actual one-test floor and diagnostic images/logs. The existing
+independent audit checks all 1,500 names/answers and selected-leaf membership;
+no expectation or reserved-hash normalization is changed.
+
+For each passing candidate the added `collision-layout.json` checks predicted
+major/minor pairs against the independently checked query records and retains
+actual diagnostic leaf IDs and relevant raw odd continuation routes. It records
+same-leaf pairs as inconclusive; no replacement candidate is chosen. These
+are observations from retained Linux-created images and diagnostics, not a
+cold Linux namespace-resolution verdict or final independent raw-image audit.
+A disagreement, failed assertion, ambiguous capture or infrastructure failure
+stops further trials while preserving the original record/witness. A failing
+instance still needs the separately reviewed postmortem classification.
+
+Always-run upload retention covers complete local controller evidence. Actual
+uploaded ZIP verification requires matching source/run, advertised digest,
+CRC, safe members, **complete member inventory** and every retained file's
+bytes. The existing bounded visibility check for newly uploaded metadata is
+reused: at most five reads with the existing 30-second total delay; no test,
+old-artifact, storage or integrity-check retry is added. The old experiment
+is not reconfigured or weakened.
+
+### Executed preparation checks
+
+- Baseline is the already reviewed exact-code full CI **43363817868** at
+  `e4712c9`; the intervening `dcd2e77` changes documentation only. Its actual
+  1,699 native unit occurrences are captured before editing. Fresh
+  instrumented units retain **all 1,699 exactly**, zero failed/ignored,
+  **1,959 lines / 152,587 bytes**, with actual **1,699 / 1,699** floor and
+  unchanged shared 2,000 / 155,000 budget. The same 86 production files retain
+  **30,332 / 43,809 = 69.236915%** coverage. This is native unit scope, not VM
+  or new filesystem qualification.
+- Expanded Rust admission controls: **seven pass**, **15 / 798** output.
+  Targeted Python controls: **twenty pass**, **7 / 266**. Legacy Python
+  controls: **fourteen pass**, **25 / 2,511**. They cover frozen inputs,
+  schedule/order, clean source, changed run/inventory, replay refusal,
+  timeout/owned-group escalation, original red and zero-exit audit failure,
+  witness/error capture, same/cross-leaf reporting, and complete uploaded
+  inventory/byte verification. Controller execution is mocked in these
+  controls; their `artifact 1` and eight-trial success messages are not live
+  upload or Linux experiment evidence.
+- Two newly written control expectations initially fail: an ID-list helper
+  also counts the manifest's repeated last-index field, and a workflow check
+  counts conditional upload-verification clauses as unconditional retention
+  clauses. Restricting the first to `candidate_ids` and checking three plain
+  `always()` clauses plus two conditional verification clauses corrects those
+  controls. Original assertions are preserved; both focused suites are green.
+- Full workspace/all-target Clippy with CLI features and `-D warnings`, fmt,
+  parsed YAML structure, Python syntax, provenance (**611 tracked text files**),
+  shared-guide, whitespace and scope checks pass. The old fixed controller/
+  workflow, corpus generator, mismatch loop/assertion and six oracle names are
+  byte-checked unchanged. No new dependencies or helper agent are used.
+- From clean committed source `fc52766`, local `prepare --replay-zip` reuses
+  the already downloaded, fixed-digest reviewed replay archive, without any
+  oracle call. It verifies all replay/frozen data and retains **613 tracked
+  source-file hashes** (including the two non-text tracked files). A separate
+  plan check passes and confirms **seventeen scheduled inputs / zero trial
+  directories**. One plan-only review invocation correctly refuses an
+  untracked Python bytecode cache created by the review harness; removing
+  that generated cache and disabling bytecode allows the same check to pass.
+  No clean-source guard is bypassed and no existing attempt is overwritten.
+
+The prepared local source snapshot is historical `fc52766`; a later source
+commit must prepare its own attempt, as the source guard requires. No native
+hash screening is repeated. **No targeted Linux trial, independent selected-
+seed hash answer or failing witness is produced in this checkpoint.** Full CI
+for this new input/controller source is still pending; baseline green CI is
+not credited to the new implementation. The original `673c16f` miss remains
+unresolved and the two-node mutation matrix remains gated.
+
+**Next bounded task:** review new exact-source CI and the prepared runner,
+then dispatch the separate targeted workflow for a reviewed immutable source
+when its checks pass. Preserve the frozen sixteen plus one exact replay:
+at most **seventeen trials / two batches / 51 trial phase images / 25,500
+independent query/hash answers** on finite completion. The two separately
+prepared replay inputs add six reference-image copies, not extra trials.
+Stop at the first discrepancy/failure; otherwise report actual layout
+coverage and finite non-reproduction. Save exact source/run/artifact IDs and
+let long jobs finish between turns. Do not rerun the old 33-trial experiment,
+rescreen seeds, change expectations, or make a correction before a retained
+witness and independent classification. Stages 4–5 remain partial/not
+quantified, stages 6–7 not reached, writes blocked and Windows/SteamOS/real-
+card use unqualified. This checkpoint ends after its code/handoff push,
+without any manual workflow dispatch or live CI monitoring.

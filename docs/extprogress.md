@@ -82,6 +82,43 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Targeted manifest runner prepared and locally validated — 2026-11-13:**
+  Implementation `fc52766dc8d5284600be78c8162d1ec543227041` adds a separate
+  frozen-manifest admission lane, controller and manual source-bound workflow.
+  The legacy controller/workflow and original corpus/mismatch assertion/six
+  oracle names remain byte-identical. Seven seed-control names/assertions
+  remain and gain targeted checks; production/dependencies/limits/floors/
+  ignored/write gates stay unchanged. Only sixteen reviewed five-digit IDs
+  or exact replay enter the new lane; ambiguous or changed inputs fail early.
+
+  Twenty targeted Python controls, fourteen legacy controls, seven expanded
+  Rust controls, full Clippy/fmt, Python/YAML structure, provenance/guide and
+  scope checks pass. Fresh instrumented units retain **all 1,699 baseline
+  occurrences exactly**, zero failed/ignored, **1,959 / 152,587** output with
+  actual floor 1,699. Production-line unit coverage remains **30,332 / 43,809
+  = 69.236915%**, native unit scope. New-control expectation errors are
+  corrected without removing or weakening original assertions. See the
+  [targeted runner preparation review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#targeted-manifest-runner-prepared-and-locally-validated--2026-11-13)
+  for exact checks, capture/upload behavior and validation distinctions.
+
+  Clean-source local preparation verifies the fixed reviewed replay ZIP and
+  all phase/frozen identities, retains **613 source-file hashes**, and passes
+  plan validation for **nine plus eight scheduled inputs / zero trials**.
+  No host oracle, native rescreen, Linux dispatch or helper is used. Controller
+  regression messages are mocks, not executed Linux trials. Fresh exact-
+  source full CI is still pending; earlier reviewed green CI stays distinct.
+
+  **Next bounded task:** review the new exact-source CI/runner, then dispatch
+  the separate targeted workflow for a reviewed immutable source when checks
+  pass. Preserve seventeen trials / two sequential batches / 51 trial phase
+  images / 25,500 independent answers, plus six separate reference-image
+  copies. Capture and stop at the first discrepancy/failure, preserve original
+  status, and classify independently before any correction. Let CI finish
+  between turns; this checkpoint stops after code/handoff push with no manual
+  dispatch. The original lost failure remains open, stages 4–5 partial/not
+  quantified, stages 6–7 not reached, writes blocked and actual card/Windows/
+  SteamOS use unqualified.
+
 - **Corrected selector full-CI evidence closed — 2026-11-12:**
   Exact `e4712c9ffc7e5aac26b8a6a85d97fcab2b9c5593` passes full
   **43363817868**, all eleven jobs including `ci-ok`. All seven tier
@@ -14031,19 +14068,19 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: exact `e4712c9` full CI **43363817868**
-passes all eleven jobs and all seven archives/retained names verify. Native
-now reaches its whole-suite floor, trailing scripts/CLI and actual six-tier /
-4,686-execution verdict. Both whole suites retain 2,558; three unit contexts
-retain 1,699, with previous names and ignored gates preserved. Frozen
-sixteen-seed manifest checks pass; their targeted Linux validation and failure
-classification remain unrun. Next implement/test the separate targeted input,
-controller and workflow. Stages 4–5 stay partial/not quantified, writes
+Latest Stage 0/3/5 checkpoint: targeted runner `fc52766` is implemented and
+locally validated against the frozen sixteen plus one exact replay. All
+1,699 baseline unit occurrences remain, coverage stays 69.236915%, and
+expanded admission/controller/retention controls pass. Clean-source local
+preparation retains 613 source hashes and schedules nine plus eight, with
+zero trials executed. New-source full CI and targeted Linux evidence remain
+pending. Next review exact-source CI/runner, then dispatch the bounded
+workflow when checks pass. Stages 4–5 stay partial/not quantified, writes
 blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. The [corrected selector full-CI closure](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#corrected-selector-full-ci-evidence-closed--2026-11-12) verifies exact `e4712c9`, full **43363817868**, all eleven jobs/seven archives, native actual floors/trailing checks and six-tier/4,686 verdict. Retention is 2,558 whole / 1,699 unit with all earlier names and ignored gates preserved. Keep failed predecessor **43335337519** distinct. **Next bounded task: implement and test the separately reviewed targeted manifest input, controller and source-bound Linux workflow.** Reuse the [frozen sixteen-candidate manifest](evidence/htree-descent-targeted-2026-11-12/manifest.json), SHA-256 `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`; its re-audit passes. Do not repeat/extend the native search, substitute candidates or weaken the old replay/00–31 experiment. Prepare/review before dispatch; later execution remains capped at sixteen selected candidates plus one exact passing replay, two sequential batches / 51 trial phase images / 25,500 independent query/hash answers. Save exact source/run identities and let long CI finish between turns. Independently confirm collisions and actual layout, retaining and stopping on discrepancies/failure; native predictions and ordinary full-CI retention do not supply that evidence. Preserve every original test/assertion/selection/floor/output limit/write gate and ignored-fuzz gate. No production/oracle correction or two-node mutation matrix precedes a retained failure and independent classification. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. This review checkpoint stops after its documentation push; no manual dispatch or further experiment belongs to it.
+1. Reuse the verified setup and authorization. The [targeted runner preparation](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#targeted-manifest-runner-prepared-and-locally-validated--2026-11-13) implements separate immutable-manifest admission, controller and manual workflow at `fc52766`. Seven expanded Rust / twenty targeted Python / fourteen legacy controls and every one of 1,699 baseline unit occurrences pass; native unit coverage remains 69.236915%. Clean-source local preparation verifies the reviewed replay/frozen inputs and 613 source hashes, with seventeen scheduled inputs and zero trials executed. **Next bounded task: review exact-source CI and the runner, then dispatch the separate targeted workflow for a reviewed immutable source when checks pass.** Baseline full **43363817868** remains reviewed at `e4712c9`; do not credit it as new-runner CI. Reuse the frozen manifest SHA-256 `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`; do not rescreen/substitute seeds or rerun the legacy 33-trial experiment. Keep sixteen selected candidates plus one exact passing replay, two sequential batches / 51 trial phase images / 25,500 independent query/hash answers, plus six separately counted reference copies. Capture and stop on the first original failure, audit disagreement or infrastructure problem; preserve raw status and independently classify a retained witness before any correction. Save source/run/artifact IDs and let CI finish between turns. Preserve every original test/assertion/selection/floor/output limit/write gate and ignored-fuzz gate. The two-node mutation matrix remains gated, stages 4–5 partial/not quantified, writes blocked and stages 6–7 not reached. This implementation checkpoint ends after its code/handoff push; no manual workflow dispatch or live monitoring belongs to it.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
