@@ -939,3 +939,101 @@ and independent classification still precede any hash/routing/assertion
 correction or the two-node mutation matrix. Stages 4–5 remain partial/not
 quantified, stages 6–7 not reached, writes blocked and Windows/SteamOS/card
 use unqualified. Stop after freezing evidence and pushing this handoff.
+
+
+## Selector CI retention and measured native-line repair — 2026-11-12
+
+Full CI [**43335337519**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43335337519)
+at **`b82480cfed8eb189ea9bcd60633d0993a6d15c43`** finishes with nine successful
+jobs and two failures: native x86_64 and the dependent `ci-ok`. The native
+whole-suite tests all pass, but **4,008 lines / 247,165 bytes** exceed its
+4,000-line / 248,000-byte wrapper. Exit **65** occurs before the native suite
+floor, twenty trailing script checks, native installed-CLI step and six-tier
+aggregate verdict. They are **not reached** in this run. The separately
+successful installed-CLI job does not replace that missing native step.
+The original full run remains red; this review does not retroactively close it.
+
+The GitHub connector retrieves the seven tier ZIPs and six relevant job logs
+after direct workspace artifact access returns proxy CONNECT 403. Existing
+session credentials and grants are reused; no new token or network-policy
+change is needed. Every tier archive passes API run/source binding, advertised
+SHA-256, ZIP CRC, safe paths and extracted-file byte comparison:
+
+| Tier archive | Artifact | Verified SHA-256 |
+|---|---|---|
+| tier-logs-x86_64 | 14000533178 | `03339dfbbd6c706d9fee05ab74d9b3dd5e506c9aa3fc9f05891b688cb493b1eb` |
+| tier-logs-suite-in-vm | 13999099047 | `94b56839105a29a73efd52c484f24a312fd8e959c6a0e9eaaeca28a8648acb02` |
+| tier-logs-aarch64 | 13997009569 | `5964d0e8f52fabde295e4ec6125bfeff4670338999ef27b194a49cb58bb07147` |
+| tier-logs-semver | 13996738153 | `55370b0dfdb95fb66dbb6d22dafea6e9903ae70929133519f8539e868723acae` |
+| tier-logs-unit | 13996359099 | `8b83cd71a117d4309e28b0ddc485bc3f3bf211422dc952f00995253b9560e1db` |
+| tier-logs-wasm | 13995824528 | `2abc366f1456e810476b41e3463c6b44da1ee49242faa3fe0632c0a65c18f2f4` |
+| tier-logs-cli | 13995769246 | `79483644b9bd228e3db8ec159d4a76e19cd2c4f5f0dc8169262b679bf554473e` |
+
+Successful-name **multisets** are compared with the previously audited
+corrected source `ae93932` / full **43132271832**, preserving repeated names:
+
+| Context | Retained successes | Additional selector controls | Ignored |
+|---|---|---|---|
+| Native whole / Linux VM whole | 2,551 → **2,558** each | Exactly seven each | Same one fuzz each |
+| Native / dedicated / ARM units | 1,692 → **1,699** each | Exactly seven each | Zero |
+| Oracle / kernel / lwext4 | **225 / 36 / 9** | None | Zero |
+| ARM images | **527** | None | Same one fuzz |
+| Browser | **5** | None | Zero |
+
+Every baseline occurrence remains, no test reports `FAILED`, and every
+ignored-name multiset remains identical. Native preceding actual floors are
+unit **1,699 / 440**, oracle **225 / 140**, kernel **36 / 33**, lwext4 **9 / 7**.
+Linux VM whole reaches its actual **2,558 / 1,060** floor at **4,179 lines /
+256,808 bytes**, within unchanged 4,180 / 258,000 limits. No VM increase is
+made. Native/dedicated/ARM unit output is respectively **1,961 / 151,937**,
+**1,967 / 152,373**, **1,961 / 151,936**, each with an actual 1,699 / 440 floor.
+ARM images reach 527 / 450; browser reaches five / four. The standalone CLI
+job reaches **159 / 150**, and its log is byte-identical to the corrected
+baseline. Semver retains **196 applicable passes / 58 rule skips**; only
+elapsed durations differ in its otherwise identical log. These skips are
+not ignored filesystem tests. Full native completion is still missing.
+
+### Repair proof and unchanged gates
+
+The complete downloaded native `suite.log` has SHA-256
+`0a7eca90051936b9fe0e36a83a4503f39f8c1582197bf7b4eb7ee199730c4500`.
+Replaying **all original bytes** through the pinned native wrapper reproduces
+exit **65** at **4,000 / 248,000**. A second replay passes **4,020 / 248,000**,
+with byte-for-byte comparisons against both the first replay and original
+archive entry. Its real replay floor reports **2,558 / 1,060**. That floor is
+replay evidence, not a floor reached by the original failed job or a fresh
+filesystem execution. Nothing is filtered, summarized or suppressed.
+
+`chores.yml` changes only the native whole-suite line limit **4,000 → 4,020**
+and adds the measured source/run explanation. The **248,000-byte** limit,
+all command arguments, selections, assertions, floors, VM/unit limits and
+ignored-fuzz gates remain unchanged. Production code, tests, dependencies,
+workflows, independent-tool expectations and frozen evidence are byte-identical
+to `b82480c`. No new tests are needed for this limit-only change; the actual
+red run and identical-log red/green replay exercise the changed gate.
+All **87 CI-profile controls** pass at **94 / 6,383** output; provenance,
+shared-guide, whitespace, local-link and scope checks pass. Existing production
+coverage is reused from the unchanged source at **69.236915%** native unit
+scope, not newly measured or extended to VM coverage here.
+
+The frozen native manifest remains
+**`45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`**.
+Its file/source hashes, 35,298-row contiguous prefix, first-sixteen selection,
+all candidate identities/name bytes/groups/pairs and special-lead accounting
+are rechecked successfully; the selected sixteen remain native predictions.
+No native name-hash sweep is repeated, no targeted Linux trial is dispatched,
+and no new failing witness or classification is claimed. The ordinary full
+CI test-name review does not newly audit diagnostic phase images.
+
+**Next bounded task:** review automatic full CI for the repaired commit and
+verify the previously missing native floor, trailing checks and aggregate,
+with exact-source retention. Let it finish between turns; no live monitoring
+or manual rerun is part of this repair checkpoint. Only after that closure,
+add the separate targeted manifest input/controller and bounded Linux trials
+under the reviewed seventeen-trial / two-batch / 51-image / 25,500-query cap.
+Preserve the old fixed experiment. The original `673c16f` miss remains open,
+stages 4–5 partial/not quantified, stages 6–7 not reached, casefold writes
+blocked and actual Windows/SteamOS/card use unqualified. No helper is used;
+all repetitive archive/name checks are deterministic scripts with primary
+review. No model-cost saving is asserted. Stop after pushing the repair and
+this handoff; fresh corrected-source CI remains pending.

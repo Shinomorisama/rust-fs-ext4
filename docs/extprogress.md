@@ -82,6 +82,42 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Selector CI reviewed; measured native-line repair ready — 2026-11-12:**
+  Exact `b82480cfed8eb189ea9bcd60633d0993a6d15c43` full **43335337519**
+  is red: native whole tests pass **2,558**, but **4,008 / 247,165** output
+  exceeds 4,000 lines (bytes fit 248,000). The suite floor, twenty trailing
+  scripts, native CLI step and six-tier aggregate are not reached. Nine
+  other jobs succeed; native and `ci-ok` fail. This historical run stays red.
+
+  All seven tier archives verify source/digest/CRC/extracted bytes. Native/VM
+  whole names retain all 2,551 plus exactly seven controls (**2,558**), with
+  the same ignored fuzz. Three unit contexts retain all 1,692 plus seven
+  (**1,699**), zero ignored. Oracle/kernel/lwext4 retain exact **225/36/9**,
+  ARM images 527, browser five; standalone CLI retains 159 and byte-identical
+  output. Semver retains 196 passes / 58 rule skips, with elapsed-time-only
+  differences. VM actual floor passes 2,558 / 1,060 at **4,179 / 256,808**,
+  within unchanged 4,180 / 258,000. Earlier native floors also pass.
+
+  Identical complete native-log replay proves 4,000-line exit-65 and
+  **4,020-line** green, with the same 248,000 bytes cap, all bytes/selections
+  and real replay floor 2,558 / 1,060. Only that native line setting and its
+  measured comment change in `chores.yml`; production/tests/workflows,
+  dependency pins, every assertion/floor/ignored gate and frozen evidence
+  remain identical. All **87** CI-profile controls, provenance, guide,
+  whitespace, link and scope checks pass. The manifest re-audit passes;
+  no hash sweep, targeted Linux dispatch, manual rerun or helper is used.
+  The [retention and repair review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#selector-ci-retention-and-measured-native-line-repair--2026-11-12)
+  records exact archive identities, counts and validation distinctions.
+
+  **Next bounded task:** review automatic full CI at the repaired source,
+  including the missing native floor/trailing/aggregate and exact retention.
+  Let CI finish between turns. No further live monitoring or Linux experiment
+  belongs to this checkpoint. Once closed, prepare the separate targeted
+  Linux input/controller under the existing sixteen-candidate-plus-replay
+  bounds. The lost original failure remains open, stages 4–5 partial/not
+  quantified, stages 6–7 not reached, writes blocked and Windows/SteamOS/card
+  use unqualified. Fresh repaired-source full CI is still pending.
+
 - **Native targeted selector and frozen prefix complete — 2026-11-12:**
   Test-only implementation `0c4e879bd1591374f59fe973a8deeafc86f560dc`
   screens the unchanged 1,500-name corpus once and finds the first sixteen
@@ -13956,18 +13992,18 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: test-only native selector `0c4e879` passes its
-controls and a single bounded screen freezes sixteen collision-bearing seeds
-from the first 35,298. All 1,692 baseline unit occurrences remain plus seven;
-production-line unit coverage is 69.236915%. Frozen manifest/source/ledger
-checks pass. Linux hashes, cross-leaf placement and failure classification
-remain unrun. Review new-source automatic CI, including output headroom,
-before adding the separate Linux trial path. Stages 4–5 stay partial/not
+Latest Stage 0/3/5 checkpoint: full CI at `b82480c` preserves all old names
+plus seven selector controls, but the native 4,008-line log exceeds 4,000
+and blocks its final floor/trailing checks. The measured native limit is
+now 4,020 with the same byte limit and gates; identical-log red/green replay
+and 87 CI-profile controls pass. New-source full CI still needs review.
+The frozen sixteen-seed manifest re-audit passes; targeted Linux confirmation
+and failure classification remain unrun. Stages 4–5 stay partial/not
 quantified, writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. The [native selector checkpoint](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#native-targeted-selector-and-frozen-prefix--2026-11-12) freezes sixteen candidates in the [committed manifest](evidence/htree-descent-targeted-2026-11-12/manifest.json), SHA-256 `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`, after one complete prefix search. Do not repeat or extend it. **Next bounded task: review automatic CI for the pushed source and the frozen manifest; inspect and resolve measured retention/output-budget failures before adding Linux trials.** Prior native whole output was 3,996 / 4,000 lines and the new unit target adds twelve lines locally; preserve limits until actual evidence justifies a repair. Once green, add a separately reviewed test-only manifest path/controller without changing the old replay/00–31 experiment. Later Linux execution is capped at sixteen candidates plus one exact passing replay, two sequential batches, 51 trial phase images / 25,500 independent query/hash answers. Confirm actual collisions and layout independently; a native prediction is not a Linux witness. Preserve every original test/assertion/selection/floor/write gate and ignored-fuzz gate. Do not change production/oracle expectations or implement the two-node mutation matrix before a retained failing image and independent classification. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. This native checkpoint stops after saving/pushing; no manual dispatch, oracle or live CI monitoring belongs to it.
+1. Reuse the verified setup and authorization. The [selector CI review and measured repair](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#selector-ci-retention-and-measured-native-line-repair--2026-11-12) verifies all seven archives and exact retained names at `b82480c`, full **43335337519**. The original native run remains red at 4,008 / 4,000 lines; its final suite floor, trailing scripts/native CLI and six-tier aggregate were not reached. The native line limit alone is now 4,020, with unchanged 248,000 bytes and all selections/assertions/floors. Identical-log replay and 87 CI-profile controls pass. **Next bounded task: review automatic full CI at the repaired source, including missing native completion and exact retention.** Let it finish between turns; do not manually rerun the failed old source or repeat the native seed screen. After repaired-source closure, add the separately reviewed targeted manifest input/controller and Linux trials without changing the old replay/00–31 experiment. Reuse the [frozen manifest](evidence/htree-descent-targeted-2026-11-12/manifest.json), SHA-256 `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`; its re-audit passes. Later Linux execution stays capped at sixteen selected candidates plus one exact passing replay, two sequential batches / 51 trial phase images / 25,500 independent query/hash answers. Confirm actual collisions/layout independently. Preserve every original test/assertion/selection/floor/write gate and ignored-fuzz gate. No production/oracle correction or two-node mutation matrix precedes a retained failure and independent classification. Stages 4–5 remain partial/not quantified, writes blocked, stages 6–7 not reached. Stop after this repair/handoff push; targeted Linux trials and live CI monitoring remain outside it.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

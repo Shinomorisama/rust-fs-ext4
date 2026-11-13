@@ -863,7 +863,11 @@ tasks:
       # successes produce 3,954 lines / 242,309 bytes; old 3,950/242,000
       # returns 65. Identical-log replay passes at 4,000/245,000,
       # preserving every byte, test selection and the executed-test floor.
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4000 248000 -- scripts/test.sh --locked --release'
+      # Selector source b82480c, CI 43335337519: all 2,558 successes
+      # produce 4,008 lines / 247,165 bytes; 4,000 lines returns 65.
+      # Identical complete-log replay passes 4,020 / 248,000 without
+      # changing bytes, test selections, the existing ignored fuzz or floor.
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4020 248000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then
