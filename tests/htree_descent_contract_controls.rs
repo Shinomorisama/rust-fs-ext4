@@ -2,6 +2,9 @@
 #[path = "support/htree_descent_contract.rs"]
 mod contract;
 
+#[path = "support/htree_descent_answers.rs"]
+mod answers;
+
 use contract::{validate, Profile, Query, Refusal};
 
 const LINUX: &[u8] = include_bytes!("data/htree-descent-13835-directory.bin");
@@ -88,6 +91,16 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
     let seed: [u32; 4] = std::array::from_fn(|i| {
         u32::from_le_bytes(seed_bytes[4 * i..4 * i + 4].try_into().unwrap())
     });
+    let raw_hashes = include_bytes!("data/htree-descent-13835-hashes.bin");
+    assert_eq!(
+        fs_ext4_test_support::sha256_hex(raw_hashes),
+        "9e5fb6fd318f6f4a5945c8a24e6d7902833b1cd3ef532755b09279e0feed1fdc"
+    );
+    let expected_names: Vec<_> = saved
+        .lines()
+        .map(|line| hex::decode(line.split('\t').next().unwrap()).unwrap())
+        .collect();
+    let parsed_answers = answers::parse(raw_hashes, &expected_names, 1, &seed).unwrap();
     let mut spills = 0;
     let mut total = 0;
     for (index, line) in saved.lines().enumerate() {
@@ -98,6 +111,9 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
             u32::from_str_radix(fields[1], 16).unwrap(),
             u32::from_str_radix(fields[2], 16).unwrap(),
         );
+        let answer = &parsed_answers[index];
+        assert_eq!(answer.name, name);
+        assert_eq!((answer.major, answer.minor), independent);
         let selected = fields[3].parse().unwrap();
         let expected_leaf: u32 = fields[4].parse().unwrap();
         let expected_inode: u32 = fields[5].parse().unwrap();
@@ -386,5 +402,169 @@ fn hash_identity_routing_shape_and_membership_failures_are_refused() {
     assert_eq!(cases.len(), 33);
     for (name, bytes, profile, query, expected) in cases {
         assert_eq!(validate(&bytes, profile, query), Err(expected), "{name}");
+    }
+    strict_hash_transcript_refusals();
+}
+
+fn strict_hash_transcript_refusals() {
+    use answers::Refusal as R;
+    let names = vec![b"a".to_vec(), b"b".to_vec()];
+    let base = b"debugfs: dx_hash -h 1 -s 00000000-0000-0000-0000-000000000000 -- \"a\"\nHash of a is 0x100 (minor 0x7)\ndebugfs: dx_hash -h 1 -s 00000000-0000-0000-0000-000000000000 -- \"b\"\nHash of b is 0x200 (minor 0x0)\n";
+    let replace = |from: &[u8], to: &[u8]| {
+        let at = base.windows(from.len()).position(|s| s == from).unwrap();
+        let mut raw = base.to_vec();
+        raw.splice(at..at + from.len(), to.iter().copied());
+        raw
+    };
+    let mut cases: Vec<(&str, Vec<u8>, R)> = Vec::new();
+    for (label, from, to, expected) in [
+        (
+            "request name",
+            b"-- \"a\"".as_slice(),
+            b"-- \"x\"".as_slice(),
+            R::Echo,
+        ),
+        ("answer name", b"Hash of a ", b"Hash of x ", R::Answer),
+        ("request version", b"-h 1 ", b"-h 4 ", R::Echo),
+        ("request seed", b"-s 00000000-", b"-s 10000000-", R::Echo),
+        ("request options", b"dx_hash ", b"dx_hash -c ", R::Echo),
+        ("empty major", b" is 0x100 ", b" is 0x ", R::Answer),
+        (
+            "major overflow",
+            b" is 0x100 ",
+            b" is 0x100000000 ",
+            R::Answer,
+        ),
+        ("major nonhex", b" is 0x100 ", b" is 0x10g ", R::Answer),
+        ("major uppercase", b" is 0x100 ", b" is 0x1A0 ", R::Answer),
+        ("major sign", b" is 0x100 ", b" is 0x+100 ", R::Answer),
+        ("odd major", b" is 0x100 ", b" is 0x101 ", R::Answer),
+        ("empty minor", b"minor 0x7", b"minor 0x", R::Answer),
+        (
+            "minor overflow",
+            b"minor 0x7",
+            b"minor 0x100000000",
+            R::Answer,
+        ),
+        ("minor nonhex", b"minor 0x7", b"minor 0xg", R::Answer),
+        ("minor sign", b"minor 0x7", b"minor 0x+7", R::Answer),
+        ("missing minor", b" (minor 0x7)", b")", R::Answer),
+        ("missing close", b"(minor 0x7)", b"(minor 0x7", R::Answer),
+        (
+            "answer trailing junk",
+            b"(minor 0x7)",
+            b"(minor 0x7) junk",
+            R::Answer,
+        ),
+        ("nonASCII suffix", b"minor 0x7", b"minor 0x\xff", R::Answer),
+        (
+            "tool error",
+            b"Hash of a is 0x100 (minor 0x7)",
+            b"dx_hash: error",
+            R::Answer,
+        ),
+    ] {
+        cases.push((label, replace(from, to), expected));
+    }
+    cases.push(("empty output", Vec::new(), R::Echo));
+    cases.push((
+        "missing final newline",
+        base[..base.len() - 1].to_vec(),
+        R::Trailing,
+    ));
+    cases.push((
+        "extra blank line",
+        [base.as_slice(), b"\n"].concat(),
+        R::Trailing,
+    ));
+    cases.push((
+        "duplicate batch",
+        [base.as_slice(), base.as_slice()].concat(),
+        R::Trailing,
+    ));
+    let lines: Vec<_> = base.split_inclusive(|b| *b == b'\n').collect();
+    cases.push(("missing pair", lines[..2].concat(), R::Echo));
+    cases.push((
+        "reordered pairs",
+        [lines[2], lines[3], lines[0], lines[1]].concat(),
+        R::Echo,
+    ));
+    cases.push((
+        "swapped answers",
+        [lines[0], lines[3], lines[2], lines[1]].concat(),
+        R::Answer,
+    ));
+    cases.push((
+        "extra answer",
+        [lines[0], lines[1], lines[1], lines[2], lines[3]].concat(),
+        R::Echo,
+    ));
+    assert_eq!(cases.len(), 28);
+    for (label, raw, expected) in cases {
+        if label == "swapped answers" {
+            // The old answer-count check accepts this mismatched transcript.
+            assert_eq!(
+                raw.split(|b| *b == b'\n')
+                    .filter(|line| line.starts_with(b"Hash of "))
+                    .count(),
+                names.len()
+            );
+        }
+        assert_eq!(
+            answers::parse(&raw, &names, 1, &[0; 4]),
+            Err(expected),
+            "{label}"
+        );
+    }
+    for name in [
+        b"".as_slice(),
+        b".",
+        b"..",
+        b"a\0",
+        b"a\n",
+        b"a\r",
+        b"a\"",
+        b"a\\",
+        b"a/",
+        &[b'a'; 256],
+    ] {
+        assert_eq!(
+            answers::parse(base, &[name.to_vec()], 1, &[0; 4]),
+            Err(R::Name),
+            "name={name:?}"
+        );
+    }
+    assert_eq!(answers::parse(base, &[], 1, &[0; 4]), Err(R::Bounds));
+    assert_eq!(
+        answers::parse(base, &vec![b"a".to_vec(); 1501], 1, &[0; 4]),
+        Err(R::Bounds)
+    );
+    assert_eq!(
+        answers::parse(&vec![0; 1024 * 1024 + 1], &names, 1, &[0; 4]),
+        Err(R::Bounds)
+    );
+    assert_eq!(
+        answers::parse(base, &[b"a".to_vec(), b"a".to_vec()], 1, &[0; 4]),
+        Err(R::Duplicate)
+    );
+    assert_eq!(answers::parse(base, &names, 6, &[0; 4]), Err(R::Profile));
+
+    // Synthetic grammar controls, not independent hashes for these names.
+    for version in 0..=5 {
+        for name in [b"raw\xff\x80".as_slice(), b"n is 0x0 (minor 0x0)"] {
+            let mut raw = format!(
+                "debugfs: dx_hash -h {version} -s 00000000-0000-0000-0000-000000000000 -- \""
+            )
+            .into_bytes();
+            raw.extend_from_slice(name);
+            raw.extend_from_slice(b"\"\nHash of ");
+            raw.extend_from_slice(name);
+            raw.extend_from_slice(b" is 0x0 (minor 0xffffffff)\n");
+            let parsed = answers::parse(&raw, &[name.to_vec()], version, &[0; 4]).unwrap();
+            assert_eq!(
+                (parsed[0].name.as_slice(), parsed[0].major, parsed[0].minor),
+                (name, 0, u32::MAX)
+            );
+        }
     }
 }

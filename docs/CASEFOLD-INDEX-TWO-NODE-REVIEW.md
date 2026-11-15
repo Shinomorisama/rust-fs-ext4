@@ -2017,3 +2017,108 @@ complete inventory pairing. Preserve original selected/actual observations
 and prove old-red/new-contract-green without recreating the witness. Stages
 4–5 remain partial/not quantified, stages 6–7 not reached, the two-node matrix
 gated, casefold writes blocked and actual Windows/card/SteamOS use unqualified.
+
+## Budget-repair CI closed; strict hash-answer parser prepared — 2026-11-14
+
+### Exact repair-source closure
+
+Full [43677747713](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43677747713)
+at **`9fcda0051e663869ecbd12c3827842f3c009e618`** passes all eleven jobs,
+including actual VM job **132702054713**, native **132702054704** and `ci-ok`.
+All seven current tier archives and all seven reviewed `bf7125e` /
+**43498618061** comparison archives verify API source/run identity, size and
+SHA-256, CRC, safe unique members, complete extracted inventory and every byte.
+
+| Archive | Artifact | SHA-256 |
+|---|---|---|
+| VM | 14149050723 | `62e021a7d1cb1872d4932d7c005e891eca74902360b8a85b38d7661835dc5111` |
+| native | 14149005440 | `6fe8069789739efcee94f7e253944ba982123deb04cd5ead046ed21fb6db4e33` |
+| CLI | 14147755077 | `cad129ad8ce674c5f31bccce5b30a8bcdcdd6c44860ded9601afb63e1a8d58a3` |
+| unit | 14147620727 | `99d65af78cb0f22434b36a685ea29c203cf9c435550fcaf9f4da07297ad39fea` |
+| semver | 14147620393 | `93d5e468a5effcb9f32b168cf5941ef7731a7d44e3e1f6b2d0a39c575fd54366` |
+| ARM | 14146973469 | `df556d229c4dc25802f798b9eb1fab157731350f1308abcd0e214f05bd3f665a` |
+| browser | 14146862485 | `9e9cc336e3df0c8751346d4253fd957ac91b57635d3b5ca26e06c80762451e63` |
+
+Exact successful-name multisets retain all **2,558 + two controls = 2,560**
+whole-suite occurrences and the same ignored fuzz in both native/VM. All
+three unit contexts retain **1,699 + two = 1,701**, zero ignored; native
+oracle/kernel/lwext4 remain **225/36/9**, ARM images **527** with unchanged
+ignored fuzz, browser **five**. CLI and all twenty trailing shell reports
+retain exact bytes. Semver retains **196 passes / 58 rule skips**; semver
+and static-library freshness reports differ only in elapsed durations.
+
+Actual native logs reach all six existing floors and **six green tiers /
+4,690 executions**; actual VM floor reports **2,560 / 1,060**. Native whole
+**4,013 lines / 247,161 bytes** fits **4,020 / 248,000**; VM **4,183 /
+256,984** fits corrected **4,200 / 258,000**. This closes the repair's full
+suite/log evidence separately from the new parser below. The native/VM
+descent-image archives are not newly audited and no new image matrix is
+qualified. The original failed targeted experiment remains failed.
+
+### Contract review and strict answer preparation
+
+The existing private route validator is unchanged. Review finds no blocker
+within its stated ordinary 1 KiB / FILETYPE / metadata_csum / root-only
+profile and byte bounds. Known effective version, name/major/minor binding,
+complete unique bounded leaf references, exact initial selection and adjacent
+same-major odd continuations are checked before accepting membership. Its
+all-leaf structural/duplicate scan does not expand the admissible routing
+set. It still requires independently checked checksum-clean inputs; it does
+not validate CRCs, physical ownership, volume consistency or write admission.
+Complete expected-corpus/inventory pairing remains the integration caller's
+obligation. No general/deeper/casefold write qualification follows.
+
+New private `tests/support/htree_descent_answers.rs` is disconnected from the
+live oracle. It requires exact ordered raw names, version and seed, then
+consumes one exact command echo and one matching name-bound major/minor
+answer per request, with exactly one final newline and no trailing output.
+Numeric fields require one to eight lowercase hex digits and an even major;
+raw filenames are never converted lossily to UTF-8. Query count is bounded
+at 1,500, transcript bytes at 1 MiB, with unique names and the existing
+quoted-batch name restrictions. The caller must separately verify tool
+success, compare the returned hashes with current computation, and bind the
+complete corpus/inventory. This is an observed-output parser, not an
+independent hash implementation or a filesystem validator.
+
+`tests/data/htree-descent-13835-hashes.bin` is the **unchanged 217,715-byte**
+`batch-0/trials/13835/hashes.stdout` from original artifact **14031054992**,
+run **43415472096**, source `dea278c`. Its SHA-256 is
+`9e5fb6fd318f6f4a5945c8a24e6d7902833b1cd3ef532755b09279e0feed1fdc`.
+The fixed original ZIP digest and extracted-file bytes are reverified before
+copying; no filesystem tool or witness regeneration is used. All **1,500**
+parsed names and both hashes match the existing independently sourced TSV.
+The existing control still checks current hashes/selections, every expected
+leaf/inode, exactly one legal continuation and the false original single-leaf
+predicate. All original fixture/query bytes retain their recorded hashes.
+
+Two existing control-test names are retained and expanded with **43** parser
+refusals: 28 malformed transcript/order/name/version/seed/numeric cases, ten
+invalid names and five bounds/duplicate/unsupported-version cases. A swapped
+answer transcript preserves the old successful answer count while strict
+parsing refuses it. Twelve synthetic positives cover six version tags,
+non-UTF-8 bytes, delimiter-like names and numeric extremes; these are grammar
+controls, not new independent hash/profile qualification.
+
+An intentionally invalid parser that bypasses command-echo validation causes
+an actual **exit 101 / one passed / one failed / zero ignored**, with the
+request-name rejection failing. It is restored byte-for-byte and the two-test
+target/floor passes. Fresh complete native baseline and final instrumented
+unit logs retain the exact **1,701** passing-name multiset, zero failed or
+ignored. Production-line native unit coverage stays **30,332 / 43,809 =
+69.236915%**. Final instrumented output **1,967 / 153,004** fits unchanged
+unit caps **2,000 / 155,000** and actual floor 1,701. Full lint passes.
+The previously recorded generated-fixture limit on local shell checks is
+not rerun or counted as passed. No helper is used.
+
+The six live oracle tests, diagnostics, route validator, production source,
+original fixtures/experiment controllers, dependencies, workflows, all
+limits/floors/ignored gates and write policy are unchanged. No VM or filesystem
+oracle is executed and no manual workflow is dispatched. New-source automatic
+CI still needs its own review; green `9fcda00` does not qualify these additions.
+Next review this parser/source CI, finish complete corpus/inventory pairing,
+then integrate the reviewed test-only correction into all six oracle tests.
+Preserve selected/actual observations separately from legal continuation and
+prove old-red/new-contract-green without rerunning the experiment or recreating
+the witness. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
+the two-node matrix gated, casefold writes blocked and actual Windows/card/
+SteamOS use unqualified.
