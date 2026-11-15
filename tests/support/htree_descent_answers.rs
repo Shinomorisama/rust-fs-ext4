@@ -1,6 +1,6 @@
 //! Strict parsing of retained ordinary-directory dx_hash batches.
 //!
-//! This private helper is not wired into the live oracle yet. The caller checks
+//! This private helper serves the live oracle and its controls. The caller checks
 //! tool success and supplies the exact ordered request names/version/seed. The
 //! accepted grammar is the observed raw stdout, including each command echo;
 //! no lossy UTF-8 conversion or answer-count-only fallback is permitted.

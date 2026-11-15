@@ -16,6 +16,7 @@ pub struct Evidence {
 pub struct Inventory {
     pub version: hash::HashVersion,
     pub locations: HashMap<Vec<u8>, Vec<u32>>,
+    pub hash_stdout: Vec<u8>,
 }
 
 impl Evidence {
@@ -194,8 +195,8 @@ impl Evidence {
         std::fs::write(self.base.join("entries.jsonl"), entries).unwrap();
         std::fs::write(self.base.join("mapping.jsonl"), maps).unwrap();
 
-        // Keep the raw batch and tool answers; do not make our hashes the
-        // diagnostic oracle or change the caller's selected-leaf assertion.
+        // Keep the raw batch and answers. The caller binds and validates each
+        // answer separately from the original first-leaf observations.
         let mut requests = Vec::new();
         for name in names {
             assert!(!name
@@ -222,7 +223,11 @@ impl Evidence {
                 .count(),
             names.len()
         );
-        Inventory { version, locations }
+        Inventory {
+            version,
+            locations,
+            hash_stdout: out.stdout,
+        }
     }
 
     pub fn query(
@@ -243,6 +248,11 @@ impl Evidence {
             format!("{{\"wrong\":{wrong}}}\n"),
         )
         .unwrap();
+    }
+
+    pub fn contract(&self, summary: &str, queries: &str) {
+        std::fs::write(self.base.join("contract-result.json"), summary).unwrap();
+        std::fs::write(self.base.join("contract-queries.jsonl"), queries).unwrap();
     }
 }
 

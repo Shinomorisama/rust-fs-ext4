@@ -82,6 +82,66 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Collision-aware correction integrated into all six oracle tests — 2026-11-15:**
+  Both prerequisite sources now pass reviewed full CI: strict parser
+  `76c2113` / **43682682730** and complete pairing `1e200d7` /
+  **43685112021**, all eleven jobs each. All fourteen current and seven
+  comparison tier archives verify source/run identity, size/digest/CRC,
+  complete inventory and every extracted byte. Exact baseline names and
+  ignored cases retain **2,560** whole / **1,701** units in all three
+  contexts, oracle/kernel/lwext4 **225/36/9**, ARM images **527**, browser
+  **five**, CLI **159** and all twenty trailing scripts. Actual native
+  **six tiers / 4,690** and VM **2,560 / 1,060** floors pass; whole output
+  stays within current caps. New descent-image archives are not qualified
+  merely by this log closure.
+
+  All six existing `htree_index_descent_oracle` tests now use one shared
+  test-only verdict: exact per-name independent hash parsing, complete
+  expected corpus/inventory pairing, raw initial selection and only adjacent
+  same-major odd continuation admission. Actual profile comes from mounted
+  superblock/inode settings. Original parser observations must also agree
+  with raw membership; wrong found/actual observations cannot be rescued by
+  a correct raw scan. Independently checked checksum-clean input remains a
+  prerequisite. Production behavior and casefold write policy do not change.
+
+  Original `queries.jsonl` selected/found/actual and `result.json.wrong`
+  first-leaf meanings are preserved. New `contract-result.json` records the
+  corrected verdict and `contract-queries.jsonl` records every admitted
+  candidate/actual/inode/permitted set. A refusal emits no partial accepted
+  rows. Existing experiment admission still rejects old first-leaf misses;
+  controllers and historical runs are unchanged and no experiment is rerun.
+
+  Before changing the live assertion, the shared verdict with the old
+  first-leaf-only rule produces actual **101 / one passed / one failed /
+  zero ignored** on the unchanged Linux witness. Removing that overstrong
+  rule makes the same control green: **1,500** accepted queries, exactly
+  **one** continuation, while the old miss count remains **one**. Fourteen
+  integrated failure controls and invalid-capture controls pass, retaining
+  all original **33 / 43 / 21** route/parser/pairing refusals. Both original
+  native control names and all six oracle names/corpus/settings remain.
+
+  The preceding exact-source native baseline is reused; fresh full
+  instrumented units retain all **1,701** passing occurrences, zero failed/
+  ignored, **1,967 / 153,004** output within **2,000 / 155,000**. Native
+  production-line unit coverage remains **30,332 / 43,809 = 69.236915%**;
+  full lint passes. **14 + 20 + 12 = 46** mocked Python controller controls
+  pass; their unittest summaries are counted separately, not by the Rust
+  floor parser. No real filesystem oracle/VM or manual workflow runs here.
+  One authorized Terra/medium helper audits CI evidence; the primary reruns
+  its audit and reads the consequential logs. No corrections are needed;
+  cost is unavailable, with no savings claim. See the [integration review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#collision-aware-verdict-integrated-into-the-six-oracle-tests--2026-11-15).
+
+  **Next bounded task:** review this exact source's automatic full CI after
+  terminal, including all retained tier names/floors/budgets and native/VM
+  descent captures for the six algorithms/signedness profiles. Verify each
+  raw name, independent major/minor, original selected/found/actual and old
+  miss count alongside the separate contract rows/verdict, complete corpus,
+  image hashes and clean independent checks. Local witness proof is not new
+  VM execution or artifact qualification. Preserve original failed runs;
+  do not rerun the experiment or regenerate its witness. Stages 4–5 remain
+  partial/not quantified, stages 6–7 not reached, two-node matrix gated,
+  casefold writes blocked and actual Windows/card/SteamOS use unqualified.
+
 - **Complete corpus/inventory pairing prepared privately — 2026-11-15:**
   Strict-parser source `76c2113` / full **43682682730** is still in progress
   at this checkpoint: native **132716968237** and VM **132716968236** are
@@ -14483,17 +14543,21 @@ answers, with 43 rejection cases and unchanged 1,701-unit/coverage baseline.
 Complete expected-corpus/inventory pairing is now prepared privately and
 passes all 1,500 retained queries, 21 batch refusal cases and an executed
 completeness-bypass red control; all 1,701 units and coverage are retained.
-Strict-parser full **43682682730** remains in progress, not reviewed green.
-Review pending source CI and the batch contract, then integrate and
-independently qualify the test-only correction while preserving original
-first-leaf observation/result meanings; do not rerun the old experiment.
+Strict-parser **43682682730** and pairing **43685112021** now pass reviewed
+full CI, retaining all seven tier archives per source and actual native/VM
+floors. The test-only correction is integrated into all six oracle tests,
+preserving original first-leaf observations/results and adding separate
+contract captures. Unchanged witness old-rule-red/new-contract-green,
+all 1,701 native units, unchanged coverage and full lint pass. Review new
+exact-source CI and all six profiles' new contract/image evidence before
+independent qualification; do not rerun the old experiment.
 The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. The measured VM-budget repair passes reviewed full **43677747713** at `9fcda00`, with all seven current/baseline tier archives and actual native/VM floors. Strict parser and complete corpus/inventory pairing are prepared privately; pending exact-source CI still needs review after it is terminal. Review the batch contract and evidence, then integrate the collision-aware correction into all six existing oracle tests. Preserve exact independent name/version/seed/major/minor agreement, initial selection separately from continuation membership, and original selected/found/actual records. Keep `result.json.wrong` as the first-leaf-miss measure consumed by experiment admission; capture the corrected contract verdict separately and review consumers before changing assertions. Prove old-red/new-contract-green on the unchanged witness. Original targeted run **43415472096** remains failed; independent postmortem **43498677681** and postmortem-source full **43498618061** are already reviewed. Do not dispatch/rerun the experiment, rescreen candidates or regenerate the witness. New-source CI remains separate from earlier source closure. The lost earlier failure and two-node matrix remain open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
+1. Reuse verified setup and authorization. The test-only collision correction is integrated into all six existing oracle tests; parser/pairing sources pass reviewed full 43682682730 / 43685112021. Review the new integration source's automatic CI after terminal: all seven tier archives, retained names/floors/output caps, and native/VM descent captures across all six algorithm/signedness profiles. Bind every independent name/version/seed/major/minor answer, complete corpus, original selected/found/actual and result.json.wrong first-leaf measure to the separate contract rows/verdict, raw directory membership, image hashes and clean checks. Preserve historical statuses and do not rerun the experiment, rescreen or regenerate the witness. Original targeted 43415472096 remains failed; reviewed independent postmortem 43498677681 and postmortem-source full 43498618061 remain separate. Completion alone is not successful evidence audit or broader qualification. The lost earlier failure and two-node matrix remain open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

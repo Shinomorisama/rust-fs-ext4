@@ -1,4 +1,4 @@
-//! Private ordinary-directory oracle contract, not wired into the live oracle yet.
+//! Private ordinary-directory contract shared by the live oracle and controls.
 //!
 //! The caller must supply independently checked, checksum-clean directory bytes
 //! and name-bound independent hash answers. The admitted profile is ordinary,

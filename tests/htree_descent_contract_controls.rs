@@ -5,6 +5,9 @@ mod contract;
 #[path = "support/htree_descent_answers.rs"]
 mod answers;
 
+#[path = "support/htree_descent_verdict.rs"]
+mod verdict;
+
 use contract::{validate, validate_corpus, Profile, Query, Refusal};
 
 const LINUX: &[u8] = include_bytes!("data/htree-descent-13835-directory.bin");
@@ -105,6 +108,7 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
     let mut total = 0;
     let mut all_queries = Vec::new();
     let mut single_admissions = Vec::new();
+    let mut observed = Vec::new();
     for (index, line) in saved.lines().enumerate() {
         let fields: Vec<_> = line.split('\t').collect();
         assert_eq!(fields.len(), 6);
@@ -150,6 +154,13 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
             effective_version: 1,
             selected: current_selected,
         });
+        observed.push(verdict::Observed {
+            name: &expected_names[index],
+            computed: (computed.major, computed.minor),
+            selected: current_selected,
+            found: current_selected == expected_leaf,
+            actual: vec![expected_leaf],
+        });
         total += 1;
     }
     assert_eq!((total, spills), (1500, 1));
@@ -157,6 +168,26 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
         validate_corpus(LINUX, profile(1024, true), &expected_names, &all_queries).unwrap(),
         single_admissions
     );
+    let corrected = verdict::evaluate(
+        LINUX,
+        profile(1024, true),
+        &seed,
+        1,
+        &expected_names,
+        raw_hashes,
+        &observed,
+    );
+    assert_eq!(corrected.as_ref().unwrap(), &single_admissions);
+    assert_eq!(observed.iter().filter(|o| !o.found).count(), 1);
+    let (summary, rows) = verdict::capture(&expected_names, &corrected);
+    assert!(summary.contains("\"queries\":1500,\"accepted\":1500,\"continued\":1,\"passed\":true"));
+    assert_eq!(rows.lines().count(), 1500);
+    assert!(rows
+        .lines()
+        .any(|line| line.contains("\"name_hex\":\"636166c3a95f383633\"")
+            && line.contains("\"candidate\":49,\"actual_leaf\":50,\"inode\":882")
+            && line.contains("\"permitted_leaves\":[49, 50],\"continued\":true")));
+    integrated_verdict_refusals(&expected_names, &seed, raw_hashes, &observed);
     for (name, hash, leaf, inode) in [
         (
             b"a_name_of_twenty_00121".as_slice(),
@@ -173,7 +204,7 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
         );
         assert_eq!(accepted.permitted_leaves, [49, 50]);
         // The preserved Linux-valid counterexample still falsifies the old
-        // assertion. The live oracle and original failed run are unchanged.
+        // assertion. Original observations and the failed run stay unchanged.
         let old_found = fs_ext4::dir::parse_block(&LINUX[49 * 1024..50 * 1024], true)
             .unwrap()
             .iter()
@@ -421,6 +452,115 @@ fn hash_identity_routing_shape_and_membership_failures_are_refused() {
     }
     strict_hash_transcript_refusals();
     complete_corpus_pairing_refusals();
+}
+
+fn integrated_verdict_refusals(
+    names: &[Vec<u8>],
+    seed: &[u32; 4],
+    stdout: &[u8],
+    observed: &[verdict::Observed<'_>],
+) {
+    use verdict::Refusal as R;
+    let p = profile(1024, true);
+    let evaluate =
+        |o: &[verdict::Observed<'_>]| verdict::evaluate(LINUX, p, seed, 1, names, stdout, o);
+    let check = |label: &str, result: verdict::Verdict, expected| {
+        assert_eq!(result, Err(expected), "{label}");
+        let (summary, rows) = verdict::capture(names, &result);
+        assert!(
+            summary.contains("\"accepted\":0,\"continued\":null,\"passed\":false"),
+            "{label}"
+        );
+        assert!(rows.is_empty(), "{label}");
+    };
+    let mut cases = Vec::new();
+    let mut changed = observed.to_vec();
+    changed[0].name = b"another-name";
+    cases.push(("observed name binding", changed, R::Observations));
+    let mut changed = observed.to_vec();
+    changed[0].computed.0 ^= 2;
+    cases.push(("computed major", changed, R::Contract(Refusal::Hash)));
+    let mut changed = observed.to_vec();
+    changed[0].computed.1 ^= 1;
+    cases.push(("computed minor", changed, R::Contract(Refusal::Hash)));
+    let mut changed = observed.to_vec();
+    changed[0].selected = 0;
+    cases.push((
+        "initial selection",
+        changed,
+        R::Contract(Refusal::Selection),
+    ));
+    let mut changed = observed.to_vec();
+    changed[0].found = !changed[0].found;
+    cases.push(("original found observation", changed, R::Observations));
+    let mut changed = observed.to_vec();
+    changed[0].actual.clear();
+    cases.push(("missing actual observation", changed, R::Observations));
+    let mut changed = observed.to_vec();
+    changed[0].actual.push(observed[0].actual[0]);
+    cases.push(("duplicate actual observation", changed, R::Observations));
+    let mut changed = observed.to_vec();
+    changed[0].actual[0] = 0;
+    cases.push(("wrong actual observation", changed, R::Observations));
+    assert_eq!(cases.len(), 8);
+    for (label, changed, expected) in cases {
+        check(label, evaluate(&changed), expected);
+    }
+    check(
+        "observation count",
+        evaluate(&observed[..1499]),
+        R::Observations,
+    );
+    let mut wrong_stdout = stdout.to_vec();
+    wrong_stdout[0] = b'!';
+    check(
+        "raw transcript",
+        verdict::evaluate(LINUX, p, seed, 1, names, &wrong_stdout, observed),
+        R::Answers(answers::Refusal::Echo),
+    );
+    check(
+        "effective version",
+        verdict::evaluate(LINUX, p, seed, 4, names, stdout, observed),
+        R::Answers(answers::Refusal::Echo),
+    );
+    let mut wrong_seed = *seed;
+    wrong_seed[0] ^= 1;
+    check(
+        "seed",
+        verdict::evaluate(LINUX, p, &wrong_seed, 1, names, stdout, observed),
+        R::Answers(answers::Refusal::Echo),
+    );
+    let mut excluded = p;
+    excluded.casefold = true;
+    check(
+        "profile",
+        verdict::evaluate(LINUX, excluded, seed, 1, names, stdout, observed),
+        R::Contract(Refusal::Unsupported),
+    );
+    let short_stdout: Vec<_> = stdout
+        .split_inclusive(|b| *b == b'\n')
+        .take(2 * 1499)
+        .flatten()
+        .copied()
+        .collect();
+    check(
+        "complete corpus",
+        verdict::evaluate(
+            LINUX,
+            p,
+            seed,
+            1,
+            &names[..1499],
+            &short_stdout,
+            &observed[..1499],
+        ),
+        R::Contract(Refusal::Corpus),
+    );
+    for expected in [names, &[]] {
+        let (summary, rows) = verdict::capture(expected, &Ok(Vec::new()));
+        assert!(summary.contains("\"passed\":false"));
+        assert!(rows.is_empty());
+    }
 }
 
 fn complete_corpus_pairing_refusals() {

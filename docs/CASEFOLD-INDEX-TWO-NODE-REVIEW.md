@@ -2212,3 +2212,124 @@ needs its own CI; local units do not establish full-CI or image qualification.
 Stages 4–5 remain partial/not quantified, stages 6–7 not reached, the two-node
 matrix gated, casefold writes blocked and actual Windows/card/SteamOS use
 unqualified.
+
+## Collision-aware verdict integrated into the six oracle tests — 2026-11-15
+
+### Prerequisite exact-source CI closure
+
+Strict-parser source **76c2113c1cfab12d4aab23395bbbac22370a992f** passes full
+[43682682730](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43682682730);
+complete-pairing **1e200d75103370c71ee5d20710d2db50728fe923** passes
+[43685112021](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43685112021),
+all eleven jobs each. Fourteen current and seven reviewed repair-source
+comparison archives verify API run/source, advertised size/SHA-256, CRC,
+safe unique members, complete extracted inventory and every extracted byte.
+
+| Run | Archive | Artifact | SHA-256 |
+|---|---|---|---|
+| 43682682730 | suite-in-vm | 14150878122 | `6d4363a19f9909903eaeb8f4805ef5b0f60d4786f7715d78b577f7ea98b54efd` |
+| 43682682730 | x86_64 | 14150308251 | `d06efb62a57a2c698b0c86a5bee90ff6ccecd7ef7ee0804322b8deeca1dd2571` |
+| 43682682730 | cli | 14149685186 | `37bcbd1214f68f4793dd558240091229fe96c728a0f9f22898c57e6d9815a68b` |
+| 43682682730 | unit | 14149611088 | `c73959136d46e98e8883c8ab67bdd6b1e57af1b5e963b44f3cda27210c28ebfe` |
+| 43682682730 | semver | 14148499940 | `8056cde7d502c095076d53b34716be2219f347a68ec8cca540b304bc292b04a0` |
+| 43682682730 | aarch64 | 14149776222 | `08dd28189c908954cbb2495dead34b4fe88f9a6de548e6a0783e292f7cd8a1c6` |
+| 43682682730 | wasm | 14149301515 | `3db0420af5fd31e188254ed615affee9576135674df1263150afb5fbd885a069` |
+| 43685112021 | suite-in-vm | 14150629875 | `7bbf7821a31f43bc47f77f18301d9f16a8d97b17aaa700212fc387b6a292a21e` |
+| 43685112021 | x86_64 | 14151773384 | `f7b0f8046ff7771b38ddcdc3c4274d0bfde7e9887a93637ec9874cc6b0375e22` |
+| 43685112021 | cli | 14150030778 | `d9bf256f48ae5ff75c12a5b688dcdf0daeab740cd96a392fab4d2b14b2d114d0` |
+| 43685112021 | unit | 14150725328 | `5feda0abc7f97e2b2f3dfeb5bd1d90bd35bda321ba47de48821bfed591d6c130` |
+| 43685112021 | semver | 14150265351 | `01a735926f37c6bc158dade521a47f57e598a7b7a7ef0988f930c77ca03c2693` |
+| 43685112021 | aarch64 | 14150965715 | `f003d8a2f43f54edb6e30f2d138e11e3c3210c19cd4cf3ee8061e38ac3f60616` |
+| 43685112021 | wasm | 14150525025 | `ae8fe8ddd08182fe95f830f48cfe03dbd1d2b9b9c8796443232473c5926733ac` |
+
+Both sources retain exactly **2,560** whole-suite passes / same ignored fuzz,
+**1,701** units in all three contexts / zero ignored, oracle/kernel/lwext4
+**225/36/9**, ARM images **527** / same ignored fuzz, browser **five**, CLI
+**159** and all twenty trailing scripts. CLI/scripts match baseline bytes;
+semver retains **196 passes / 58 rule skips**, with semver/static-library
+reports differing only in elapsed durations. Actual native job logs reach
+all six floors and **six green tiers / 4,690 executions**; VM reaches actual
+**2,560 / 1,060** floor. Parser native/VM whole output is **4,012 / 247,033**
+and **4,183 / 256,983**; pairing native/VM is **4,016 / 247,564** and
+**4,184 / 256,988**, within **4,020 / 248,000** and **4,200 / 258,000**.
+These are log/suite closures, not audits of the new descent-image archives.
+
+One authorized Terra/medium helper checks evidence. The primary reads and
+reruns its deterministic audit (exit zero), inspects actual native/VM
+floors/caps/aggregate, and verifies consequential results. No discrepancies
+or corrections are needed. Model cost is unavailable; no savings are claimed.
+
+### Shared corrected verdict and original evidence
+
+All six existing names and the original 1,500-name generator/settings/input
+seam remain. The new shared test-only `htree_descent_verdict` helper consumes
+the original current-driver observations and raw independent stdout. It
+requires exact name/order/seed/version/major/minor binding, complete unique
+expected corpus/inventory pairing, raw initial selection and only bounded
+adjacent same-major odd continuations. Original found/actual observations
+must also agree with the raw admitted leaf: a correct raw scan cannot rescue
+an incorrect original parser observation. Profile facts come from the
+mounted superblock/inode. The existing independently checksum-clean-input
+prerequisite and ordinary 1 KiB/root-only bounds remain; no checksum,
+ownership, general filesystem or write-admission guarantee is added.
+
+The live oracle still writes original `queries.jsonl` selected/found/actual
+and `result.json.wrong` first-selected-leaf miss counts. Its final assertion
+now uses the shared corrected verdict, with separate `contract-result.json`
+and `contract-queries.jsonl`. Summary schema 1 names the
+`ordinary-root-collision-v1` contract and records query/accepted/continuation
+counts, passed/refusal. Each accepted row binds raw name hex, original candidate,
+actual leaf/inode, permitted leaves, continuation and complete live count.
+Refusal emits zero accepted rows, false summary and no partial success.
+The summary never overwrites or reinterprets the original first-leaf count.
+
+Consumer review confirms old experiment `check_answers` and `audit_profile`
+still reject first-selected-leaf misses and require old `wrong == 0`.
+Controllers are byte-identical: a new valid continuation is accepted by the
+corrected Rust oracle while old experiment admission remains deliberately
+strict. Historical failed source/runs/images are untouched and no experiment
+is rerun. Existing workflow artifact globs already retain the new files;
+workflow selection, limits, floors and ignored gates are unchanged.
+
+### Executed red, retained witness green and validation
+
+Before changing the live assertion, the shared verdict is tested with the
+old additional first-leaf-only condition. Actual native execution returns
+**101 / one passed / one failed / zero ignored**, at the retained valid
+cross-leaf witness, `Contract(Misrouted)`. The exact old-rule module SHA-256
+is `80ec93d2d3e345ecd7bf6ae7b180f9fcd406a2e58c655139c418df11e2e48d5a`.
+Removing that overstrong condition makes the same target green and reaches
+its actual two-test floor. No image regeneration or filesystem oracle is used.
+
+The unchanged independent witness admits **1,500** names, exactly **one**
+continuation, and retains the original **one** first-leaf miss. The café
+query still selects **49**, is found in **50**, and reports inode **882**;
+the corrected row admits **[49, 50]** without changing those observations.
+Fourteen integrated failure cases check names/counts, both computed hashes,
+selection, original found/actual records, transcript/seed/version, excluded
+profile and consistently truncated corpus/answers. Failure capture cannot
+produce accepted rows; invalid success cardinalities also refuse. All original
+**33 route / 43 answer / 21 pairing** rejection cases remain.
+
+The immediately preceding exact-source native baseline is preserved/reused,
+not rerun before editing. Fresh complete instrumented units retain its exact
+**1,701** passing-name multiset, zero failed/ignored, actual floor 1,701.
+Output **1,967 / 153,004** fits **2,000 / 155,000**. Production-line native
+unit coverage remains **30,332 / 43,809 = 69.236915%**; full lint passes.
+Existing mocked Python controllers pass **14 + 20 + 12 = 46** tests.
+A generic Rust floor invocation reports zero for these Python-only summaries;
+separate validation checks all three exact unittest counts/OK statuses.
+That is not a failed controller test or a changed project floor. Mock
+trial/artifact messages do not constitute filesystem execution.
+
+No production behavior, dependency, original fixture/experiment bytes,
+workflow or write gate changes. No local filesystem oracle/VM or manual
+workflow is launched. Fresh new-source full CI and independent runtime capture
+review remain pending. Next audit all retained tier evidence plus native/VM
+captures for the six profiles: strict independent answers, original first-leaf
+observations/count, complete raw inventory and separate corrected verdict/
+rows, phase/image identities and judged clean checks. A new CI completion
+alone does not establish successful artifact review. Keep the lost earlier
+failure and two-node matrix gated, stages 4–5 partial/not quantified,
+stages 6–7 not reached, casefold writes blocked and actual Windows/card/
+SteamOS use unqualified.

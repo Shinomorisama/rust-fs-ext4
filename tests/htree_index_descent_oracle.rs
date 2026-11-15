@@ -1,12 +1,13 @@
-//! An index built by e2fsprogs sends every name to the leaf that holds it.
+//! An index built by e2fsprogs routes every name through its bounded candidates.
 //!
 //! `mkfs.ext4 -d` copies a directory of names into a fresh image, then
 //! `e2fsck -fyD` rebuilds that directory as an htree. It hashes each name
 //! with the filesystem's own algorithm (`s_def_hash_version`) and signedness
 //! (`s_flags`), both set here with `debugfs ssv`, and partitions the leaves by the
 //! result. So the index on disk is the formatter's statement of the hash.
-//! For every name, the descent `htree::lookup_leaf_with` performs must land
-//! on the logical block that actually contains it.
+//! For every name, the initial descent must select the correct candidate.
+//! Membership may continue through adjacent same-major odd collision routes.
+//! Exact independent hashes and the complete expected corpus must agree.
 //!
 //! Before #96 the hash packed bytes in the wrong order, so the descent
 //! matched the leaf only by chance, and `path::lookup` hid it by falling
@@ -21,6 +22,7 @@
 #![cfg(unix)]
 
 use fs_ext4::dir;
+use fs_ext4::features::{Incompat, RoCompat};
 use fs_ext4::file_io;
 use fs_ext4::fs::Filesystem;
 use fs_ext4::htree;
@@ -34,6 +36,13 @@ mod diagnostics;
 
 #[path = "support/htree_descent_experiment.rs"]
 mod experiment;
+
+#[path = "support/htree_descent_answers.rs"]
+mod answers;
+#[path = "support/htree_descent_contract.rs"]
+mod contract;
+#[path = "support/htree_descent_verdict.rs"]
+mod verdict;
 
 fn names() -> Vec<Vec<u8>> {
     let mut out = Vec::new();
@@ -183,6 +192,7 @@ fn run(hash_alg: &str, s_flags: u32) {
     let inventory = evidence.directory(&fs, bigdir_ino, &inode, &data, &names);
 
     let mut wrong = Vec::new();
+    let mut observed = Vec::with_capacity(names.len());
     for name in &names {
         let leaf = htree::lookup_leaf_with(
             name,
@@ -197,28 +207,48 @@ fn run(hash_alg: &str, s_flags: u32) {
             .unwrap_or_default()
             .iter()
             .any(|e| &e.name == name);
-        evidence.query(
+        let computed = fs_ext4::hash::name_hash(name, inventory.version, &fs.sb.hash_seed);
+        let actual = inventory
+            .locations
+            .get(name)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        evidence.query(name, computed, leaf, found, actual);
+        observed.push(verdict::Observed {
             name,
-            fs_ext4::hash::name_hash(name, inventory.version, &fs.sb.hash_seed),
-            leaf,
+            computed: (computed.major, computed.minor),
+            selected: leaf,
             found,
-            inventory
-                .locations
-                .get(name)
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
-        );
+            actual: actual.to_vec(),
+        });
         if !found {
             wrong.push(String::from_utf8_lossy(name).into_owned());
         }
     }
     evidence.complete(wrong.len());
+    let profile = contract::Profile {
+        block_size: bs,
+        filetype: fs.sb.feature_incompat & Incompat::FILETYPE.bits() != 0,
+        metadata_csum: fs.sb.feature_ro_compat & RoCompat::METADATA_CSUM.bits() != 0,
+        unsigned_hash: fs.sb.unsigned_hash(),
+        casefold: inode.flags & InodeFlags::CASEFOLD.bits() != 0,
+        encrypted: inode.flags & InodeFlags::ENCRYPT.bits() != 0,
+    };
+    let result = verdict::evaluate(
+        &data,
+        profile,
+        &fs.sb.hash_seed,
+        inventory.version as u8,
+        &names,
+        &inventory.hash_stdout,
+        &observed,
+    );
+    let (summary, queries) = verdict::capture(&names, &result);
+    evidence.contract(&summary, &queries);
     assert!(
-        wrong.is_empty(),
-        "[{tag}] {} of {} names descend to a leaf that does not hold them, e.g. {:?}",
-        wrong.len(),
-        names.len(),
-        &wrong[..wrong.len().min(5)]
+        result.is_ok(),
+        "[{tag}] collision-aware descent contract refused: {result:?}; {} initial-leaf misses retained separately",
+        wrong.len()
     );
     let _ = std::fs::remove_dir_all(&root);
     let _ = std::fs::remove_file(&image);
