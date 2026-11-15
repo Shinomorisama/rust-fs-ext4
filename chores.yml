@@ -813,11 +813,11 @@ tasks:
           guest_args="$guest_args $arg"
         done
         # shellcheck disable=SC2086  # the words are the point
-        # Seven seed controls at eba3a0e, run 43086570946/artifact 13890566773:
-        # all 2,551 successes produce 4,164 lines / 256,086 bytes.
-        # Old 4,160-line cap returns 65; identical-log replay passes
-        # at 4,180/258,000, preserving every byte, selection and floor.
-        scripts/tier.sh test:vm vm 4180 258000 -- \
+        # Two contract controls at 80957bd, run 43527245743/artifact 14089146613:
+        # all 2,558 prior successes plus two produce 4,184 lines / 257,099 bytes.
+        # Old 4,180-line cap returns 65; identical-log replay passes
+        # at 4,200/258,000, preserving every byte, selection and floor.
+        scripts/tier.sh test:vm vm 4200 258000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 

@@ -82,6 +82,45 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Private-contract CI line-budget repair — 2026-11-14:**
+  Source `80957bd` full **43527245743** is terminal **failed**: the VM
+  test command passes, but **4,184 lines / 257,099 bytes** exceed the
+  **4,180-line** cap and return **65**. The aggregate also fails; native
+  and the other eight prerequisite jobs pass. This is measured output,
+  not a failed filesystem assertion or cybersecurity refusal. The old
+  run remains red.
+
+  Four current/baseline native and VM archives verify source/run identity,
+  digest/CRC, complete inventory and all extracted bytes. Both whole
+  passing-name multisets retain all **2,558** prior occurrences plus the
+  two new private controls = **2,560**, with unchanged ignored fuzz. Native
+  units retain **1,699 + 2 = 1,701**, oracle/kernel/lwext4 **225/36/9**.
+  CLI and all twenty trailing script reports retain baseline bytes; the
+  actual native job reaches all six floors and **4,690** executions. Other
+  successful jobs are metadata only here; descent-image archives are unreviewed.
+
+  Raise only the VM line cap **4,180 → 4,200**, justified beside its command.
+  Identical saved-log replay reproduces old-cap **65**, passes new-cap
+  **0**, retains every byte and reaches **2,560 / 1,060** at the actual
+  floor script. Byte cap **258,000**, other caps, selections, floors and
+  ignored/write gates stay unchanged. The focused output-budget controls
+  and full lint pass. A broader local shell-suite attempt passes twelve
+  files, then fails its scratch-cleanup test because the generated basic/
+  csum-seed images are absent; seven later files are unrun, separately
+  from their already passed CI reports. No oracle or VM is launched to
+  repair this environment.
+  See the [measured budget review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#private-contract-ci-measured-vm-line-budget-repair--2026-11-14).
+
+  **Next bounded task:** review the repair's exact-source automatic CI
+  after it finishes, including actual VM floor/aggregate and complete
+  retained-name evidence. Then review and integrate the private contract
+  into all six oracle tests with strict name-bound independent answers
+  and complete corpus/inventory pairing. Do not rerun the experiment or
+  regenerate the retained witness. Saved-log replay is not fresh VM
+  execution or whole-CI closure. Stages 4–5 remain partial/not quantified,
+  stages 6–7 not reached, the two-node matrix gated, casefold writes
+  blocked and actual card/Windows/SteamOS use unqualified.
+
 - **Full CI closed; private collision-aware contract prepared — 2026-11-13:**
   Exact postmortem source `bf7125e` now passes full **43498618061**, all
   eleven jobs / `ci-ok`. All seven source-bound tier archives and seven
@@ -14331,15 +14370,19 @@ Exact-source full CI **43498618061** is now closed with full baseline-name/
 floor/artifact retention. A private collision-aware contract is prepared,
 with all 1,500 saved queries, 33 rejection cases, three invalid-policy red
 checks, 1,701 local units and full lint. It remains disconnected from the
-existing oracle assertion. Review its new-source CI, then integrate and
-independently qualify the test-only correction; do not rerun the old
-experiment. The original lost failure and
+existing oracle assertion. New-source full **43527245743** passes the VM's
+test command but fails its line cap at **4,184 / 4,180**, exit **65**.
+Current/baseline native and VM archives retain every previous passing name
+plus the two controls. A measured **4,200-line** repair passes identical-log
+replay with its unchanged byte cap and actual floor; its new-source automatic
+CI still needs review. Then integrate and independently qualify the test-only
+correction; do not rerun the old experiment. The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. The [exact-source runner review and dispatch](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#exact-source-runner-review-closed-targeted-experiment-dispatched--2026-11-13) closes full **43381484080** at `dea278c` (eleven jobs/seven archives, all retained names and real native six-tier/4,686 verdict) plus Stage 0 **43381484039** (24 jobs / 39 actual floors and original-six image/hash audit). The targeted workflow was dispatched once as **43415472096**, immutable head `dea278cf6cd69bfca9e9f23ecbae331a4c6c6e14`; initial batch-zero metadata is in progress and no trial result is yet credited. **Next bounded task: inspect this exact run and perform one consolidated evidence review after it is terminal.** Reuse preflight checks rather than repeating broad audits while waiting. Do not dispatch/rerun another attempt, rescreen or substitute seeds. Preserve seventeen trials / nine then eight / 51 trial phase images / 25,500 independent answers plus six reference copies, all original statuses/assertions/selection/floor/output/ignored/write gates and the frozen manifest SHA-256 `45e6d0c5b6a808e00ecc2269397bf8278b5adbbca1515194091516109cb98558`. Capture and stop on the first failure/discrepancy; distinguish test, hash, corruption and infrastructure observations, and independently classify a retained failing instance in the prescribed VM before any correction. A finite pass needs actual layout coverage and non-reproduction reporting, not an expanded pool. The old 33-trial workflow is unchanged and unrun. The two-node mutation matrix remains gated, stages 4–5 partial/not quantified, writes blocked and stages 6–7 not reached. This preflight/dispatch checkpoint ends after its documentation push; let the existing targeted run finish between turns without live monitoring.
+1. Reuse the verified setup and authorization. Review the measured VM-budget repair's exact-source automatic CI after it is terminal, including retained-name evidence and actual VM floor/aggregate. Then review and integrate the private collision-aware contract into all six existing oracle tests with strict name-bound major/minor answers and complete corpus/inventory pairing. Preserve initial selection separately from continuation membership and prove old-red/new-contract-green on the unchanged witness. The original targeted run **43415472096** remains failed; its independent postmortem **43498677681** and source full **43498618061** are already reviewed. Do not dispatch/rerun the experiment, rescreen candidates or regenerate the witness. New-source CI is separate from saved-log replay and earlier source closure. The lost earlier failure and two-node matrix remain open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

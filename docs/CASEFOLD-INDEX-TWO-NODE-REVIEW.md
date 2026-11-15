@@ -1949,3 +1949,71 @@ this preparation; new-source full CI remains separate from closed `bf7125e`.
 Stages 4–5 remain partial/not quantified, stages 6–7 not reached, the two-node
 matrix stays gated, casefold writes blocked and card/Windows/SteamOS use
 unqualified.
+
+## Private-contract CI measured VM line-budget repair — 2026-11-14
+
+Full [43527245743](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43527245743)
+at **`80957bd73b1b4866b6c8abe88d8af1563c84f89a`** is terminal failed.
+Native job **132236907940** passes; VM job **132236907984** runs its suite
+successfully but the tier wrapper rejects **4,184 lines / 257,099 bytes**
+against **4,180 / 258,000**, exit **65**. Its following actual floor is not
+reached. The aggregate fails as required. The other eight prerequisite jobs
+pass, checked as metadata only here. No success is inferred for the whole run.
+
+### Retained evidence and scope
+
+Four API/source-bound archives verify advertised size/SHA-256, CRC, unique
+safe members, complete extracted inventory and every extracted byte. The
+comparison source is reviewed `bf7125e` / **43498618061**.
+
+| Source | Archive | Artifact | SHA-256 |
+|---|---|---|---|
+| `80957bd` | VM | 14089146613 | `0e0efcdec25d0d27e6db5454b90ff78e588b75e3c07f78d2835e5bb7fe4775eb` |
+| `80957bd` | native | 14089305804 | `e2c1ffe534fc627d35a34abff87d4d2ae2bfd0714e136ad17f2a6e5a4bcb8a92` |
+| `bf7125e` | VM | 14077494119 | `a0825c356f8509f415ff4aea9f28ac4804a672b77b0b2589e0875dcc1f780954` |
+| `bf7125e` | native | 14077291408 | `acc31876d35bfacc15466f0114cfa6e12bb96c917de6ebf21c64c5b82e48510c` |
+
+Exact passing-name multisets retain all **2,558** previous whole-suite
+occurrences plus exactly the two new private-contract controls = **2,560**
+in both native and VM, with the same one ignored fuzz case and no failures.
+Native units retain **1,699 + 2 = 1,701**, zero ignored; oracle/kernel/lwext4
+retain exact **225 / 36 / 9** multisets. Native whole output is **4,015 /
+247,448** within **4,020 / 248,000**; native units **1,969 / 152,332** within
+**2,000 / 155,000**. CLI and all twenty trailing shell reports retain exact
+baseline bytes; eight Unicode controls differ only in elapsed duration.
+The actual native job reaches all six floors and **six green tiers / 4,690
+executions**. This bounded audit does not close ARM/browser/standalone/semver
+artifacts or independently inspect the new descent-image captures.
+
+### Measured correction and verification
+
+Only the VM **line** cap changes, **4,180 → 4,200**, with the measurement
+beside the command in `chores.yml`. Byte cap **258,000**, test selections,
+all floors, all other caps and the ignored gate remain intact. The retained
+VM log has SHA-256
+`65ab8194671426af16a369d1839b7a7f23cb076e7e111e42f76b4d399ce29763`.
+Replaying those exact saved bytes through `scripts/tier.sh` first reproduces
+**65** at the old cap, then passes **0** at the new cap. Both replay logs
+compare byte-for-byte with the original. The actual floor script then
+reports **2,560 / 1,060**. This is deterministic wrapper/floor verification,
+not another VM execution or a successful rerun of the failed workflow.
+
+Focused `tests/scripts/test-output-budget.sh` controls pass through the tier
+wrapper; full lint passes, including fmt, workspace/all-target Clippy, guide,
+family, CI-gate, provenance and eight Unicode controls. The broader local
+`chore test:scripts` attempt passes twelve files, then fails in
+`test-scratch-left-behind.sh`: generated `ext4-basic.img` / `ext4-csum-seed.img`
+are absent, causing its downstream Rust regression tests to fail. Seven
+later shell files are unrun. This is separate from their passed CI evidence;
+no fixture regeneration, host oracle or VM is launched here. No fresh Rust
+baseline/coverage execution is claimed for this configuration-only repair.
+
+No Rust source, original oracle assertion, fixture/corpus, production behavior,
+dependency, experiment controller, workflow selection or write policy changes.
+No manual workflow is dispatched or rerun. Review the repair's new exact-source
+automatic CI and retained names after it finishes, then review/integrate the
+test-only collision correction with strict independent per-name answers and
+complete inventory pairing. Preserve original selected/actual observations
+and prove old-red/new-contract-green without recreating the witness. Stages
+4–5 remain partial/not quantified, stages 6–7 not reached, the two-node matrix
+gated, casefold writes blocked and actual Windows/card/SteamOS use unqualified.
