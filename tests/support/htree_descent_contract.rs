@@ -38,6 +38,7 @@ pub enum Refusal {
     Missing,
     Duplicate,
     Misrouted,
+    Corpus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,6 +47,7 @@ pub struct Admission {
     pub actual_leaf: u32,
     pub candidate: u32,
     pub permitted_leaves: Vec<u32>,
+    pub live_entries: usize,
 }
 
 fn u16_at(bytes: &[u8], at: usize) -> u16 {
@@ -151,6 +153,7 @@ pub fn validate(bytes: &[u8], profile: Profile, query: Query<'_>) -> Result<Admi
         }
     }
     let mut found = None;
+    let mut live_entries = 0;
     for &(_, leaf) in &routes {
         let block = &bytes[leaf as usize * bs..(leaf as usize + 1) * bs];
         if block[bs - 12..bs - 4] != [0, 0, 0, 0, 12, 0, 0, 0xde] {
@@ -174,6 +177,7 @@ pub fn validate(bytes: &[u8], profile: Profile, query: Query<'_>) -> Result<Admi
             }
             let name = &block[offset + 8..offset + 8 + name_length];
             if inode != 0 {
+                live_entries += 1;
                 if name.is_empty()
                     || name.contains(&0)
                     || name.contains(&b'/')
@@ -198,5 +202,37 @@ pub fn validate(bytes: &[u8], profile: Profile, query: Query<'_>) -> Result<Admi
         actual_leaf,
         candidate,
         permitted_leaves: permitted,
+        live_entries,
     })
+}
+
+/// Bind every expected name to exactly one live record, with no extra records.
+/// Per-query validation checks every leaf and requires unique membership. A
+/// unique expected-name set of the same size as the complete live inventory
+/// therefore accounts for every live record, including multiple in one leaf.
+/// This retains all of `validate`'s profile and independent-input prerequisites.
+pub fn validate_corpus(
+    bytes: &[u8],
+    profile: Profile,
+    expected: &[Vec<u8>],
+    queries: &[Query<'_>],
+) -> Result<Vec<Admission>, Refusal> {
+    if expected.is_empty() || expected.len() > 1500 || expected.len() != queries.len() {
+        return Err(Refusal::Corpus);
+    }
+    let mut seen = std::collections::HashSet::new();
+    for (name, query) in expected.iter().zip(queries) {
+        if name.as_slice() != query.name || !seen.insert(name.as_slice()) {
+            return Err(Refusal::Corpus);
+        }
+    }
+    let mut admissions = Vec::with_capacity(queries.len());
+    for query in queries {
+        let admission = validate(bytes, profile, *query)?;
+        if admission.live_entries != expected.len() {
+            return Err(Refusal::Corpus);
+        }
+        admissions.push(admission);
+    }
+    Ok(admissions)
 }

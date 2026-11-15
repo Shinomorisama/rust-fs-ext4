@@ -2122,3 +2122,93 @@ prove old-red/new-contract-green without rerunning the experiment or recreating
 the witness. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
 the two-node matrix gated, casefold writes blocked and actual Windows/card/
 SteamOS use unqualified.
+
+## Complete corpus/inventory pairing prepared privately — 2026-11-15
+
+Full **43682682730** at exact strict-parser source
+**`76c2113c1cfab12d4aab23395bbbac22370a992f`** remains in progress at this
+checkpoint. Native **132716968237** and VM **132716968236** are running;
+eight other jobs pass as metadata only, with aggregate pending. No new
+full-CI/log/archive closure is claimed. Reviewed repair source `9fcda00` /
+**43677747713** remains the last closed full evidence. Useful native work
+continues privately without changing the six live oracle assertions.
+
+### Complete bounded pairing
+
+The existing raw leaf scan counts every nonzero-inode live record as well as
+performing its existing structural checks. `Admission.live_entries` exposes
+that count; zero-inode unused records do not count. New private
+`validate_corpus` requires **1..=1,500** unique expected raw names, exactly
+one ordered query per expected name, and per-query admission using the same
+name-bound major/minor/version/initial-selection/continuation checks. Each
+admission must report total live records equal to the expected corpus size.
+
+The completeness argument depends on both properties: every distinct expected
+name matches exactly one actual record, and the total live record count is
+the same. Therefore every actual live record is paired, with no extra live
+name or duplicate left over. Counting leaves would miss multiple live records
+in one leaf; counting records without checking every query would miss a
+same-count replacement. The implementation checks both and returns no partial
+successful batch if a later query fails. Original bounded profile and byte
+limits, complete unique leaf references, independent checksum-clean-input
+prerequisite and separation of initial selection from permitted continuations
+remain. This private batch helper is not checksum, physical ownership, volume
+consistency or write admission, and admits no new filesystem shape.
+
+### Controls and retained evidence
+
+The existing Linux-witness control builds all **1,500** queries from unchanged
+expected-name and independent-hash captures, with recomputed current hashes
+and selections. Batch admission equals every previously checked individual
+admission, preserving selected/actual leaves, inodes, one legal continuation,
+and the original false single-leaf predicate for the retained collision.
+All committed directory/query/transcript fixture bytes retain their digests.
+
+The existing negative control expands with **21** batch refusal cases:
+empty/overbound/mismatched query counts, duplicate expected names, query/name
+order mismatches, omitted names, an isolated continuation query, extra live
+records in a leaf, extra referenced leaves, same-count name replacement,
+deleted/duplicate actual records, malformed later leaves and later-query
+major/minor/name/version/selection/misrouting failures, plus excluded profile.
+Synthetic positives admit a complete corpus, consistently reordered pairs,
+legal continuations and an unused record. Synthetic structures exercise the
+contract; they are not independently clean filesystem images.
+
+An intentionally invalid batch checker with the live-count comparison removed
+produces actual **exit 101 / one passed / one failed / zero ignored**. The
+omitted-name control fails while the retained full witness still passes.
+Byte-for-byte restoration then passes both original test names and their
+actual two-test floor. No test is added, deleted or renamed; the original
+33 route refusals and 43 strict-answer refusals still execute.
+
+The immediately preceding exact-source native/coverage baseline is preserved
+and reused, not executed again before editing. The fresh complete instrumented
+unit run retains its exact **1,701** successful-name multiset, zero failures
+or ignored tests. Actual floor 1,701 passes. Output **1,967 lines / 153,004
+bytes** fits unchanged **2,000 / 155,000**; production-line native unit
+coverage stays **30,332 / 43,809 = 69.236915%**. Full lint passes, including
+fmt, workspace/all-target Clippy and the existing guide/family/CI/provenance/
+Unicode checks. No helper, VM or filesystem oracle is used. The known local
+generated-fixture shell-suite limit is not rerun or credited as passing.
+
+### Integration capture requirement and next gate
+
+Consumer inspection finds `scripts/htree-descent-experiment.py` still requires
+`result.json["wrong"] == 0`; `Evidence::complete` currently writes that value
+from the original first-selected-leaf misses. `queries.jsonl` separately
+records selected/found/actual observations. Integration must retain those
+meanings and record the corrected contract verdict separately, with a
+capture/consumer review before replacing the assertion. A valid continuation
+must not erase the original false single-leaf observation, change the old
+experiment's recorded outcome or silently reinterpret its admission evidence.
+
+The six live oracle tests, diagnostics, strict parser, production, original
+fixtures/experiment controllers, dependencies, workflows, all limits/floors/
+ignored gates and write policy are unchanged. No manual workflow is dispatched
+or rerun. Review pending exact-source CI after terminal and this batch helper,
+then integrate the reviewed test-only correction into all six existing oracle
+tests and prove old-red/new-contract-green on the unchanged witness. New source
+needs its own CI; local units do not establish full-CI or image qualification.
+Stages 4–5 remain partial/not quantified, stages 6–7 not reached, the two-node
+matrix gated, casefold writes blocked and actual Windows/card/SteamOS use
+unqualified.

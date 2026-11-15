@@ -5,7 +5,7 @@ mod contract;
 #[path = "support/htree_descent_answers.rs"]
 mod answers;
 
-use contract::{validate, Profile, Query, Refusal};
+use contract::{validate, validate_corpus, Profile, Query, Refusal};
 
 const LINUX: &[u8] = include_bytes!("data/htree-descent-13835-directory.bin");
 const FIXTURE_SHA: &str = "fde0da6acad7a9b3afea4194ef09ddb5126d72d4d25324fac6800bc9a4cd3424";
@@ -103,6 +103,8 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
     let parsed_answers = answers::parse(raw_hashes, &expected_names, 1, &seed).unwrap();
     let mut spills = 0;
     let mut total = 0;
+    let mut all_queries = Vec::new();
+    let mut single_admissions = Vec::new();
     for (index, line) in saved.lines().enumerate() {
         let fields: Vec<_> = line.split('\t').collect();
         assert_eq!(fields.len(), 6);
@@ -138,9 +140,23 @@ fn valid_linux_witness_and_bounded_continuations_are_admitted() {
             (selected, expected_leaf, expected_inode)
         );
         spills += usize::from(accepted.actual_leaf != accepted.candidate);
+        assert_eq!(accepted.live_entries, 1500);
+        single_admissions.push(accepted);
+        all_queries.push(Query {
+            name: &expected_names[index],
+            computed: (computed.major, computed.minor),
+            independent,
+            independent_name: &answer.name,
+            effective_version: 1,
+            selected: current_selected,
+        });
         total += 1;
     }
     assert_eq!((total, spills), (1500, 1));
+    assert_eq!(
+        validate_corpus(LINUX, profile(1024, true), &expected_names, &all_queries).unwrap(),
+        single_admissions
+    );
     for (name, hash, leaf, inode) in [
         (
             b"a_name_of_twenty_00121".as_slice(),
@@ -404,6 +420,238 @@ fn hash_identity_routing_shape_and_membership_failures_are_refused() {
         assert_eq!(validate(&bytes, profile, query), Err(expected), "{name}");
     }
     strict_hash_transcript_refusals();
+    complete_corpus_pairing_refusals();
+}
+
+fn complete_corpus_pairing_refusals() {
+    let original = synthetic(
+        1024,
+        true,
+        &[(0, 1), (0x101, 2), (0x200, 3)],
+        &[b"a", b"b", b"c"],
+    );
+    let p = profile(1024, true);
+    let names: Vec<_> = [b"a", b"b", b"c"].map(|n| n.to_vec()).to_vec();
+    let queries = vec![
+        query(b"a", (0x80, 1), 1),
+        query(b"b", (0x100, 7), 1),
+        query(b"c", (0x200, 9), 3),
+    ];
+    let accepted = validate_corpus(&original, p, &names, &queries).unwrap();
+    assert_eq!(accepted.len(), 3);
+    assert!(accepted.iter().all(|a| a.live_entries == 3));
+    assert_eq!((accepted[1].candidate, accepted[1].actual_leaf), (1, 2));
+    assert_eq!(
+        validate_corpus(
+            &original,
+            p,
+            &[names[2].clone(), names[0].clone(), names[1].clone()],
+            &[queries[2], queries[0], queries[1]],
+        )
+        .unwrap(),
+        [
+            accepted[2].clone(),
+            accepted[0].clone(),
+            accepted[1].clone()
+        ]
+    );
+    // A second record in one leaf must be counted independently of leaf count.
+    let mut extra = original.clone();
+    put16(&mut extra, 1024 + 4, 12);
+    put32(&mut extra, 1024 + 12, 901);
+    put16(&mut extra, 1024 + 16, 1000);
+    extra[1024 + 18..1024 + 21].copy_from_slice(&[1, 1, b'z']);
+    let mut unused = extra.clone();
+    put32(&mut unused, 1024 + 12, 0);
+    assert_eq!(
+        validate_corpus(&unused, p, &names, &queries).unwrap(),
+        accepted
+    );
+
+    type Case<'a> = (&'static str, Vec<u8>, Vec<Vec<u8>>, Vec<Query<'a>>, Refusal);
+    let mut cases: Vec<Case<'_>> = vec![
+        (
+            "empty corpus",
+            original.clone(),
+            vec![],
+            vec![],
+            Refusal::Corpus,
+        ),
+        (
+            "corpus bound",
+            original.clone(),
+            vec![b"a".to_vec(); 1501],
+            vec![queries[0]; 1501],
+            Refusal::Corpus,
+        ),
+        (
+            "query count",
+            original.clone(),
+            names.clone(),
+            queries[..2].to_vec(),
+            Refusal::Corpus,
+        ),
+        (
+            "duplicate expected name",
+            original.clone(),
+            vec![names[0].clone(), names[0].clone(), names[2].clone()],
+            vec![queries[0], queries[0], queries[2]],
+            Refusal::Corpus,
+        ),
+        (
+            "query order binding",
+            original.clone(),
+            names.clone(),
+            vec![queries[1], queries[0], queries[2]],
+            Refusal::Corpus,
+        ),
+        (
+            "omitted corpus name",
+            original.clone(),
+            names[..2].to_vec(),
+            queries[..2].to_vec(),
+            Refusal::Corpus,
+        ),
+        (
+            "only continuation query",
+            original.clone(),
+            vec![names[1].clone()],
+            vec![queries[1]],
+            Refusal::Corpus,
+        ),
+        (
+            "extra live record in same leaf",
+            extra,
+            names.clone(),
+            queries.clone(),
+            Refusal::Corpus,
+        ),
+        (
+            "extra referenced leaf",
+            synthetic(
+                1024,
+                true,
+                &[(0, 1), (0x101, 2), (0x200, 3), (0x300, 4)],
+                &[b"a", b"b", b"c", b"d"],
+            ),
+            names.clone(),
+            queries.clone(),
+            Refusal::Corpus,
+        ),
+    ];
+    let mut changed = queries.clone();
+    changed[2].name = b"d";
+    cases.push((
+        "query name binding",
+        original.clone(),
+        names.clone(),
+        changed,
+        Refusal::Corpus,
+    ));
+    let mut bytes = original.clone();
+    bytes[3 * 1024 + 8] = b'd';
+    cases.push((
+        "same count replacement",
+        bytes,
+        names.clone(),
+        queries.clone(),
+        Refusal::Missing,
+    ));
+    let mut bytes = original.clone();
+    put32(&mut bytes, 3 * 1024, 0);
+    cases.push((
+        "deleted live record",
+        bytes,
+        names.clone(),
+        queries.clone(),
+        Refusal::Corpus,
+    ));
+    let mut bytes = original.clone();
+    bytes[3 * 1024 + 8] = b'a';
+    cases.push((
+        "duplicate live record",
+        bytes,
+        names.clone(),
+        queries.clone(),
+        Refusal::Duplicate,
+    ));
+    let mut bytes = original.clone();
+    bytes[4 * 1024 - 5] = 0;
+    cases.push((
+        "malformed later leaf",
+        bytes,
+        names.clone(),
+        queries.clone(),
+        Refusal::Leaf,
+    ));
+    for (label, changed) in [
+        (
+            "later major agreement",
+            Query {
+                computed: (0x202, 9),
+                ..queries[2]
+            },
+        ),
+        (
+            "later minor agreement",
+            Query {
+                computed: (0x200, 8),
+                ..queries[2]
+            },
+        ),
+        (
+            "later independent name",
+            Query {
+                independent_name: b"d",
+                ..queries[2]
+            },
+        ),
+        (
+            "later effective version",
+            Query {
+                effective_version: 4,
+                ..queries[2]
+            },
+        ),
+    ] {
+        let mut all = queries.clone();
+        all[2] = changed;
+        cases.push((label, original.clone(), names.clone(), all, Refusal::Hash));
+    }
+    let mut changed = queries.clone();
+    changed[2].selected = 1;
+    cases.push((
+        "later initial selection",
+        original.clone(),
+        names.clone(),
+        changed,
+        Refusal::Selection,
+    ));
+    let mut changed = queries.clone();
+    changed[2].computed = (0x100, 9);
+    changed[2].independent = changed[2].computed;
+    changed[2].selected = 1;
+    cases.push((
+        "later genuine misrouting",
+        original.clone(),
+        names.clone(),
+        changed,
+        Refusal::Misrouted,
+    ));
+    assert_eq!(cases.len(), 20);
+    for (label, bytes, names, queries, expected) in cases {
+        assert_eq!(
+            validate_corpus(&bytes, p, &names, &queries),
+            Err(expected),
+            "{label}"
+        );
+    }
+    let mut excluded = p;
+    excluded.casefold = true;
+    assert_eq!(
+        validate_corpus(&original, excluded, &names, &queries),
+        Err(Refusal::Unsupported)
+    );
 }
 
 fn strict_hash_transcript_refusals() {

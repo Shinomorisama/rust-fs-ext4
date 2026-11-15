@@ -82,6 +82,56 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Complete corpus/inventory pairing prepared privately — 2026-11-15:**
+  Strict-parser source `76c2113` / full **43682682730** is still in progress
+  at this checkpoint: native **132716968237** and VM **132716968236** are
+  running, eight other jobs pass as metadata only, aggregate pending. No
+  new full-CI/artifact closure is credited. The reviewed green baseline
+  remains repair `9fcda00` / **43677747713**.
+
+  The private route validator now counts every structurally checked live
+  record and exposes `live_entries`. New disconnected `validate_corpus`
+  binds one unique expected raw name to each ordered query, requires matching
+  counts within **1..=1,500**, validates every name/hash/version/selection/
+  continuation, and requires total live records to equal the expected count.
+  Unique per-name membership plus that complete count rules out extra,
+  missing or duplicate entries; leaf counts alone cannot satisfy it. Existing
+  profile, byte bounds and independently checksum-clean-input prerequisites
+  remain. This is not filesystem CRC, ownership or write admission.
+
+  All **1,500** retained queries pass the batch contract with exactly the
+  same individual admissions, selected/actual leaves and inodes, and one
+  legal continuation. Existing two control-test names expand with **21**
+  batch rejection cases covering omitted/extra/duplicate/replaced records,
+  name/query pairing and later-query hash/version/selection/misrouting.
+  Positive controls preserve reordered matching pairs and unused records.
+  Removing completeness verification yields actual **101 / one passed /
+  one failed / zero ignored**, at the omitted-name control. Byte-for-byte
+  restoration passes the two-test target and actual floor.
+
+  The preceding exact-source **1,701**-pass native/coverage baseline is
+  preserved and reused, not rerun. Fresh full instrumented units retain its
+  exact successful-name multiset, zero failed/ignored, at **1,967 lines /
+  153,004 bytes** inside **2,000 / 155,000**. Production-line native unit
+  coverage remains **30,332 / 43,809 = 69.236915%**; full lint passes.
+  Production, six live oracle tests, diagnostics, strict parser, original
+  fixture/query/experiment bytes, dependencies, workflows, limits/floors and
+  write policy stay unchanged. No helper, filesystem oracle, VM, experiment
+  rerun or manual workflow dispatch is used. See the [pairing review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#complete-corpusinventory-pairing-prepared-privately--2026-11-15).
+
+  **Next bounded task:** after pending exact-source CI is terminal, review
+  its retained evidence and this batch contract, then integrate the reviewed
+  test-only correction into all six existing oracle tests. Preserve original
+  `queries.jsonl` selected/found/actual observations and `result.json.wrong`
+  first-leaf-miss meaning: experiment admission consumes that old field.
+  Record the corrected contract verdict separately, with a capture/consumer
+  review before changing assertions. Prove old-red/new-contract-green using
+  the unchanged witness; do not recreate it or rerun the experiment. New
+  source CI is separate from local unit checks and earlier green sources.
+  Stages 4–5 remain partial/not quantified, stages 6–7 not reached, the
+  two-node matrix gated, casefold writes blocked and Windows/card/SteamOS
+  use unqualified.
+
 - **Budget-repair CI closed; strict hash-answer parser prepared — 2026-11-14:**
   Exact repair source `9fcda00` passes full **43677747713**, all eleven
   jobs / `ci-ok`. All seven current and seven reviewed `bf7125e` baseline
@@ -14430,15 +14480,20 @@ reviewed full **43677747713**, all seven current/baseline tier archives,
 actual native **4,690** executions and VM floor. Strict raw name/version/seed
 hash-answer parsing is now prepared privately against all 1,500 retained
 answers, with 43 rejection cases and unchanged 1,701-unit/coverage baseline.
-Review its new-source CI, finish complete expected-corpus/inventory pairing,
-then integrate and independently qualify the test-only correction; do not
-rerun the old experiment. The original lost failure and
+Complete expected-corpus/inventory pairing is now prepared privately and
+passes all 1,500 retained queries, 21 batch refusal cases and an executed
+completeness-bypass red control; all 1,701 units and coverage are retained.
+Strict-parser full **43682682730** remains in progress, not reviewed green.
+Review pending source CI and the batch contract, then integrate and
+independently qualify the test-only correction while preserving original
+first-leaf observation/result meanings; do not rerun the old experiment.
+The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse the verified setup and authorization. The measured VM-budget repair now passes reviewed full **43677747713** at `9fcda00`, with all seven current/baseline tier archives and actual native/VM floors. Review the new private strict hash-answer parser's exact-source CI and implementation, finish complete expected-corpus/inventory pairing, then integrate the collision-aware contract into all six existing oracle tests. Preserve exact independent name/version/seed/major/minor agreement and initial selection separately from continuation membership; prove old-red/new-contract-green on the unchanged witness. Original targeted run **43415472096** remains failed; independent postmortem **43498677681** and postmortem-source full **43498618061** are already reviewed. Do not dispatch/rerun the experiment, rescreen candidates or regenerate the witness. New-source CI remains separate from earlier source closure. The lost earlier failure and two-node matrix remain open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
+1. Reuse the verified setup and authorization. The measured VM-budget repair passes reviewed full **43677747713** at `9fcda00`, with all seven current/baseline tier archives and actual native/VM floors. Strict parser and complete corpus/inventory pairing are prepared privately; pending exact-source CI still needs review after it is terminal. Review the batch contract and evidence, then integrate the collision-aware correction into all six existing oracle tests. Preserve exact independent name/version/seed/major/minor agreement, initial selection separately from continuation membership, and original selected/found/actual records. Keep `result.json.wrong` as the first-leaf-miss measure consumed by experiment admission; capture the corrected contract verdict separately and review consumers before changing assertions. Prove old-red/new-contract-green on the unchanged witness. Original targeted run **43415472096** remains failed; independent postmortem **43498677681** and postmortem-source full **43498618061** are already reviewed. Do not dispatch/rerun the experiment, rescreen candidates or regenerate the witness. New-source CI remains separate from earlier source closure. The lost earlier failure and two-node matrix remain open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
