@@ -2333,3 +2333,96 @@ alone does not establish successful artifact review. Keep the lost earlier
 failure and two-node matrix gated, stages 4–5 partial/not quantified,
 stages 6–7 not reached, casefold writes blocked and actual Windows/card/
 SteamOS use unqualified.
+
+## Focused corrected-oracle evidence verified — 2026-11-15
+
+Integration source **`a56bea26554865b020a689505cc01576d305f69c`** has successful
+focused job **132772730096** in
+[Stage 0 **43701273127**](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43701273127).
+All 24 Stage 0 jobs are now terminal successful, inspected as metadata except
+the descent artifact below. Source full **43701273105** remains in progress:
+native **132773406937** and VM **132773406900** are running, eight other jobs
+pass, aggregate pending. No whole-CI or other Stage 0 detailed-evidence closure
+is inferred from those statuses.
+
+### Exact archive, source and execution
+
+Artifact **14156237973**, **2,675,703 bytes**, SHA-256
+`d44d85a0fba0ffbcb12fac8f133f4be6b7a53e8610baf49127f22f061784a216`,
+passes API run/source binding, advertised digest/size, every ZIP CRC, safe
+unique members, complete extracted inventory and every extracted byte,
+**285 files**. The retained source commit is exact, and all **149** recorded
+source-file hashes match that commit. The manifest equals the workflow's
+complete source-input selection, including the new shared verdict, parser
+and routing contract. Pinned sibling checks are part of the successful job.
+
+The actual retained log executes exactly the original **six** test names,
+zero failed/ignored, and the job reaches its real **six-test floor**. Its
+**186 lines / 12,567 bytes** fit the unchanged **4,200 / 340,000** focused
+cap. Log completion is separate from this successful saved-byte review.
+
+### Complete six-profile byte and contract audit
+
+| Algorithm | Signedness | Effective version | Leaves | Queries | Original misses | Continued |
+|---|---|---:|---:|---:|---:|---:|
+| half-MD4 | signed | 1 | 50 | 1,500 | 0 | 0 |
+| half-MD4 | unsigned | 4 | 50 | 1,500 | 0 | 0 |
+| legacy | signed | 0 | 50 | 1,500 | 0 | 0 |
+| legacy | unsigned | 3 | 49 | 1,500 | 0 | 0 |
+| TEA | signed | 2 | 50 | 1,500 | 0 | 0 |
+| TEA | unsigned | 5 | 49 | 1,500 | 0 | 0 |
+
+All **18** formatter/configured/indexed phase image digests match their
+sidecars. Raw superblocks agree with saved UUID/seed, configured algorithm
+and signedness, 1 KiB blocks and FILETYPE/metadata checksums. Six distinct
+UUIDs/seeds are retained. Raw inode-table location/content, directory flags,
+size and depth-zero extent mappings agree with the captured inode/map and
+every mapped directory block in the unchanged indexed image.
+
+Independent byte parsing verifies dot headers, root capacity/count/version,
+complete unique leaf references, route ordering and tail shapes. Both
+complete ordered root-route presentations in each independent `htree_dump`
+report match the raw routes and captured route JSON. Raw leaf record spans,
+names/inodes/types and complete 1,500-name inventories agree with captured
+entries. Original corpus digest/order and all **9,000** query names match.
+
+For each query, the raw batch request and echoed request bind the exact name,
+seed and effective version; the independent answer binds raw name bytes and
+both major/minor values. Both hashes match the current-driver observation.
+Raw route selection and adjacent same-major odd continuation rules yield the
+captured candidate/permitted set. Unique raw membership/inode agrees with
+original selected/found/actual and every new corrected contract row, including
+complete live count. Original `result.json.wrong` exactly counts the old
+first-leaf misses; each separate contract summary is schema 1, passed, 1,500
+accepted with its exact continuation count. Total coverage is **9,000
+independent answers / 9,000 original observations / 9,000 contract rows**.
+
+All recorded formatter/settings/report/hash/check calls return zero; rebuild
+statuses are admitted zero/one. Every saved nonrepairing check executes all
+five passes, returns zero and judges clean. No filesystem CRC is independently
+recomputed in this local review; checksum-clean input is established by the
+prescribed independent saved checks, not by the contract parser itself.
+
+All six fresh profiles have zero first-leaf misses, zero admitted continuations
+and no multi-candidate query set. This verifies fresh ordinary-profile
+integration and retained evidence semantics. It does not produce a new
+collision witness or requalify collision writes. The unchanged 13835 Linux
+witness/independent postmortem and executed native old-rule-red/new-contract-
+green proof remain separate. No host oracle, mount, VM, test, experiment,
+manual workflow or helper is launched here; no code, limit, floor or write
+policy changes. Deterministic audit-reader format fixes handle raw filenames
+and both printed root lists; no artifact discrepancy is found.
+
+### Remaining closure
+
+After full **43701273105** becomes terminal, review all seven tier archives,
+exact retained successful/ignored multisets, real floors/aggregate/output
+caps and native/VM descent captures, alongside remaining Stage 0 actual-floor
+evidence. Other mutation-image archives remain metadata-only until separately
+reviewed. Reuse this completed focused audit rather than repeating it. New
+documentation-source CI is separate from the reviewed integration source.
+Original failed runs and the lost earlier image remain unresolved as recorded;
+the original experiment and witness remain unchanged.
+Stages 4–5 remain partial/not quantified, stages 6–7 not reached, two-node
+matrix gated, casefold writes blocked and actual Windows/card/SteamOS use
+unqualified.

@@ -82,6 +82,54 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Focused corrected-oracle evidence verified — 2026-11-15:**
+  Exact integration source `a56bea2` / Stage 0 **43701273127** now passes
+  all **24 jobs**, checked as metadata except the detailed descent review
+  below. Full **43701273105** still has native **132773406937** and VM
+  **132773406900** running; eight other jobs pass, aggregate pending.
+  Whole-suite retained-name/floor/archive closure and the other Stage 0
+  jobs' detailed evidence are not credited here.
+
+  Focused job **132772730096** executes all original six oracle tests,
+  zero failed/ignored, and actual **six-test floor**. Artifact **14156237973**
+  (2,675,703 bytes), SHA-256
+  `d44d85a0fba0ffbcb12fac8f133f4be6b7a53e8610baf49127f22f061784a216`,
+  verifies API source/run identity, CRC, all **285 files**, complete inventory
+  and every extracted byte. All **149** recorded source hashes match the
+  exact commit and complete expected source-input list. Log **186 lines /
+  12,567 bytes** passes the existing focused cap and real floor.
+
+  All **six** algorithm/signedness profiles retain **18** phase images,
+  **9,000** names/queries, **9,000** exact independently name-bound major/
+  minor answers and **9,000** separate contract rows. Raw superblock settings,
+  inode-table bytes/extent mappings, mapped directory bytes, root routes,
+  leaf names/inodes and complete membership agree with saved observations.
+  Both complete ordered route presentations in independent index dumps
+  agree. Every original selected/found/actual/old miss count matches its
+  separate corrected candidate/permitted/actual/inode/verdict. All six
+  independent nonrepairing checks execute five passes and judge clean;
+  saved image identities and all recorded tool statuses verify. Filesystem
+  CRCs are not independently recomputed locally.
+
+  All fresh profiles have **zero original misses / zero continuations**;
+  they verify ordinary six-profile integration, not a new live collision
+  instance. The unchanged retained 13835 Linux witness, independent
+  postmortem and executed native old-rule-red/new-contract-green proof
+  remain the separate continuation evidence. This read-only review uses no
+  helper and changes no driver, test, fixture, workflow, limit, floor or
+  write policy. No project test, filesystem oracle, VM or workflow is
+  launched. See the [focused evidence review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#focused-corrected-oracle-evidence-verified--2026-11-15).
+
+  **Next bounded task:** let source full CI finish, then close all seven
+  retained tier archives/names/floors/budgets and native/VM descent captures,
+  plus remaining Stage 0 actual-floor evidence. Keep other Stage 0 mutation
+  images metadata-only unless their detailed evidence is reviewed. Do not
+  repeat this verified focused audit, rerun the experiment or regenerate
+  its witness. New documentation-source CI is separate from `a56bea2`'s
+  evidence. Stages 4–5 remain partial/not quantified, stages 6–7 not reached,
+  two-node matrix gated, casefold writes blocked and actual Windows/card/
+  SteamOS use unqualified.
+
 - **Collision-aware correction integrated into all six oracle tests — 2026-11-15:**
   Both prerequisite sources now pass reviewed full CI: strict parser
   `76c2113` / **43682682730** and complete pairing `1e200d7` /
@@ -14548,16 +14596,20 @@ full CI, retaining all seven tier archives per source and actual native/VM
 floors. The test-only correction is integrated into all six oracle tests,
 preserving original first-leaf observations/results and adding separate
 contract captures. Unchanged witness old-rule-red/new-contract-green,
-all 1,701 native units, unchanged coverage and full lint pass. Review new
-exact-source CI and all six profiles' new contract/image evidence before
-independent qualification; do not rerun the old experiment.
+all 1,701 native units, unchanged coverage and full lint pass. Focused
+`a56bea2` evidence now verifies all six profiles, 149 source hashes, 18
+images and 9,000 independent answers/original observations/contract rows,
+with no new collision continuation. Stage 0 43701273127 passes all 24 jobs
+as metadata beyond that focused audit. Source full 43701273105 remains
+in progress; its retained tiers and native/VM captures need review after
+terminal. Do not rerun the old experiment or this closed focused audit.
 The original lost failure and
 two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse verified setup and authorization. The test-only collision correction is integrated into all six existing oracle tests; parser/pairing sources pass reviewed full 43682682730 / 43685112021. Review the new integration source's automatic CI after terminal: all seven tier archives, retained names/floors/output caps, and native/VM descent captures across all six algorithm/signedness profiles. Bind every independent name/version/seed/major/minor answer, complete corpus, original selected/found/actual and result.json.wrong first-leaf measure to the separate contract rows/verdict, raw directory membership, image hashes and clean checks. Preserve historical statuses and do not rerun the experiment, rescreen or regenerate the witness. Original targeted 43415472096 remains failed; reviewed independent postmortem 43498677681 and postmortem-source full 43498618061 remain separate. Completion alone is not successful evidence audit or broader qualification. The lost earlier failure and two-node matrix remain open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
+1. Reuse verified setup and authorization. Focused corrected-oracle evidence at exact `a56bea2` is closed: Stage 0 job **132772730096** / artifact **14156237973** verifies all six tests, 149 source hashes, 18 images and 9,000 independent answers/original observations/contract rows. All fresh profiles have zero misses/continuations; retained `13835` remains the separate continuation witness. Stage 0 **43701273127** passes all 24 jobs as metadata beyond this audit. Let source full **43701273105** finish, then review all seven tier archives, retained names/floors/output caps, native/VM descent captures and remaining Stage 0 actual-floor evidence. Keep other mutation-image archives metadata-only until reviewed. Reuse this focused audit. Preserve exact independent hash/name/seed/version agreement, complete raw inventory, original selected/found/actual and `result.json.wrong` meanings alongside separate contract records. Do not rerun the experiment, rescreen or regenerate the witness. Original targeted **43415472096** remains failed; reviewed postmortem **43498677681** and full **43498618061** remain separate. New documentation-source CI does not qualify integration source. The lost earlier failure and two-node matrix stay open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
