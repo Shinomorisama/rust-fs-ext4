@@ -82,6 +82,66 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Corrected oracle full evidence closed; two-node preparation can resume — 2026-11-15:**
+  Integration source **`a56bea26554865b020a689505cc01576d305f69c`** passes
+  full **43701273105**, all eleven jobs / `ci-ok`, and Stage 0
+  **43701273127**, all 24 jobs. Seven current and seven reviewed comparison
+  tier archives verify API source/run, size/SHA-256/CRC, complete inventory
+  and every extracted byte. Exact successful/ignored multisets retain
+  **2,560** whole / **1,701** units in all three contexts, oracle/kernel/
+  lwext4 **225/36/9**, ARM images **527**, browser **five**, CLI **159** and
+  all twenty trailing scripts. Actual native **six tiers / 4,690** and VM
+  **2,560 / 1,060** floors pass. Native **4,012 / 247,033** and VM
+  **4,185 / 257,233** fit unchanged whole-suite caps. All 24 Stage 0 logs
+  verify **39 actual floor calls**: 37 at 1/1, descent at 6/6 and symlink
+  kernel at 5/5. Other Stage 0 mutation-image archives remain metadata-only.
+
+  Native descent artifact **14158113901**, SHA-256
+  `baad576bf11b45bd8bcd688653fadb1d0419869adbabeb61ab057f788cdd2153`,
+  verifies **564 files / twelve captures / 36 images / 18,000 queries**.
+  VM artifact **14158698993**, SHA-256
+  `45d301a5cc406f8302fdd8009158087cd7829078b4223d01577881cef5904da1`,
+  verifies **282 files / six captures / 18 images / 9,000 queries**. Every
+  independent name/seed/version/major/minor answer, original selected/found/
+  actual/old miss count, complete raw directory inventory and separate
+  contract row/verdict agrees. Raw superblocks, inode tables/extents/maps,
+  independent index dumps, image hashes, statuses and clean checks verify.
+  Filesystem CRCs are not independently recomputed locally. This adds
+  **27,000** verified answer/observation/contract rows and **54 images** to
+  the already closed focused **9,000 / 18** audit, which is reused.
+
+  All fresh captures have zero original misses/continuations. The unchanged
+  13835 Linux witness/postmortem and executed old-rule-red/new-contract-green
+  control remain separate continuation evidence. The lost earlier `673c16f`
+  image's cause/impact are still unestablished. Documentation CI
+  **43703181030** and scheduled decoder fuzz **43703022558** pass as metadata
+  only; fuzz success does not clear the unchanged ignored slow-fuzz gate.
+
+  **The scoped oracle-correction prerequisite is closed.** Production `src`
+  tree remains byte-identical to the original two-node review at `673c16f`
+  (tree `f8bc5a8f655b2a31e66a9e58e742eedac513dd5c`); all **34** indexed-boundary
+  controls and current **1,701** unit baseline are retained. This permits
+  resuming bounded two-node preparation; no two-node mutation or casefold
+  write qualification follows. One authorized Terra/medium helper audits
+  logs/archives; the primary reruns the archive audit, checks consequential
+  floors/aggregate and independently audits all full descent bytes. No
+  discrepancy; cost unavailable, no savings claim. No project tests/oracles,
+  VM, experiment, manual workflow or code change is launched here. See the
+  [full closure review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#corrected-oracle-full-evidence-closed--2026-11-15).
+
+  **Next bounded task:** refresh the existing healthy two-node insertion/
+  split preflight/support contract, then add native controls for both root
+  intervals: space insertion, leaf splitting and selected root/node/leaf
+  corruption. Preserve 1,701 baseline occurrences and all 34 existing
+  indexed controls; distinguish private full-node decline from public index-
+  dropping fallback. Keep the planned **16 Linux / 32 Rust-C** positive
+  matrix non-continuation-only, with independent before/after evidence and
+  existing resource limits. No automatic mutation-matrix dispatch. Do not
+  repeat the now-closed oracle audits or wait for another identical artifact
+  review of documentation-only commits. Stages 4–5 remain partial/not
+  quantified, stages 6–7 not reached, two-node qualification pending,
+  casefold writes blocked and actual Windows/card/SteamOS use unqualified.
+
 - **Focused corrected-oracle evidence verified — 2026-11-15:**
   Exact integration source `a56bea2` / Stage 0 **43701273127** now passes
   all **24 jobs**, checked as metadata except the detailed descent review
@@ -14599,17 +14659,20 @@ contract captures. Unchanged witness old-rule-red/new-contract-green,
 all 1,701 native units, unchanged coverage and full lint pass. Focused
 `a56bea2` evidence now verifies all six profiles, 149 source hashes, 18
 images and 9,000 independent answers/original observations/contract rows,
-with no new collision continuation. Stage 0 43701273127 passes all 24 jobs
-as metadata beyond that focused audit. Source full 43701273105 remains
-in progress; its retained tiers and native/VM captures need review after
-terminal. Do not rerun the old experiment or this closed focused audit.
-The original lost failure and
-two-node-matrix gate remain open. Stages 4–5 stay partial/not quantified,
+with no new collision continuation. Source full **43701273105** is now
+closed: seven tier archives and native/VM captures retain all names/floors
+and add 54 raw-verified images / 27,000 contract/hash observations. Stage 0
+**43701273127** closes all 24 jobs / 39 actual floor calls; other mutation
+images remain metadata-only. The scoped oracle gate is closed; resume
+bounded two-node native preparation under the existing healthy/non-continuation
+contract. The original lost failure stays unclassified and two-node
+qualification remains pending. Do not rerun the experiment or these closed
+oracle audits. Stages 4–5 stay partial/not quantified,
 writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Reuse verified setup and authorization. Focused corrected-oracle evidence at exact `a56bea2` is closed: Stage 0 job **132772730096** / artifact **14156237973** verifies all six tests, 149 source hashes, 18 images and 9,000 independent answers/original observations/contract rows. All fresh profiles have zero misses/continuations; retained `13835` remains the separate continuation witness. Stage 0 **43701273127** passes all 24 jobs as metadata beyond this audit. Let source full **43701273105** finish, then review all seven tier archives, retained names/floors/output caps, native/VM descent captures and remaining Stage 0 actual-floor evidence. Keep other mutation-image archives metadata-only until reviewed. Reuse this focused audit. Preserve exact independent hash/name/seed/version agreement, complete raw inventory, original selected/found/actual and `result.json.wrong` meanings alongside separate contract records. Do not rerun the experiment, rescreen or regenerate the witness. Original targeted **43415472096** remains failed; reviewed postmortem **43498677681** and full **43498618061** remain separate. New documentation-source CI does not qualify integration source. The lost earlier failure and two-node matrix stay open, stages 4–5 partial/not quantified, casefold writes blocked and actual Windows/card/SteamOS use unqualified. Let automatic CI finish between turns without live polling.
+1. Resume bounded ordinary two-node preparation. The scoped oracle correction at `a56bea2` is closed by full **43701273105**, Stage 0 **43701273127**, retained names/floors/budgets and focused/native/VM raw capture audits. Reuse that source evidence through byte-identical documentation checkpoints; do not restart identical audits or rerun experiments. Refresh the existing healthy/non-continuation source/support preflight, then add native room-insertion, leaf-split and selected root/node/leaf corruption controls under both root intervals. Preserve all **1,701** current baseline occurrences and **34** indexed-boundary controls, existing support modes/resource bounds, and private full-node decline versus public fallback semantics. The later **16 Linux / 32 Rust-C** positive matrix still requires independent input/output preparation, execution, byte review and scoped qualification; do not automatically dispatch it before native preparation/review. Other Stage 0 mutation-image artifacts remain metadata-only. Keep original failed runs and the unchanged retained witness; the lost earlier `673c16f` cause remains unestablished. Stages 4–5 stay partial/not quantified, stages 6–7 not reached, two-node qualification pending, casefold writes blocked and actual Windows/card/SteamOS use unqualified.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

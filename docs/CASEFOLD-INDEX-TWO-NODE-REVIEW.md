@@ -2426,3 +2426,120 @@ the original experiment and witness remain unchanged.
 Stages 4–5 remain partial/not quantified, stages 6–7 not reached, two-node
 matrix gated, casefold writes blocked and actual Windows/card/SteamOS use
 unqualified.
+
+## Corrected oracle full evidence closed — 2026-11-15
+
+### Exact source, retained suites and actual floors
+
+Integration source **a56bea26554865b020a689505cc01576d305f69c** passes full
+[43701273105](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43701273105),
+all eleven jobs including native **132773406937**, VM **132773406900** and
+`ci-ok`. Seven current tier archives and seven reviewed `1e200d7` /
+**43685112021** comparison archives verify exact API source/run identity,
+size/SHA-256, CRC, safe unique members, complete extracted inventory and
+every extracted byte.
+
+| Archive | Artifact | SHA-256 |
+|---|---|---|
+| suite-in-vm | 14158848150 | `a49c0a6899ff89838944ec7e6e083035a70be8702a4acf0171a042ae611dd098` |
+| x86_64 | 14158532750 | `6aa9f7766607a4ea5ecdcd47a8a9bd77e6e2a2e935a30b19dbcacc7fee8676d6` |
+| cli | 14156936123 | `d7c426574e89939f2aa621d83368132b06529703f6ce623f73bf93566cc80107` |
+| unit | 14156627285 | `e2ed268e3266f57fd16139987d872b616c55ea3bdecca7ef99560e50c2e0fbba` |
+| semver | 14156197674 | `b41c97f02b35cd51e356ef266bb5dd83f38e3ed228d0d2a11a65386a01d74931` |
+| aarch64 | 14157261744 | `ff6972e22083950381e9b36c4afe8d44c856785177cd6b34b0ee271a9739d81f` |
+| wasm | 14156945841 | `b34a9392b4187dfccd78a9a09c2e851285f5a2092d31d158b03f501fb98eeb48` |
+
+Exact passing/ignored name multisets retain **2,560** whole passes and the
+same ignored fuzz in native/VM; **1,701** units in all three contexts with
+zero ignored; oracle/kernel/lwext4 **225/36/9**; ARM images **527** with
+unchanged ignored fuzz; browser **five**. CLI **159** and all twenty trailing
+script reports retain exact baseline bytes. Semver retains **196 passes /
+58 rule skips**; semver/static-library output differs only in durations.
+Native actual job logs reach every existing floor and **six green tiers /
+4,690 executions**; VM reaches actual **2,560 / 1,060**. Native whole
+**4,012 / 247,033** fits **4,020 / 248,000**, VM **4,185 / 257,233** fits
+**4,200 / 258,000**.
+
+Stage 0 **43701273127** closes all **24** successful jobs. All decoded job
+logs verify **39 actual floor calls**: 37 single-test calls at 1/1, the
+already audited descent at 6/6, and symlink/kernel at 5/5. No nonzero
+failed/ignored result or job-error flag appears. This is log/floor closure;
+other Stage 0 mutation-image artifacts remain metadata-only, with earlier
+detailed evidence retained separately. Focused descent artifact **14156237973**
+and its 149 source hashes / 18 images / 9,000 answers/rows are already closed
+above and are reused without repeating that audit.
+
+### Native and VM complete descent capture review
+
+| Archive | Artifact | ZIP bytes | Files | Captures | Images | Queries/answers/contract rows |
+|---|---:|---:|---:|---:|---:|---:|
+| native | 14158113901 | 5,303,509 | 564 | 12 | 36 | 18,000 each |
+| VM | 14158698993 | 2,677,392 | 282 | 6 | 18 | 9,000 each |
+
+Native archive SHA-256:
+`baad576bf11b45bd8bcd688653fadb1d0419869adbabeb61ab057f788cdd2153`.
+VM SHA-256:
+`45d301a5cc406f8302fdd8009158087cd7829078b4223d01577881cef5904da1`.
+Both verify exact source/run/API identity, sizes/digests, CRC, safe unique
+members, complete extracted inventories and every extracted byte. Each six-
+profile algorithm/signedness set occurs twice in native and once in VM.
+
+The same independent byte-level reader used for focused evidence checks all
+**18 new captures / 54 images / 27,000 queries**: formatter/configured/indexed
+hash identities; raw superblock UUID/seed/algorithm/signedness/profile facts;
+inode-table content/size/flags and extent-derived physical mapping; every mapped
+directory byte; complete raw root/leaf records, role references and membership.
+Raw routes agree with saved route records and both complete ordered route
+presentations in the independent index dumps. Original corpus digest/order,
+all exact request/echo/name/seed/version and both independent hash fields,
+current selected/found/actual observations, raw permissible continuation sets,
+and every new per-name candidate/actual/inode/live-count contract row agree.
+The old miss count and separate schema-1 corrected summary each retain their
+defined meaning. Independent nonrepairing checks execute all five passes,
+return zero and judge clean; tool/rebuild status rules and image hashes verify.
+
+All new captures have **zero old misses / zero continuations / zero multi-
+candidate queries**. They establish full-suite ordinary-profile integration
+without producing another collision witness. Together with the reused focused
+audit, closed capture coverage is **24 captures / 72 images / 36,000 names,
+independent answers, original observations and separate contract rows**.
+The fixed 13835 Linux witness/postmortem and executed old-rule-red/new-contract-
+green control remain the collision-continuation evidence. No local filesystem
+CRC recomputation, new oracle/mount/VM, project test or experiment is used.
+
+### Review decision and resumed bounded work
+
+The scoped oracle-correction prerequisite is closed: a preserved independently
+classified counterexample, strict corrected contract, executed red/negative
+controls, exact-source full/focused CI, retained names/floors and actual
+saved-byte evidence now agree. This does not establish the cause or impact of
+the lost earlier `673c16f` image and does not qualify collision writes,
+intermediate-node mutation, recovery, generic ownership or real-card use.
+
+The production `src` tree hash is still
+`f8bc5a8f655b2a31e66a9e58e742eedac513dd5c`, identical at original two-node
+review `673c16f` and integrated `a56bea2`. All **34** existing indexed-boundary
+controls are present in the current **1,701** unit baseline. Resume the
+existing bounded healthy/non-continuation two-node preparation: refresh
+source/support preflight, then native room/split and selected root/node/leaf
+corruption controls under both root ranges. Preserve all baseline names,
+existing modes and resource bounds, and the distinction between private
+full-node decline and public index-dropping fallback. The later **16 Linux /
+32 Rust-C** positive matrix still needs its own implementation, execution,
+saved-byte review and scoped qualification; no matrix workflow is dispatched
+by this closure and casefold writes remain blocked.
+
+One authorized Terra/medium helper audits archives/retention and supplies
+decoded Stage 0/full logs. The primary reads/reruns its archive audit, separately
+asserts all 39 floor calls and real native/VM totals, reads consequential
+lines, and independently audits all native/VM descent image bytes. No evidence
+discrepancy or report correction is needed. Cost is unavailable; no savings
+are claimed. Documentation CI **43703181030** at `1ae5ad1` and scheduled
+decoder fuzz **43703022558** at `a56bea2` pass as metadata only; they do not
+clear the unchanged ignored slow-fuzz gate or add image/recovery qualification.
+
+This checkpoint changes documentation only. Reuse the closed `a56bea2` source
+evidence through byte-identical documentation checkpoints; do not restart
+identical artifact audits or rerun experiments. Stages 4–5 remain partial/not
+quantified, stages 6–7 not reached, two-node qualification pending, casefold
+writes blocked and actual Windows/card/SteamOS use unqualified.
