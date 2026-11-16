@@ -492,6 +492,7 @@ fn retain_bootstrap(prefix: &str, destination: &Path) {
     }
 }
 
+#[cfg(test)]
 #[test]
 fn linux_records_two_node_indexed_link_reference() {
     // Outside scripts/test.sh's owned scratch, so failures survive cleanup in
