@@ -1,6 +1,8 @@
 //! Two-root-range native controls. Synthetic layouts are not Linux qualification.
 use super::*;
 
+use crate::fs::guarded_chmod::two_node_query as query_preflight;
+
 struct Indexed {
     dev: Arc<Device>,
     fs: Filesystem,
@@ -276,6 +278,7 @@ fn invoke(
 }
 
 fn positive(bs: u32) {
+    query_controls(bs);
     for range in 0..2 {
         for split in [false, true] {
             for capi in [false, true] {
@@ -475,6 +478,109 @@ fn positive(bs: u32) {
                 assert_eq!(inventory(&reopened, parent, target), names);
             }
         }
+    }
+}
+
+fn query_controls(bs: u32) {
+    for full in [false, true] {
+        let Indexed {
+            dev,
+            fs,
+            parent,
+            target,
+            clock,
+            ..
+        } = indexed(bs, full, None);
+        let before = dev.bytes();
+        let marker = fs.marked_not_clean.load(Ordering::SeqCst);
+        let status = fs.chmod_operation().unwrap().operation.status();
+        let inode = fs.stat_ino(parent.ino).unwrap();
+        let root = fs
+            .read_block(fs.map_inode_logical(&inode, 0).unwrap().unwrap())
+            .unwrap();
+        let (_, roots) = crate::htree::parse_root_entries(&root).unwrap();
+        for range in 0..2 {
+            dev.reset();
+            let result = query_preflight::select(
+                &fs,
+                parent.ino,
+                target.ino,
+                range,
+                full,
+                0..query_preflight::MAX_CANDIDATES,
+            )
+            .unwrap();
+            let selected = result.selected.unwrap();
+            assert_eq!(selected.name.len(), 255);
+            assert!(!result.trace.contains("\"exhausted\""));
+            assert_eq!(selected.root_slot, range);
+            assert_eq!(selected.node, roots[range].block);
+            assert_eq!(
+                selected.node_physical,
+                fs.map_inode_logical(&inode, u64::from(selected.node))
+                    .unwrap()
+                    .unwrap()
+            );
+            assert_eq!(
+                selected.leaf_physical,
+                fs.map_inode_logical(&inode, u64::from(selected.leaf))
+                    .unwrap()
+                    .unwrap()
+            );
+            assert_eq!(selected.major, hash(&fs, &selected.name));
+            assert!(selected.major >= roots[range].hash);
+            if range == 0 {
+                assert!(selected.major < roots[1].hash);
+            }
+            assert_eq!(selected.boundary.is_some(), full);
+            assert_eq!(selected.split, full);
+            assert_eq!(
+                crate::htree::lookup_leaf_with(
+                    &selected.name,
+                    &root,
+                    &fs.sb.hash_seed,
+                    fs.sb.unsigned_hash(),
+                    |n| { fs.read_block(fs.map_inode_logical(&inode, u64::from(n))?.unwrap()) }
+                )
+                .unwrap(),
+                Some(selected.leaf)
+            );
+            let again = query_preflight::select(
+                &fs,
+                parent.ino,
+                target.ino,
+                range,
+                full,
+                0..query_preflight::MAX_CANDIDATES,
+            )
+            .unwrap();
+            assert_eq!(again.selected.unwrap().json(), selected.json());
+            assert_eq!(again.trace, result.trace);
+            assert_eq!(dev.bytes(), before);
+            assert_eq!(dev.counts()[1..3], [0, 0]);
+        }
+        if !full {
+            let exhausted =
+                query_preflight::select(&fs, parent.ino, target.ino, 0, true, 0..64).unwrap();
+            assert!(exhausted.selected.is_none());
+            assert!(exhausted.trace.ends_with("{\"event\":\"exhausted\"}\n"));
+            assert_eq!(exhausted.trace.lines().count(), 66);
+        }
+        for (range, candidates) in [(2, 0..1), (0, 0..0), (0, 0..16_385)] {
+            assert!(matches!(
+                query_preflight::select(&fs, parent.ino, target.ino, range, false, candidates),
+                Err(Error::InvalidArgument(_))
+            ));
+        }
+        assert!(matches!(
+            query_preflight::select(&fs, target.ino, target.ino, 0, false, 0..1),
+            Err(Error::Unsupported(_))
+        ));
+        assert_eq!(dev.bytes(), before);
+        assert_eq!(dev.counts()[1..3], [0, 0]);
+        assert_eq!(clock.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(fs.marked_not_clean.load(Ordering::SeqCst), marker);
+        assert_eq!(fs.chmod_operation().unwrap().operation.status(), status);
     }
 }
 
@@ -721,6 +827,19 @@ fn corruption(bs: u32) {
                     if dirty {
                         fs.mark_not_clean_once().unwrap();
                     }
+                    let bytes = dev.bytes();
+                    dev.reset();
+                    assert!(query_preflight::select(
+                        &fs,
+                        parent.ino,
+                        target.ino,
+                        range,
+                        full,
+                        0..64
+                    )
+                    .is_err());
+                    assert_eq!(dev.bytes(), bytes);
+                    assert_eq!(dev.counts()[1..3], [0, 0]);
                     let _fs = with_test_mount(fs, |h, fs| {
                         no_effect(
                             fs,
@@ -760,6 +879,9 @@ fn decline(bs: u32, range: usize) {
         .unwrap();
     let (count, _) = crate::htree::parse_node_entries(&node).unwrap();
     assert_eq!(count.count, count.limit);
+    let search = query_preflight::select(&fs, parent.ino, target.ino, range, true, 0..64).unwrap();
+    assert!(search.selected.is_none());
+    assert!(search.trace.ends_with("{\"event\":\"exhausted\"}\n"));
     let mut buf = BlockBuffer::new(bs);
     buf.uninit_cleared.insert(0, 0);
     let pending = buf.uninit_cleared.clone();

@@ -2635,3 +2635,126 @@ and complete protected-byte/map/accounting evidence. Do not infer a dense
 `cap-*` name set or simply relax one-root/one-node assertions. No automatic
 matrix dispatch. Stages 4–5 remain partial/not quantified, stages 6–7 not
 reached, casefold writes blocked and actual Windows/card/SteamOS unqualified.
+
+## Two-node query and explicit-namespace preparation — 2026-11-16
+
+This checkpoint prepares support for the separate Linux reference mode; it
+does not run or qualify that matrix. `link_index_two_node_query.rs` is one
+shared test-only module registered in `guarded_chmod.rs`, used by both the
+native controls and new `link_index_two_node_reference.rs` support. The
+reference support is deliberately dormant (`allow(dead_code)`), compiled
+without adding a matrix test, ignored test or skip. All three existing
+driver-emission modes, their assertions and capacity guest remain byte-identical.
+Production behavior, write gates, dependencies, workflow selections, floors
+and caps are unchanged.
+
+### Query preparation and explicit namespace
+
+The read-only selector checks ordinary indexed-directory/FILETYPE/checksum
+policy, 1/4 KiB size and 1,024-block bound, distinct complete physical mappings,
+exactly two root routes, unique node/leaf roles, valid checksums and every
+stored name's inherited root/node hash interval. Empty, odd, duplicated or
+out-of-interval routes and wrong source identities fail preflight. Existing
+external-extent/metadata ownership observation stays with the complete saved
+input observer; this helper does not replace it or add generic admission.
+
+At most **16,384** unchanged-seed `cap-*` candidates are considered. Existing
+names and query majors already present are skipped. A candidate must route
+through the requested root interval and fit the requested room/split class.
+Splitting additionally requires an even new boundary within the selected
+leaf's old interval, a free selected-node route slot, and room for that query
+in the appropriate planned half. Trial blocks stay in memory. Exhaustion
+returns the complete finite trace, with no seed or class substitution.
+The trace records the seed/effective version, candidate index, major/minor,
+root slot/node/leaf and rejection reason. Selected-query JSON adds exact raw
+name bytes, logical/physical roles, operation and proposed split boundary.
+
+The reference preparation retains input images and existing complete
+inventory/check/oracle reports before assertions, then query/search records.
+The separate guest protocol consumes a sorted explicit hex namespace and
+source inode; it does not infer dense `0..total` names. Audit/link/cold modes
+check exact raw names/inodes, links, flags, EAs, payloads and cold metadata/
+free counts. Requests are validated before filesystem operations. Per-call
+expected inputs, stdout and stderr have separate retained paths. All actual
+filesystem calls remain behind the prescribed guest helper; none ran here.
+
+Native controls reuse the existing four names. Eight size/root/class query
+profiles repeat deterministically with unchanged bytes/writes/flushes, clock,
+marker and health. They also check 96 corrupt preflights, finite exhaustion,
+four selected-full-node searches, invalid bounds and a regular-file parent
+refusal. The previous 16 public positives / 192 corruption calls / 24 invalid
+refusals / four private declines remain intact. Six offline Python controls
+cover non-dense/raw names, component/namespace validation, exact name-count
+limit, explicit before/after link inventories and invalid requests reaching
+no filesystem call. Their filesystem calls are mocked, not host operations.
+
+Initial compilation finds a `u32`/`usize` split-planner argument mismatch;
+the explicit size conversion resolves it. Initial lint rejects duplicate
+module loading; registering one shared test-only module resolves it. Full
+lint passes. Focused native controls pass. Final instrumented native units
+retain the exact **1,705** prior successful-name multiset and all **38**
+indexed names, zero failed/ignored. Output **1,971 lines / 153,369 bytes**
+fits unchanged **2,000 / 155,000** caps; the actual 1,705 floor passes.
+All six offline protocol controls pass. No previous test name, filter or
+project floor changes.
+
+The first complete unit check retains **1,705** successes and all **38**
+indexed names, exact previous multisets, no failed/ignored. Existing-file
+coverage stays **30,338 / 43,809**. Its raw report includes 199 selector lines
+(191 covered) and 78 unrun reference-support lines; raw coverage is initially
+30,529 / 44,086, slightly below the previous percentage because the unrun
+support is included. Review adds the missing regular-file-parent refusal
+control before final verification; no coverage filter or floor is relaxed.
+The final report covers **193/199 selector lines**, **0/78** deliberately
+unrun reference-support lines and unchanged **30,338/43,809** on every prior
+file. Raw coverage rises to **30,531/44,086 = 69.2533%**, above the previous
+69.2506% floor. Both raw and retained-file coverage checks pass. The report
+includes test support and is not a Stage 5 completion estimate. These are
+local synthetic/protocol checks, not independent Linux evidence.
+
+### Predecessor CI review and remaining gate
+
+Source **`9420fd604d24a2e8fd0643a3dc9373c313b792bc`**, Stage 0
+**43811279144**, passes all **24** jobs. All decoded completed logs match
+the exact pinned workflow: **39 actual floor calls**, 37 at 1/1, descent
+6/6 and symlink/kernel 5/5. This is log/floor review; other mutation-image
+artifacts are not re-audited. Full **43811279266** remains in progress at
+the review snapshot, with native **133115852941** and VM **133115852993**
+running. Their whole-suite artifacts, floors/trailing checks and aggregate
+are pending, not credited as reviewed success.
+
+| Completed tier archive | Artifact | ZIP bytes | Reviewed results |
+|---|---:|---:|---|
+| unit | 14200399627 | 26,134 | 1,705 / zero ignored, all 38 indexed names |
+| aarch64 | 14200998508 | 36,196 | 1,705 units / zero ignored; 527 images / unchanged one ignored |
+| CLI | 14199989236 | 413 | Exact baseline bytes; actual 159/150 floor and package tail |
+| wasm | 14199989355 | 541 | Exact five-success multiset / actual 5/4 floor |
+| semver | 14200856763 | 394 | Normalized baseline identical; 196 pass / 58 rule skips |
+
+All five verify API run/source identity, archive size/digest/CRC, safe unique
+inventory and every extracted byte. Dedicated/ARM unit success multisets
+equal reviewed `a56bea2` plus exactly the four original two-node controls;
+all prior 34 indexed names remain among 38. Actual budget/floor verdicts
+agree. Dedicated units use **1,979 / 153,133**, ARM **1,973 / 152,696**,
+within unchanged 2,000 / 155,000 caps. Other completed tiers retain their
+existing caps/floors. Detailed evidence and reproducible audit are under
+`/workspace/work/two-node-ci-review`; local preflight/protocol/full-native
+checks are under `/workspace/work/two-node-reference`.
+
+One authorized Terra/medium helper performs read-only evidence download/audit;
+the primary reruns the audit, inspects consequential job lines and verifies
+pinned workflow bytes and all 39 exact floor counts. Initial CLI redirected
+downloads are denied; the GitHub connector retrieves all required completed
+bytes successfully. No remaining access blocker for those bytes, helper
+qualification decision or cost/savings claim. No new host oracle, mount, VM,
+manual workflow, experiment or card operation occurs in this checkpoint.
+
+Next implement the independent two-node Linux operation/delta assertions and
+matrix wiring: exact shared input/query bytes, complete explicit namespace,
+root/other-node/old-map protection, exact block/extent-node accounting and
+independent cold readback. The **16 Linux / 32 Rust-C** cases remain unrun;
+Rust/C two-node emissions and focused jobs remain unwired. Review pending
+full CI when terminal, reusing the closed oracle-correction audit rather
+than rerunning it. New-source automatic CI is pending at push. No automatic
+matrix dispatch here. Stages 4–5 stay partial/not quantified, stages 6–7 not
+reached, casefold writes blocked and Windows/card/SteamOS unqualified.
