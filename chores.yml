@@ -88,6 +88,18 @@ chore_min_version: 0.6.0
 #   flatters the row.
 #
 #     tier      measured          budget            headroom, and why
+#     native    4,023 / 248,416    4,040 / 250,000   Two-node source 98b8708,
+#                                                    full run 43965365470,
+#                                                    artifact 14282661248:
+#                                                    all 2,565 passes and the
+#                                                    unchanged ignored fuzz.
+#                                                    Five extra slow-test
+#                                                    notices breach 4,020 /
+#                                                    248,000, exit 65. Exact
+#                                                    complete-log replay fails
+#                                                    old caps and passes these;
+#                                                    output/selection/floor stay.
+#   Historical native measurement and then-current budget:
 #     native    3,977 / 245,220    4,000 / 248,000   Full-node reference 5cc71e7,
 #                                                    run 42278162281, artifact
 #                                                    13538423818: 2,539 passes,
@@ -867,7 +879,11 @@ tasks:
       # produce 4,008 lines / 247,165 bytes; 4,000 lines returns 65.
       # Identical complete-log replay passes 4,020 / 248,000 without
       # changing bytes, test selections, the existing ignored fuzz or floor.
-      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4020 248000 -- scripts/test.sh --locked --release'
+      # Two-node source 98b8708, CI 43965365470: all 2,565 successes
+      # produce 4,023 lines / 248,416 bytes after five extra slow notices.
+      # The 4,020/248,000 wrapper returns 65; byte-identical complete-log
+      # replay passes 4,040/250,000. Preserve selection, output and floor.
+      - 'scripts/tier.sh "test:native (whole suite, release)" suite 4040 250000 -- scripts/test.sh --locked --release'
       - 'bash scripts/core.sh test-floor suite 1060'
       - task: test:scripts
       # The command-line tools, built and staged from this checkout, then

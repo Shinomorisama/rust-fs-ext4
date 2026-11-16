@@ -1,5 +1,9 @@
 # Ordinary two-intermediate-node insertion review
 
+Latest continuation: the [Linux reference and emission design review](#linux-reference-closure-and-separate-emission-design--2026-11-16)
+records the completed sixteen-case reference, observed split differences and
+the remaining complete-CI prerequisite. Earlier dated gates below are historical.
+
 ## Checkpoint and current gate — 2026-11-07
 
 This checkpoint reviews ordinary hard-link insertion into a depth-one index
@@ -2758,3 +2762,152 @@ full CI when terminal, reusing the closed oracle-correction audit rather
 than rerunning it. New-source automatic CI is pending at push. No automatic
 matrix dispatch here. Stages 4–5 stay partial/not quantified, stages 6–7 not
 reached, casefold writes blocked and Windows/card/SteamOS unqualified.
+
+## Linux reference closure and separate emission design — 2026-11-16
+
+This review continues the bounded qualification contract above. Source
+`55b08c9` completes the independent sixteen-case ordinary two-node reference
+in focused, native and guest contexts; the primary has reviewed all **48
+cases / 144 phase images**. Exact images, hashes, namespace/metadata, protected
+bytes, allocation and cold readbacks are recorded in the current
+[handoff](extprogress.md#current-checkpoint). This evidence is reused here;
+the closed raw-image/oracle audits are not repeated.
+
+Source `98b8708` also passes all 25 Stage 0 jobs, all 40 actual focused
+floor calls and both **2,565-test whole-suite executions**. Its native
+wrapper fails only the measured output caps at **4,023 lines / 248,416
+bytes**, exit 65. The actual native whole floor, trailing scripts/CLI and
+`ci-ok` are not closed. The byte-identical saved-log repair is documented
+in `chores.yml` and the handoff; complete CI after that repair is the
+remaining execution prerequisite. No Rust/C two-node emission is credited.
+
+### Shared-input execution and support boundary
+
+Keep the existing three `link_index_capacity_driver.rs::Mode` variants,
+observers, assertions, guest behavior, test names and scratch prefixes
+byte-identical. A new separate two-node emission module/test must consume
+the owned result of the reference case rather than relax a one-root assertion.
+
+The reference result should retain its `Prepared` input/snapshot/selected
+query and the completed Linux snapshot. A narrow extraction of the current
+case body can return that owned result plus its existing manifest row; the
+current reference-only wrapper keeps its sixteen-case behavior and saved
+paths. Finish the Linux operation and cold validation before returning it.
+This avoids recomputing or cloning the selection, reparsing retained JSON as
+the authority, or keeping an open mount across the two writers.
+
+Each new emission run prepares four bounded Linux predecessors, then sixteen
+reference cases. For each completed reference, make separate Rust and C
+working copies of the **same captured input** and borrow the **same selected
+query bytes**. Hash the pristine source/input before and after both emissions.
+Record the Linux/reference/query identity in both API observations. This is
+**16 Linux operations + 32 Rust/C emissions**, with one complete sorted raw
+namespace per input; no dense `0..total` inference or seed/class substitution.
+Keep the existing 16,384-candidate/name, 1,024-directory-block and four-external-
+extent-node limits and bounded Linux predecessor preparation.
+
+The new matrix has a distinct library test and focused job. Existing 25 job
+bodies, exact test selections/floors and old emission modes remain unchanged.
+The focused job follows the same source pins, toolchain, guest-only oracles,
+explicit single-test floor/refused ignored cases and retained evidence pattern.
+Existing whole-suite ceilings are changed only after an actual measured
+failure and identical-log replay; this design does not budget future tests.
+
+### Output comparison after the measured split differences
+
+The reference observes **15 of 24 split boundaries** differing from the
+preflight planner's proposals, with four query-half differences. The format
+contract requires correct routing and preserved effects; the existing
+reference assertions do not require a particular median boundary. Preserve
+both observations rather than rewriting the reference around the driver.
+
+| Property | Linux versus Rust/C comparison |
+|---|---|
+| Input and operation | Exact image hash, source/parent inode/generation and selected raw name/version/seed/hash/root/node/leaf identity must agree. |
+| Namespace | Exact input entries plus one query to the existing source; complete raw names/inodes equal Linux's completed namespace. |
+| Root and unselected bytes | Preserve the complete input root, both root routes, other node and all unselected old leaves in each output. |
+| Room | INDEX/depth/nodes/routes/mapping/size/allocation remain; exactly the selected old leaf changes. |
+| Split | Keep all old mappings/routes; append exactly one directory leaf and one route in the selected node; validate its even boundary inside the selected leaf's inherited interval. |
+| Selected boundary | Record Linux's actual boundary and the driver's actual boundary separately. Require the driver to match its deterministic preflight plan and verify every old/new name against its own resulting tree. |
+| Metadata | Preserve non-effect fields. Parent links stay, source links and parent version increase once. Driver timestamps use its injected stamp; Linux's wall-clock values are separately retained. |
+| Allocation | Debit each output's actual added directory/extent nodes against its own bitmaps/group/global counts; old mappings and extent-node addresses remain. New physical block numbers need not coincide between allocators. |
+
+Never compare a driver's selected half to Linux's selected half as a proxy
+for correct membership. Validate each full output through the existing
+complete indexed observer, judged non-repairing checks and a fresh read-only
+Linux cold mount. Preserve complete role uniqueness, checksum validity,
+correct hash intervals and raw inventory rather than requiring byte-identical
+selected-node/leaf contents between writers.
+
+The measured Linux cases allocate zero blocks for room and one leaf block
+for split. Thirty-six audited cases retain an existing external extent leaf;
+none creates a new extent node. Any new extent-node allocation reached by a
+driver emission must therefore be explicitly reported and separately reviewed
+against its independent closed/cold evidence; it is not inherited Linux
+mutation coverage. Keep the original at-most-one-new-extent-node accounting
+bound and exact protected-byte checks. No broader branch is qualified by this
+design alone.
+
+### Driver operation and independent readback
+
+Use `Filesystem::apply_link_at` and `fs_ext4_link_at` with requested C attribute
+readback, both on fresh mounts of the common input. Reuse the existing public
+link dispatch and full C attribute validator where their contracts apply;
+introduce no production API or alternate mutation path.
+
+For each API, retain duplicate, 256-byte-name and directory-source refusal
+observations: **96 calls across 32 profiles**, expected EEXIST/ENAMETOOLONG/
+EISDIR, unchanged mounted image bytes and zero clock observations. Existing
+synthetic corruption/private-decline controls continue to establish their
+separate no-effect boundaries. A private decline must never be relabelled as
+a no-effect public fallback refusal.
+
+The single positive call must observe its injected clock exactly once and
+never request a new generation. Require exact parent mtime/ctime and source
+ctime (including nanoseconds), parent version/source links once, complete
+source/parent identity and preservation of unrelated fields. Validate and
+retain every C attribute field, including generation, kind, size/sectors,
+links, flags and all timestamp components; tie that record to the source's
+closed raw inode/debugfs and Linux cold metadata.
+
+Keep input/refused/post-call-dirty/closed/cold image identities for each API.
+Persist the call result and best available working bytes before success
+assertions so an unexpected refusal or partial failure remains reviewable.
+`finish()` must leave the filesystem clean, RECOVER clear and any journal
+clean. Checks of dirty bytes do not become an interruption/recovery claim.
+Judged checks and cold validation consume separate preserved copies; require
+original closed bytes and cold bytes to remain identical under read-only
+observation. Bulk guest namespace/program data stays in retained files,
+using the tested quoting helper rather than shell arguments.
+
+The test-only transition checker may reuse the complete two-node reference
+geometry/protection/accounting checks and add deterministic driver-clock/C
+checks. This does not justify weakening the existing Linux or three old
+emitter assertions. Parent/source table sharing, all other inode slices,
+EAs, payloads/root directory and old extent-node protection remain explicit.
+
+### Evidence and review decision
+
+Use a separate persistent repository-local emission evidence root, surviving
+owned test-scratch cleanup. Retain source hashes, predecessor images and
+selection traces, reference input/output/cold, each API's five phases,
+program/expected files, result/attribute records, raw inodes, complete
+inventories and tool streams/statuses. Focused/native/guest jobs upload reached
+partial evidence on failure as well as completed matrices. A completed row
+means all required closed/cold checks finished; a partial manifest must not
+claim 32 successful emissions merely because dispatch started.
+
+Review exact-source whole/unit name multisets, all actual focused/full floors,
+native trailing twenty scripts/CLI/static-library checks and `ci-ok`. Audit
+all saved input/query bindings, every output's independent routing, raw
+protected bytes and exact allocation. Keep the old native 1,705 occurrences /
+38 indexed names and every previously qualified emitter case intact.
+
+The design is ready for the separate implementation once repaired-source
+complete CI closes. This checkpoint adds no emission code, matrix execution,
+manual dispatch, test selection or write qualification. Caller exclusion,
+healthy ordinary non-continuation layouts and closed reference handles remain
+scope conditions. Two-node casefold writes, full-node fallback expansion,
+new generic ownership admission, interrupted writes, actual card/Windows/
+SteamOS behavior and the existing ignored fuzz case remain separate gates.
+Stages 4–5 stay partial/not quantified; casefold writes remain blocked.
