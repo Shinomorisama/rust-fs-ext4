@@ -2543,3 +2543,95 @@ evidence through byte-identical documentation checkpoints; do not restart
 identical artifact audits or rerun experiments. Stages 4–5 remain partial/not
 quantified, stages 6–7 not reached, two-node qualification pending, casefold
 writes blocked and actual Windows/card/SteamOS use unqualified.
+
+## Native two-node controls — 2026-11-16
+
+The native preparation from the closed oracle prerequisite is now implemented
+in `src/fs/guarded_chmod/tests/link_index_two_node_native.rs`, registered by
+the existing indexed-boundary module. Only test support and this handoff/review
+change; production implementation, old test names, dependencies, workflows,
+limits, floors and write gates are unchanged. Predecessor `30a8b86` full
+**43789072619** passes as metadata only; its documentation-only source does
+not need another identical oracle artifact audit.
+
+### Fixture and operation contract
+
+The fixtures are synthetic ordinary checksummed **direct/nonjournaled Ext4**,
+at 1/4 KiB. Each has depth one, two distinct intermediate nodes, complete
+unique logical leaf roles and inherited root bounds. A sorted cached hash pool
+selects unused 255-byte queries in each root interval, removes incidental equal
+hashes and fails on exhaustion. The actual maximum search is **8,256**
+candidates, below the planned 16,384; the four-digit-name bound is strictly
+below 10,000. The maximum directory is **515 blocks**, below 1,024. No hash
+seed/algorithm substitution, aliased full-node routes or continuation boundary
+is accepted. Preflight verifies complete namespace/checksums/routing, actual
+selected leaves, and whether the exact query fits before either writer runs.
+
+| Native cases across both block sizes | Calls | Required result |
+|---|---:|---|
+| Both root intervals × room/split × Rust/C | 16 | Success, full protected-byte/map/accounting/namespace checks. |
+| Both intervals × room/full leaves × six corruptions × clean/already-dirty × Rust/C | 192 | EIO with no writes, flushes, clock, marker, health or device-byte change. |
+| Both intervals × duplicate/overlong/directory-source × Rust/C | 24 | EEXIST / ENAMETOOLONG / EISDIR with the same no-effect checks. |
+| Both intervals × genuinely full selected node | 4 | Private split returns `Ok(false)`; staged blocks/pending state and public device/runtime state unchanged. |
+
+The six corruptions are bad checksums and checksum-valid malformed root,
+selected node and selected leaf. The root structural control changes the root
+information length, the node control clears its count and the leaf control
+sets an invalid record length. Private full-node declines remain distinct
+from public index-dropping fallback: this checkpoint adds no two-node public
+fallback qualification.
+
+Space insertion preserves every allocation byte/count and all old routes/maps.
+Splitting preserves the root and index flags, every old mapping/route, the
+other node and all other leaves; one appended data block is charged exactly
+in size/sectors, bitmap and group/global counters. The selected node gains
+exactly its new leaf route within the same root interval. Whole-device
+comparison excludes only specified changed blocks, with precise allowed-field
+masks inside superblock, descriptor and shared source/parent inode tables.
+Protected inode slices, root-directory bytes, unrelated data, payloads and EAs
+therefore stay exact. Source links increase once, parent links stay unchanged,
+parent version increases once, exact ctime/mtime and one clock observation
+agree, and complete C attribute records match the source. Complete unique
+names/inodes and hash routing agree before/after and after finish/remount.
+
+These are driver-built fixtures using driver hashes/checksums; passing proves
+native self-consistency and effect boundaries, not independent Linux format
+or journaled-layout compatibility.
+
+### Executed verification and review decision
+
+Four new test names (`two_node::positive_1k`, `positive_4k`, `corruption_1k`,
+`corruption_4k`) pass their focused run. An actual temporary production routing
+fault forces split selection through the first root route. The 1 KiB positive
+test fails, **exit 101 / one failed / zero ignored**, proving the second-range
+split control detects it. The source is restored byte-for-byte before final
+verification: `src/fs.rs` SHA-256
+`2927719483324709dd15fe14f7ac84046fbf26ddc81795cb10c373aaed1f70ff`.
+No wrong-root production change is retained.
+
+Full instrumented native units, rerun on the final lint-corrected source,
+retain the exact previous **1,701** successful-name multiset plus these four:
+**1,705 passed / zero failed / zero ignored**. All **34** previous indexed
+controls remain, **38** including the additions. The real tier floor of 1,705
+passes; the project floor is unchanged. Output **1,971 lines / 153,369 bytes**
+fits the unchanged **2,000 / 155,000** caps. Measured production-line native
+unit coverage rises **30,332 → 30,338 / 43,809**, about **69.2369% → 69.2506%**;
+this is not a Stage 5 completion percentage. Initial lint rejects two redundant
+comparisons in candidate bounds; the stricter `< 10000` assertions resolve
+them. Final full lint and final unit/coverage checks pass. Scratch verification
+and retained logs are under `/workspace/work/two-node-native` and
+`tmp/logs/two-node-{native,protected,wrong-root-red,units}.log`; these local
+files are not substitutes for new-source automatic CI artifacts.
+
+The native checkpoint passes within this synthetic direct Ext4 scope.
+New-source automatic CI remains pending at push; no host oracle/mount, VM,
+manual workflow, new experiment, helper or real card is used. Independent
+two-node **16 Linux / 32 Rust-C** mutation/emission cases remain **unrun**.
+Review exact-source CI/native retention next, then implement the separate
+explicit two-node Linux reference mode, preserving all three existing emitter
+modes. Keep four direct/journaled 1/4 KiB layouts, both intervals, room/split,
+identical input/query bytes, finite selection, explicit predecessor namespace
+and complete protected-byte/map/accounting evidence. Do not infer a dense
+`cap-*` name set or simply relax one-root/one-node assertions. No automatic
+matrix dispatch. Stages 4–5 remain partial/not quantified, stages 6–7 not
+reached, casefold writes blocked and actual Windows/card/SteamOS unqualified.

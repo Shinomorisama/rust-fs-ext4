@@ -82,6 +82,61 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Native two-node indexed-link controls implemented — 2026-11-16:**
+  New test-only support covers ordinary, checksummed, direct/nonjournaled
+  Ext4 with two distinct intermediate nodes at 1/4 KiB blocks. Four new
+  test names exercise **16 Rust/C positive calls**, **192 public corruption
+  calls**, **24 invalid-input refusals** and **four private full-node
+  declines**. Both root intervals cover insertion with space and splitting.
+  Fixtures have unique complete routes/leaves, bounded distinct-hash query
+  selection (at most **8,256** candidates, below 16,384), and at most **515**
+  directory blocks. No seed substitution or continuation qualification.
+
+  Positive controls preserve root/index flags, old maps/routes, the other
+  node and leaves, protected inode-table bytes, payloads and EAs. Space
+  insertion allocates nothing; splitting appends exactly one block with
+  exact bitmap/group/global debit. Complete routed namespace, source links,
+  parent version/timestamps, one clock observation and C attributes agree;
+  finish/remount retains the namespace. Selected root/node/leaf checksum
+  and structural corruption returns EIO on clean/already-dirty mounts with
+  unchanged bytes, writes/flushes, clock, marker and health. Duplicate,
+  overlong-name and directory-source refusals have the same no-effect
+  checks. Real-capacity full-node **private** declines preserve staged
+  state too; no new public index-dropping fallback qualification is claimed.
+
+  An executed temporary wrong-root routing mutation fails the 1 KiB
+  positive control (exit 101); production `src/fs.rs` is restored exactly
+  (SHA-256 `2927719483324709dd15fe14f7ac84046fbf26ddc81795cb10c373aaed1f70ff`).
+  Focused controls pass. Full native units retain the exact **1,701**
+  prior successful-name multiset plus four names, **1,705** total; all
+  **34** prior indexed controls remain, **38** with the additions, zero
+  failed/ignored. Native unit coverage rises from **30,332 to 30,338 /
+  43,809** production lines; this measured scope is not Stage 5 progress.
+  Existing output caps/floors are unchanged. Lint's two redundant fixture
+  comparisons are corrected to the stricter 10,000-candidate bound; final
+  lint passes. Final unchanged-source unit/coverage confirmation is recorded
+  in the [native review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#native-two-node-controls--2026-11-16).
+
+  No production behavior, dependency, workflow, gate or previous test is
+  changed. This is synthetic native self-consistency evidence, **not**
+  Linux-clean image or journaled-layout qualification. New-source automatic
+  CI is pending at push; documentation-only predecessor `30a8b86` / full
+  **43789072619** passes as metadata only, without another artifact audit.
+  No helper, host oracle/mount, VM, real card, manual workflow or experiment
+  is used. Reuse the already closed corrected-oracle prerequisite below.
+
+  **Next bounded task:** review exact-source automatic CI/native-control
+  retention, then prepare a separate explicit two-node Linux reference
+  mode. Preserve the three existing emitter modes and assertions; their
+  one-root/one-node assumptions cannot simply be widened. The planned
+  **16 Linux / 32 Rust-C** matrix (four direct/journaled 1/4 KiB layouts,
+  both root ranges, room/split) remains unrun and needs exact shared input
+  and query bytes, explicit complete namespace and protected-byte/map/
+  accounting evidence. No automatic mutation-matrix dispatch. Stages 4–5
+  remain partial/not quantified, stages 6–7 not reached, two-node write
+  qualification pending, casefold writes blocked and Windows/card/SteamOS
+  use unqualified.
+
 - **Corrected oracle full evidence closed; two-node preparation can resume — 2026-11-15:**
   Integration source **`a56bea26554865b020a689505cc01576d305f69c`** passes
   full **43701273105**, all eleven jobs / `ci-ok`, and Stage 0
@@ -14625,7 +14680,19 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 0/3/5 checkpoint: exact runner `dea278c` passes the previously
+Latest Stage 5 native checkpoint (2026-11-16): four test-only two-node controls
+add 16 Rust/C positive calls, 192 corruption calls, 24 invalid-input refusals
+and four private full-node declines across both root intervals and 1/4 KiB
+direct Ext4. Exact native retention is 1,701 previous plus four new names,
+1,705 total, with all 34 previous indexed controls retained; native unit
+coverage gains six production lines and full lint passes. The temporary
+wrong-root mutation is caught and production source restored. These synthetic
+controls do not qualify independent Linux/journaled two-node writes; exact-
+source automatic CI and the later 16 Linux / 32 Rust-C matrix remain pending.
+Stages 4–5 stay partial/not quantified, casefold writes blocked, stages 6–7
+not reached and actual Windows/card/SteamOS use unqualified.
+
+Preceding Stage 0/3/5 oracle checkpoint: exact runner `dea278c` passes the previously
 reviewed full **43381484080** and Stage 0 **43381484039**. Targeted experiment
 **43415472096** is now reviewed as failed: five actual trial floors pass,
 then `13835` retains a one-name selected-leaf mismatch, exit 101; eleven
@@ -14672,7 +14739,7 @@ writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Resume bounded ordinary two-node preparation. The scoped oracle correction at `a56bea2` is closed by full **43701273105**, Stage 0 **43701273127**, retained names/floors/budgets and focused/native/VM raw capture audits. Reuse that source evidence through byte-identical documentation checkpoints; do not restart identical audits or rerun experiments. Refresh the existing healthy/non-continuation source/support preflight, then add native room-insertion, leaf-split and selected root/node/leaf corruption controls under both root intervals. Preserve all **1,701** current baseline occurrences and **34** indexed-boundary controls, existing support modes/resource bounds, and private full-node decline versus public fallback semantics. The later **16 Linux / 32 Rust-C** positive matrix still requires independent input/output preparation, execution, byte review and scoped qualification; do not automatically dispatch it before native preparation/review. Other Stage 0 mutation-image artifacts remain metadata-only. Keep original failed runs and the unchanged retained witness; the lost earlier `673c16f` cause remains unestablished. Stages 4–5 stay partial/not quantified, stages 6–7 not reached, two-node qualification pending, casefold writes blocked and actual Windows/card/SteamOS use unqualified.
+1. Review exact-source automatic CI and the four new native two-node controls, retaining all **1,705** unit occurrences and **38** indexed controls without changing previous selections/floors/caps. Then prepare a separate explicit two-node independent Linux reference mode for the **16 Linux / 32 Rust-C** positive matrix: four direct/journaled 1/4 KiB layouts, both root intervals, room insertion/split, identical input/query bytes, finite candidate selection, explicit complete namespace, protected raw bytes/maps and exact accounting. Preserve all three existing emitter modes and their assertions. Native synthetic direct Ext4 controls are implemented; independent Linux mutation/emission execution and saved-byte qualification remain unrun. Do not automatically dispatch the matrix or repeat the closed oracle audits/experiment. The scoped oracle correction at `a56bea2` remains closed by full **43701273105**, Stage 0 **43701273127** and the retained focused/native/VM evidence. Other Stage 0 mutation images remain metadata-only; the lost `673c16f` cause stays unestablished. Stages 4–5 remain partial/not quantified, stages 6–7 not reached, casefold writes blocked and actual Windows/card/SteamOS use unqualified.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

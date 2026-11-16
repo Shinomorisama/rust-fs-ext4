@@ -7,6 +7,9 @@ mod root_capacity;
 #[path = "link_index_intermediate_native.rs"]
 mod intermediate;
 
+#[path = "link_index_two_node_native.rs"]
+mod two_node;
+
 #[derive(Clone, Copy, Debug)]
 enum Case {
     FullParent,
