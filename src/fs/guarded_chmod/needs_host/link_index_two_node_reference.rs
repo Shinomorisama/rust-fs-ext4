@@ -141,8 +141,14 @@ fn guest(
         &expected,
     )
     .unwrap();
+    // A complete explicit namespace already exceeds Linux's single-argument
+    // limit in the smallest profile. The guest sees repository files at the
+    // same path; keep bulk data in a retained program, not the shell argument.
+    let program = base.with_extension(format!("{label}.guest.py"));
+    std::fs::write(&program, format!("{expected}\n{GUEST}")).unwrap();
     let script = format!(
-        "python3 - \"$MNT\" {mode} <<'TWO_NODE_REFERENCE'\n{expected}\n{GUEST}\nTWO_NODE_REFERENCE\n"
+        "python3 {} \"$MNT\" {mode}\n",
+        fs_ext4_test_support::guest_quote(program.to_str().unwrap())
     );
     let out = if mode == "link" {
         guest_kernel_write(image.to_str().unwrap(), &script)
