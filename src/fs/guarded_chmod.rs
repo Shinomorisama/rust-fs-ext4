@@ -899,6 +899,10 @@ fn check_times(times: [(i64, u32); 2]) -> Result<()> {
 mod two_node_query;
 
 #[cfg(test)]
+#[path = "guarded_chmod/needs_host/link_index_two_node_shape.rs"]
+mod two_node_shape;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

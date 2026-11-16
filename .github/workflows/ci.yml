@@ -239,6 +239,11 @@ jobs:
           done
       - name: chore lint
         run: chore lint
+      - name: Retain two-node reference source identity
+        run: |
+          mkdir -p tmp/link-index-two-node-reference
+          git rev-parse HEAD > tmp/link-index-two-node-reference/source-commit.txt
+          git ls-files -z src tests/support tests/scripts/test_link_index_two_node_protocol.py Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml .github/workflows/ci.yml | xargs -0 sha256sum > tmp/link-index-two-node-reference/source-sha256.txt
       - name: chore test
         id: tier
         run: chore test
@@ -261,6 +266,14 @@ jobs:
         with:
           name: htree-descent-native-evidence
           path: tmp/htree-descent-evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Keep reached two-node Linux reference evidence
+        if: always() && steps.tier.outcome != 'skipped' && hashFiles('tmp/link-index-two-node-reference/source-commit.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-two-node-native-reference
+          path: tmp/link-index-two-node-reference/
           if-no-files-found: error
           retention-days: 30
       - name: chore vm:status (the VM is down again)
@@ -346,6 +359,11 @@ jobs:
       # guest installs from rust-toolchain.toml. That is the point of the
       # job — on a Mac there is no usable host toolchain for these tests
       # either.
+      - name: Retain two-node reference source identity
+        run: |
+          mkdir -p tmp/link-index-two-node-reference
+          git rev-parse HEAD > tmp/link-index-two-node-reference/source-commit.txt
+          git ls-files -z src tests/support tests/scripts/test_link_index_two_node_protocol.py Cargo.toml Cargo.lock .github/workflows/casefold-stage0.yml .github/workflows/ci.yml | xargs -0 sha256sum > tmp/link-index-two-node-reference/source-sha256.txt
       - name: chore test:vm
         id: tier
         run: chore test:vm
@@ -368,6 +386,14 @@ jobs:
         with:
           name: htree-descent-guest-evidence
           path: tmp/htree-descent-evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Keep reached two-node Linux reference evidence
+        if: always() && steps.tier.outcome != 'skipped' && hashFiles('tmp/link-index-two-node-reference/source-commit.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-two-node-guest-reference
+          path: tmp/link-index-two-node-reference/
           if-no-files-found: error
           retention-days: 30
       - name: chore vm:status (the VM is down again)

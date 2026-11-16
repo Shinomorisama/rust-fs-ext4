@@ -15,8 +15,6 @@ mod node_full;
 #[path = "link_index_node_full_driver.rs"]
 mod node_fallback;
 
-// Preparation is compiled and reviewed before a separate matrix job is wired.
-#[allow(dead_code)]
 #[path = "link_index_two_node_reference.rs"]
 mod two_node;
 

@@ -385,6 +385,71 @@ fn positive(bs: u32) {
                         fs.read_block(fs.groups[0].inode_bitmap).unwrap(),
                         inode_bitmap
                     );
+                    {
+                        use crate::fs::guarded_chmod::two_node_shape::{self as shape, Case, View};
+                        let current_map: Vec<_> = (0..now.size / u64::from(bs))
+                            .map(|n| fs.map_inode_logical(&now, n).unwrap().unwrap())
+                            .collect();
+                        let current: Vec<_> = current_map
+                            .iter()
+                            .map(|p| fs.read_block(*p).unwrap())
+                            .collect();
+                        let before_view = View {
+                            blocks: &blocks,
+                            mapping: &map,
+                        };
+                        let after_view = View {
+                            blocks: &current,
+                            mapping: &current_map,
+                        };
+                        let case = Case {
+                            root_slot: range,
+                            leaf: selected[range],
+                            major: hash(fs, query),
+                            name: query,
+                            split,
+                        };
+                        assert_eq!(
+                            shape::check(before_view, after_view, case).unwrap(),
+                            appended
+                        );
+                        let mut wrong = case;
+                        wrong.root_slot ^= 1;
+                        assert!(shape::check(before_view, after_view, wrong).is_err());
+                        let mut changed = current.clone();
+                        changed[0][31] ^= 1;
+                        assert!(shape::check(
+                            before_view,
+                            View {
+                                blocks: &changed,
+                                mapping: &current_map
+                            },
+                            case
+                        )
+                        .is_err());
+                        let mut changed = current.clone();
+                        changed[2 - range][bs as usize - 1] ^= 1;
+                        assert!(shape::check(
+                            before_view,
+                            View {
+                                blocks: &changed,
+                                mapping: &current_map
+                            },
+                            case
+                        )
+                        .is_err());
+                        let mut relocated = current_map.clone();
+                        relocated[0] ^= 1;
+                        assert!(shape::check(
+                            before_view,
+                            View {
+                                blocks: &current,
+                                mapping: &relocated
+                            },
+                            case
+                        )
+                        .is_err());
+                    }
                     assert_eq!(
                         fs.read_inode_verified(fs.resolve(b"/peer").unwrap())
                             .unwrap()

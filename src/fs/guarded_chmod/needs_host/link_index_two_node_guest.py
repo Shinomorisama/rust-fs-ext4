@@ -75,14 +75,48 @@ def audit(root, names, source):
     return result
 
 
-def main(root, mode, values, query_hex, source):
+def expected(result):
+    assert set(result['records']) == {'/policy', '/source', '/peer'}
+    for path, wanted in EXPECTED:
+        assert result['records'][path.decode()] == wanted
+    assert result['flags'] == FLAGS
+    assert (result['free_blocks'], result['free_inodes']) == FREE
+
+
+def delta(before, after, query_hex, source, split, block_size):
+    assert after['inventory'] == sorted(before['inventory'] + [[query_hex, source]])
+    assert after['flags'] == before['flags']
+    assert after['free_inodes'] == before['free_inodes']
+    assert after['records']['/peer'] == before['records']['/peer']
+    for path, allowed in [('/policy', {'size', 'blocks', 'mtime', 'ctime'}),
+                          ('/source', {'links', 'ctime'})]:
+        old, new = before['records'][path], after['records'][path]
+        assert set(old) == set(new)
+        assert {k:v for k,v in old.items() if k not in allowed} == {k:v for k,v in new.items() if k not in allowed}
+    old, new = before['records']['/policy'], after['records']['/policy']
+    debit = before['free_blocks'] - after['free_blocks']
+    assert (1 <= debit <= 2) if split else debit == 0
+    assert new['size'] == old['size'] + (block_size if split else 0)
+    assert new['blocks'] == old['blocks'] + debit * (block_size // 512)
+    assert new['mtime'] == new['ctime'] and new['mtime'] >= old['mtime']
+    assert new['ctime'] >= old['ctime']
+    old, new = before['records']['/source'], after['records']['/source']
+    assert new['links'] == old['links'] + 1 and new['ctime'] >= old['ctime']
+
+
+def main(root, mode, values, query_hex, source, *, split, block_size):
     assert mode in ["audit", "link", "cold"]
+    assert type(split) is bool and block_size in (1024, 4096)
     names = namespace(values)
     query = component(query_hex)
     assert len(query) == 255 and type(source) is int and source > 0
     if mode == "link":
         assert query not in names and len(names) < LIMIT
+    readonly = bool(os.statvfs(root).f_flag & os.ST_RDONLY)
+    assert readonly == (mode != 'link')
+    if mode == "link":
         before = audit(root, names, source)
+        expected(before)
         try:
             os.link(root + b"/source", root + b"/policy/" + query)
         except OSError as error:
@@ -90,17 +124,15 @@ def main(root, mode, values, query_hex, source):
                                   errno=error.errno, before=before), sort_keys=True))
             raise
         after = audit(root, sorted(names + [query]), source)
+        delta(before, after, query_hex, source, split, block_size)
         print(json.dumps(dict(event=mode, query_hex=query_hex, before=before,
-                              after=after), sort_keys=True))
+                              after=after, readonly=readonly), sort_keys=True))
     else:
         result = audit(root, names, source)
-        if mode == "cold":
-            for path, wanted in EXPECTED:
-                assert snapshot(root + path) == wanted
-            assert result["flags"] == FLAGS
-            assert (result["free_blocks"], result["free_inodes"]) == FREE
-        print(json.dumps(dict(event=mode, query_hex=query_hex, **result), sort_keys=True))
+        expected(result)
+        print(json.dumps(dict(event=mode, query_hex=query_hex, readonly=readonly, **result), sort_keys=True))
 
 
 if __name__ == "__main__":
-    main(os.fsencode(sys.argv[1]), sys.argv[2], NAMES, QUERY_HEX, SOURCE)
+    main(os.fsencode(sys.argv[1]), sys.argv[2], NAMES, QUERY_HEX, SOURCE,
+         split=SPLIT, block_size=BLOCK_SIZE)
