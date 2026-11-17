@@ -1,8 +1,8 @@
 # Ordinary two-intermediate-node insertion review
 
-Latest continuation: the [Linux reference and emission design review](#linux-reference-closure-and-separate-emission-design--2026-11-16)
-records the completed sixteen-case reference, observed split differences and
-the remaining complete-CI prerequisite. Earlier dated gates below are historical.
+Latest continuation: the [full emission closure](#separate-emission-full-ci-and-nativeguest-evidence-closed--2026-11-17)
+records exact-source focused/full CI and the complete focused/native/guest
+saved-byte review. Earlier dated gates below are historical.
 
 ## Checkpoint and current gate — 2026-11-07
 
@@ -3122,3 +3122,90 @@ growth, broader admission/lifecycle and recovery remain separate. No project
 test, manual workflow, host oracle/mount or coverage run is launched by this
 documentation checkpoint. Stages 4–5 remain partial/not quantified, stages
 6–7 not reached, casefold writes blocked and Windows/card/SteamOS unqualified.
+
+## Separate emission full CI and native/guest evidence closed — 2026-11-17
+
+Exact source **`2aa0f301bf8cf5561936e165f99ebaae52247f9d`** passes full
+[44157868626](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44157868626),
+all **eleven jobs / `ci-ok`**. Both whole-suite successful/ignored name
+multisets are exactly the closed `7fd069e` baseline plus the one new
+emission test: **2,566 passes**, the same existing ignored slow fuzz case,
+no failures or removed occurrences. All **1,705 units / 38 indexed names**
+remain, with indexed names once in all five contexts. Native oracle/kernel/
+lwext4 sets remain **225 / 36 / 9**. Reuse the five already-closed current
+unit/ARM/browser/CLI/semver archives and focused **26 jobs / 41 floors**;
+no duplicate focused image audit is needed.
+
+The primary verifies all **fourteen actual full-job floor calls**, including
+native **2,566 / 1,060** at job **134308673883**, line **598**, then all
+**twenty** shell controls at **599**, CLI **159 / 150** at **604** and
+actual **six green tiers / 4,700 executions** at **605**. The five-stage
+static-library log includes the deliberately refused stale lock (exit 101)
+and its enclosing shell control passes. Native CLI is byte-identical to
+its standalone archive. Native whole output **4,025 lines / 248,758 bytes**
+fits unchanged **4,040 / 250,000** caps. Guest **134308674011**, lines
+**249–250**, passes **4,190 / 257,904** and actual **2,566 / 1,060**
+within unchanged **4,200 / 258,000** caps. Both VMs stop; aggregate
+**134359201179** reports all ten prerequisite results successful.
+
+Current native tier **14367724158** (**95,841 bytes**, SHA-256
+`d2e5af6cc1f6f052769dbeaf852f0ab3add0c09421c3793ede7ba6c441166561`)
+and guest tier **14367865759** (**45,714 bytes**, SHA-256
+`074f7abc937dfbdefdc9c5104a41390528079db4acaf75e5bf5aa8bca836efda`)
+verify API run/source/size/digest, ZIP CRC, safe complete extraction and
+every extracted byte. Named tests/statuses are compared with the exact
+closed baseline archives. No output cap/floor/dependency/production change
+or manual rerun is required.
+
+New native emission archive **14368248793** (**39,990,764 bytes**,
+SHA-256 `425f70d40ea8e2051c5553a2af4ca43161bf6d912dbd8e2ac0b5fae40ec5d199`)
+and guest emission **14367621165** (**39,372,123 bytes**, SHA-256
+`524579f05b1bbcbb06bf61794195401fed8312ff4abd9a594cce1f4f329ee242`)
+verify their complete **4,097 / 4,171 files**, API/source/size/digest,
+CRCs, safe paths, every extracted byte and **153 source hashes each**.
+The primary reuses the reviewed read-only byte auditor on these two fresh
+executions: **32 Linux references / 64 Rust-C emissions / 416 canonical
+phase images**, all **192 no-effect refusals**, exact common immutable
+input/query/reference pairing, deterministic clock/source generation and
+all eighteen attributes in each of **32 C results** pass.
+
+Raw namespace/routing/checksums, root/other-node/untouched-leaf bytes,
+old mappings/extent-node addresses, protected inode/table/EAs/payload/root
+directory and exact bitmap/group/global allocation all verify. Each room
+call allocates zero; each split allocates one leaf and **no new extent
+node**. Existing external extent leaves survive in **48 / 64 driver
+cases**. Driver boundaries match preflight. Linux boundaries differ in
+**4 / eight native** and **4 / eight guest** reference splits;
+query-half differences are **0 / 1** respectively, with valid independent
+routing and equal complete namespaces in every case.
+
+All **288 clean five-pass reports**, **864 raw inode/stat pairs and EA
+checksums**, **144 clean journal-superblock checksums**, **160 bound
+guest programs/headers/results**, **480 successful status records** and
+**571 JSONL files / 91,054 parseable records** verify. Every reference
+output/cold and driver closed/cold pair is byte-identical after read-only
+kernel validation. All five driver phases and dirty superblock checksums
+are retained; dirty snapshots do not establish interruption/recovery.
+Combined with the closed focused review, this emission mode has **48
+Linux references / 96 Rust-C calls / 624 reviewed canonical images**.
+The separate original reference mode's closed evidence is reused, not
+reopened; its new archives are not separately credited by this checkpoint.
+
+One authorized Terra/medium read-only helper audits tier identity/name/
+floor completeness. The primary reads/reruns its deterministic script,
+independently checks actual wrappers/trailing results and owns the full
+raw-image/program/C-attribute review. No discrepancy or filesystem defect
+is found. Cost unavailable; no savings claim. Reproducible primary audits
+and results: `/workspace/work/casefold-evidence/two-node-emission-full-2aa0f30`;
+helper: sibling `two-node-emission-full-helper-2aa0f30`. No project test,
+host oracle/mount, manual workflow or coverage run is launched here.
+
+**The separate ordinary healthy non-continuation two-node matrix is
+closed within its reviewed profile.** Next prepare deterministic coverage
+for a two-node leaf split that must allocate an external extent-map node,
+beginning with native controls and a bounded fixture contract, followed
+by independent Linux/Rust/C evidence before qualification. Collision/
+continuation, full-node growth, broader admission/lifecycle and recovery
+remain separate. This checkpoint changes documentation only. Stages
+**4–5 stay partial/not quantified**, **6–7 not reached**, casefold writes
+blocked and actual Windows/card/SteamOS use unqualified.
