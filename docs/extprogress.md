@@ -82,6 +82,67 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Repaired native CI closed; separate emission implementation unblocked — 2026-11-16:**
+  Exact source **`7fd069ea4e72d21990fe748f1b94d8c0c1479881`** passes
+  full [43980924561](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43980924561),
+  all **eleven jobs / `ci-ok`**. Seven current and seven reviewed-baseline
+  tier archives verify API source/run, size/SHA-256, ZIP CRC, safe complete
+  inventory and every extracted byte. Exact successful/ignored multisets
+  retain **2,565** whole-suite passes in both native/VM contexts and
+  **1,705** units in all three unit contexts. All **38 indexed names**
+  remain once in each of those five contexts. Oracle/kernel/lwext4 remain
+  **225/36/9**, ARM images **527**, browser **five**, CLI **159**, semver
+  **196 passes / 58 unchanged rule skips**. The existing ignored fuzz
+  case remains a gate; successful CI does not clear it.
+
+  Native job **133698069290** now reaches the actual whole-suite floor
+  **2,565 / 1,060** at line **583**, all **twenty** trailing shell checks
+  at **584**, native CLI **159 / 150** at **589** and the final **six
+  green tiers / 4,699 executions** at **590**. The retained static-library
+  log verifies all five stages, including the deliberately refused stale
+  lock (exit 101); its enclosing shell control passes. Native CLI bytes
+  equal both standalone archives. Native whole output **4,021 lines /
+  248,138 bytes** fits repaired **4,040 / 250,000**. VM job
+  **133698069296**, lines **240–241**, passes **4,188 / 257,562** and the
+  actual **2,565 / 1,060** floor within unchanged **4,200 / 258,000** caps.
+  The primary checks all **fourteen actual floor calls** in the completed
+  full-job logs and the aggregate's ten successful prerequisite results.
+
+  Native artifact **14288020211**, **95,843 bytes**, SHA-256
+  `2a662e7dea22080dbc5465e0a7dd02f1b3f2b4a79e17b26a4cea45d455854020`,
+  retains all nine tier/trailing logs. VM artifact **14285664255** has
+  **45,696 bytes**, SHA-256
+  `7c66ffe7518a7de420b827dd1497be1d9ee2d6c105464be77cf418299de76ab4`.
+  See the [closure review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#budget-repair-full-ci-closed--2026-11-16)
+  for all seven archive identities. The failed `98b8708` run and original
+  byte-identical old-red/new-green budget replay remain historical evidence;
+  this fresh run supplies the previously missing real floor/trailing checks.
+
+  All tracked files except `chores.yml` and the two handoff/review documents
+  are byte-identical between `98b8708` and `7fd069e`. Reuse the reviewed
+  **25 Stage 0 jobs / 40 actual floor calls** and closed **48 Linux cases /
+  144 phase images** from the preceding checkpoints. No raw-image/oracle
+  audit is repeated and no new capture archive is qualified here. One
+  authorized Terra/medium read-only helper downloads/audits tier evidence;
+  the primary reruns its audit, independently verifies API identity/all
+  eleven jobs, exact actual floors, consequential lines and the full
+  static-library/shell evidence. No discrepancy; cost unavailable, no
+  savings claim. Scratch: `/workspace/work/two-node-budget-repair-ci`.
+
+  **The complete-CI prerequisite is closed.** Next implement the reviewed
+  separate **32 Rust/C emission matrix**, borrowing one owned completed
+  Linux-reference result and exact common input/query per case. Preserve
+  all three old modes and existing names/floors/caps; retain 96 invalid
+  no-effect calls, deterministic clock/full C attributes, five driver phases,
+  each output's own correct routing/allocation and independent closed/cold
+  evidence. The 32 emissions remain **unimplemented/unrun**. This checkpoint
+  changes documentation only and launches no project test, oracle, VM,
+  experiment or manual workflow. Reuse closed `7fd069e` evidence through
+  documentation-only tips; do not restart identical CI/image audits or wait
+  for another documentation-only run before implementation. Stages 4–5
+  remain partial/not quantified, stages 6–7 not reached, casefold writes
+  blocked and actual Windows/card/SteamOS use unqualified.
+
 - **Measured native output-budget repair; emission design reviewed — 2026-11-16:**
   Exact source **`98b870875a23ecd43c71e9934cdf1a672f319d27`** passes all
   **25 Stage 0 jobs** in [43965365493](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/43965365493),
@@ -15081,15 +15142,16 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 5 preparation checkpoint (2026-11-16): the shared bounded
-two-node query selector and separate explicit-namespace guest protocol are
-prepared, with six mocked offline checks and enhanced existing native groups.
-No new Linux matrix execution or write qualification is claimed. Predecessor
-`9420fd6` Stage 0 passes all 24 jobs / 39 reviewed actual floor calls; five
-available full-CI archives retain dedicated/ARM names and unchanged other
-completed tiers. Native/VM whole-suite and aggregate evidence remains pending.
-Stages 4–5 stay partial/not quantified, writes blocked and stages 6–7 not
-reached. Finish the separate Linux operation/delta checks and matrix wiring.
+Latest Stage 5 checkpoint (2026-11-16): independent sixteen-case two-node
+Linux reference and saved-byte review are closed. Budget-repair source
+`7fd069e` now passes reviewed full CI **43980924561**, all eleven jobs /
+`ci-ok`, with exact 2,565 whole / 1,705 unit retention, 38 indexed names
+in five contexts and real native six-tier / 4,699 executions, twenty trailing
+shell controls, static-library freshness and CLI. The prior 25-job Stage 0 /
+40-floor and 144-image Linux review are reused without repetition. Separate
+32 Rust/C emissions remain unimplemented/unrun; their reviewed design is now
+unblocked. Stages 4–5 stay partial/not quantified, casefold writes blocked,
+stages 6–7 not reached and actual Windows/card/SteamOS use unqualified.
 
 Preceding Stage 5 native checkpoint (2026-11-16): four test-only two-node controls
 add 16 Rust/C positive calls, 192 corruption calls, 24 invalid-input refusals
@@ -15150,7 +15212,7 @@ writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Review complete CI after the measured **native-only 4,040-line / 250,000-byte budget repair**. Source `98b8708` passes all 25 Stage 0 jobs / 40 actual floors and all **2,565** tests in both whole suites, but native's **4,023 / 248,416** log breaches old caps and stops before its whole floor and trailing scripts/CLI. Identical-log replay is old-red/new-green with every byte retained. Close actual native floor/trailing checks and `ci-ok`, then implement the reviewed **separate 32 Rust/C emission matrix** on a shared owned Linux-reference result, exact common inputs and query bytes. Independent sixteen-case reference and **144-image** saved-byte review at `55b08c9` remain closed; reuse them. The [emission design](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#linux-reference-closure-and-separate-emission-design--2026-11-16) preserves per-output routing despite 15/24 differing split proposals, records unobserved new extent-node allocation separately and keeps all three old modes intact. Preserve **1,705** unit occurrences / **38** indexed names, selections/floors and write gates. Other Stage 0 mutation images remain metadata-only and lost `673c16f` cause unestablished. Stages 4–5 stay partial/not quantified, stages 6–7 not reached, casefold writes blocked and Windows/card/SteamOS unqualified.
+1. Implement the reviewed **separate 32 Rust/C emission matrix** on an owned completed Linux-reference result and exact common inputs/query bytes. The full-CI prerequisite is closed at `7fd069e` / **43980924561**, including real native whole floor, twenty trailing scripts, static-library freshness, CLI, six green tiers / **4,699** executions and `ci-ok`. Reuse that closure through documentation-only tips rather than repeat identical audits or wait for more documentation CI. Independent sixteen-case reference and **144-image** saved-byte review at `55b08c9`, plus 25-job Stage 0 / 40-floor review, remain closed. The [emission design](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#linux-reference-closure-and-separate-emission-design--2026-11-16) requires shared immutable inputs, 96 invalid no-effect calls, deterministic clock/full C readback, five driver phases and each output's independently valid routing/allocation despite measured Linux/planner split differences. Keep all three old modes byte-identical, **1,705** units / **38** indexed names, selections/floors/caps and write gates. No emission execution or qualification is credited yet; any actual output overflow needs retained identical-log replay before a cap change. Other Stage 0 mutation images remain metadata-only and lost `673c16f` cause unestablished. Stages 4–5 remain partial/not quantified, stages 6–7 not reached, casefold writes blocked and Windows/card/SteamOS unqualified.
 2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
 3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
 4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.

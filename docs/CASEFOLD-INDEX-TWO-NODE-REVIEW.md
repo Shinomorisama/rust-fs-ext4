@@ -2911,3 +2911,87 @@ scope conditions. Two-node casefold writes, full-node fallback expansion,
 new generic ownership admission, interrupted writes, actual card/Windows/
 SteamOS behavior and the existing ignored fuzz case remain separate gates.
 Stages 4–5 stay partial/not quantified; casefold writes remain blocked.
+
+## Budget-repair full CI closed — 2026-11-16
+
+Repair source **`7fd069ea4e72d21990fe748f1b94d8c0c1479881`**, full
+**43980924561**, attempt one, completes successfully with all **eleven jobs**
+and `ci-ok`. All ten aggregate prerequisites explicitly report success in
+job **133727667793**. Against failed source `98b8708` / **43965365470**,
+the only changed tracked files are `chores.yml` and the two review/handoff
+documents; all Rust, tests, dependencies and workflow blobs remain identical.
+Only the native whole-suite caps changed, as already justified by the retained
+byte-identical output replay. No test or write policy changed here.
+
+Seven current and seven baseline tier archives verify API source/run identity,
+advertised byte length/SHA-256, ZIP CRC, safe unique complete inventories and
+every extracted byte. Successful-name and ignored-status multisets match the
+reviewed baseline exactly. Retention is **1,705** units in dedicated/native/
+ARM, **2,565** whole passes in native/VM, **225/36/9** oracle/kernel/lwext4,
+**527** ARM images and **five** browser tests. All **38 indexed names** occur
+once in each of five unit/whole contexts. CLI retains **159**, with exact
+byte equality between native/current standalone/baseline standalone logs;
+semver differs only in durations, **196 passes / 58 unchanged rule skips**.
+The existing ignored fuzz case remains unchanged and unqualified.
+
+| Current tier | Artifact | ZIP bytes |
+|---|---:|---:|
+| native x86_64 | 14288020211 | 95,843 |
+| whole suite in VM | 14285664255 | 45,696 |
+| dedicated units | 14283376909 | 26,129 |
+| aarch64 | 14282589904 | 36,190 |
+| standalone CLI | 14283595795 | 413 |
+| browser | 14283063271 | 541 |
+| semver | 14283167925 | 395 |
+
+Native archive SHA-256:
+`2a662e7dea22080dbc5465e0a7dd02f1b3f2b4a79e17b26a4cea45d455854020`.
+VM archive SHA-256:
+`7c66ffe7518a7de420b827dd1497be1d9ee2d6c105464be77cf418299de76ab4`.
+The failed baseline native archive/digest and saved old-red/new-green replay
+remain preserved in the preceding checkpoint; this success does not relabel
+that original run.
+
+Native job **133698069290** confirms actual unicode/unit/oracle/kernel/
+lwext4/whole/CLI floors at lines **539/565/574/576/581/583/589**. Whole
+output is **4,021 lines / 248,138 bytes**, within repaired **4,040 / 250,000**.
+Line **584** reaches all **twenty** trailing shell controls, exact pinned
+`tests/scripts/test-*.sh` names and PASS verdicts, **40 lines / 2,213 bytes**.
+The full static-library log retains first build, deleted header, core edit,
+Unicode-table edit and deliberately refused stale lock (expected exit 101);
+its enclosing shell test passes. CLI staging/install and **159 / 150** pass,
+then line **590** reports the real **six green tiers / 4,699 executions**.
+These were unrun in the failed budget checkpoint and are now closed.
+
+VM job **133698069296**, lines **240–241**, confirms **4,188 / 257,562**
+within unchanged **4,200 / 258,000**, followed by actual **2,565 / 1,060**.
+Dedicated job **133696860453**, ARM **133698069256**, browser
+**133696860138** and standalone CLI **133696860520** retain their actual
+unit/image/Unicode/browser/CLI floors. The primary separately asserts the
+complete **fourteen-call actual full-job floor multiset**, current API
+run/source/all-job success and aggregate results. No count is inferred from
+an earlier failed wrapper or a local replay in place of the real floor.
+
+One authorized Terra/medium read-only helper downloads/audits the tier bytes
+and supplies floor excerpts. The primary reads and reruns its audit, checks
+consequential native/VM/aggregate lines and the complete trailing shell/static-
+library evidence, and adds the independent exact-floor/API/semver assertions.
+All checks pass with no discrepancy. Cost is unavailable; no savings claim.
+Evidence and reproducible `audit.py` / `primary-verify.py` are under
+`/workspace/work/two-node-budget-repair-ci`.
+
+The complete-CI prerequisite for the reviewed emission design is now closed.
+Reuse the already-reviewed **25 Stage 0 jobs / 40 floors** and independent
+**48 Linux cases / 144 phase images**; no raw-image/oracle audit is repeated
+and new capture archives are not reviewed here. The **32 Rust/C emissions
+remain unimplemented/unrun**. Next implement that separate mode against one
+owned completed reference result, retaining immutable input/query identity,
+96 no-effect invalid calls, deterministic clock/full C attributes, five driver
+phases and each output's independently valid routing/allocation/cold evidence.
+
+This checkpoint changes documentation only. No project tests, oracle tools,
+VMs, experiments or manual workflows are launched. Reuse the closed `7fd069e`
+source evidence through documentation-only tips; another identical artifact
+audit or waiting for documentation-only CI is not a prerequisite to emission
+implementation. Stages 4–5 remain partial/not quantified, stages 6–7 not
+reached, casefold writes blocked and actual Windows/card/SteamOS unqualified.
