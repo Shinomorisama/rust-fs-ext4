@@ -1,8 +1,8 @@
 # Ordinary two-intermediate-node insertion review
 
-Latest continuation: the [full emission closure](#separate-emission-full-ci-and-nativeguest-evidence-closed--2026-11-17)
-records exact-source focused/full CI and the complete focused/native/guest
-saved-byte review. Earlier dated gates below are historical.
+Latest continuation: the [extent-map promotion controls](#extent-map-promotion-controls--2026-11-17)
+cover simultaneous directory-leaf and extent-map allocation in native tests.
+The preceding full emission closure records the independent saved-byte review.
 
 ## Checkpoint and current gate — 2026-11-07
 
@@ -3209,3 +3209,58 @@ continuation, full-node growth, broader admission/lifecycle and recovery
 remain separate. This checkpoint changes documentation only. Stages
 **4–5 stay partial/not quantified**, **6–7 not reached**, casefold writes
 blocked and actual Windows/card/SteamOS use unqualified.
+
+## Extent-map promotion controls — 2026-11-17
+
+The ordinary two-node split now has two native controls, one per block size.
+Each uses a fresh image for each root range and API, for eight public link
+calls. The input has a full selected directory leaf and a free route in its
+intermediate node. The directory owns seven data blocks. Swapping two block
+locations preserves their logical bytes and creates four inline extent records.
+A regular file holds the physical successor of the last extent, so the append
+must add a fifth record. The test asserts the four-record depth-zero geometry
+before the call and the five records in a checksummed external leaf afterward.
+
+Each result adds one directory leaf and one distinct extent-map leaf. The
+free block counters and exact allocation bitmap debit are two blocks, the
+free inode counts are unchanged, and the directory grows by one logical block.
+The checked routing delta preserves old mappings, root and unaffected leaves.
+The byte comparison protects unrelated inodes, file payloads and attributes,
+including the spacer. The test checks one clock observation, the parent
+version and source link increments, C result identity and timestamps, and the
+complete namespace after finish and reopen. All six focused native tests pass.
+
+The documentation-only `c65d4e9` run **44178134786** exposed a guest byte cap
+failure after all 2,566 previously reviewed named tests passed. The saved
+**14377590178** ZIP is 45,824 bytes with SHA-256
+`df53431cdc5cb89c0b7daab98a282a64f5b8adab1732b8e625d7574da407b349`.
+Its `vm.log` is 4,191 lines and 258,017 bytes with SHA-256
+`3bb0940136b0c9f069d715e68a169ab916beb8c2953a67304e9147d9878f930e`.
+Replay through the pinned wrapper returns 65 at 258,000 and passes at the
+next thousand-byte cap of 259,000. Both replay logs compare byte-identical.
+The 4,200-line cap and test floor of 1,060 remain in effect.
+
+Start independent Linux coverage with the 1 KiB direct layout. All three
+previous emission environments retained a 130-block contiguous directory run
+with no external extent node in the sampled split input. Their physical
+successors were free. Other sampled layouts already used external extent
+nodes. For a fresh scratch copy of the contiguous profile, swap the last and
+third-from-last physical locations while keeping their logical data intact.
+The proposed order is a contiguous prefix followed by three reverse-ordered
+single blocks. This yields four inline extents and reserves the final mapped
+block's successor through an earlier mapping in the same directory. Assert
+these facts from the raw image, verify the exact namespace and physical roles,
+and require judged filesystem checks and read-only Linux validation before
+mutation. A failed premise must retain evidence and fail the fixture check.
+Use the existing bounded query selector for both root ranges after this
+transformation. Save the checksummed input, raw inline extent records and
+occupancy proof, and verify that Linux and both APIs use that exact input and
+query. Require one new directory leaf, one new external extent-map leaf, old
+maps and role ownership preserved, correct counts, protected bytes and
+read-only Linux cold equality. Record each writer's actual split boundary.
+An offline probe applies this transform to both root ranges in each retained
+focused, native and guest archive. All six scratch copies preserve their
+logical directory blocks and namespace, inode metadata, block ownership,
+bitmap/free counts and checked checksums. The retained originals still match
+their hashes. The transformed fixtures and Linux mutations still need judged
+validation in the harness VM.

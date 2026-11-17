@@ -829,7 +829,10 @@ tasks:
         # all 2,558 prior successes plus two produce 4,184 lines / 257,099 bytes.
         # Old 4,180-line cap returns 65; identical-log replay passes
         # at 4,200/258,000, preserving every byte, selection and floor.
-        scripts/tier.sh test:vm vm 4200 258000 -- \
+        # Run 44178134786, artifact 14377590178: the same 2,566 successes
+        # printed 4,191 lines / 258,017 bytes. Identical replay exits 65 at
+        # 258,000 bytes and passes at the next thousand-byte cap, 259,000.
+        scripts/tier.sh test:vm vm 4200 259000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 

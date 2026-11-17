@@ -82,6 +82,46 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
+- **Two-node extent-map promotion verified in native controls — 2026-11-17:**
+  Two new tests exercise eight public Rust/C links across 1/4 KiB blocks and
+  both root ranges. A full selected directory leaf and four inline extent
+  records force the split to allocate one directory leaf and one checksummed
+  extent-map leaf. A regular file occupies the final extent's physical
+  successor. Every result preserves old mappings and unaffected bytes,
+  debits exactly two free blocks and zero inodes, stamps once, increments
+  the parent version and source links, and reopens with the exact namespace.
+  All six focused tests pass. The pinned native unit tier retains all **1,705**
+  baseline successes plus exactly the two new names, **1,707** total with no
+  ignored or failed tests and **40** indexed controls. Final unit output is
+  **1,972 lines / 153,913 bytes** within the existing cap. Full lint and all
+  twenty shell controls pass. See the [promotion review](CASEFOLD-INDEX-TWO-NODE-REVIEW.md#extent-map-promotion-controls--2026-11-17).
+
+  The documentation tip `c65d4e9` failed guest [44178134786](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44178134786)
+  after running all **2,566** previous tests with the same ignored fuzz case.
+  Guest job **134376475445** hit the byte limit and exited **65** before the
+  floor check. The verified guest archive **14377590178** retained **4,191
+  lines / 258,017 bytes**. Replaying these exact bytes through the pinned
+  wrapper reproduces exit 65 at **258,000** and passes at **259,000**. Both
+  replay outputs match the archived log. Only the guest byte cap is raised.
+  The 4,200-line cap, actual test floors and test selection rules still apply.
+
+  Raw probes of **six scratch copies** of the retained 1 KiB direct Linux
+  split inputs show a bounded independent fixture path. Swapping the last
+  and third-from-last physical locations preserves their logical bytes and
+  creates four inline extents. The same directory owns the final extent's
+  physical successor. Both root ranges in all three earlier environments
+  preserve checksums, namespace, physical ownership and allocation counts
+  after this transform. Reproducible probes and saved budget replay are in
+  `/workspace/work/casefold-evidence/two-node-extent-promotion`.
+
+  Next confirm fresh source CI and implement the prepared 1 KiB direct
+  fixture in the harness. Qualify its pre-state with Linux and judged checks,
+  then compare independent Linux, Rust and C splits on the exact input and
+  query. Native promotion and the offline probes do not qualify Linux
+  execution, journaled promotion or recovery. Stages 4–5 remain partial
+  and not quantified, stages 6–7 not reached, casefold writes blocked and
+  actual Windows/card/SteamOS use unqualified.
+
 - **Two-node emission full CI and native/guest saved-byte review closed — 2026-11-17:**
   Exact source **`2aa0f301bf8cf5561936e165f99ebaae52247f9d`** passes full
   [44157868626](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44157868626),
@@ -15385,15 +15425,20 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 5 checkpoint (2026-11-17): source `2aa0f30` passes all 26
+Latest Stage 5 checkpoint (2026-11-17): eight native Rust/C links verify a
+simultaneous two-node directory split and inline extent-map promotion. Six
+read-only byte probes verify the planned exact fixture transform. Independent
+Linux/Rust/C runs with forced extent-map allocation and fresh source CI are
+pending. Stage 5 remains partial and not quantified.
+
+Preceding Stage 5 emission checkpoint (2026-11-17): source `2aa0f30` passes all 26
 focused jobs / 41 actual floors and full **44157868626**, all eleven jobs /
 `ci-ok`. Native/guest whole sets retain exact 2,565 prior passes plus the
 one new test, 2,566 total each, and all actual floors/trailing checks pass.
 Independent focused/native/guest emission review closes 48 Linux references /
 96 Rust-C calls / 624 canonical images, 288 no-effect refusals, exact clock/
 C attributes, routing/protected bytes/allocation and kernel cold identity.
-No new extent-map node is allocated; next prepare deterministic coverage
-for that boundary before broader qualification. Collision/continuation,
+These independent runs allocate no extent-map node. Collision/continuation,
 full-node growth, admission/lifecycle and recovery remain separate. Stages
 4–5 stay partial/not quantified, writes blocked, stages 6–7 not reached and
 actual Windows/card/SteamOS use unqualified.

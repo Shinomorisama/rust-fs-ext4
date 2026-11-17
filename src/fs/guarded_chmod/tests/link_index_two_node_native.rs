@@ -3,6 +3,9 @@ use super::*;
 
 use crate::fs::guarded_chmod::two_node_query as query_preflight;
 
+#[path = "link_index_two_node_extent.rs"]
+mod extent_promotion;
+
 struct Indexed {
     dev: Arc<Device>,
     fs: Filesystem,
@@ -526,7 +529,7 @@ fn positive(bs: u32) {
                         &allowed,
                         selected[range],
                         split.then_some(range as u32 + 1),
-                        appended,
+                        appended.as_slice(),
                     );
                     names.push(query.clone());
                     names.sort();
@@ -659,7 +662,7 @@ fn protected_disk(
     parent_fields: &[(usize, usize)],
     leaf: u32,
     node: Option<u32>,
-    appended: Option<u64>,
+    added_blocks: &[u64],
 ) {
     let bs = fs.sb.block_size() as usize;
     let preserve = |block: u64, fields: &[(usize, usize)]| {
@@ -678,12 +681,12 @@ fn protected_disk(
     let sb_block = if bs == 1024 { 1 } else { 0 };
     let sb_offset = 1024 % bs;
     let mut sb_fields = vec![(sb_offset + 58, 2), (sb_offset + 1020, 4)];
-    if appended.is_some() {
+    if !added_blocks.is_empty() {
         sb_fields.extend([(sb_offset + 12, 4), (sb_offset + 344, 4)]);
     }
     preserve(sb_block, &sb_fields);
     let (descriptor, offset) = fs.sb.descriptor_location(0);
-    let descriptor_fields = if appended.is_some() {
+    let descriptor_fields = if !added_blocks.is_empty() {
         vec![
             (offset + 12, 2),
             (offset + 24, 2),
@@ -705,8 +708,8 @@ fn protected_disk(
     if let Some(n) = node {
         allowed.insert(fs.map_inode_logical(&inode, u64::from(n)).unwrap().unwrap());
     }
-    if let Some(p) = appended {
-        allowed.insert(p);
+    if !added_blocks.is_empty() {
+        allowed.extend(added_blocks.iter().copied());
         allowed.insert(fs.groups[0].block_bitmap);
         allowed.insert(fs.sb.descriptor_location(0).0);
     }
