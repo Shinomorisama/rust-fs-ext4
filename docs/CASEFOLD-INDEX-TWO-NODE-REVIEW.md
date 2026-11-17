@@ -3040,3 +3040,85 @@ manual workflow, host oracle/mount, fresh coverage measurement or write-gate
 change is included. New external-extent-node coverage, if reached, still needs
 explicit independent evidence review. Stages 4–5 remain partial/not quantified,
 casefold writes blocked and Windows/card/SteamOS use unqualified.
+
+## Separate emission focused evidence reviewed — 2026-11-17
+
+Source **`2aa0f301bf8cf5561936e165f99ebaae52247f9d`** passes Stage 0
+**44157868360**, all 26 jobs. Actual floors retain the preceding forty plus
+new emission **1 / 1**, with zero ignored cases in that selection. Job
+**134303377348** records six protocol controls (5 lines / 104 bytes) and
+one successful exact emission test (1,321 lines / 234,321 bytes). No cap,
+floor, dependency, production implementation or write gate changes here.
+
+The primary verifies artifact **14362901682**, size **39,936,274**, SHA-256
+`d83097b423d34d138264e73df8cba03af02138a539518ab97d928561608715ed`:
+API run/source/size/digest, ZIP CRC, safe unique paths, all 4,237 extracted
+files and 153 hashes against committed source objects. It independently
+reads all sixteen paired Linux references and 32 public Rust/C results,
+208 canonical phase images, 144 clean five-pass reports, 432 raw inode/stat
+pairs and external-EA checksums, 72 clean journal-superblock checksums,
+80 source-identical guest programs/headers/results, 240 successful status
+records and all 336 JSONL files / 45,251 parseable records. Constructor
+bootstrap records are retained; their already-closed transition qualification
+is not reopened by this review.
+
+Input/query/reference hashes bind both APIs to each exact captured Linux
+input, without reselection. All 96 refusals return the declared ABI errno
+(17/63/21), with zero counted I/O/clock effects and exact input/refused bytes.
+Positive records succeed with one deterministic clock observation, unchanged
+source generation, exact parent mtime/ctime and source ctime; all eighteen
+C attributes in all sixteen C cases match the raw closed source inode.
+Source-matched passing assertions check marker/status retention and healthy
+success; those internal values are not inferred from image bytes alone.
+
+Independent raw decoding validates complete namespaces and valid routing,
+root/other-node/untouched-leaf bytes, old maps and external-node addresses,
+protected inode/table/EAs/payload/root-directory bytes, parent version and
+source link effects, and exact bitmap/group/global debits. Sixteen room
+calls allocate zero blocks; sixteen split calls allocate one leaf each.
+No new external extent node is reached; existing extent leaves survive in
+24/32 driver cases. Each driver's boundary matches its plan. Three of eight
+Linux split boundaries differ from that plan (six paired driver rows),
+without a query-half difference in this execution. Both partitions remain
+valid and complete. All reference output/cold and driver closed/cold images
+are exactly equal after independent read-only kernel validation. Dirty images
+have valid updated dirty superblock checksums; this does not test recovery.
+
+Five completed full-tier archives also pass API/run/source/size/SHA-256,
+CRC, safe complete extraction and prior named-test multisets/summary counts:
+
+| Tier | Artifact | Bytes | SHA-256 |
+|---|---:|---:|---|
+| Unit | 14362756978 | 26,164 | `76b82e6dad1fef97a98bafaa26bc048d4e4a1a2a561cf29aab93f6becd679dce` |
+| ARM | 14363905446 | 36,186 | `2aad414873a8db9b6dac8573eac81d91c6db4f85fb450579e2988b36b0d4ad88` |
+| Browser | 14363165987 | 540 | `b867345d9efd47793710776a0401eecbea1d133bd3e62553f4d6b4daf68d864c` |
+| CLI | 14361747952 | 413 | `ff6e60244a00a057bc6f5497d68abd9aae10fab949f8c8a87d89c81b3921e67e` |
+| Semver | 14363355235 | 394 | `d20c8211a3b9ea60d4710903d156c633ac9220a4f11374cd8cc7d3fb9bf1b7f3` |
+
+Both units retain all 1,705 passes / 38 indexed controls; ARM images retain
+527 passes and its existing one ignored fuzz case, browser five, CLI 159,
+Unicode eight and semver 196 passes / 58 unchanged rule skips. These ignored/
+skipped cases remain gates. Full **44157868626** has eight successful
+prerequisites but native **134308673883** and guest **134308674011** are
+still running. Their expected 2,566 passes, actual floors, complete trailing
+shell/static-library/CLI evidence, aggregate and separate saved emission
+captures are pending. Focused evidence does not substitute for that review.
+
+One authorized Terra/medium read-only helper checks evidence completeness,
+source hashes and tier/name/floor retention. Primary reruns its saved
+`audit_counts.py` and independently performs the byte/program/C-attribute
+review. A mislabeled body from parallel `gh` job-log retrieval is replaced
+by authoritative direct job **134303377455** logs; actual link-policy floor
+is 1/1. Helper ignored-reason parsing and primary supplementary journal
+feature offset are corrected before passing; neither is a filesystem defect.
+Cost unavailable; no savings claim. Primary scratch scripts/logs are in
+`/workspace/work/casefold-evidence/two-node-emission-2aa0f30`; helper audit
+is in the sibling `two-node-emission-helper-2aa0f30` directory.
+
+Implementation review finds no blocker within this focused ordinary healthy
+non-continuation matrix. Full-CI closure and reached native/guest capture
+review are next; new extent-node allocation, collision/continuation, full-node
+growth, broader admission/lifecycle and recovery remain separate. No project
+test, manual workflow, host oracle/mount or coverage run is launched by this
+documentation checkpoint. Stages 4–5 remain partial/not quantified, stages
+6–7 not reached, casefold writes blocked and Windows/card/SteamOS unqualified.
