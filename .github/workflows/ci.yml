@@ -239,6 +239,11 @@ jobs:
           done
       - name: chore lint
         run: chore lint
+      - name: Retain two-node emission source identity
+        run: |
+          mkdir -p tmp/link-index-two-node-emission
+          git rev-parse HEAD > tmp/link-index-two-node-emission/source-commit.txt
+          git ls-files -z src tests/support tests/scripts/test_link_index_two_node_protocol.py Cargo.toml Cargo.lock chores.yml rust-toolchain.toml scripts/test.sh scripts/tier.sh scripts/core.sh .github/workflows/casefold-stage0.yml .github/workflows/ci.yml | xargs -0 sha256sum > tmp/link-index-two-node-emission/source-sha256.txt
       - name: Retain two-node reference source identity
         run: |
           mkdir -p tmp/link-index-two-node-reference
@@ -274,6 +279,14 @@ jobs:
         with:
           name: link-index-two-node-native-reference
           path: tmp/link-index-two-node-reference/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Keep reached two-node Rust/C emission evidence
+        if: always() && steps.tier.outcome != 'skipped' && hashFiles('tmp/link-index-two-node-emission/source-commit.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-two-node-native-emission
+          path: tmp/link-index-two-node-emission/
           if-no-files-found: error
           retention-days: 30
       - name: chore vm:status (the VM is down again)
@@ -359,6 +372,11 @@ jobs:
       # guest installs from rust-toolchain.toml. That is the point of the
       # job — on a Mac there is no usable host toolchain for these tests
       # either.
+      - name: Retain two-node emission source identity
+        run: |
+          mkdir -p tmp/link-index-two-node-emission
+          git rev-parse HEAD > tmp/link-index-two-node-emission/source-commit.txt
+          git ls-files -z src tests/support tests/scripts/test_link_index_two_node_protocol.py Cargo.toml Cargo.lock chores.yml rust-toolchain.toml scripts/test.sh scripts/tier.sh scripts/core.sh .github/workflows/casefold-stage0.yml .github/workflows/ci.yml | xargs -0 sha256sum > tmp/link-index-two-node-emission/source-sha256.txt
       - name: Retain two-node reference source identity
         run: |
           mkdir -p tmp/link-index-two-node-reference
@@ -394,6 +412,14 @@ jobs:
         with:
           name: link-index-two-node-guest-reference
           path: tmp/link-index-two-node-reference/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Keep reached two-node Rust/C emission evidence
+        if: always() && steps.tier.outcome != 'skipped' && hashFiles('tmp/link-index-two-node-emission/source-commit.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-two-node-guest-emission
+          path: tmp/link-index-two-node-emission/
           if-no-files-found: error
           retention-days: 30
       - name: chore vm:status (the VM is down again)

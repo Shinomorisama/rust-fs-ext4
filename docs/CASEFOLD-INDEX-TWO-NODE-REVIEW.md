@@ -2995,3 +2995,48 @@ source evidence through documentation-only tips; another identical artifact
 audit or waiting for documentation-only CI is not a prerequisite to emission
 implementation. Stages 4–5 remain partial/not quantified, stages 6–7 not
 reached, casefold writes blocked and actual Windows/card/SteamOS unqualified.
+
+## Separate two-node emission implementation — 2026-11-17
+
+The reviewed mode is now implemented in test-only
+`link_index_two_node_emission.rs`, beneath the existing reference module.
+The reference case body keeps its operations, assertions and order; an owned
+`CompletedCase` returns the original `Prepared`, completed Linux snapshot and
+row. The original wrapper still returns that row to the same sixteen-case
+reference test. All three older emitter modes remain byte-identical.
+
+The new test prepares sixteen complete Linux cases and borrows each immutable
+input/selection for Rust and C. It never reruns selection or assumes dense
+names. Pair manifests bind input/query/reference hashes; each closed namespace
+must equal the completed Linux namespace. The shared transition enforces root/
+other-node/old-map protection, role/namespace validity, raw inode/table/EAs/
+payload/root-directory protection and exact data/extent-node accounting.
+Driver boundaries must match preflight; observed Linux boundaries remain
+separate rather than requiring equal split halves.
+
+A forwarding counted FileDevice and injected runtime check all three invalid
+requests per profile for no effect, including writes/flushes, marker and health.
+The positive call saves result/dirty bytes before assertions, samples the clock
+once, preserves generation and validates/retains all eighteen C attribute
+fields. After finish, complete judged captures check clean/RECOVER/journal
+state and exact driver metadata. Read-only Linux cold validation uses the
+unchanged explicit-namespace file protocol, with closed/cold image equality.
+Five driver phases, query/pair/result/refusal/C records, raw reports and hashes
+survive normal scratch cleanup. Partial manifests distinguish expected from
+completed 16-reference/32-emission counts.
+
+The 26th focused job uses the existing pins, exact new test/floor one and
+refused ignored cases. All 25 existing focused definitions are semantically
+unchanged. Full native/VM paths retain separate reached emission archives and
+source headers, including chores/toolchain and runner scripts; the eleven-job
+aggregate, all task caps/floors and dependencies are unchanged.
+
+Local verification passes the exact 1,705/38 native baseline, four focused
+native groups, six protocol controls, twenty shell checks and full lint.
+The new test's exact selection is listed as one test; it is not executed
+locally. Linux/reference/emission operations and actual source-bound CI,
+saved-byte review and scoped qualification are pending. No production code,
+manual workflow, host oracle/mount, fresh coverage measurement or write-gate
+change is included. New external-extent-node coverage, if reached, still needs
+explicit independent evidence review. Stages 4–5 remain partial/not quantified,
+casefold writes blocked and Windows/card/SteamOS use unqualified.

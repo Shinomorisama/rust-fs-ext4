@@ -4,6 +4,9 @@ use std::path::PathBuf;
 
 use crate::fs::guarded_chmod::two_node_query as query;
 
+#[path = "link_index_two_node_emission.rs"]
+mod emissions;
+
 const GUEST: &str = include_str!("link_index_two_node_guest.py");
 
 struct Prepared {
@@ -438,7 +441,13 @@ fn transition(prepared: &Prepared, after: &Snapshot, image: &Path) -> usize {
     added.len()
 }
 
-fn case(source: &Path, base: &Path, range: usize, split: bool) -> String {
+struct CompletedCase {
+    prepared: Prepared,
+    linux: Snapshot,
+    row: String,
+}
+
+fn run_case(source: &Path, base: &Path, range: usize, split: bool) -> CompletedCase {
     let working = base.with_extension("working.img");
     std::fs::copy(source, &working).unwrap();
     let prepared = prepare(&working, base, range, split);
@@ -479,7 +488,16 @@ fn case(source: &Path, base: &Path, range: usize, split: bool) -> String {
     std::fs::write(base.with_extension("two-node-cold.sha256"), sha(&cold)).unwrap();
     std::fs::remove_file(working).unwrap();
     std::fs::remove_file(cold).unwrap();
-    format!("{{\"case\":\"{}\",\"root_slot\":{range},\"split\":{split},\"input_sha256\":\"{}\",\"output_sha256\":\"{output_hash}\",\"allocated\":{allocated},\"query\":{}}}",base.file_name().unwrap().to_str().unwrap(),prepared.input_hash,prepared.query.json().trim())
+    let row = format!("{{\"case\":\"{}\",\"root_slot\":{range},\"split\":{split},\"input_sha256\":\"{}\",\"output_sha256\":\"{output_hash}\",\"allocated\":{allocated},\"query\":{}}}",base.file_name().unwrap().to_str().unwrap(),prepared.input_hash,prepared.query.json().trim());
+    CompletedCase {
+        prepared,
+        linux: after,
+        row,
+    }
+}
+
+fn case(source: &Path, base: &Path, range: usize, split: bool) -> String {
+    run_case(source, base, range, split).row
 }
 
 fn retain_bootstrap(prefix: &str, destination: &Path) {

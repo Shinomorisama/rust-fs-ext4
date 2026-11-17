@@ -207,6 +207,47 @@ jobs:
             tmp/logs/casefold-two-node-protocol.log
           if-no-files-found: error
           retention-days: 30
+  link-index-two-node-emission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact two-node emission source identity
+        run: |
+          mkdir -p tmp/link-index-two-node-emission
+          git rev-parse HEAD > tmp/link-index-two-node-emission/source-commit.txt
+          git ls-files -z src tests/support tests/scripts/test_link_index_two_node_protocol.py Cargo.toml Cargo.lock chores.yml rust-toolchain.toml scripts/test.sh scripts/tier.sh scripts/core.sh .github/workflows/casefold-stage0.yml .github/workflows/ci.yml | xargs -0 sha256sum > tmp/link-index-two-node-emission/source-sha256.txt
+      - name: Check explicit namespace and metadata protocol offline
+        run: scripts/tier.sh casefold:two-node-emission-protocol casefold-two-node-emission-protocol 200 20000 -- python3 tests/scripts/test_link_index_two_node_protocol.py
+      - name: Compare Rust and C links on each completed Linux two-node input
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/two-node-emission-scratch
+        run: |
+          scripts/tier.sh casefold:link-index-two-node-emission casefold-link-index-two-node-emission 4200 340000 -- scripts/test.sh --locked --release --lib fs::guarded_chmod::needs_host::link_emission::indexed_reference::root_capacity::two_node::emissions::linux_checks_public_two_node_indexed_links -- --exact --show-output
+          bash scripts/core.sh test-floor --refuse-ignored casefold-link-index-two-node-emission 1
+      - name: Keep paired Linux references and Rust/C input, refusal, dirty, closed and cold evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-index-two-node-emission
+          path: |
+            tmp/link-index-two-node-emission/
+            tmp/logs/casefold-link-index-two-node-emission.log
+            tmp/logs/casefold-two-node-emission-protocol.log
+          if-no-files-found: error
+          retention-days: 30
   link-index-intermediate-emission:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
