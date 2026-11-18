@@ -143,7 +143,10 @@ fn linux_compares_two_node_extent_promotion() {
         .unwrap();
     };
     manifest(&references, &emissions);
-    let prefix = format!("two-node-promotion-source-{}", std::process::id());
+    // Reuse the harness's unique run name. Keep it free of dots because the
+    // bootstrap uses with_extension to name every phase.
+    let run_name = run.file_name().unwrap().to_str().unwrap().replace('.', "-");
+    let prefix = format!("two-node-promotion-source-{run_name}");
     let result = std::panic::catch_unwind(|| node_full::profile_named(BLOCK_SIZE, false, &prefix));
     retain_bootstrap(&prefix, &run);
     if let Err(error) = result {

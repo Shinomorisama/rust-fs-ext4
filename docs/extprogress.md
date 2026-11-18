@@ -82,7 +82,63 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
-- **Independent 1 KiB direct extent-map promotion passes focused Linux and saved-byte review — 2026-11-17:**
+- **1 KiB direct promotion images pass full-context review; shell guard repaired — 2026-11-18:**
+  The source `ff7fe75` and documentation descendant `8d417e9` each pass
+  **2,569** tests and actual **2,569 / 1,060** floors in native and guest
+  whole suites. Both retain all `88fe341` successful and ignored names
+  plus exactly one promotion test. The native unit/oracle/kernel/lwext4
+  multisets also match the closed baseline. The broader source Stage 0
+  workflow passes all **27** jobs. [Stage 0](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998692)
+
+  Full runs **44230998685** and **44231852911** fail their native shell
+  tier and aggregate. Both stop at `test-clock-calls.sh` after four passing
+  shell checks. It rejects the new promotion test's direct process ID call
+  while generating a scratch filename. The whole suites fit the unchanged
+  limits: native **4,023 / 248,471** and **4,028 / 249,185** lines/bytes,
+  guest **4,197 / 258,855** and **4,195 / 258,601**. The later native shell
+  checks, static-library freshness and installed CLI phase were unreached.
+  Standalone CLI and guest jobs passed separately.
+  [Source run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998685)
+  [Documentation run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44231852911)
+
+  The same shell guard locally reproduces exit **1** before the repair and
+  passes after it. The promotion test now derives its bootstrap prefix from
+  the harness's existing unique run name and replaces dots with hyphens to
+  keep phase file extensions intact. The repair passes all **twenty** local
+  shell controls, including static-library freshness, full lint and the
+  exact host test build/selection. The tests, floors and caps retain their
+  existing requirements. Fresh repair-source focused and full CI are pending.
+
+  Separate native/guest promotion archives **14397828656 / 14399877490**
+  and **14400526431 / 14400240627** verify API identity, digests, ZIP CRCs,
+  **2,418 extracted files** and **155 committed source hashes per archive**.
+  The primary verifies all four fixture transforms, **8 Linux references /
+  16 Rust-C calls**, **104 phase images**, **48 no-effect refusals**,
+  **72 clean five-pass reports**, **216 EA checksums**, **40 guest programs**,
+  **8 complete C records**, and **120 successful status records**.
+  Every split adds one directory leaf and one checksummed extent-map leaf
+  and preserves prior mappings, protected bytes, namespace and cold bytes.
+  Linux and the driver differ on **four of eight** split boundaries. One
+  query lands in different valid split halves. Each allocator's block
+  choices and bitmap debits independently verify. Counting the earlier
+  focused archive, this mode has **130 reviewed phase images**.
+
+  One authorized Terra/medium helper verifies four tier-log archives and
+  exact test-name multisets. The primary reads and reruns that audit,
+  verifies the actual wrapper/guard failure and owns the raw evidence review.
+  Cost unavailable. Scripts and logs are in
+  `/workspace/work/casefold-evidence/two-node-linux-promotion` and sibling
+  `two-node-linux-promotion-full-helper`.
+
+  Next verify the repaired source's full native trailing checks and aggregate.
+  Review only fresh coverage or discrepancies rather than repeating the closed
+  raw review. The qualification covers tested **1 KiB direct** promotion,
+  both root ranges. Independent journaled and 4 KiB promotion, wider Stage 5
+  coverage and recovery remain open. Stages 4–5 remain partial and not
+  quantified. Casefold writes are blocked and Windows/card/SteamOS use
+  remains unqualified.
+
+- **Initial focused 1 KiB direct extent-map promotion review — 2026-11-17:**
   The preceding native checkpoint `88fe341` passes all **eleven full jobs**
   and **26 focused jobs**. Both whole suites retain every previous success
   and add exactly the two named promotion tests, **2,568 passes** with the
@@ -15489,10 +15545,12 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 5 checkpoint (2026-11-17): 1 KiB direct promotion passes focused
-Linux, Rust and C checks and independent review of 26 saved phase images for
-both root ranges. Full native/guest CI and its separate evidence remain
-pending. Stage 5 remains partial and not quantified.
+Latest Stage 5 checkpoint (2026-11-18): 1 KiB direct promotion passes raw
+review in all three execution contexts, with 130 phase images across both
+root ranges. The native full runs reached the 2,569-test floor and failed a
+shell guard on the test's process ID call. The local repair passes the guard,
+lint and all twenty shell checks. Fresh full CI and its real native trailing
+checks are pending. Stage 5 remains partial and not quantified.
 
 Preceding promotion checkpoint (2026-11-17): eight native Rust/C links verify a
 simultaneous two-node directory split and inline extent-map promotion. Six

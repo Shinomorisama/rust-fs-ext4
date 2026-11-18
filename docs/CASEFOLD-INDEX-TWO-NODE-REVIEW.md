@@ -1,7 +1,7 @@
 # Ordinary two-intermediate-node insertion review
 
-The latest checkpoint implements the independent promotion fixture and records
-the completed native CI review. [1 KiB promotion fixture](#independent-promotion-fixture--2026-11-17)
+The latest checkpoint reviews the full-context promotion images and repairs
+the native shell guard failure. [Full-context review](#promotion-full-context-review-and-shell-guard-repair--2026-11-18)
 
 ## Checkpoint and current gate — 2026-11-07
 
@@ -3330,3 +3330,41 @@ the focused raw review in
 `/workspace/work/casefold-evidence/two-node-linux-promotion`. The broader
 focused workflow and full native/guest suite and promotion evidence remain
 pending. Casefold writes remain blocked. [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998685)
+
+
+## Promotion full-context review and shell guard repair — 2026-11-18
+
+The full source run **44230998685** and documentation run **44231852911**
+both retain the baseline whole-suite test multiset plus the promotion test.
+Each native and guest suite has 2,569 passes, one unchanged ignored fuzz case,
+and zero failed tests. The native whole-suite floors pass. Both native jobs
+then fail their fifth shell check at the same direct process ID call. The
+remaining native shell and CLI phases never ran and `ci-ok` reports the
+native dependency failed. Guest suites reached their floors and stopped
+their VMs. The Stage 0 source workflow passed all 27 jobs.
+
+| Role | Archive | Bytes | SHA-256 |
+|---|---:|---:|---|
+| Source native promotion | 14397828656 | 2,033,509 | `31f5388a05df30bb1ec47e10067fea8357fad9639d812038a4183fe22d8aef7c` |
+| Source guest promotion | 14399877490 | 2,021,147 | `d0d94e01e271e3649d2396f7c70879d2707ba94ce34fbb0f0aec9a466ed12433` |
+| Documentation native promotion | 14400526431 | 2,029,972 | `9015a91c4e505ed42ca13560c7c2d9673c0c898cf2bc4bb1abb7acc9848fd47e` |
+| Documentation guest promotion | 14400240627 | 2,011,874 | `bfab7386798a3b3c7012c43fc98b6620708d4ee67d319ddf2219b0058487f1e7` |
+
+All four archives pass exact source identity, digest and full byte checks.
+The primary verifies 104 phase images, all four layout deltas, 24
+promotions, 48 no-effect refusals, 72 clean five-pass reports, 216 EA
+checksums, 40 guest programs, eight complete C records and 120 successful
+statuses. Each promotion allocates one directory leaf and one extent-map
+leaf. Four of eight Linux split boundaries differ from the driver plan.
+One query lands in a different half. Independent routing, exact debits,
+metadata, namespace and byte-identical cold copies still pass. The focused
+archive adds 26 previously reviewed images. Scratch verification remains
+in `/workspace/work/casefold-evidence/two-node-linux-promotion`.
+
+The red tree fails `test-clock-calls.sh` exactly as in CI. Reusing the
+harness's unique run name, normalized for extension-based phase filenames,
+passes that same guard, all twenty local shell controls, full lint and the
+exact host selection. No test budget or acceptance rule changes. The
+repaired source needs its own successful native trailing checks and
+aggregate. Scope remains 1 KiB direct promotion in both root ranges.
+Casefold writes remain blocked.
