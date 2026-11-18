@@ -7,6 +7,9 @@ use crate::fs::guarded_chmod::two_node_query as query;
 #[path = "link_index_two_node_emission.rs"]
 mod emissions;
 
+#[path = "link_index_two_node_promotion.rs"]
+mod promotion;
+
 const GUEST: &str = include_str!("link_index_two_node_guest.py");
 
 struct Prepared {

@@ -1,8 +1,7 @@
 # Ordinary two-intermediate-node insertion review
 
-Latest continuation: the [extent-map promotion controls](#extent-map-promotion-controls--2026-11-17)
-cover simultaneous directory-leaf and extent-map allocation in native tests.
-The preceding full emission closure records the independent saved-byte review.
+The latest checkpoint implements the independent promotion fixture and records
+the completed native CI review. [1 KiB promotion fixture](#independent-promotion-fixture--2026-11-17)
 
 ## Checkpoint and current gate — 2026-11-07
 
@@ -3264,3 +3263,44 @@ logical directory blocks and namespace, inode metadata, block ownership,
 bitmap/free counts and checked checksums. The retained originals still match
 their hashes. The transformed fixtures and Linux mutations still need judged
 validation in the harness VM.
+
+
+## Independent promotion fixture — 2026-11-17
+
+Native source `88fe341d04136bfe9502743125c289aa4c4cf461` passes all eleven
+full jobs and all 26 focused jobs. Native and guest tier archives **14383660473**
+and **14383486193** verify API identity, size, SHA-256 and ZIP CRC. Both suites
+have exactly **2,568** successful occurrences plus the baseline ignored fuzz
+test. The sole additions are the 1 KiB and 4 KiB native promotion controls.
+The actual guest verdict is **4,193 lines / 258,262 bytes**, then **2,568 /
+1,060** at its test floor. Native records **4,022 / 248,317**, the same whole
+floor, twenty passing shell controls, the expected stale-lock refusal in
+static-library freshness, CLI **159 / 150** and **4,704** total executions
+across six tiers. The direct logs contain all fourteen full floor calls, both
+VM shutdowns and all ten successful aggregate prerequisites. One authorized
+read-only helper reproduced archive and multiset checks. The primary reran
+that audit and verified the direct job verdicts. The direct ZIP route returned
+403 and the connector supplied verified bytes. Cost was unavailable. Audit
+scripts and logs are in `/workspace/work/casefold-evidence/two-node-extent-promotion-ci`.
+[Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44194932719)
+[Focused CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44194932674)
+
+A separate host test implements the fixture described above using a fresh
+Linux-generated 1 KiB direct predecessor. It requires one contiguous inline
+extent before the scratch transform. It rewrites the four bounded extent
+records and inode checksum, and moves exactly two directory data blocks so
+the entire logical directory and bitmap stay identical. The existing
+read-only capture, judged filesystem check and kernel audit cover each
+derived input before Linux writes. Both Rust and C use a copy of the exact
+same input and the exact query selected for that root range.
+
+The existing transition compares old logical and physical roles, preserves
+protected bytes, and measures exact bitmap and count updates. The new test
+specifically requires a one-entry inode index pointing to a verified external
+leaf with five extent records. That external leaf must be distinct from the
+new directory leaf. The reference and driver artifacts retain the node bytes
+and both block addresses. Success in both root ranges produces two references
+and four emissions, with 12 refusal records and 26 canonical phase images.
+A separate exact focused job and full native/guest retention preserve partial
+results and the source manifest. The harness operations and saved-byte review
+are pending. The existing casefold write gate applies.

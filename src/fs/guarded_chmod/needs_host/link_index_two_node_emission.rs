@@ -104,13 +104,13 @@ fn boundary(state: &Snapshot, prepared: &Prepared) -> Option<u32> {
     Some(added[0].hash)
 }
 
-fn emit(
+pub(super) fn emit(
     reference: &CompletedCase,
     reference_base: &Path,
     base: &Path,
     capi: bool,
     journal: bool,
-) -> String {
+) -> (String, Snapshot) {
     let prepared = &reference.prepared;
     let before = &prepared.before;
     let q = &prepared.query;
@@ -279,7 +279,7 @@ fn emit(
     std::fs::write(base.with_extension("observation.json"), format!("{row}\n")).unwrap();
     std::fs::remove_file(image).unwrap();
     std::fs::remove_file(cold).unwrap();
-    row
+    (row, closed)
 }
 
 #[cfg(test)]
@@ -322,7 +322,7 @@ fn linux_checks_public_two_node_indexed_links() {
                             "{}-{bs}-{journal}-{range}-{split}",
                             if capi { "capi" } else { "rust" }
                         ));
-                        emissions.push(emit(&reference, &base, &driver, capi, journal));
+                        emissions.push(emit(&reference, &base, &driver, capi, journal).0);
                         assert_eq!(sha(&source), source_hash);
                         manifest(&references, &emissions);
                     }
