@@ -82,7 +82,7 @@ for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
 
-- **Independent 1 KiB direct extent-map promotion fixture implemented — 2026-11-17:**
+- **Independent 1 KiB direct extent-map promotion passes focused Linux and saved-byte review — 2026-11-17:**
   The preceding native checkpoint `88fe341` passes all **eleven full jobs**
   and **26 focused jobs**. Both whole suites retain every previous success
   and add exactly the two named promotion tests, **2,568 passes** with the
@@ -119,12 +119,32 @@ for `casefold-rw`, never main or siblings.
   own job and artifacts. Local verification retains exactly **1,707** native
   successes. Full lint, six offline protocol checks and the workflow
   comparison pass. The exact host filter builds and lists one test.
-  The independent VM execution is pending. The saved-byte audit is prepared
-  in `/workspace/work/casefold-evidence/two-node-linux-promotion`. Review
-  its actual Linux/Rust/C images and the full suite
-  after CI. Coverage here is 1 KiB direct, both root ranges. Journaled and
-  4 KiB promotion, broader Stage 5 coverage and recovery remain open.
+  Exact source **`ff7fe75dfc70fb26eeb0980f3b14ab278af29484`** passes
+  promotion job **134555718263** with **281 lines / 36,142 bytes** and
+  actual floor **1 / 1**, zero ignored. Its six protocol checks pass.
+  Archive **14395063527** (**2,053,535 bytes**, SHA-256
+  `681d156dbbc780f666ef5d35a5d5a48097c067ec0ee6d97416a2bbf390d217ca`)
+  verifies API identity, ZIP entry CRCs, **610 extracted files** and
+  **155 committed source hashes**. [Focused job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998692/job/134555718263)
+
+  The independent raw audit confirms the exact fixture delta, one new
+  directory and extent-map leaf for each of **two Linux references and
+  four Rust/C calls**, **26 phase images**, **12 no-effect refusals**,
+  **18 clean five-pass reports**, **54 EA checksums**, **10 guest programs**,
+  both complete C attribute records and **30 successful status records**.
+  All six closed results match their cold copies byte-for-byte. Linux
+  chose physical blocks 17031/17032 and both APIs chose 8711/8712.
+  The two writers' partitions agreed in this execution. Reproducible
+  read-only verification is in
+  `/workspace/work/casefold-evidence/two-node-linux-promotion`.
+
+  The broader focused run and full native/guest CI for this source are
+  pending. Next confirm actual full counts and floors and audit the
+  separately retained native/guest promotion evidence. This focused
+  result covers 1 KiB direct with both root ranges. Journaled and 4 KiB
+  promotion, broader Stage 5 coverage and recovery remain open.
   Casefold writes are blocked and Windows/card/SteamOS use remains unqualified.
+  [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998685)
 
 - **Two-node extent-map promotion native controls — 2026-11-17 (CI closure above):**
   Two new tests exercise eight public Rust/C links across 1/4 KiB blocks and
@@ -15469,9 +15489,10 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 | **6 — Prove recovery and enable qualified writes** | Test interrupted operations, journal recovery, errors, and refusals; enable only the combinations that pass. | Not yet reached. The ordinary-volume recovery recount regression passed independent Linux checking and readback; its full-CI output-budget repair and subsequent prerequisite checkpoints passed. Casefold operation/recovery qualification remains incomplete; keep repair and unsupported combinations blocked. |
 | **7 — Integrate and qualify Windows** | Audit the Windows adapter's name conversion, caching, create/rename semantics, serialization, device ownership, flushing, and eject. Test alternating Windows/Linux use. | Not yet reached. Pin and audit an actual `ext4-win-driver` revision; later qualify specific SteamOS versions/devices. |
 
-Latest Stage 5 checkpoint (2026-11-17): the separate 1 KiB direct Linux/Rust/C
-promotion test and CI evidence paths are implemented. Independent harness
-execution and saved-byte review are pending. Stage 5 remains partial.
+Latest Stage 5 checkpoint (2026-11-17): 1 KiB direct promotion passes focused
+Linux, Rust and C checks and independent review of 26 saved phase images for
+both root ranges. Full native/guest CI and its separate evidence remain
+pending. Stage 5 remains partial and not quantified.
 
 Preceding promotion checkpoint (2026-11-17): eight native Rust/C links verify a
 simultaneous two-node directory split and inline extent-map promotion. Six

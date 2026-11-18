@@ -3302,5 +3302,31 @@ new directory leaf. The reference and driver artifacts retain the node bytes
 and both block addresses. Success in both root ranges produces two references
 and four emissions, with 12 refusal records and 26 canonical phase images.
 A separate exact focused job and full native/guest retention preserve partial
-results and the source manifest. The harness operations and saved-byte review
-are pending. The existing casefold write gate applies.
+results and the source manifest. The focused result is reviewed below.
+
+Source `ff7fe75dfc70fb26eeb0980f3b14ab278af29484` passes focused job
+**134555718263**, one exact test and actual floor one with zero ignored.
+The wrapper records **281 lines / 36,142 bytes** and all six protocol
+checks pass. Artifact **14395063527** verifies API run and source identity,
+**2,053,535 bytes**, SHA-256
+`681d156dbbc780f666ef5d35a5d5a48097c067ec0ee6d97416a2bbf390d217ca`,
+ZIP entry CRCs, **610 extracted files** and **155 committed source hashes**.
+[Focused job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998692/job/134555718263)
+
+The independent reader verifies the exact byte delta from the Linux-built
+predecessor. The 130 logical directory blocks retain their bytes while the
+physical blocks 17028 and 17030 exchange positions. Block 17029 remains
+occupied. Both Linux and all four Rust/C outputs debit exactly two blocks,
+retain the old mappings, and store exactly five extent records in one
+checksummed external leaf. The Linux data and extent leaves are 17031/17032,
+and the Rust/C leaves are 8711/8712. Each root range's split boundary agrees
+between Linux and the APIs in this run.
+
+All **26 phase images**, **18 clean five-pass reports**, **54 EA checksums**,
+**10 guest programs**, **30 status records**, both complete C attributes and
+**12 no-effect refusal records** verify. The six output/cold pairs are
+byte-identical. All 39 JSONL files and 573 rows parse. The primary performed
+the focused raw review in
+`/workspace/work/casefold-evidence/two-node-linux-promotion`. The broader
+focused workflow and full native/guest suite and promotion evidence remain
+pending. Casefold writes remain blocked. [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44230998685)
