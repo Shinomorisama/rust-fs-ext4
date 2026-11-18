@@ -10,6 +10,65 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 **Casefold writes are still deliberately blocked. This is not yet a Windows-ready release for the card.** No actual SteamOS hardware or Windows/card round trip has been qualified.
 
+## Sol's next batch
+
+**Next `do next` (set 2026-11-18).** Select one disposable Linux-built
+image and pin the Windows read-only path for it. Use the card's format
+if it is already recorded. Otherwise start with an existing 4 KiB
+journaled UTF-8 12.1 casefold fixture. Record the chosen image or recipe,
+strictness, directory layout, filesystem and journal features, and
+whether its journal fits the checked recovery path. A recovery mismatch
+is an input to the later write work. The read-only milestone can proceed.
+[Fixture profiles](CASEFOLD-STAGE0.md#initial-fixture-matrix) · [Checked recovery](CHECKED-RECOVERY.md)
+
+Using the existing Windows harness documentation and read-only sibling
+checkout, identify the exact adapter and casefold core revisions, how the
+VM build would select that core, and how it would receive this image and
+mount it with `--ro`. The adapter currently pins upstream ext4 v0.8.0.
+**Stop this first batch** with the image and build choice plus the first
+concrete blocker, or the ready-to-run Windows VM scenario. Record any
+unverified feature or runner access explicitly. Run that scenario in a
+later batch. [Windows harness](https://github.com/Shinomorisama/ext4-win-driver/blob/393665e6cf7277422385154deeb8d2e4401dfa93/README.md#testing)
+
+**One `do next` means one batch.** Target **10–15 percentage points of the
+session allowance** per run, including review and handoff. Choose one
+observable result at the start. When a session meter is available, record
+the opening and closing readings, begin wrapping up around 10 points
+consumed, and leave room to finish by 15. Stop earlier after the result or when the
+remaining allowance is tight. When the meter is unavailable, report
+“usage unavailable,” use one small deliverable as the limit, and let the
+user check usage before continuing. Calibrate the next batch from that
+reading when available. At each stop update this section with the result,
+source SHA, evidence or pending CI run IDs, and one exact resume action.
+Save CI run IDs as soon as they exist so an interruption leaves a way
+to recover the work. Wait for the user's next `do next`. An in-flight CI
+run can finish between batches and its saved result can be inspected on resume.
+
+**Milestones after the first batch.** Split each into smaller batches as needed.
+
+1. Mount the selected image read-only in the Windows VM. List the original
+   filename, open it through an equivalent spelling, verify its contents
+   and unmount. Verify the image digest is unchanged.
+2. Trace the Windows operations needed for one ordinary file copy and clean
+   release. Prioritize the first missing operation, ownership check or
+   recovery guarantee. Estimate mount-time and per-create work for a
+   populated 1.5 TB filesystem early. Extend index coverage when the chosen
+   path needs it or its safe refusal still needs proof.
+3. Qualify that profile against independent Linux checks, including
+   duplicate-name handling, refused operations and interrupted writes.
+   Once the existing write-enablement conditions pass for the profile,
+   copy a file in the Windows VM, eject, and cold-open the same image in
+   the Linux VM. Verify original spelling, content hash and a clean
+   filesystem. Use cheap relevant shell guards before the expensive VM
+   tiers and reuse already reviewed evidence for unchanged cases.
+   [Write-enablement conditions](#conditions-still-required-before-enabling-writes)
+
+Linux reference, recovery and filesystem checks belong in the pinned Linux
+harness VM. WinFsp behavior and cross-OS image handoff can be exercised
+with a Windows VM. Physical reader/card behavior, real removal or power
+loss, and compatibility on a particular Steam Deck or Steam Frame require
+later hardware checks. Hardware access is unnecessary for the VM milestones.
+
 ## Required chat opening and staged progress reports
 
 When the user links the repository in a new chat, read the initial `AGENTS.md`,
@@ -81,6 +140,15 @@ will honor/retain Full access or session approvals. All changes are intended
 for `casefold-rw`, never main or siblings.
 
 ## Current checkpoint
+
+- **Repaired source CI closed — 2026-11-18.** At `8849dc3`, full CI passed
+  all 11 jobs including `ci-ok`, and focused CI passed all 27 jobs. The
+  native log reaches the shell tier (40 lines), installed CLI (159 checks)
+  and six-tier total (4,705 executions). Native and guest whole suites
+  each reached 2,569 against the 1,060 floor, and both VMs stopped.
+  This closes the shell-guard follow-up for the tested 1 KiB direct case.
+  Resume at [Sol's next batch](#sols-next-batch).
+  [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44385603211) · [Focused CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44385603215)
 
 - **1 KiB direct promotion images pass full-context review; shell guard repaired — 2026-11-18:**
   The source `ff7fe75` and documentation descendant `8d417e9` each pass
@@ -15547,10 +15615,9 @@ These retain the original plan's Stage 0–7 numbering. Completed foundations co
 
 Latest Stage 5 checkpoint (2026-11-18): 1 KiB direct promotion passes raw
 review in all three execution contexts, with 130 phase images across both
-root ranges. The native full runs reached the 2,569-test floor and failed a
-shell guard on the test's process ID call. The local repair passes the guard,
-lint and all twenty shell checks. Fresh full CI and its real native trailing
-checks are pending. Stage 5 remains partial and not quantified.
+root ranges. The shell-guard repair at `8849dc3` passed full and focused CI,
+including the native trailing checks. Stage 5 remains partial and not
+quantified. [Current checkpoint](#current-checkpoint)
 
 Preceding promotion checkpoint (2026-11-17): eight native Rust/C links verify a
 simultaneous two-node directory split and inline extent-map promotion. Six
@@ -15629,11 +15696,9 @@ writes blocked and stages 6–7 not reached.
 
 ## What comes next
 
-1. Review exact-source automatic CI for the newly implemented **separate 32 Rust/C two-node emission matrix** and its sixteen Linux reference cases. Verify the new 26th focused job/floor, all 25 retained definitions/floors, exact **1,705** unit occurrences / **38** indexed names, whole-suite **2,565 + one** retention, native trailing twenty scripts/staticlib/CLI and `ci-ok`. Then audit every common input/query binding, refusal/dirty/closed/cold image, complete C attribute and namespace/metadata/routing/protected-byte/allocation record. Native compilation/control passes do not qualify the unrun matrix. The closed `7fd069e` full-CI prerequisite and earlier sixteen-case / 144-image Linux reference review are reused; do not repeat those closed oracle audits or experiments. Keep the measured split-boundary differences and any newly observed extent-node allocation explicit. All three old modes, caps/floors and write gates remain unchanged. Stages 4–5 stay partial/not quantified, stages 6–7 not reached, casefold writes blocked and Windows/card/SteamOS unqualified.
-2. Finish creation and mutation planning, including serialization from duplicate checks through commit, stale-entry handling, and replacement semantics.
-3. Implement and independently verify indexed insertion, collisions, splits, and supported growth. Keep unsupported growth as a safe refusal; do not silently drop the index.
-4. Exercise complete write sequences against Linux/e2fsprogs, including interrupted writes and recovery, before changing the write gate.
-5. Integrate the qualified core into a pinned Windows build and test real cross-OS workflows. Core casefold support alone does not establish Windows or SteamOS readiness.
+Use the live batch entry near the top for the next assignment, stopping
+point and VM milestone sequence. Earlier dated checkpoints preserve the
+decisions and evidence available at the time. [Sol's next batch](#sols-next-batch)
 
 ## Rules for continuing
 

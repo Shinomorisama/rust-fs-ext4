@@ -43,6 +43,11 @@ file at the repository root. Keep tested checkpoint updates in the existing
 handoff and push authorized work to `origin/casefold-rw` so later chats can read
 it. Do not merge into or push to `main`.
 
+For each `do next`, take one assignment from the handoff and pause at its
+usage checkpoint so the user can check the session allowance. The current
+assignment, 10–15% target and resume instructions are in
+[Sol's next batch](docs/extprogress.md#sols-next-batch).
+
 Before repeating upstream or fork research, read the dated
 [upstream/fork review register](docs/UPSTREAM-FORK-REVIEWS.md) and its exact-tip
 snapshot. Distinguish metadata checks from implementation review and preserve
