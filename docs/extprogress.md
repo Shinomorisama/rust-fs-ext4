@@ -12,15 +12,35 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-18).** Extend the focused Windows job with
-one refusal check on the pinned disposable image. Invoke the same
-`ext4.exe` with `mount IMAGE --drive X: --rw` and require a nonzero exit
-and the specific message `unsupported INCOMPAT features: 0x00020000`.
-Require that the process never reports a ready mount, the drive remains
-absent, and the image digest is unchanged. Retain the existing positive
-read-only check on the same bytes. Use a bounded timeout and fail the
-check on timeout or a mount error unrelated to casefold. Keep the
-casefold write gate closed. [Windows workflow](../.github/workflows/casefold-windows-readonly.yml)
+**Next `do next` (set 2026-11-19).** Review the focused Windows run for the
+commit that adds the writable-mount refusal check. Verify that the
+same pinned executable refused `--rw` with the casefold error and
+preserved the image digest, then passed the existing read-only open
+and clean unmount on the same bytes. Take the first failure if either
+check stops. Before further write work, review any unresolved full CI
+failure recorded below. Keep the casefold write gate closed.
+[Windows workflow runs](https://github.com/Shinomorisama/rust-fs-ext4/actions/workflows/casefold-windows-readonly.yml?query=branch%3Acasefold-rw)
+
+### Windows writable refusal check prepared — 2026-11-19
+
+The Windows VM job now runs `mount IMAGE --drive X: --rw` on the
+verified disposable image before the read-only smoke. It requires a
+nonzero exit, the exact unsupported casefold feature mask, absent
+mount-ready output, an absent drive, and the original SHA-256. The
+command times out after 15 seconds. The same image then goes through
+the existing read-only enumeration, alias read and clean unmount.
+Actionlint and embedded Bash and Python syntax checks passed. The
+local refusal-check rehearsal accepted one valid result and rejected
+seven invalid ones. Its Windows verdict comes from CI.
+[Windows workflow](../.github/workflows/casefold-windows-readonly.yml)
+
+The previous docs-only source `614253e` failed full CI's native whole
+suite with exit 101. The digest-checked tier archive shows
+`linux_checks_public_full_root_fallback` panicked at
+`link_index_capacity.rs:226` with “collision boundaries are a separate
+reference.” The earlier Windows source `52ac53a` passed full CI. The
+Linux test failure remains open and applies separately from the
+Windows smoke. [Failing native job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44467413190/job/135371823490) · [Tier archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44467413190/artifacts/14504949687)
 
 ### Windows file-copy source trace completed — 2026-11-18
 

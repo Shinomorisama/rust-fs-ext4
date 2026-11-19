@@ -81,7 +81,7 @@ jobs:
           }
           Add-Content -Path $env:GITHUB_PATH -Value $bin
 
-      - name: List, open by alias, and unmount read-only
+      - name: Refuse writable mount, then list and open by alias read-only
         timeout-minutes: 3
         shell: python {0}
         working-directory: windows/ext4-win-driver
@@ -123,11 +123,33 @@ jobs:
           require(kernel.GetLogicalDrives() & drive_mask == 0, "Drive X: is already in use")
           mounted_directory = Path("X:/fold_small")
           ext4 = Path("target/x86_64-pc-windows-gnullvm/release/ext4.exe").resolve(strict=True)
+          mount_command = [str(ext4), "mount", str(image), "--drive", "X:"]
+          refused = subprocess.run(
+              [*mount_command, "--rw"],
+              stdin=subprocess.DEVNULL,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True,
+              errors="replace",
+              timeout=15,
+          )
+          print(refused.stdout, end="", flush=True)
+          require(refused.returncode != 0, "Writable casefold mount returned success")
+          require("ext4 mounted at" not in refused.stdout, "Writable casefold mount reported ready")
+          expected_error = "unsupported INCOMPAT features: 0x00020000"
+          require(
+              any(line.endswith(expected_error) for line in refused.stdout.splitlines()),
+              "Writable mount failed for a reason other than the casefold gate",
+          )
+          require(kernel.GetLogicalDrives() & drive_mask == 0, "Writable attempt left drive X: mounted")
+          require(sha256(image) == image_digest, "Writable refusal changed the Linux fixture")
+          print(f"PASS: writable mount refused casefold (exit {refused.returncode}), image unchanged", flush=True)
+
           mount_log = scratch / "casefold-mount.log"
           with mount_log.open("wb") as log:
               # Isolate Ctrl-C from the runner shell and other steps.
               mount = subprocess.Popen(
-                  [str(ext4), "mount", str(image), "--drive", "X:", "--ro"],
+                  [*mount_command, "--ro"],
                   stdin=subprocess.DEVNULL,
                   stdout=log,
                   stderr=subprocess.STDOUT,
