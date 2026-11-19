@@ -19,21 +19,34 @@ jobs:
       CASEFOLD_SHA: 8849dc360e6de69686dd785b237d4ebf7222538f
       FS_CORE_SHA: f62c1173141ab21f37eec8708682009e2aa6e760
     steps:
-      # The adapter's setup and path dependencies expect it at the workspace root.
       - name: Check out the pinned Windows adapter
         uses: actions/checkout@v4
         with:
           repository: Shinomorisama/ext4-win-driver
           ref: 393665e6cf7277422385154deeb8d2e4401dfa93
+          path: windows/ext4-win-driver
           persist-credentials: false
 
+      - name: Set the adapter toolchain's working directory
+        shell: bash
+        working-directory: windows/ext4-win-driver
+        run: |
+          set -euo pipefail
+          test ! -e ../rust-fs-ext4
+          test ! -e ../rust-fs-core
+          mkdir -p ../toolchain
+          # Composite shell steps need their own working-directory.
+          sed '/^      shell: /a\      working-directory: windows/ext4-win-driver' \
+            .github/actions/windows-toolchain/action.yml > ../toolchain/action.yml
+
       - name: Prepare WinFsp and the adapter's Windows toolchain
-        uses: ./.github/actions/windows-toolchain
+        uses: ./windows/toolchain
         with:
           llvm-mingw-version: '20260421'
 
       - name: Select the pinned casefold library and build the adapter
         shell: bash
+        working-directory: windows/ext4-win-driver
         run: |
           set -euo pipefail
           git -C ../rust-fs-ext4 fetch --depth 1 \
@@ -71,6 +84,7 @@ jobs:
       - name: List, open by alias, and unmount read-only
         timeout-minutes: 3
         shell: python {0}
+        working-directory: windows/ext4-win-driver
         run: |
           import ctypes
           import hashlib

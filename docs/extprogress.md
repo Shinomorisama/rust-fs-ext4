@@ -12,19 +12,29 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-18).** Correct the checkout layout in
-`.github/workflows/casefold-windows-readonly.yml` and get the focused
-Windows job past toolchain setup. The first run placed the adapter at
+**Next `do next` (set 2026-11-18).** Verify the checkout-layout repair
+in the new Windows read-only job. Check that setup, the locked build,
+fixture download, equivalent-name open and clean unmount actually ran.
+Take the first new failure as the next bounded repair if the job stops.
+[Windows workflow runs](https://github.com/Shinomorisama/rust-fs-ext4/actions/workflows/casefold-windows-readonly.yml?query=branch%3Acasefold-rw)
+
+The first run placed the adapter at
 `D:\a\rust-fs-ext4\rust-fs-ext4`. The adapter's toolchain action tried
 to create `../rust-fs-ext4`, which resolves to that same checkout. Git
 stopped at `error: remote origin already exists.` after cloning
 `rust-fs-core`. Build, download and mount steps were skipped.
-Place the adapter under a distinct directory and ensure the composite
-action's shell steps actually run from that directory so its sibling
-path dependencies resolve separately. Check the resolved paths and
-keep the adapter sources and pinned inputs intact. Then verify the
-locked build and smoke verdict if reached, or save the new run ID.
 [First failed Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44461175852/job/135348041488)
+
+The repair places the adapter in `windows/ext4-win-driver` and copies
+its toolchain action into a temporary runner directory with that
+working directory set for each shell step. The build and smoke also
+use the adapter directory. A scratch rehearsal reproduced the old
+exit 3, then executed the adapted action's clone script successfully
+for all five sibling repositories. The casefold and shared-core
+revisions matched their pins. The generated action matched the pinned
+original after removing the five working-directory entries.
+Actionlint and embedded shell and Python syntax checks passed.
+[Workflow](../.github/workflows/casefold-windows-readonly.yml)
 
 The first workflow source `a2ef59a` passed local Actionlint, shell and
 Python syntax checks and pinned fixture extraction. GitHub assigned a
