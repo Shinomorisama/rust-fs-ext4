@@ -520,10 +520,15 @@ fn transition(before: &Snapshot, after: &Snapshot, image: &Path) {
 }
 
 fn profile(bs: u32, journal: bool) {
-    profile_named(bs, journal, "link-index-capacity");
+    profile_named(bs, journal, "link-index-capacity", None);
 }
 
-fn profile_named(bs: u32, journal: bool, prefix: &str) {
+struct FixtureIdentity {
+    uuid: &'static str,
+    hash_seed: &'static str,
+}
+
+fn profile_named(bs: u32, journal: bool, prefix: &str, identity: Option<FixtureIdentity>) {
     let base = fs_ext4_test_support::temp_dir().join(format!("{prefix}-{bs}-{journal}"));
     let image = base.with_extension("working.img");
     let batch = base.with_extension("batch-start.img");
@@ -537,25 +542,32 @@ fn profile_named(bs: u32, journal: bool, prefix: &str) {
     } else {
         "none,extent,64bit,filetype,metadata_csum,dir_index"
     };
-    let made = oracle("mke2fs")
-        .args([
-            "-q",
-            "-F",
-            "-t",
-            "ext4",
-            "-b",
-            &bs.to_string(),
-            "-I",
-            "256",
-            "-m",
-            "0",
-            "-O",
-            features,
-            "-E",
-            "lazy_itable_init=0,lazy_journal_init=0",
-        ])
-        .arg(&image)
-        .output();
+    let mut mkfs = oracle("mke2fs").args([
+        "-q",
+        "-F",
+        "-t",
+        "ext4",
+        "-b",
+        &bs.to_string(),
+        "-I",
+        "256",
+        "-m",
+        "0",
+        "-O",
+        features,
+    ]);
+    let mut extended = String::from("lazy_itable_init=0,lazy_journal_init=0");
+    if let Some(FixtureIdentity { uuid, hash_seed }) = identity {
+        mkfs = mkfs.args(["-U", uuid]);
+        extended.push_str(",hash_seed=");
+        extended.push_str(hash_seed);
+        std::fs::write(
+            base.with_extension("fixture.txt"),
+            format!("uuid={uuid}\nhash_seed={hash_seed}\n"),
+        )
+        .unwrap();
+    }
+    let made = mkfs.args(["-E", extended.as_str()]).arg(&image).output();
     assert!(
         made.status.success(),
         "{}",

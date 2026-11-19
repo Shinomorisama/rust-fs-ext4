@@ -12,14 +12,34 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-19).** Pin the full-root fallback test's
-Linux fixture identity for its four profiles using the recovered UUIDs
-and hash seeds below. Bound the change to that test's fixture generation.
-Keep the even-boundary assertion and all four Linux and eight Rust/C
-profiles. Retain the seed and image for any new failure. Run the exact
-focused capacity-emission job in the pinned Linux harness, then check
-full CI separately. Keep the casefold write gate closed.
+**Next `do next` (set 2026-11-19).** Review the exact-source focused
+capacity-emission job for the fixture-pin commit. Verify its one-test
+floor, all four Linux and eight Rust/C profiles, the archived fixture
+identity records and the input, capacity and grown image headers.
+Check exact-source full CI separately. If either run stops, inspect
+the saved fixture and first failing assertion. Keep the casefold write
+gate closed.
 [Focused capacity test](../.github/workflows/casefold-stage0.yml)
+
+### Full-root fallback fixture identities pinned — 2026-11-19
+
+The full-root fallback test passes the four recovered UUID and hash-seed
+pairs below to the existing Linux fixture builder. Each profile records
+its requested fixture identity before invoking the guest formatter.
+The Linux-only capacity and intermediate tests use the original
+unseeded recipe. The even-boundary assertion, search bounds, test
+selection, floors and unrelated workflow jobs are preserved.
+
+The focused job already saves its dedicated scratch directory on failure.
+For a failed full-suite profile, the test copies its identity and
+available images outside the temporary directory before propagating the
+failure. The native and guest jobs upload that directory when reached.
+Local checks matched all four source pins against 12 archived Linux
+image headers, rehearsed copying the failing profile only, and passed
+formatting, the clock guard and workflow lint. The host test compiled
+and the exact filter selected one test.
+The pinned harness still has to verify the rebuilt fixtures and driver
+results. [Fixture pins](../src/fs/guarded_chmod/needs_host/link_index_capacity_driver.rs) · [Full CI retention](../.github/workflows/ci.yml)
 
 ### Windows writable refusal and read-only check passed — 2026-11-19
 

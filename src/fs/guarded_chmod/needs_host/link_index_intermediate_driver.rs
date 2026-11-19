@@ -94,7 +94,7 @@ fn prepare(bs: u32, journal: bool) -> (PathBuf, Snapshot) {
 }
 
 pub(super) fn prepare_named(bs: u32, journal: bool, prefix: &str) -> (PathBuf, Snapshot) {
-    profile_named(bs, journal, prefix);
+    profile_named(bs, journal, prefix, None);
     let base = fs_ext4_test_support::temp_dir().join(format!("{prefix}-{bs}-{journal}"));
     let image = base.with_extension("seek.img");
     let prior = base.with_extension("prior.img");

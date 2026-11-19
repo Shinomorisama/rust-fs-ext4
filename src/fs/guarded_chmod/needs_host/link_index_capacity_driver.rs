@@ -639,9 +639,44 @@ pub(super) fn emit(
 
 #[test]
 fn linux_checks_public_full_root_fallback() {
-    for bs in [1024, 4096] {
-        for journal in [false, true] {
-            profile_named(bs, journal, "link-capacity-driver-source");
+    // Each identity comes from a passing Linux reference in artifact 13495931406.
+    let profiles = [
+        (
+            1024,
+            false,
+            FixtureIdentity {
+                uuid: "7c5accee-c911-4fc6-9b9c-86a800cad53a",
+                hash_seed: "ebee3798-f076-4938-a53f-b7d69f76072a",
+            },
+        ),
+        (
+            1024,
+            true,
+            FixtureIdentity {
+                uuid: "d6cb0f51-49f4-4931-8090-fc4c7ee73c6e",
+                hash_seed: "61727c21-deaa-40ee-9006-861711d4f343",
+            },
+        ),
+        (
+            4096,
+            false,
+            FixtureIdentity {
+                uuid: "9962434d-bdfe-4ab5-9ee7-f3ab7aa66395",
+                hash_seed: "44ae000d-db95-403c-b755-d1da3935f31a",
+            },
+        ),
+        (
+            4096,
+            true,
+            FixtureIdentity {
+                uuid: "5d0f3549-9659-46c8-b696-919ba48d3869",
+                hash_seed: "a9932303-c549-4ab9-af36-1358aa3b66a5",
+            },
+        ),
+    ];
+    for (bs, journal, identity) in profiles {
+        let result = std::panic::catch_unwind(|| {
+            profile_named(bs, journal, "link-capacity-driver-source", Some(identity));
             let base = fs_ext4_test_support::temp_dir()
                 .join(format!("link-capacity-driver-source-{bs}-{journal}"));
             let source = base.with_extension("capacity.img");
@@ -649,6 +684,31 @@ fn linux_checks_public_full_root_fallback() {
             for capi in [false, true] {
                 emit(&source, &linux, capi, bs, journal, Mode::RootFallback);
             }
+        });
+        if let Err(panic) = result {
+            retain_failed_profile(bs, journal);
+            std::panic::resume_unwind(panic);
+        }
+    }
+}
+
+fn retain_failed_profile(bs: u32, journal: bool) {
+    // Whole-suite scratch is deleted by scripts/test.sh after cargo exits.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tmp/link-index-capacity-failure");
+    let saved = fs_ext4_test_support::create_unique_temp_dir(&root).unwrap();
+    let source = format!("link-capacity-driver-source-{bs}-{journal}.");
+    let rust = format!("link-capacity-driver-rust-{bs}-{journal}.");
+    let capi = format!("link-capacity-driver-capi-{bs}-{journal}.");
+    for entry in std::fs::read_dir(fs_ext4_test_support::temp_dir()).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        let name = name.to_str().unwrap();
+        if [source.as_str(), rust.as_str(), capi.as_str()]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+            && (name.ends_with(".img") || name.ends_with(".fixture.txt"))
+        {
+            std::fs::copy(entry.path(), saved.join(name)).unwrap();
         }
     }
 }
