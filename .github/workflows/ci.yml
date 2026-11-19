@@ -271,7 +271,9 @@ jobs:
           path: tmp/logs/*.log
           if-no-files-found: error
       - name: Keep failed full-root fallback fixture
-        if: always() && steps.tier.outcome == 'failure' && hashFiles('tmp/link-index-capacity-failure/**/*.fixture.txt') != ''
+        if: >-
+          always() && steps.tier.outcome != 'skipped' && steps.tier.outcome == 'failure'
+          && hashFiles('tmp/link-index-capacity-failure/**/*.fixture.txt') != ''
         uses: actions/upload-artifact@v4
         with:
           name: link-index-capacity-native-failure
@@ -425,7 +427,9 @@ jobs:
           path: tmp/logs/*.log
           if-no-files-found: error
       - name: Keep failed full-root fallback fixture
-        if: always() && steps.tier.outcome == 'failure' && hashFiles('tmp/link-index-capacity-failure/**/*.fixture.txt') != ''
+        if: >-
+          always() && steps.tier.outcome != 'skipped' && steps.tier.outcome == 'failure'
+          && hashFiles('tmp/link-index-capacity-failure/**/*.fixture.txt') != ''
         uses: actions/upload-artifact@v4
         with:
           name: link-index-capacity-guest-failure

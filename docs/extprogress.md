@@ -12,14 +12,42 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-19).** Review the exact-source focused
-capacity-emission job for the fixture-pin commit. Verify its one-test
-floor, all four Linux and eight Rust/C profiles, the archived fixture
-identity records and the input, capacity and grown image headers.
-Check exact-source full CI separately. If either run stops, inspect
-the saved fixture and first failing assertion. Keep the casefold write
-gate closed.
-[Focused capacity test](../.github/workflows/casefold-stage0.yml)
+**Next `do next` (set 2026-11-19).** Verify full CI for the commit that
+adds the explicit skipped-tier guard to both failure-retention uploads.
+Check the CI-profile test in the unit, aarch64, native and suite-in-VM
+jobs. Verify the whole-suite floors and aggregate when reached. The
+focused fixture check and archive review below are complete. If full
+CI passes, the next bounded write prerequisite is a zero-write
+reproduction for checked recovery's unsupported-journal admission.
+Keep the casefold write gate closed.
+[Full CI](../.github/workflows/ci.yml)
+
+### Pinned Linux fixtures pass focused review; upload guard repaired — 2026-11-19
+
+Source `8570886` passed focused capacity-emission job **135858399874**
+with one test at floor one, 418 lines and 54,511 bytes. Its archive
+**14573145484** matches the API run, commit and SHA-256
+`4c73ab3b808d516e9468eebdd613e9966c3c17160e8e59be083ebbb873e0d51d`.
+All 837 files pass ZIP CRC and all 148 source hashes match Git.
+All 56 image headers match the four requested identity records.
+The Linux transitions end at 240, 247, 5,346 and 5,463 aliases in
+profile order, with both Rust and C matching each Linux count.
+All eight driver observation records and four C attribute records
+are present. The separate Linux-only capacity job also passed at
+floor one. Other focused jobs were still running at this review.
+[Focused capacity job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44608476312/job/135858399874) · [Artifact](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44608476312/artifacts/14573145484)
+
+Full CI **44608476438** failed its standalone, aarch64 and native
+unit checks with exit 101. The verified tier archives
+**14571432108**, **14571163986** and **14571099959** all show the
+same failure in `tests/ci_profile.rs:1103`. Both new upload
+conditions used `outcome == 'failure'` and omitted the explicit
+`outcome != 'skipped'` check the guard requires. The exact test
+reproduced the failure locally. Adding the explicit guard preserves
+failure-only uploads and passes all 87 CI-profile tests and Actionlint
+locally. The suite-in-VM job was pending at review. Full CI for the
+repair remains to be verified.
+[Original full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44608476438)
 
 ### Full-root fallback fixture identities pinned — 2026-11-19
 
