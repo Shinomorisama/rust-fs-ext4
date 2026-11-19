@@ -12,23 +12,61 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-18).** Select one disposable Linux-built
-image and pin the Windows read-only path for it. Use the card's format
-if it is already recorded. Otherwise start with an existing 4 KiB
-journaled UTF-8 12.1 casefold fixture. Record the chosen image or recipe,
-strictness, directory layout, filesystem and journal features, and
-whether its journal fits the checked recovery path. A recovery mismatch
-is an input to the later write work. The read-only milestone can proceed.
-[Fixture profiles](CASEFOLD-STAGE0.md#initial-fixture-matrix) · [Checked recovery](CHECKED-RECOVERY.md)
+**Next `do next` (set 2026-11-18).** Take the first Windows read-only VM
+batch. Prepare one focused `windows-latest` smoke job on `casefold-rw`
+using the pins and fixture below. Use the adapter's existing WinFsp setup
+and disposable runner checkouts. Build `ext4.exe` with `--locked --features
+mount --target x86_64-pc-windows-gnullvm`, download the Linux artifact with
+Actions read access, and verify the selected member's digest before mount.
+Stop with the smoke verdict, the first concrete failure, or the run ID
+if CI is still executing. Keep the existing Linux oracle inside its
+pinned guest. [Windows build and matrix](https://github.com/Shinomorisama/ext4-win-driver/blob/393665e6cf7277422385154deeb8d2e4401dfa93/.github/workflows/matrix.yml)
 
-Using the existing Windows harness documentation and read-only sibling
-checkout, identify the exact adapter and casefold core revisions, how the
-VM build would select that core, and how it would receive this image and
-mount it with `--ro`. The adapter currently pins upstream ext4 v0.8.0.
-**Stop this first batch** with the image and build choice plus the first
-concrete blocker, or the ready-to-run Windows VM scenario. Record any
-unverified feature or runner access explicitly. Run that scenario in a
-later batch. [Windows harness](https://github.com/Shinomorisama/ext4-win-driver/blob/393665e6cf7277422385154deeb8d2e4401dfa93/README.md#testing)
+The smoke mounts the raw image with `ext4.exe mount IMAGE --drive X: --ro`.
+Enumerate `X:\fold_small` and require the stored name `ReadMe` using an exact
+case-sensitive comparison. Open `X:\fold_small\README`, verify SHA-256
+`7beb5db28751ba43973ea7d20f08dffa3f2bc7d8015c5b9095236f3ca8820562`,
+unmount, and verify the image digest again. Use this one small directory
+for the first check. Review indexed and Unicode alias paths in a later batch.
+
+### Windows read-only preparation completed — 2026-11-18
+
+- **Fixture.** Selected the provisional 64 MiB `casefold-4096-strict.img`
+  from artifact **14466114990**, run **44385603215**, source `8849dc3`.
+  Verify the archive SHA-256
+  `23e943bf9b34b026196fa2aeecb4ea6c9e4f2a528b02d424bf39de1dabff9e18`
+  and extract `casefold-stage0/casefold-4096-strict.img`. The image SHA-256
+  is `a0dabe3454a67b1ba1fe7bb4f880974a518501cb23f419f34886a4d29a5f8b3e`.
+  Both hashes, the saved superblock and the Linux namespace report
+  were verified. If the artifact expires, regenerate with the pinned
+  `casefold_fixture_oracle` test and bind the smoke to the new report and
+  digest. The fixture uses 4 KiB blocks, UTF-8 12.1 strict and ext4
+  feature masks `0x24 / 0x200c2 / 0x40b`. Its ordinary directory is
+  case-sensitive, `fold_small` is linear and `fold_indexed` has an HTree.
+  The actual card format is still unknown.
+  [Linux artifact](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44385603215/artifacts/14466114990) · [Fixture recipe](CASEFOLD-STAGE0.md#initial-fixture-matrix)
+- **Journal.** Raw bytes show clean internal JBD2 v2 in inode 8 with one
+  1,024-block extent, first log block 1, start 0 and feature masks
+  `0x0 / 0x12 / 0x0`. The journal has 64-bit and checksum-v3 flags.
+  The current checked recovery path refuses checksum v3. The clean
+  read-only smoke requires no replay. Carry the journal gap into the
+  later writable-profile decision. [Checked recovery](CHECKED-RECOVERY.md)
+- **Build pins and first blocker.** Use adapter
+  `393665e6cf7277422385154deeb8d2e4401dfa93` and casefold ext4 library
+  `8849dc360e6de69686dd785b237d4ebf7222538f` as the adapter's sibling
+  `../rust-fs-ext4`. Keep the adapter's lockfile and other pins, including
+  `rust-fs-core` v0.3.4 at `f62c1173141ab21f37eec8708682009e2aa6e760`.
+  That dependency combination awaits the locked Windows build. Use
+  the adapter's Windows toolchain action and explicitly select the
+  casefold sibling after setup. Its stock workflow clones upstream
+  ext4 v0.8.0 and pulls legacy matrix images, so an unmodified dispatch
+  cannot test this fixture and core. The adapter fork reports zero
+  Actions runs. Runner access and the combined build remain unverified.
+  [Toolchain action](https://github.com/Shinomorisama/ext4-win-driver/blob/393665e6cf7277422385154deeb8d2e4401dfa93/.github/actions/windows-toolchain/action.yml)
+
+This preparation used saved CI evidence and raw reads. The handoff source
+`46a4e04` passed all 11 full CI jobs. The Windows mount remains to be tested.
+[Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44424476956)
 
 **One `do next` means one batch.** Target **10–15 percentage points of the
 session allowance** per run, including review and handoff. Choose one
@@ -44,7 +82,7 @@ Save CI run IDs as soon as they exist so an interruption leaves a way
 to recover the work. Wait for the user's next `do next`. An in-flight CI
 run can finish between batches and its saved result can be inspected on resume.
 
-**Milestones after the first batch.** Split each into smaller batches as needed.
+**Milestones for the VM work.** Split each into smaller batches as needed.
 
 1. Mount the selected image read-only in the Windows VM. List the original
    filename, open it through an equivalent spelling, verify its contents
@@ -15819,7 +15857,12 @@ Index tests must prove Linux can find entries after driver insertion, collisions
 
 Crash/error tests must establish acceptable pre- or post-operation states, safe recovery in both directions, and correct checksums and allocation accounting. Audit mount, deferred replay, writability transitions, mutation APIs, and repair so relaxing one guard does not expose an unqualified path. Qualify journal/geometry combinations explicitly rather than assuming all ext4 features work.
 
-Windows integration still needs a selected repository revision and an audit of its adapter and mount lifecycle. The user has no Steam hardware or known final filesystem profile. Do not require that information to continue independent core work, and do not claim SteamOS-device compatibility until tested. Ensure Unicode licensing accompanies future redistributed binaries/tables.
+Windows integration has selected starting revisions for its read-only VM
+check. The adapter and mount lifecycle still need qualification. The user
+has no Steam hardware or known final filesystem profile. Do not require
+that information to continue independent core work, and do not claim
+SteamOS-device compatibility until tested. Ensure Unicode licensing
+accompanies future redistributed binaries/tables.
 
 ## Where the evidence lives
 
