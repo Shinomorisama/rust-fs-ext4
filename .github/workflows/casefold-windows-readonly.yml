@@ -1,0 +1,159 @@
+name: Casefold Windows read-only
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-windows-readonly.yml
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  readonly:
+    name: WinFsp casefold image
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      CASEFOLD_SHA: 8849dc360e6de69686dd785b237d4ebf7222538f
+      FS_CORE_SHA: f62c1173141ab21f37eec8708682009e2aa6e760
+    steps:
+      # The adapter's setup and path dependencies expect it at the workspace root.
+      - name: Check out the pinned Windows adapter
+        uses: actions/checkout@v4
+        with:
+          repository: Shinomorisama/ext4-win-driver
+          ref: 393665e6cf7277422385154deeb8d2e4401dfa93
+          persist-credentials: false
+
+      - name: Prepare WinFsp and the adapter's Windows toolchain
+        uses: ./.github/actions/windows-toolchain
+        with:
+          llvm-mingw-version: '20260421'
+
+      - name: Select the pinned casefold library and build the adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C ../rust-fs-ext4 fetch --depth 1 \
+            https://github.com/Shinomorisama/rust-fs-ext4.git "$CASEFOLD_SHA"
+          git -C ../rust-fs-ext4 checkout --detach FETCH_HEAD
+          test "$(git -C ../rust-fs-ext4 rev-parse HEAD)" = "$CASEFOLD_SHA"
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = "$FS_CORE_SHA"
+          printf 'Adapter %s\nCasefold ext4 %s\nShared core %s\n' \
+            "$(git rev-parse HEAD)" "$CASEFOLD_SHA" "$FS_CORE_SHA"
+          cargo build --release --locked --features mount --target x86_64-pc-windows-gnullvm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download the pinned Linux fixture archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14466114990/zip \
+            > "$(cygpath -u "$RUNNER_TEMP")/casefold-fixtures.zip"
+
+      - name: Add the WinFsp runtime to PATH
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = Join-Path ${env:ProgramFiles(x86)} 'WinFsp\bin'
+          if (!(Test-Path -LiteralPath $bin -PathType Container)) {
+            throw "WinFsp runtime directory missing at $bin"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+      - name: List, open by alias, and unmount read-only
+        timeout-minutes: 3
+        shell: python {0}
+        run: |
+          import ctypes
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import time
+          import zipfile
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def sha256(path):
+              with path.open("rb") as stream:
+                  return hashlib.file_digest(stream, "sha256").hexdigest()
+
+          scratch = Path(os.environ["RUNNER_TEMP"])
+          archive = scratch / "casefold-fixtures.zip"
+          archive_digest = "23e943bf9b34b026196fa2aeecb4ea6c9e4f2a528b02d424bf39de1dabff9e18"
+          image_digest = "a0dabe3454a67b1ba1fe7bb4f880974a518501cb23f419f34886a4d29a5f8b3e"
+          file_digest = "7beb5db28751ba43973ea7d20f08dffa3f2bc7d8015c5b9095236f3ca8820562"
+          image = scratch / "casefold-4096-strict.img"
+          require(sha256(archive) == archive_digest, "Linux fixture archive digest mismatch")
+          with zipfile.ZipFile(archive) as fixtures:
+              member = "casefold-stage0/casefold-4096-strict.img"
+              require(fixtures.namelist().count(member) == 1, "Expected exactly one Linux fixture")
+              with fixtures.open(member) as source, image.open("xb") as destination:
+                  shutil.copyfileobj(source, destination)
+          require(sha256(image) == image_digest, "Linux fixture image digest mismatch")
+          print(f"Linux fixture verified: {image_digest}", flush=True)
+
+          kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+          drive_mask = 1 << (ord("X") - ord("A"))
+          require(kernel.GetLogicalDrives() & drive_mask == 0, "Drive X: is already in use")
+          mounted_directory = Path("X:/fold_small")
+          ext4 = Path("target/x86_64-pc-windows-gnullvm/release/ext4.exe").resolve(strict=True)
+          mount_log = scratch / "casefold-mount.log"
+          with mount_log.open("wb") as log:
+              # Isolate Ctrl-C from the runner shell and other steps.
+              mount = subprocess.Popen(
+                  [str(ext4), "mount", str(image), "--drive", "X:", "--ro"],
+                  stdin=subprocess.DEVNULL,
+                  stdout=log,
+                  stderr=subprocess.STDOUT,
+                  creationflags=subprocess.CREATE_NEW_CONSOLE,
+              )
+          ready = False
+          try:
+              deadline = time.monotonic() + 30
+              while time.monotonic() < deadline:
+                  require(mount.poll() is None, f"Mount exited early ({mount.returncode})")
+                  output = mount_log.read_text(encoding="utf-8", errors="replace")
+                  if "ext4 mounted at X: (RO)" in output and mounted_directory.is_dir():
+                      ready = True
+                      break
+                  time.sleep(0.25)
+              require(ready, "Read-only mount did not become ready within 30 seconds")
+              names = {entry.name for entry in mounted_directory.iterdir()}
+              require("ReadMe" in names and "README" not in names, f"Stored spelling mismatch: {sorted(names)}")
+              require(sha256(mounted_directory / "README") == file_digest, "Alias file content mismatch")
+              print("WinFsp listed ReadMe and opened README with the Linux reference digest", flush=True)
+          finally:
+              try:
+                  if ready and mount.poll() is None:
+                      # Send the adapter its normal unmount signal in the isolated console.
+                      if not kernel.FreeConsole() or not kernel.AttachConsole(mount.pid):
+                          raise ctypes.WinError(ctypes.get_last_error())
+                      try:
+                          if not kernel.SetConsoleCtrlHandler(None, True):
+                              raise ctypes.WinError(ctypes.get_last_error())
+                          if not kernel.GenerateConsoleCtrlEvent(0, 0):
+                              raise ctypes.WinError(ctypes.get_last_error())
+                          require(mount.wait(timeout=15) == 0, "Mount returned an error at unmount")
+                      finally:
+                          kernel.FreeConsole()
+              finally:
+                  if mount.poll() is None:
+                      mount.kill()
+                      mount.wait(timeout=10)
+                  print(mount_log.read_text(encoding="utf-8", errors="replace"), end="", flush=True)
+          require(mount.returncode == 0, f"Mount exited unexpectedly ({mount.returncode})")
+          require(kernel.GetLogicalDrives() & drive_mask == 0, "Drive X: is still mounted")
+          require(sha256(image) == image_digest, "Read-only mount changed the Linux fixture")
+          print("PASS: clean unmount and unchanged Linux image digest", flush=True)

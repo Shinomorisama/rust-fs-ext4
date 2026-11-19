@@ -12,15 +12,14 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-18).** Take the first Windows read-only VM
-batch. Prepare one focused `windows-latest` smoke job on `casefold-rw`
-using the pins and fixture below. Use the adapter's existing WinFsp setup
-and disposable runner checkouts. Build `ext4.exe` with `--locked --features
-mount --target x86_64-pc-windows-gnullvm`, download the Linux artifact with
-Actions read access, and verify the selected member's digest before mount.
-Stop with the smoke verdict, the first concrete failure, or the run ID
-if CI is still executing. Keep the existing Linux oracle inside its
-pinned guest. [Windows build and matrix](https://github.com/Shinomorisama/ext4-win-driver/blob/393665e6cf7277422385154deeb8d2e4401dfa93/.github/workflows/matrix.yml)
+**Next `do next` (set 2026-11-18).** Verify the first Windows read-only
+workflow run for the commit introducing
+`.github/workflows/casefold-windows-readonly.yml`. Read the job log for the
+locked adapter build, Linux image digest, WinFsp verdict and clean unmount.
+If the run failed, take the first failing step as the bounded follow-up.
+Once the run passes, record the result and trace the Windows operations
+for the next file-copy milestone in a later batch.
+[Windows workflow runs](https://github.com/Shinomorisama/rust-fs-ext4/actions/workflows/casefold-windows-readonly.yml?query=branch%3Acasefold-rw)
 
 The smoke mounts the raw image with `ext4.exe mount IMAGE --drive X: --ro`.
 Enumerate `X:\fold_small` and require the stored name `ReadMe` using an exact
@@ -28,6 +27,14 @@ case-sensitive comparison. Open `X:\fold_small\README`, verify SHA-256
 `7beb5db28751ba43973ea7d20f08dffa3f2bc7d8015c5b9095236f3ca8820562`,
 unmount, and verify the image digest again. Use this one small directory
 for the first check. Review indexed and Unicode alias paths in a later batch.
+
+The first job uses `windows-latest`, the adapter's WinFsp setup, and
+disposable runner checkouts. It builds with the adapter's lockfile, gives
+the mount its own console for Ctrl-C and requires a successful exit and
+drive removal. Actionlint, shell and Python syntax checks, and extraction
+of the pinned fixture through the job's verification code passed locally.
+The Windows build and mount verdict come from CI.
+[Workflow](../.github/workflows/casefold-windows-readonly.yml)
 
 ### Windows read-only preparation completed — 2026-11-18
 
