@@ -12,13 +12,27 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-18).** Verify the first Windows read-only
-workflow run for the commit introducing
-`.github/workflows/casefold-windows-readonly.yml`. Read the job log for the
-locked adapter build, Linux image digest, WinFsp verdict and clean unmount.
-If the run failed, take the first failing step as the bounded follow-up.
-Once the run passes, record the result and trace the Windows operations
-for the next file-copy milestone in a later batch.
+**Next `do next` (set 2026-11-18).** Correct the checkout layout in
+`.github/workflows/casefold-windows-readonly.yml` and get the focused
+Windows job past toolchain setup. The first run placed the adapter at
+`D:\a\rust-fs-ext4\rust-fs-ext4`. The adapter's toolchain action tried
+to create `../rust-fs-ext4`, which resolves to that same checkout. Git
+stopped at `error: remote origin already exists.` after cloning
+`rust-fs-core`. Build, download and mount steps were skipped.
+Place the adapter under a distinct directory and ensure the composite
+action's shell steps actually run from that directory so its sibling
+path dependencies resolve separately. Check the resolved paths and
+keep the adapter sources and pinned inputs intact. Then verify the
+locked build and smoke verdict if reached, or save the new run ID.
+[First failed Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44461175852/job/135348041488)
+
+The first workflow source `a2ef59a` passed local Actionlint, shell and
+Python syntax checks and pinned fixture extraction. GitHub assigned a
+Windows runner and checked out the adapter successfully. Full CI for
+that source is separate. [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44461175889)
+
+After the read-only job passes, record the result and trace the Windows
+operations for the file-copy milestone in a later batch.
 [Windows workflow runs](https://github.com/Shinomorisama/rust-fs-ext4/actions/workflows/casefold-windows-readonly.yml?query=branch%3Acasefold-rw)
 
 The smoke mounts the raw image with `ext4.exe mount IMAGE --drive X: --ro`.
