@@ -12,17 +12,39 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-20).** Reproduce the checked-recovery
-admission issue on a disposable ordinary volume with a valid, clean
-checksum-v3 JBD2 journal. Reuse the `checked_recovery` native test
-module's memory device and I/O counter. Confirm the specific
-plain-JBD2-only error, count both writes and flushes through return
-and drop, and compare the complete before and after bytes. Record
-the exact red result. An identical final image can conceal an
-initial dirty marker followed by a restoring write. A supported
-plain-JBD2 mount and finish provide a positive control. Keep the
-casefold write gate closed.
-[Checked mount](../src/fs.rs#L720) · [Recovery tests](../src/fs.rs#L14756) · [Valid checksum-v3 fixture recipe](../tests/jbd2_checksums_oracle.rs)
+**Next `do next` (set 2026-11-20).** Apply the saved regression patch
+and fix `Filesystem::mount_recovering` so journal and filesystem
+admission complete before the first dirty-marker write. Preserve
+the existing refusal order, deferred replay, and checked release
+for supported journals. Run the same checksum-v3 test and the four
+existing checked-recovery controls. Verify the Linux recovery tier
+in the pinned VM and check full CI. Keep the casefold write gate
+closed. [Checked mount](../src/fs.rs#L720) · [Regression patch](CHECKED-RECOVERY-ADMISSION-RED.patch)
+
+### Checked-recovery admission I/O reproduced — 2026-11-20
+
+Source `941b561` passed all four existing native checked-recovery
+tests. A temporary regression then formatted an ordinary 32 MiB
+in-memory volume and installed a clean checksum-v3 JBD2 declaration
+with the same checksum recipe used by the existing oracle test.
+The I/O counters start after fixture preparation. Checked mount
+returns the expected plain-JBD2-only error and the complete image
+matches the before snapshot. The zero-I/O assertion fails on
+**two writes and two flushes**, through return and drop. The four
+supported-journal controls still pass. An exact rerun repeats the
+`(2, 2)` result and exit **101**. No Linux oracle or host mount
+is needed for this native reproduction.
+
+The initial `refuse_write` marks `s_state` dirty before journal
+validation. The error path drops the handle and restores `s_state`.
+This explains the measured writes and why the final bytes match.
+The dormant regression patch has SHA-256
+`43608f099cee97889a50f577d6db6133459ca80a722db8dce8c0d22e1d5647d1`
+and recreates the tested `src/fs.rs` blob
+`504048a3a13913f5b45220147dd1a2117c8afeb0`. Its source was restored
+before publication. Logs are in
+`/workspace/work/casefold-evidence/checked-recovery-admission`.
+[Regression patch](CHECKED-RECOVERY-ADMISSION-RED.patch) · [Checksum fixture recipe](../tests/jbd2_checksums_oracle.rs)
 
 ### Pinned fixture and upload guard pass full CI — 2026-11-20
 

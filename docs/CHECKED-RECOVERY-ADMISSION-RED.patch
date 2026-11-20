@@ -1,0 +1,125 @@
+diff --git a/src/fs.rs b/src/fs.rs
+index a70a2dd..504048a 100644
+--- a/src/fs.rs
++++ b/src/fs.rs
+@@ -14814,10 +14814,22 @@ mod tests {
+         struct Failing {
+             inner: std::sync::Arc<MemDev>,
+             events: AtomicUsize,
++            writes: AtomicUsize,
++            flushes: AtomicUsize,
+             fail_at: AtomicUsize,
+         }
+
+         impl Failing {
++            fn new(inner: std::sync::Arc<MemDev>, fail_at: usize) -> Self {
++                Self {
++                    inner,
++                    events: AtomicUsize::new(0),
++                    writes: AtomicUsize::new(0),
++                    flushes: AtomicUsize::new(0),
++                    fail_at: AtomicUsize::new(fail_at),
++                }
++            }
++
+             fn gate(&self) -> Result<()> {
+                 if self.events.fetch_add(1, Ordering::SeqCst) >= self.fail_at.load(Ordering::SeqCst)
+                 {
+@@ -14835,10 +14847,12 @@ mod tests {
+                 self.inner.size_bytes()
+             }
+             fn write_at(&self, offset: u64, buf: &[u8]) -> Result<()> {
++                self.writes.fetch_add(1, Ordering::SeqCst);
+                 self.gate()?;
+                 self.inner.write_at(offset, buf)
+             }
+             fn flush(&self) -> Result<()> {
++                self.flushes.fetch_add(1, Ordering::SeqCst);
+                 self.gate()
+             }
+             fn is_writable(&self) -> bool {
+@@ -14846,17 +14860,66 @@ mod tests {
+             }
+         }
+
++        #[test]
++        fn unsupported_checksum_v3_journal_is_refused_without_device_io() {
++            use crate::jbd2::{self, JbdIncompat, JournalSuperblock};
++
++            let image = journalled();
++            let fs = Filesystem::mount_lazy(image.clone()).unwrap();
++            let inode =
++                crate::inode::Inode::parse(&fs.read_inode_raw(fs.sb.journal_inode).unwrap())
++                    .unwrap();
++            let offset = jbd2::journal_block_to_physical(&fs, &inode, 0)
++                .unwrap()
++                .unwrap()
++                * u64::from(BS);
++            drop(fs);
++
++            // Same checksum-v3 journal declaration as tests/jbd2_checksums_oracle.rs.
++            let mut raw = [0u8; 1024];
++            image.read_at(offset, &mut raw).unwrap();
++            let bits = u32::from_be_bytes(raw[0x28..0x2c].try_into().unwrap());
++            raw[0x28..0x2c].copy_from_slice(&(bits | JbdIncompat::CSUM_V3.bits()).to_be_bytes());
++            raw[0x50] = jbd2::JBD2_CRC32C_CHKSUM;
++            raw[0xfc..0x100].fill(0);
++            let checksum = crate::checksum::linux_crc32c(!0, &raw);
++            raw[0xfc..0x100].copy_from_slice(&checksum.to_be_bytes());
++            let journal = JournalSuperblock::parse(&raw).unwrap();
++            assert!(journal.is_clean() && journal.uses_csum_v3());
++            assert_eq!(journal.checksum_declaration_error(), None);
++            assert_eq!(journal.checksum, checksum);
++            image.write_at(offset, &raw).unwrap();
++            assert_ne!(on_disk(&image).state & crate::superblock::EXT4_VALID_FS, 0);
++            assert!(!needs_recovery(&image));
++
++            let before = image.bytes.lock().unwrap().clone();
++            let dev = std::sync::Arc::new(Failing::new(image.clone(), usize::MAX));
++            let refusal = Filesystem::mount_recovering(dev.clone());
++            assert!(
++                matches!(refusal, Err(Error::Unsupported(msg)) if msg.starts_with("checked lifecycle supports plain JBD2 only")),
++                "expected the checked lifecycle to refuse this journal, got {:?}",
++                refusal.err()
++            );
++            assert!(
++                *image.bytes.lock().unwrap() == before,
++                "refusal changed bytes"
++            );
++            let writes = dev.writes.load(Ordering::SeqCst);
++            let flushes = dev.flushes.load(Ordering::SeqCst);
++            assert_eq!(
++                (writes, flushes),
++                (0, 0),
++                "checked refusal must perform zero writes and flushes, including drop"
++            );
++        }
++
+         /// Every device write and flush of a checked mount, create and
+         /// finish, the drop included, is one `finish` answers for: a failure
+         /// at any of them must not be reported as a clean release.
+         #[test]
+         fn a_failure_at_any_release_write_is_not_a_clean_finish() {
+             let run = |fail_at: usize| {
+-                let dev = std::sync::Arc::new(Failing {
+-                    inner: journalled(),
+-                    events: AtomicUsize::new(0),
+-                    fail_at: AtomicUsize::new(fail_at),
+-                });
++                let dev = std::sync::Arc::new(Failing::new(journalled(), fail_at));
+                 let finished = Filesystem::mount_recovering(dev.clone())
+                     .and_then(|fs| fs.apply_create("/a", 0o644).map(|_| fs))
+                     .and_then(|fs| fs.finish());
+@@ -14876,11 +14939,7 @@ mod tests {
+         /// drop that follows it may touch the device again.
+         #[test]
+         fn a_failed_commit_leaves_finish_and_drop_without_device_io() {
+-            let dev = std::sync::Arc::new(Failing {
+-                inner: journalled(),
+-                events: AtomicUsize::new(0),
+-                fail_at: AtomicUsize::new(usize::MAX),
+-            });
++            let dev = std::sync::Arc::new(Failing::new(journalled(), usize::MAX));
+             let fs = Filesystem::mount_recovering(dev.clone()).expect("checked mount");
+             let first = dev.events.load(Ordering::SeqCst) + 2;
+             dev.fail_at.store(first, Ordering::SeqCst);
