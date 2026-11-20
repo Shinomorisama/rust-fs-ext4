@@ -12,15 +12,40 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-19).** Verify full CI for the commit that
-adds the explicit skipped-tier guard to both failure-retention uploads.
-Check the CI-profile test in the unit, aarch64, native and suite-in-VM
-jobs. Verify the whole-suite floors and aggregate when reached. The
-focused fixture check and archive review below are complete. If full
-CI passes, the next bounded write prerequisite is a zero-write
-reproduction for checked recovery's unsupported-journal admission.
-Keep the casefold write gate closed.
-[Full CI](../.github/workflows/ci.yml)
+**Next `do next` (set 2026-11-20).** Reproduce the checked-recovery
+admission issue on a disposable ordinary volume with a valid, clean
+checksum-v3 JBD2 journal. Reuse the `checked_recovery` native test
+module's memory device and I/O counter. Confirm the specific
+plain-JBD2-only error, count both writes and flushes through return
+and drop, and compare the complete before and after bytes. Record
+the exact red result. An identical final image can conceal an
+initial dirty marker followed by a restoring write. A supported
+plain-JBD2 mount and finish provide a positive control. Keep the
+casefold write gate closed.
+[Checked mount](../src/fs.rs#L720) · [Recovery tests](../src/fs.rs#L14756) · [Valid checksum-v3 fixture recipe](../tests/jbd2_checksums_oracle.rs)
+
+### Pinned fixture and upload guard pass full CI — 2026-11-20
+
+Guard repair `3d1df2b` passes all 11 jobs in exact full CI
+**44611220227**, including `ci-ok`. Archived logs **14572313836**,
+**14571749191**, **14577120291** and **14576819812** match their
+API digests, sizes, run and source and pass ZIP CRC. The upload-guard
+test passes in standalone, aarch64, native unit, native whole-suite
+and guest contexts. Both whole suites pass the full-root fallback
+test and each records **2,569 successes**, floor **1,060**, with
+the existing ignored fuzz test. The native run reaches the twenty
+shell controls, 159 installed-CLI checks and 4,705 total executions.
+Both VMs stop cleanly. The native and guest whole logs stay within
+their existing limits at 4,022 lines / 248,357 bytes and 4,195 lines /
+258,605 bytes. The original fixture-pin source `8570886` also
+completed all 27 focused jobs successfully.
+[Repair full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44611220227) · [Fixture-focused CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44608476312)
+
+The initial checked mount calls `refuse_write`, which may write and
+flush `s_state`, before validating the journal. A later refusal can
+run the restoring write through `Drop`. That ordering is confirmed
+in source. The zero-I/O reproduction remains the next checkpoint.
+[State writes](../src/fs.rs#L1306) · [Drop path](../src/fs.rs#L642)
 
 ### Pinned Linux fixtures pass focused review; upload guard repaired — 2026-11-19
 
