@@ -13,8 +13,9 @@ operation. Applications requiring a backup must save and independently reopen it
 
 The checked lifecycle currently accepts an internal JBD2 v2 journal with matching
 block size, first log block 1, one user, no compatibility/read-only flags and only
-REVOKE/64BIT incompatibility flags. Outstanding journal/filesystem errors are
-reported. Checksummed, async-commit, fast-commit and unknown journal formats remain
+REVOKE/64BIT incompatibility flags. It checks the initial journal profile and
+outstanding filesystem errors before the first device write or flush.
+Checksummed, async-commit, fast-commit and unknown journal formats remain
 unsupported in this API. The older `mount` interface remains available and
 replays checksummed journals too; that path is qualified by its own tests, not by
 these. Ext4 metadata checksums are distinct from JBD2 transaction checksums.

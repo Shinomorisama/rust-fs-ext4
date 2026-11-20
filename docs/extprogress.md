@@ -12,14 +12,30 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-20).** Apply the saved regression patch
-and fix `Filesystem::mount_recovering` so journal and filesystem
-admission complete before the first dirty-marker write. Preserve
-the existing refusal order, deferred replay, and checked release
-for supported journals. Run the same checksum-v3 test and the four
-existing checked-recovery controls. Verify the Linux recovery tier
-in the pinned VM and check full CI. Keep the casefold write gate
-closed. [Checked mount](../src/fs.rs#L720) · [Regression patch](CHECKED-RECOVERY-ADMISSION-RED.patch)
+**Next `do next` (set 2026-11-20).** Verify the exact repair commit's
+full CI. Confirm the checksum-v3 refusal control and four existing
+checked-recovery unit controls ran. Inspect the pinned Linux VM
+results for all five `journal_mount_recovery` integration tests,
+including the interrupted-replay and interrupted-release cases.
+Check the whole-suite floors and aggregate. Keep the casefold write
+gate closed. [Checked mount](../src/fs.rs#L720) · [Linux recovery tests](../tests/journal_mount_recovery.rs)
+
+### Checked-recovery admission fix passes native tests — 2026-11-20
+
+The first writable preflight in `mount_recovering` now calls the
+read-only `write_refusal` verdict. The journal profile and outstanding
+filesystem errors are checked before `mark_not_clean_once`. Supported
+mounts then follow the existing replay and checked release path. The
+checksum-v3 restriction stays in force.
+
+The saved patch reconstructed the tested red blob exactly. Its test is
+now active and passes with **zero writes, zero flushes and identical
+image bytes** after the expected refusal. The four existing native
+checked-recovery controls also pass. Full local lint and the clock
+guard pass. The archived red patch remains a historical reproduction.
+The Linux recovery tests run in both whole-suite jobs in CI. Their
+repair-source results and the full aggregate are pending.
+[Regression](../src/fs.rs#L14865) · [Checked recovery contract](CHECKED-RECOVERY.md)
 
 ### Checked-recovery admission I/O reproduced — 2026-11-20
 
