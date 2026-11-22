@@ -12,15 +12,38 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-20).** Prepare a focused reference for
-checked recovery of one ordinary 4 KiB Linux image with an internal
-checksum-v3, 64-bit JBD2 journal. Reuse the existing checksum tests and
-the pinned Linux harness. Start with one committed transaction and
-record the original journal flags, checksum and recovery markers, the
-Linux-recovered result, and the current checked-mount refusal with
-zero writes and flushes. Define the successful checked replay and
-finish assertions for that same input. Keep the current format checks
-and casefold write gate closed.
+**Next `do next` (set 2026-11-22).** Verify the focused checked-recovery
+reference job and audit its three saved images and source records.
+Check the exact test floor, journal feature bits and checksum, Linux's
+replayed payload, and the checked refusal's zero writes, zero flushes
+and byte equality. If the job stops, diagnose its first failed step
+from the retained evidence. Check full CI separately. Keep the
+casefold write gate closed.
+[Linux reference workflow](../.github/workflows/casefold-checked-recovery.yml)
+
+### Linux checksum-v3 recovery reference prepared — 2026-11-22
+
+The new focused test uses the existing checksum harness to build one
+ordinary 4 KiB Linux image. It allocates a data block to `/oracle`,
+locates that block with debugfs, and places a replacement payload in
+one committed 64-bit checksum-v3 transaction. Original target bytes
+must still be present before replay. The workflow saves the original
+image, the independently recovered image, and the byte-identical
+checked-refusal copy. It records journal flags, checksum, sequence,
+recovery markers, Linux reports, and refusal I/O counters. The exact
+test runs through the pinned harness at floor one with no ignored tests.
+Local compilation selects exactly one test, and full lint and workflow
+checks pass. The VM result is pending.
+
+For a future supported checked run on the same input, require the
+replayed `/oracle` data to match Linux. While the handle is open,
+require a clean journal cursor and an ext4 recovery marker that stays
+set through flush. On successful `finish`, require a clean filesystem
+state, a cleared recovery marker, preserved journal profile and valid
+checksums. Independently cold-read the recovered data, require a
+clean Linux check, and verify that repeat checked mount and finish
+preserve the bytes. Use the existing checked replay and release tests
+for subsequent interruption coverage.
 [Checksum oracle](../tests/jbd2_checksums_oracle.rs) · [Checked recovery tests](../tests/journal_mount_recovery.rs)
 
 ### Checked-recovery admission repair passes full CI — 2026-11-20

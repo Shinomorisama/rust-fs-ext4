@@ -1,0 +1,65 @@
+name: Checked recovery Linux evidence
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-checked-recovery.yml
+      - tests/jbd2_checksums_oracle.rs
+      - src/fs.rs
+      - src/jbd2.rs
+      - src/journal.rs
+      - src/journal_apply.rs
+      - src/journal_writer.rs
+
+permissions:
+  contents: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+  CARGO_TERM_COLOR: never
+  CARGO_BUILD_JOBS: "4"
+
+jobs:
+  linux-reference:
+    name: Linux checksum-v3 recovery reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned siblings
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Retain exact reference source identity
+        run: |
+          mkdir -p tmp/checked-recovery-reference
+          git rev-parse HEAD > tmp/checked-recovery-reference/source-commit.txt
+          git ls-files -z src tests/support tests/jbd2_checksums_oracle.rs Cargo.toml Cargo.lock \
+            .github/workflows/casefold-checked-recovery.yml | xargs -0 sha256sum \
+            > tmp/checked-recovery-reference/source-sha256.txt
+      - name: Verify Linux replay and checked refusal on identical input
+        id: reference
+        env:
+          FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/checked-recovery-reference
+        run: |
+          scripts/tier.sh casefold:checked-recovery-reference checked-recovery-reference 1050 65000 \
+            -- scripts/test.sh --locked --release --test jbd2_checksums_oracle \
+            linux_reference_for_checked_csum_v3_replay -- --exact --show-output
+          bash scripts/core.sh test-floor --refuse-ignored checked-recovery-reference 1
+      - name: Save original, Linux replay, and checked refusal evidence
+        if: always() && steps.reference.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: checked-recovery-reference
+          path: |
+            tmp/checked-recovery-reference/
+            tmp/logs/checked-recovery-reference.log
+          if-no-files-found: error
+          retention-days: 30

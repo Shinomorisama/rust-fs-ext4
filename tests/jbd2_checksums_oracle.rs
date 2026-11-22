@@ -18,7 +18,9 @@
 
 use fs_ext4::block_io::{BlockDevice, FileDevice};
 use fs_ext4::error::Result;
+use fs_ext4::features::Incompat;
 use fs_ext4::inode::Inode;
+use fs_ext4::jbd2::{JbdIncompat, JournalSuperblock};
 use fs_ext4::journal_writer::JournalWriter;
 use fs_ext4::Filesystem;
 use fs_ext4_test_support::oracle;
@@ -87,6 +89,7 @@ struct CrashDevice {
     inner: Arc<dyn BlockDevice>,
     budget: usize,
     writes: AtomicUsize,
+    flushes: AtomicUsize,
 }
 
 impl BlockDevice for CrashDevice {
@@ -103,6 +106,7 @@ impl BlockDevice for CrashDevice {
         self.inner.write_at(offset, buf)
     }
     fn flush(&self) -> Result<()> {
+        self.flushes.fetch_add(1, Ordering::SeqCst);
         self.inner.flush()
     }
     fn is_writable(&self) -> bool {
@@ -156,6 +160,7 @@ fn e2fsck_replays_what_this_crate_committed(tag: &str, features: &str, bits: u32
             inner: Arc::new(FileDevice::open_rw(&image).unwrap()),
             budget: 5 + 1 + 1,
             writes: AtomicUsize::new(0),
+            flushes: AtomicUsize::new(0),
         };
         writer.commit(&dev, &tx).unwrap();
     }
@@ -248,6 +253,137 @@ fn a_debugfs_transaction_is_replayed() {
         );
     }
     let _ = std::fs::remove_file(&image);
+}
+
+fn save_checked_reference_state(image: &str, journal_block: u64) -> (u32, u16, JournalSuperblock) {
+    let first_block = read_block(image, 0);
+    let sb = &first_block[1024..2048];
+    let incompat = u32::from_le_bytes(sb[0x60..0x64].try_into().unwrap());
+    let state = u16::from_le_bytes(sb[0x3a..0x3c].try_into().unwrap());
+    let mut raw = read_block(image, journal_block);
+    let jsb = JournalSuperblock::parse(&raw).unwrap();
+    let allowed = JbdIncompat::REVOKE | JbdIncompat::BIT64 | JbdIncompat::CSUM_V3;
+    assert_eq!(jsb.block_type, fs_ext4::jbd2::JBD2_SUPERBLOCK_V2);
+    assert_eq!(u64::from(jsb.block_size), BS);
+    assert!(jsb.uses_csum_v3() && jsb.uses_64bit());
+    assert_eq!(jsb.feature_incompat & !allowed.bits(), 0);
+    assert_eq!((jsb.feature_compat, jsb.feature_ro_compat), (0, 0));
+    assert_eq!((jsb.first, jsb.nr_users, jsb.errno), (1, 1, 0));
+    assert_eq!(jsb.checksum_declaration_error(), None);
+    raw[0xfc..0x100].fill(0);
+    assert_eq!(
+        jsb.checksum,
+        fs_ext4::checksum::linux_crc32c(!0, &raw[..1024])
+    );
+    std::fs::write(
+        format!("{image}.state.txt"),
+        format!(
+            "journal_block={journal_block}\nincompat={incompat:#010x}\nstate={state:#06x}\njournal_incompat={:#010x}\nchecksum={:#010x}\nstart={}\nsequence={}\n",
+            jsb.feature_incompat, jsb.checksum, jsb.start, jsb.sequence,
+        ),
+    )
+    .unwrap();
+    (incompat, state, jsb)
+}
+
+#[test]
+fn linux_reference_for_checked_csum_v3_replay() {
+    let image = fresh_image("checked_v3_input", "metadata_csum,64bit");
+    let initial = pattern(0);
+    let committed = pattern(1);
+    let payload = format!("{image}.payload.bin");
+    std::fs::write(&payload, &initial).unwrap();
+    let create = format!("write \"{payload}\" /oracle");
+    let (code, log) = run("debugfs", &["-w", "-R", &create, &image], None);
+    assert_eq!(code, Some(0), "{log}");
+
+    let physical_block = |path: &str| {
+        let query = format!("bmap {path} 0");
+        let out = oracle("debugfs").args(["-R", &query, &image]).output();
+        assert!(out.status.success(), "{out:?}");
+        let block = String::from_utf8(out.stdout)
+            .unwrap()
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+        assert_ne!(block, 0, "{path} has no allocated block");
+        block
+    };
+    let data_block = physical_block("/oracle");
+    let journal_block = physical_block("<8>");
+    assert_ne!(data_block, journal_block);
+    assert!(read_block(&image, data_block) == initial);
+
+    set_journal_incompat(&image, (JbdIncompat::BIT64 | JbdIncompat::CSUM_V3).bits());
+    std::fs::write(&payload, &committed).unwrap();
+    let script = format!("jo -c\njw -b {data_block} \"{payload}\"\njc\n");
+    let (code, log) = run("debugfs", &["-w", "-f", "-", &image], Some(&script));
+    std::fs::write(format!("{image}.debugfs.txt"), &log).unwrap();
+    assert_eq!(code, Some(0), "{log}");
+
+    let (incompat, _, before) = save_checked_reference_state(&image, journal_block);
+    assert_eq!(incompat & Incompat::CASEFOLD.bits(), 0);
+    assert_ne!(incompat & Incompat::RECOVER.bits(), 0);
+    assert!(!before.is_clean());
+    assert!(
+        read_block(&image, data_block) == initial,
+        "data was already checkpointed"
+    );
+
+    let linux = format!("{image}.linux.img");
+    let refused = format!("{image}.refused.img");
+    std::fs::copy(&image, &linux).unwrap();
+    std::fs::copy(&image, &refused).unwrap();
+    let replay = oracle("e2fsck")
+        .args(["-fy", &linux])
+        .env("LC_ALL", "C")
+        .judged()
+        .repaired("Linux checksum-v3 recovery");
+    std::fs::write(format!("{linux}.replay.txt"), &replay).unwrap();
+    assert!(replay.contains("recovering journal"), "{replay}");
+    assert!(
+        !replay.contains("Fix?") && !replay.contains("Clear?"),
+        "Linux needed repairs beyond replay: {replay}"
+    );
+    assert!(
+        read_block(&linux, data_block) == committed,
+        "Linux did not replay /oracle"
+    );
+    let (incompat, state, after) = save_checked_reference_state(&linux, journal_block);
+    assert_eq!(incompat & Incompat::RECOVER.bits(), 0);
+    assert_ne!(state & fs_ext4::superblock::EXT4_VALID_FS, 0);
+    assert!(after.is_clean());
+    assert_eq!(after.feature_incompat, before.feature_incompat);
+    let clean = oracle("e2fsck")
+        .args(["-fn", &linux])
+        .env("LC_ALL", "C")
+        .judged()
+        .clean("Linux checksum-v3 post-replay check");
+    std::fs::write(format!("{linux}.e2fsck.txt"), clean.stdout).unwrap();
+
+    let dev = Arc::new(CrashDevice {
+        inner: Arc::new(FileDevice::open_rw(&refused).unwrap()),
+        budget: usize::MAX,
+        writes: AtomicUsize::new(0),
+        flushes: AtomicUsize::new(0),
+    });
+    let error = Filesystem::mount_recovering(dev.clone())
+        .err()
+        .expect("checksum-v3 is gated");
+    let writes = dev.writes.load(Ordering::SeqCst);
+    let flushes = dev.flushes.load(Ordering::SeqCst);
+    std::fs::write(
+        format!("{refused}.result.txt"),
+        format!("error={error}\nwrites={writes}\nflushes={flushes}\n"),
+    )
+    .unwrap();
+    assert!(
+        matches!(error, fs_ext4::Error::Unsupported(msg) if msg.starts_with("checked lifecycle supports plain JBD2 only")),
+        "{error:?}"
+    );
+    assert_eq!((writes, flushes), (0, 0));
+    assert!(std::fs::read(&refused).unwrap() == std::fs::read(&image).unwrap());
+    eprintln!("Linux replay updated /oracle block {data_block}; checked mount refused with zero writes and flushes");
 }
 
 /// Journal block 1 is the descriptor, 2..=4 the data, 5 the revoke block
