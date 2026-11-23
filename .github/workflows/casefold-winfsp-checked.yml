@@ -1,0 +1,141 @@
+name: WinFsp checked image integration
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-winfsp-checked.yml
+      - tests/c_smoke/winfsp_checked.py
+  workflow_dispatch:
+    inputs:
+      adapter_patch:
+        description: Verified adapter patch, encoded as base64
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe-syntax:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m py_compile tests/c_smoke/winfsp_checked.py
+
+  checked-image:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/casefold-rw'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      ADAPTER_SHA: 393665e6cf7277422385154deeb8d2e4401dfa93
+      PATCH_SHA: 00f65c6df5a713a73e3c2165e726f3db8671cca9d3820360fcced622f613555b
+      CORE_SHA: f62c1173141ab21f37eec8708682009e2aa6e760
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: probe-source
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Shinomorisama/ext4-win-driver
+          ref: ${{ env.ADAPTER_SHA }}
+          path: windows/ext4-win-driver
+          persist-credentials: false
+
+      - name: Set the pinned adapter toolchain working directory
+        shell: bash
+        working-directory: windows/ext4-win-driver
+        run: |
+          set -euo pipefail
+          mkdir -p ../toolchain
+          sed '/^      shell: /a\      working-directory: windows/ext4-win-driver' \
+            .github/actions/windows-toolchain/action.yml > ../toolchain/action.yml
+
+      - name: Prepare WinFsp and the Windows toolchain
+        uses: ./windows/toolchain
+        with:
+          llvm-mingw-version: '20260421'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify and apply the scratch adapter patch
+        shell: python {0}
+        working-directory: windows/ext4-win-driver
+        env:
+          ADAPTER_PATCH: ${{ inputs.adapter_patch }}
+        run: |
+          import base64
+          import hashlib
+          import os
+          from pathlib import Path
+          import subprocess
+
+          data = base64.b64decode(os.environ.pop("ADAPTER_PATCH"), validate=True)
+          if hashlib.sha256(data).hexdigest() != os.environ["PATCH_SHA"]:
+              raise RuntimeError("Adapter patch digest mismatch")
+          revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          if revision != os.environ["ADAPTER_SHA"]:
+              raise RuntimeError("Adapter revision mismatch")
+          patch = Path(os.environ["RUNNER_TEMP"]) / "checked-adapter.patch"
+          patch.write_bytes(data)
+          subprocess.run(["git", "apply", "--check", str(patch)], check=True)
+          subprocess.run(["git", "apply", str(patch)], check=True)
+
+      - name: Build the exact WinFsp adapter and library
+        id: build
+        shell: bash
+        working-directory: windows/ext4-win-driver
+        run: |
+          set -euo pipefail
+          evidence="$(cygpath -u "$RUNNER_TEMP")/winfsp-checked"
+          mkdir -p "$evidence"
+          git -C ../rust-fs-ext4 fetch --depth 1 \
+            https://github.com/Shinomorisama/rust-fs-ext4.git "$GITHUB_SHA"
+          git -C ../rust-fs-ext4 checkout --detach FETCH_HEAD
+          test "$(git -C ../rust-fs-ext4 rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = "$CORE_SHA"
+          printf 'Adapter %s\nAdapter patch %s\nCasefold ext4 %s\nShared core %s\n' \
+            "$ADAPTER_SHA" "$PATCH_SHA" "$GITHUB_SHA" "$CORE_SHA" > "$evidence/source.txt"
+          cargo build --release --locked --features mount --target x86_64-pc-windows-gnullvm \
+            2>&1 | tee "$evidence/build.log"
+
+      - name: Download the audited Linux image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14789346547/zip \
+            > "$(cygpath -u "$RUNNER_TEMP")/checked-linux-reference.zip"
+
+      - name: Read, write, flush and release through WinFsp
+        timeout-minutes: 4
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = Join-Path ${env:ProgramFiles(x86)} 'WinFsp\bin'
+          if (!(Test-Path -LiteralPath $bin -PathType Container)) {
+            throw 'WinFsp runtime directory is missing'
+          }
+          $env:PATH = "$bin;$env:PATH"
+          python probe-source/tests/c_smoke/winfsp_checked.py `
+            windows/ext4-win-driver/target/x86_64-pc-windows-gnullvm/release/ext4.exe `
+            "$env:RUNNER_TEMP/checked-linux-reference.zip" "$env:RUNNER_TEMP/winfsp-checked"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retain WinFsp build and image evidence
+        if: always() && steps.build.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: winfsp-checked-image
+          path: ${{ runner.temp }}/winfsp-checked/
+          if-no-files-found: error
+          retention-days: 30

@@ -12,16 +12,32 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Prepare a focused Windows VM job
-that builds the pinned WinFsp adapter with the saved checked-image
-patch. Use the same Windows toolchain as the read-only job and an
-audited disposable ordinary image. Exercise `mount --checked`, read
-the replayed payload, write and flush an ordinary file through WinFsp,
-and require successful checked release after Ctrl-C. Keep the
-finished image and logs for a cold Linux check. Verify the
-interruption-fixture storage repair in its own CI as it completes.
-Casefold writes stay blocked.
+**Next `do next` (set 2026-11-23).** Verify the focused WinFsp
+checked-image job and its retained evidence. Exercise checked
+replay, a WinFsp write and flush, and successful release of the
+disposable ordinary image. Use the resulting image for a cold
+Linux read and checker run. Verify interruption-fixture storage
+repair CI **45143481078** as it completes. Casefold writes stay
+blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Focused WinFsp checked-image runner prepared — 2026-11-23
+
+The Windows workflow uses the read-only job's pinned adapter and
+Windows toolchain. It accepts the saved adapter patch as a test
+input, verifies its exact SHA-256, and applies it to the runner's
+temporary adapter checkout. The core tree holds the workflow and
+standalone test harness.
+
+The harness opens one disposable ordinary checksum-v3 image with
+`mount --checked`. It verifies exclusive backing-file access,
+compares the replayed payload, writes and flushes a 5,123-byte file
+through WinFsp, and requires successful Ctrl-C release. It checks
+the finished ext4 flags and saves the image, payload and transcript.
+Local validation reproduced the exact fixture and payload, applied
+the patch to the pinned adapter and passed Actionlint and provenance.
+The Windows runner must still build and execute the probe.
+[Windows workflow](../.github/workflows/casefold-winfsp-checked.yml) · [Probe](../tests/c_smoke/winfsp_checked.py)
 
 ### Guest output repair verified and interruption copies bounded — 2026-11-23
 
