@@ -316,6 +316,24 @@ fs_ext4_fs_t *fs_ext4_mount_rw_with_callbacks(
     const fs_ext4_blockdev_cfg_t *cfg);
 
 /*
+ * Open an exclusively owned block device with checked journal recovery.
+ * Read, write and flush callbacks must all be set. Flush must return
+ * success only after prior writes reach stable storage. Missing
+ * callbacks return NULL and EINVAL before any callback is invoked.
+ *
+ * Back up the device before mounting. Keep exclusive ownership and
+ * keep the callback functions and context valid until a failed mount
+ * returns or until fs_ext4_finish() returns. The configuration itself
+ * is read only during mount. Stop other calls before finish, which
+ * consumes the handle on either outcome.
+ *
+ * Returns NULL on failure. Read fs_ext4_last_error() and
+ * fs_ext4_last_errno() for details.
+ */
+fs_ext4_fs_t *fs_ext4_mount_recovering_with_callbacks(
+    const fs_ext4_blockdev_cfg_t *cfg);
+
+/*
  * Mount RW via callbacks WITHOUT performing journal replay automatically.
  * Same semantics as `fs_ext4_mount_rw_with_callbacks` except a dirty
  * journal is recorded but NOT replayed during this call. Use this when
@@ -351,8 +369,8 @@ void fs_ext4_umount(fs_ext4_fs_t *fs);
 
 /*
  * Finish and free an owned filesystem handle. Stop all other calls using
- * fs before calling and hold exclusive ownership of the image through
- * return. On a checked mount, a successful finish clears the recovery
+ * fs before calling and hold exclusive ownership of the backing device
+ * through return. On a checked mount, a successful finish clears the recovery
  * marker after the device is flushed and the journal is checkpointed.
  *
  * Returns 0 on success, -1 on failure with fs_ext4_last_error() and

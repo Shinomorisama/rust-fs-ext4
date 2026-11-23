@@ -11,6 +11,12 @@ Obtain exclusive ownership before mounting and hold it through
 calls on the handle before finish, which consumes it on success or failure.
 On error, read the thread-local diagnostics and reopen under fresh ownership.
 
+For a callback-backed device, `fs_ext4_mount_recovering_with_callbacks`
+uses the same lifecycle. Supply read, write and flush callbacks.
+Flush success means the preceding writes reached stable storage.
+Keep exclusive ownership and keep the callback context and functions
+valid until mount fails or checked finish returns.
+
 The ext4 `RECOVER` / `needs_recovery` flag is expected while a journaled filesystem
 is mounted. Its presence alone is neither filesystem damage nor a requirement to
 format. A writable mount may change storage before the first requested file

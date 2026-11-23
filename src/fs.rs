@@ -14823,6 +14823,7 @@ mod tests {
         struct Failing {
             inner: std::sync::Arc<MemDev>,
             events: AtomicUsize,
+            reads: AtomicUsize,
             writes: AtomicUsize,
             flushes: AtomicUsize,
             fail_at: AtomicUsize,
@@ -14833,6 +14834,7 @@ mod tests {
                 Self {
                     inner,
                     events: AtomicUsize::new(0),
+                    reads: AtomicUsize::new(0),
                     writes: AtomicUsize::new(0),
                     flushes: AtomicUsize::new(0),
                     fail_at: AtomicUsize::new(fail_at),
@@ -14850,6 +14852,7 @@ mod tests {
 
         impl crate::block_io::BlockDevice for Failing {
             fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
+                self.reads.fetch_add(1, Ordering::SeqCst);
                 self.inner.read_at(offset, buf)
             }
             fn size_bytes(&self) -> u64 {
@@ -14867,6 +14870,83 @@ mod tests {
             fn is_writable(&self) -> bool {
                 true
             }
+        }
+
+        #[test]
+        fn capi_checked_callbacks_require_flush_and_report_release_errors() {
+            use crate::capi::*;
+            use crate::error::errno::{EINVAL, EIO};
+            use std::ffi::{c_void, CStr};
+
+            extern "C" fn read(ctx: *mut c_void, dst: *mut c_void, at: u64, len: u64) -> i32 {
+                let dev = unsafe { &*ctx.cast::<Failing>() };
+                let bytes =
+                    unsafe { std::slice::from_raw_parts_mut(dst.cast::<u8>(), len as usize) };
+                i32::from(dev.read_at(at, bytes).is_err())
+            }
+            extern "C" fn write(ctx: *mut c_void, src: *const c_void, at: u64, len: u64) -> i32 {
+                let dev = unsafe { &*ctx.cast::<Failing>() };
+                let bytes = unsafe { std::slice::from_raw_parts(src.cast::<u8>(), len as usize) };
+                i32::from(dev.write_at(at, bytes).is_err())
+            }
+            extern "C" fn flush(ctx: *mut c_void) -> i32 {
+                let dev = unsafe { &*ctx.cast::<Failing>() };
+                i32::from(dev.flush().is_err())
+            }
+
+            let image = journalled();
+            let dev = Arc::new(Failing::new(image.clone(), usize::MAX));
+            let cfg = fs_ext4_blockdev_cfg_t {
+                context: Arc::as_ptr(&dev) as *mut c_void,
+                size_bytes: dev.size_bytes(),
+                block_size: 512,
+                read: Some(read),
+                write: Some(write),
+                flush: Some(flush),
+            };
+            let error = || {
+                unsafe { CStr::from_ptr(fs_ext4_last_error()) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            for missing in [
+                fs_ext4_blockdev_cfg_t { read: None, ..cfg },
+                fs_ext4_blockdev_cfg_t { write: None, ..cfg },
+                fs_ext4_blockdev_cfg_t { flush: None, ..cfg },
+            ] {
+                assert!(unsafe { fs_ext4_mount_recovering_with_callbacks(&missing) }.is_null());
+                assert_eq!(fs_ext4_last_errno(), EINVAL);
+            }
+            assert_eq!(dev.reads.load(Ordering::SeqCst), 0);
+            assert_eq!(dev.events.load(Ordering::SeqCst), 0);
+
+            dev.fail_at.store(0, Ordering::SeqCst);
+            assert!(unsafe { fs_ext4_mount_recovering_with_callbacks(&cfg) }.is_null());
+            assert_eq!(fs_ext4_last_errno(), EIO);
+            assert!(error().contains("write callback returned 1"), "{}", error());
+            assert!(!needs_recovery(&image));
+
+            dev.fail_at.store(usize::MAX, Ordering::SeqCst);
+            let mounted = unsafe { fs_ext4_mount_recovering_with_callbacks(&cfg) };
+            assert!(!mounted.is_null(), "{}", error());
+            let flushes = dev.flushes.load(Ordering::SeqCst);
+            assert_eq!(unsafe { fs_ext4_flush(mounted) }, 0, "{}", error());
+            assert_eq!(dev.flushes.load(Ordering::SeqCst), flushes + 1);
+            assert!(needs_recovery(&image));
+
+            dev.fail_at
+                .store(dev.events.load(Ordering::SeqCst), Ordering::SeqCst);
+            assert_eq!(unsafe { fs_ext4_finish(mounted) }, -1);
+            assert_eq!(fs_ext4_last_errno(), EIO);
+            assert!(error().contains("flush callback returned 1"), "{}", error());
+            assert!(needs_recovery(&image));
+
+            dev.fail_at.store(usize::MAX, Ordering::SeqCst);
+            let reopened = unsafe { fs_ext4_mount_recovering_with_callbacks(&cfg) };
+            assert!(!reopened.is_null(), "{}", error());
+            assert_eq!(unsafe { fs_ext4_finish(reopened) }, 0, "{}", error());
+            assert_eq!(fs_ext4_last_errno(), 0);
+            assert!(!needs_recovery(&image));
         }
 
         #[test]

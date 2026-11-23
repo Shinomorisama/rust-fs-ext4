@@ -24,6 +24,7 @@
 //! - fs_ext4_mount_recovering(image_path) -> *mut fs_ext4_fs_t
 //! - fs_ext4_finish(fs) -> int
 //! - fs_ext4_mount_rw_with_callbacks(cfg) -> *mut fs_ext4_fs_t  (RW via FSKit-style read+write callbacks)
+//! - fs_ext4_mount_recovering_with_callbacks(cfg) -> *mut fs_ext4_fs_t
 //! - fs_ext4_truncate(fs, path, new_size) -> int (shrink + sparse grow)
 //! - fs_ext4_symlink(fs, target, linkpath) -> u32 inode (fast + slow path)
 //! - fs_ext4_chmod(fs, path, mode) -> int
@@ -746,13 +747,41 @@ unsafe fn mount_fs_core_handle(
 pub unsafe extern "C" fn fs_ext4_mount_rw_with_callbacks(
     cfg: *const fs_ext4_blockdev_cfg_t,
 ) -> *mut fs_ext4_fs_t {
+    mount_rw_callbacks(cfg, CallbackMount::Eager)
+}
+
+/// Mount an exclusively owned device through read, write and flush callbacks.
+/// All three must be supplied. Flush success promises that prior writes
+/// reached stable storage.
+/// Keep the callbacks and context alive through the return from mount or,
+/// after a successful mount, through `fs_ext4_finish`.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_mount_recovering_with_callbacks(
+    cfg: *const fs_ext4_blockdev_cfg_t,
+) -> *mut fs_ext4_fs_t {
+    mount_rw_callbacks(cfg, CallbackMount::Checked)
+}
+
+enum CallbackMount {
+    Eager,
+    Lazy,
+    Checked,
+}
+
+unsafe fn mount_rw_callbacks(
+    cfg: *const fs_ext4_blockdev_cfg_t,
+    mode: CallbackMount,
+) -> *mut fs_ext4_fs_t {
     ffi_guard(
         std::ptr::null_mut(),
-        AssertUnwindSafe(|| mount_rw_with_callbacks_inner(cfg)),
+        AssertUnwindSafe(|| mount_rw_with_callbacks_inner(cfg, mode)),
     )
 }
 
-unsafe fn mount_rw_with_callbacks_inner(cfg: *const fs_ext4_blockdev_cfg_t) -> *mut fs_ext4_fs_t {
+unsafe fn mount_rw_with_callbacks_inner(
+    cfg: *const fs_ext4_blockdev_cfg_t,
+    mode: CallbackMount,
+) -> *mut fs_ext4_fs_t {
     clear_last_error();
     if cfg.is_null() {
         set_err_msg("null cfg", EINVAL);
@@ -767,12 +796,14 @@ unsafe fn mount_rw_with_callbacks_inner(cfg: *const fs_ext4_blockdev_cfg_t) -> *
         set_err_msg("cfg.write is null (required for RW callback mount)", EINVAL);
         return std::ptr::null_mut();
     };
-    let flush_fn = cfg.flush; // Option — None is fine, treated as no-op.
+    let flush_fn = cfg.flush;
+    if matches!(mode, CallbackMount::Checked) && flush_fn.is_none() {
+        set_err_msg("cfg.flush is null (required for checked recovery)", EINVAL);
+        return std::ptr::null_mut();
+    }
 
-    // Stash the C context as usize so the closures are Send+Sync. Caller
-    // owns the context lifetime; FSKit guarantees serial access from the
-    // extension's queue, which matches the synchronisation model the
-    // rest of the driver assumes.
+    // Store the context address so the closures are Send + Sync. The caller
+    // keeps the context valid and synchronizes access from callback threads.
     let ctx_addr = cfg.context as usize;
     let size = cfg.size_bytes;
 
@@ -838,10 +869,18 @@ unsafe fn mount_rw_with_callbacks_inner(cfg: *const fs_ext4_blockdev_cfg_t) -> *
             return std::ptr::null_mut();
         }
     };
-    match Filesystem::mount(dev) {
+    let (mounted, what) = match mode {
+        CallbackMount::Eager => (Filesystem::mount(dev), "mount_rw (callback)"),
+        CallbackMount::Lazy => (Filesystem::mount_lazy(dev), "mount_rw_lazy (callback)"),
+        CallbackMount::Checked => (
+            Filesystem::mount_recovering(dev),
+            "mount_recovering (callback)",
+        ),
+    };
+    match mounted {
         Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
         Err(e) => {
-            set_err_from(&e, "mount_rw (callback)");
+            set_err_from(&e, what);
             std::ptr::null_mut()
         }
     }
@@ -860,103 +899,7 @@ unsafe fn mount_rw_with_callbacks_inner(cfg: *const fs_ext4_blockdev_cfg_t) -> *
 pub unsafe extern "C" fn fs_ext4_mount_rw_with_callbacks_lazy(
     cfg: *const fs_ext4_blockdev_cfg_t,
 ) -> *mut fs_ext4_fs_t {
-    ffi_guard(
-        std::ptr::null_mut(),
-        AssertUnwindSafe(|| mount_rw_with_callbacks_lazy_inner(cfg)),
-    )
-}
-
-unsafe fn mount_rw_with_callbacks_lazy_inner(
-    cfg: *const fs_ext4_blockdev_cfg_t,
-) -> *mut fs_ext4_fs_t {
-    clear_last_error();
-    if cfg.is_null() {
-        set_err_msg("null cfg", EINVAL);
-        return std::ptr::null_mut();
-    }
-    let cfg = &*cfg;
-    let Some(read_fn) = cfg.read else {
-        set_err_msg("cfg.read is null", EINVAL);
-        return std::ptr::null_mut();
-    };
-    let Some(write_fn) = cfg.write else {
-        set_err_msg("cfg.write is null (required for RW callback mount)", EINVAL);
-        return std::ptr::null_mut();
-    };
-    let flush_fn = cfg.flush;
-
-    let ctx_addr = cfg.context as usize;
-    let size = cfg.size_bytes;
-
-    let read_closure = move |offset: u64, buf: &mut [u8]| -> std::io::Result<()> {
-        let rc = unsafe {
-            read_fn(
-                ctx_addr as *mut c_void,
-                buf.as_mut_ptr() as *mut c_void,
-                offset,
-                buf.len() as u64,
-            )
-        };
-        if rc != 0 {
-            Err(std::io::Error::other(format!(
-                "read callback returned {rc}"
-            )))
-        } else {
-            Ok(())
-        }
-    };
-    let write_closure = move |offset: u64, buf: &[u8]| -> std::io::Result<()> {
-        let rc = unsafe {
-            write_fn(
-                ctx_addr as *mut c_void,
-                buf.as_ptr() as *const c_void,
-                offset,
-                buf.len() as u64,
-            )
-        };
-        if rc != 0 {
-            Err(std::io::Error::other(format!(
-                "write callback returned {rc}"
-            )))
-        } else {
-            Ok(())
-        }
-    };
-    let flush_closure: Option<crate::block_io::FlushCb> = flush_fn.map(|f| {
-        let cb: crate::block_io::FlushCb = Box::new(move || -> std::io::Result<()> {
-            let rc = unsafe { f(ctx_addr as *mut c_void) };
-            if rc != 0 {
-                Err(std::io::Error::other(format!(
-                    "flush callback returned {rc}"
-                )))
-            } else {
-                Ok(())
-            }
-        });
-        cb
-    });
-
-    let dev = CallbackDevice {
-        size,
-        read: Box::new(read_closure),
-        write: Some(Box::new(write_closure)),
-        flush: flush_closure,
-    };
-
-    let dev = match callback_mount_device(dev, cfg) {
-        Ok(dev) => dev,
-        Err(msg) => {
-            set_err_msg(&msg, EINVAL);
-            return std::ptr::null_mut();
-        }
-    };
-    match Filesystem::mount_lazy(dev) {
-        Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
-        Err(e) => {
-            set_err_from(&e, "mount_rw_lazy (callback)");
-            std::ptr::null_mut()
-        }
-    }
+    mount_rw_callbacks(cfg, CallbackMount::Lazy)
 }
 
 /// Replay the JBD2 journal on `fs` now if it is dirty. Idempotent — safe to

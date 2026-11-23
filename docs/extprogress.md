@@ -12,14 +12,59 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-22).** Verify the Windows checked image
-job on this exact source. Check the C compiler and linker result,
-the pinned archive identity, the payload, the result of checked
-finish and the preserved refused image. Also close `8a06dd4` Linux
-CI **45109907503** once guest **137480478043** finishes. Compare its
-whole suite with **45098304842** and require one new C lifecycle
-test with every baseline result retained. Casefold writes stay blocked.
-[Windows workflow](../.github/workflows/casefold-windows-checked-recovery.yml) · [Full Linux CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907503)
+**Next `do next` (set 2026-11-22).** Verify exact-source CI for the
+checked C callback mount. Require
+`fs::tests::checked_recovery::capi_checked_callbacks_require_flush_and_report_release_errors`
+once in each unit and whole suite, alongside the `8a06dd4` baseline
+and regular-image C lifecycle test. Then exercise the callback
+lifecycle in the Windows VM with a disposable image. Windows adapter
+integration and actual partition ownership remain separate checkpoints.
+Casefold writes stay blocked.
+[C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Checked recovery exposed to C storage callbacks — 2026-11-22
+
+`fs_ext4_mount_recovering_with_callbacks` takes the existing block-device
+configuration and shares the eager and lazy mounts' callback setup.
+Checked mount requires read, write and flush before invoking any
+callback. The caller is responsible for exclusive ownership and
+keeps the callbacks and context valid through finish. Flush must
+report success only when preceding writes have reached stable storage.
+
+The in-memory ordinary-volume control verifies missing-callback
+refusal with zero I/O, `EIO` from the first failed mount write,
+a live flush with RECOVER still set and `EIO` from a failed finish
+with RECOVER preserved. A fresh mount and successful finish clear
+the marker. All seven checked-recovery controls, 21 existing C
+callback controls, both header checks and lint pass locally.
+The published source still needs CI and Windows callback coverage.
+[Public header](../include/fs_ext4.h) · [C ABI](../src/capi.rs)
+
+### Windows checked C image and exact Linux CI verified — 2026-11-22
+
+Source `a202b2f` passed Windows run **45116103803**, job
+**137499194291**, with core `9e900154`. Windows built and linked
+the C probe and ran it against the audited ordinary checksum-v3
+image. It returned the expected payload, retained RECOVER across
+flush and cleared it on finish. It refused the bad journal checksum
+and preserved the entire refused image. The finished image matches
+Linux outside the filesystem superblock and the earlier checked
+Linux copy byte for byte. Its SHA-256 is
+`cb9741184edd0f0fde3e167036e58a82967c555f110c0bbc392eb4d0e5650f4b`.
+
+Archive **14791782485** matches the API run, source, size and SHA-256
+`e36c87cb0096385713803553798677fd8a2cb8273a1483c21132a3bf949f7373`.
+All nine ZIP members pass CRC. The retained executable is x64 PE.
+This verifies one Windows VM regular-image lifecycle through C.
+[Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45116103803/job/137499194291) · [Windows archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45116103803/artifacts/14791782485)
+
+The C implementation source `8a06dd4` passed all **11** full Linux
+CI jobs, including aggregate **137498666655**. The verified guest
+archive **14791427986** has **2,572** passes at floor **1,060** and
+matches the baseline plus one C lifecycle test. The guest wrapper
+used **4,198 lines** and **258,835 bytes** under the unchanged limits.
+Both VMs stopped. Native reported **4,711** total test executions.
+[Full Linux CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907503) · [Guest archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907503/artifacts/14791427986)
 
 ### Windows checked image test ready for runner verification — 2026-11-22
 
