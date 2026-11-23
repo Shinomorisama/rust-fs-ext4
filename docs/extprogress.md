@@ -12,14 +12,86 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Verify the Windows callback
-lifecycle job on this source and audit its completed, refused and
-failed-release images. Also verify guest output-limit repair CI
-**45127543843** for `57c78da`. Compare with the audited `a95679f`
-archive and check the 1,060 floor, VM shutdown and aggregate.
-Windows adapter integration and partition ownership remain separate
-checkpoints. Casefold writes stay blocked.
+**Next `do next` (set 2026-11-23).** Prepare a focused Windows VM job
+that builds the pinned WinFsp adapter with the saved checked-image
+patch. Use the same Windows toolchain as the read-only job and an
+audited disposable ordinary image. Exercise `mount --checked`, read
+the replayed payload, write and flush an ordinary file through WinFsp,
+and require successful checked release after Ctrl-C. Keep the
+finished image and logs for a cold Linux check. Verify the
+interruption-fixture storage repair in its own CI as it completes.
+Casefold writes stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Guest output repair verified and interruption copies bounded — 2026-11-23
+
+Guest job **137536144380** on `57c78da` passed. Verified archive
+**14801415576** retains the exact `a95679f` test multiset with
+**2,573** passes, floor **1,060**, and one existing ignored test.
+The wrapper accepted **4,201 lines** and **259,194 bytes**, and the
+runner confirmed VM shutdown.
+
+Native job **137536144495** stopped with storage error 28 while
+copying the next image for the checked replay interruption test,
+after Linux recovered all 14 immediate-durability cuts. Verified
+archive **14799744016** records the failure at the fixture copy.
+The later `9336310` full run **45129870801** passed independently.
+
+The test now removes each successful baseline and interruption image
+after Linux verifies it. Each of the two interruption tests normally
+holds its input and at most one working copy. The existing retention
+option preserves all images on request. A local rehearsal verified
+both cleanup modes, and the compiled target still lists all five
+tests. The pinned VM still needs to run the cleanup source.
+[Guest repair CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45127543843) · [Native archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45127543843/artifacts/14799744016) · [Later full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45129870801)
+
+### Opt-in WinFsp checked image patch prepared — 2026-11-23
+
+The pinned adapter at `393665e` now has a scratch patch for
+`ext4 mount --checked`. It opens a regular file exclusively on
+Windows and holds the same handle through the checked C callbacks.
+The file-backed callback serializes seek and I/O and flushes with
+`sync_all`. The CLI rejects a selected partition in checked mode.
+
+WinFsp's checked live flush reports C failures through the existing
+Windows status mapping. A recorded flush failure blocks subsequent
+mutations and prevents a successful release from clearing RECOVER.
+The adapter retains ownership until WinFsp has stopped and dropped
+its callback context, then calls the consuming checked finish.
+Backing-file ownership lasts through its return.
+
+The two-file patch `winfsp-checked-image-candidate.patch` has SHA-256
+`00f65c6df5a713a73e3c2165e726f3db8671cca9d3820360fcced622f613555b`.
+It is saved under the checked recovery evidence directory and applied
+in `/workspace/work/winfsp-checked-candidate/ext4-win-driver`. The
+scratch siblings pin ext4 `9336310`, core `f62c117`, the skeleton
+`6ebc683` and WinFsp bindings `59ab48b`. Linux formatting, locked
+build check and three existing mount tests pass. The Windows-only
+path still needs compilation and a live VM check. The production
+adapter checkout and remote stay at their prior state.
+
+### Windows checked callback lifecycle verified — 2026-11-23
+
+Exact source `9336310` passed Windows run **45129870836**, job
+**137542661073**. The job linked the C probe and exercised the
+regular-file and checked callback paths on copies of the audited
+ordinary checksum-v3 image. The callback test used 512-byte
+requests and the Windows CRT durability operation. Missing flush
+was refused before any I/O. The live callback flush preserved
+RECOVER, and successful finish cleared it. An injected finish
+failure returned `EIO` and left RECOVER set.
+
+Archive **14797835602** matches source, run, size and SHA-256
+`085904515105f7d0d6cd48b16c03cb281ad767fd6cd0481841d4acba96497a8c`.
+All 11 ZIP members pass CRC and the executable is x64 PE.
+The finished callback image equals the finished Windows
+path-based image and the checked Linux image byte for byte.
+The failed-release image preserves a valid ext4 checksum, the
+recovered data and journal bytes, and the recovery flag. The
+refused image remains identical to the archived damaged copy.
+The raw audit is `audit-checked-callback-windows.log` in the
+checked recovery evidence directory.
+[Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45129870836/job/137542661073) · [Evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45129870836/artifacts/14797835602)
 
 ### Windows callback lifecycle test prepared — 2026-11-23
 

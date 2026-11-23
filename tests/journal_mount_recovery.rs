@@ -212,6 +212,14 @@ impl Fixture {
         path
     }
 
+    fn discard_checked_copy(path: &Path) {
+        // Keep each interruption's evidence on request. In regular runs
+        // the next cut needs space for only one more image.
+        if std::env::var_os("FS_EXT4_JOURNAL_ORACLE_KEEP").is_none() {
+            fs::remove_file(path).unwrap();
+        }
+    }
+
     fn assert_recovered(&self, path: &Path) {
         let image = fs::read(path).unwrap();
         let offset = self.inode_block * BLOCK + self.inode_offset;
@@ -434,6 +442,7 @@ fn linux_recovers_every_checked_replay_write_and_flush_interruption() {
         assert!(events >= 4, "must exercise actual writes and flushes");
         fixture.assert_recovered(&baseline);
         fixture.linux_check(&baseline);
+        Fixture::discard_checked_copy(&baseline);
         for fail_at in 0..events {
             let image = fixture.copy(&format!("interrupted-{writeback}-{fail_at}"));
             let (success, _, mount_completed) = interrupted_mount(&image, fail_at, writeback);
@@ -454,6 +463,7 @@ fn linux_recovers_every_checked_replay_write_and_flush_interruption() {
                 );
             }
             fixture.linux_recover(&image);
+            Fixture::discard_checked_copy(&image);
         }
         eprintln!(
             "independent e2fsck recovery: {events} write/flush boundaries; writeback={writeback}"
@@ -562,6 +572,7 @@ fn a_failed_finish_never_clears_the_recovery_marker_before_the_release_is_comple
             "a completed release: marker clear, state clean"
         );
         fixture.linux_check(&baseline);
+        Fixture::discard_checked_copy(&baseline);
         for fail_at in 0..events {
             let image = fixture.copy(&format!("release-interrupted-{writeback}-{fail_at}"));
             let (success, _) = interrupted_finish(&image, fail_at, writeback);
@@ -577,6 +588,7 @@ fn a_failed_finish_never_clears_the_recovery_marker_before_the_release_is_comple
                  cannot tell the release was incomplete"
             );
             fixture.linux_recover(&image);
+            Fixture::discard_checked_copy(&image);
         }
     }
 }
