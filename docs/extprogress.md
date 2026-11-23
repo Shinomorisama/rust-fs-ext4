@@ -12,14 +12,26 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Verify the cold Linux
-workflow's corrected VM shutdown step. Both cold reads and the
-non-repairing check already pass on the exact Windows image below.
-The next independent Windows checkpoint is a checked mount refusal
-on the audited casefold image, with the prior read-only alias check
-and untouched image bytes. Also verify interruption-fixture storage
-repair CI **45143481078** as it completes. Casefold writes stay blocked.
+**Next `do next` (set 2026-11-23).** Verify the focused Windows
+checked-casefold run and audit the retained source, refusal reason,
+read-only listing and alias payload, clean release, and image digest.
+Also close cold Linux retry **45147906386** and interruption-fixture
+storage CI **45143481078** when their reports arrive. Casefold writes
+stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Windows checked casefold refusal probe — 2026-11-23
+
+The WinFsp dispatch accepts a `casefold` flag for one focused
+run on the audited strict 4 KiB fixture from artifact **14466114990**.
+It requires the checked-mode casefold feature error with exit 1
+and verifies that the drive stays absent and the image is unchanged.
+The same binary then mounts read-only, lists `ReadMe`, opens
+`README` with the Linux reference payload digest, and releases
+the drive without changing the image. The workflow retains
+the image, both transcripts, the names, and the alias payload.
+The ordinary-image mode remains the dispatch default.
+[Workflow](../.github/workflows/casefold-winfsp-checked.yml) · [Probe](../tests/c_smoke/winfsp_checked.py)
 
 ### Windows release image passes cold Linux read and checker — 2026-11-23
 

@@ -12,6 +12,10 @@ on:
         description: Verified adapter patch, encoded as base64
         required: true
         type: string
+      casefold:
+        description: Check casefold refusal and read-only lookup
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -111,14 +115,17 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          FIXTURE_ARTIFACT: ${{ inputs.casefold && '14466114990' || '14789346547' }}
         run: |
           set -euo pipefail
-          gh api repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14789346547/zip \
-            > "$(cygpath -u "$RUNNER_TEMP")/checked-linux-reference.zip"
+          gh api "repos/Shinomorisama/rust-fs-ext4/actions/artifacts/$FIXTURE_ARTIFACT/zip" \
+            > "$(cygpath -u "$RUNNER_TEMP")/winfsp-probe-input.zip"
 
-      - name: Read, write, flush and release through WinFsp
+      - name: Exercise the selected WinFsp image lifecycle
         timeout-minutes: 4
         shell: pwsh
+        env:
+          CASEFOLD_PROBE: ${{ inputs.casefold }}
         run: |
           $ErrorActionPreference = 'Stop'
           $bin = Join-Path ${env:ProgramFiles(x86)} 'WinFsp\bin'
@@ -126,16 +133,20 @@ jobs:
             throw 'WinFsp runtime directory is missing'
           }
           $env:PATH = "$bin;$env:PATH"
-          python probe-source/tests/c_smoke/winfsp_checked.py `
-            windows/ext4-win-driver/target/x86_64-pc-windows-gnullvm/release/ext4.exe `
-            "$env:RUNNER_TEMP/checked-linux-reference.zip" "$env:RUNNER_TEMP/winfsp-checked"
+          $probeArgs = @(
+            'windows/ext4-win-driver/target/x86_64-pc-windows-gnullvm/release/ext4.exe'
+            "$env:RUNNER_TEMP/winfsp-probe-input.zip"
+            "$env:RUNNER_TEMP/winfsp-checked"
+          )
+          if ($env:CASEFOLD_PROBE -eq 'true') { $probeArgs += '--casefold' }
+          python probe-source/tests/c_smoke/winfsp_checked.py @probeArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Retain WinFsp build and image evidence
         if: always() && steps.build.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
-          name: winfsp-checked-image
+          name: ${{ inputs.casefold && 'winfsp-checked-casefold' || 'winfsp-checked-image' }}
           path: ${{ runner.temp }}/winfsp-checked/
           if-no-files-found: error
           retention-days: 30
