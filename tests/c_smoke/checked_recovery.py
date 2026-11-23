@@ -53,12 +53,18 @@ def exercise(archive, output, executable):
         working = output / "checked.img"
         refused = output / "refused.img"
         payload = output / "payload.bin"
-        working.write_bytes(fixture.read(base))
+        callback = output / "callback-checked.img"
+        failed = output / "callback-failed.img"
+        original = fixture.read(base)
+        for image in (working, callback, failed):
+            image.write_bytes(original)
+        del original
         original_refusal = fixture.read(base + ".refused.img")
         refused.write_bytes(original_refusal)
         payload.write_bytes(fixture.read(base + ".payload.bin"))
         result = subprocess.run(
-            [str(executable), working.name, refused.name, payload.name],
+            [str(executable), working.name, refused.name, payload.name,
+             callback.name, failed.name],
             cwd=output,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -74,10 +80,20 @@ def exercise(archive, output, executable):
         checked = working.read_bytes()
         if memoryview(checked)[BLOCK_SIZE:] != memoryview(linux)[BLOCK_SIZE:]:
             raise ValueError("Checked finish differs from Linux outside block zero")
+        release_failed = failed.read_bytes()
+        callback_checked = callback.read_bytes()
+        if memoryview(callback_checked)[BLOCK_SIZE:] != memoryview(linux)[BLOCK_SIZE:]:
+            raise ValueError("Callback finish differs from Linux outside block zero")
+        if memoryview(release_failed)[BLOCK_SIZE:] != memoryview(linux)[BLOCK_SIZE:]:
+            raise ValueError("Failed callback finish changed replayed data or journal state")
+        if callback_checked[1024 + 0x60] & 4 or not release_failed[1024 + 0x60] & 4:
+            raise ValueError("Callback finish did not record the expected recovery markers")
         verdict = (
             f"Reference {source} archive {digest}\n"
             "Damaged image unchanged and checked image matches Linux outside block zero\n"
             f"Finished image SHA-256 {hashlib.sha256(checked).hexdigest()}\n"
+            f"Callback finish SHA-256 {hashlib.sha256(callback_checked).hexdigest()}\n"
+            f"Failed callback finish SHA-256 {hashlib.sha256(release_failed).hexdigest()}\n"
         )
         (output / "verdict.txt").write_text(verdict, encoding="utf-8")
         print(verdict, end="", flush=True)

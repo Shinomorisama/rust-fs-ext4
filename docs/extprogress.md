@@ -12,14 +12,32 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Verify the guest output-limit
-repair in exact-source CI. Compare the guest tests with the audited
-`a95679f` archive and check the 1,060 floor, VM shutdown and
-aggregate. While CI runs, the next independent preparation remains
-the Windows VM callback lifecycle on a disposable image. Windows
-adapter integration and actual partition ownership remain separate
+**Next `do next` (set 2026-11-23).** Verify the Windows callback
+lifecycle job on this source and audit its completed, refused and
+failed-release images. Also verify guest output-limit repair CI
+**45127543843** for `57c78da`. Compare with the audited `a95679f`
+archive and check the 1,060 floor, VM shutdown and aggregate.
+Windows adapter integration and partition ownership remain separate
 checkpoints. Casefold writes stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Windows callback lifecycle test prepared — 2026-11-23
+
+The Windows C probe retains the regular-file check and tests two
+callback-backed copies of the audited ordinary checksum-v3 image.
+Each callback context owns its disposable file through finish. On
+Windows the probe opens it with sharing denied and uses the CRT's
+durability operation. The callbacks verify 512-byte alignment. A
+missing flush callback is refused before any I/O. The probe checks
+the committed payload, a live flush, successful checked finish and
+an injected finish error that leaves RECOVER set.
+
+The linked native C rehearsal and archive comparisons pass. The
+regular-file and callback finish outputs have the same SHA-256.
+The failed-release image retains RECOVER and agrees with Linux's
+recovered data and journal outside block zero. Actionlint and
+provenance checks pass. Windows execution is pending at publication.
+[Windows workflow](../.github/workflows/casefold-windows-checked-recovery.yml) · [C probe](../tests/c_smoke/checked_recovery.c)
 
 ### Checked callback tests retained and guest output limit repaired — 2026-11-23
 
