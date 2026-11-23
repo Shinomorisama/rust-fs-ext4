@@ -12,15 +12,39 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-22).** Verify exact-source CI for the
-checked C callback mount. Require
-`fs::tests::checked_recovery::capi_checked_callbacks_require_flush_and_report_release_errors`
-once in each unit and whole suite, alongside the `8a06dd4` baseline
-and regular-image C lifecycle test. Then exercise the callback
-lifecycle in the Windows VM with a disposable image. Windows adapter
-integration and actual partition ownership remain separate checkpoints.
-Casefold writes stay blocked.
+**Next `do next` (set 2026-11-23).** Verify the guest output-limit
+repair in exact-source CI. Compare the guest tests with the audited
+`a95679f` archive and check the 1,060 floor, VM shutdown and
+aggregate. While CI runs, the next independent preparation remains
+the Windows VM callback lifecycle on a disposable image. Windows
+adapter integration and actual partition ownership remain separate
+checkpoints. Casefold writes stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Checked callback tests retained and guest output limit repaired — 2026-11-23
+
+`a95679f` passed the focused Linux VM job **137501959014** at floor
+one, with 119 lines and 5,504 bytes. Full CI **45116984195** passed
+nine jobs including native **137502742835**. The guest and aggregate
+failed after the guest wrapper returned exit 65 on its output size.
+
+Archives **14791874557**, **14792965461**, **14794960549** and
+**14795294023** match the exact source, API sizes and SHA-256 values
+and pass ZIP CRC. All unit and whole-suite test outcomes match
+`8a06dd4` plus exactly one checked callback test in each applicable
+tier. The unit tiers each pass **1,710**, and both whole suites
+pass **2,573** with the existing ignored fuzz test. The native
+job reports **4,713** test executions and a stopped VM.
+
+The guest emitted **4,201 lines** and **259,194 bytes**. The pinned
+wrapper returns 65 on the same saved output when either old
+limit remains in force. The next ten-line and thousand-byte
+limits, **4,210** and **260,000**, accept the identical bytes.
+The original floor **1,060** counts **2,573** passes on replay.
+The change is limited to the guest output budget. The receipt
+is `checked-callback-guest-budget-replay.log` in the checked
+recovery evidence directory. Repair-source CI is pending.
+[Original full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45116984195) · [Guest archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45116984195/artifacts/14795294023) · [Focused Linux](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45116984129)
 
 ### Checked recovery exposed to C storage callbacks — 2026-11-22
 

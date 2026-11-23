@@ -832,7 +832,11 @@ tasks:
         # Run 44178134786, artifact 14377590178: the same 2,566 successes
         # printed 4,191 lines / 258,017 bytes. Identical replay exits 65 at
         # 258,000 bytes and passes at the next thousand-byte cap, 259,000.
-        scripts/tier.sh test:vm vm 4200 259000 -- \
+        # Checked callbacks at a95679f, run 45116984195/artifact 14795294023:
+        # 2,573 successes produced 4,201 lines / 259,194 bytes. Either old
+        # cap alone returns 65 on the saved log. The next ten-line and
+        # thousand-byte limits accept the identical log at floor 1,060.
+        scripts/tier.sh test:vm vm 4210 260000 -- \
           ../fs-linux-test-harness/scripts/vm.sh guest-test $guest_args
         bash scripts/core.sh test-floor vm 1060
 
