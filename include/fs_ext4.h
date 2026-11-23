@@ -350,6 +350,18 @@ int fs_ext4_replay_journal_if_dirty(fs_ext4_fs_t *fs);
 void fs_ext4_umount(fs_ext4_fs_t *fs);
 
 /*
+ * Finish and free an owned filesystem handle. Stop all other calls using
+ * fs before calling and hold exclusive ownership of the image through
+ * return. On a checked mount, a successful finish clears the recovery
+ * marker after the device is flushed and the journal is checkpointed.
+ *
+ * Returns 0 on success, -1 on failure with fs_ext4_last_error() and
+ * fs_ext4_last_errno() set. The handle is consumed on either return.
+ * After failure, reopen under fresh ownership for recovery.
+ */
+int fs_ext4_finish(fs_ext4_fs_t *fs);
+
+/*
  * Durability barrier for a live mount. The handle stays mounted and usable.
  *
  * Unmounting is NOT needed to get data out. Every mutating call already
@@ -557,6 +569,16 @@ int fs_ext4_last_errno(void);
  * JBD2 journal is replayed before returning so callers see a consistent
  * on-disk state. */
 fs_ext4_fs_t *fs_ext4_mount_rw(const char *device_path);
+
+/*
+ * Open a regular image file by UTF-8 path for checked journal recovery.
+ * The caller must obtain exclusive image ownership and retain it from
+ * before mount through release. Back up the image before mounting, since
+ * mounting can write. Use fs_ext4_flush() while mounted and fs_ext4_finish()
+ * for a checked release. Returns NULL with thread-local error details on
+ * failure.
+ */
+fs_ext4_fs_t *fs_ext4_mount_recovering(const char *image_path);
 
 /* Shrink a regular file to `new_size` bytes. Frees the tail extents and
  * updates the inode size + blocks counter. Not yet journaled — safe only

@@ -12,21 +12,146 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-22).** On this source, verify the focused
-Linux checksum-v3 run and its exact test floor and evidence archive.
-Check the input, Linux replay, checked live and finished images,
-damaged refusal and cold Linux read and consistency report. Full CI
-also runs the strengthened plain-JBD2 interruption test.
-[Linux reference workflow](../.github/workflows/casefold-checked-recovery.yml)
+**Next `do next` (set 2026-11-22).** Verify the checked C ABI in
+exact-source CI. The only new test is
+`fs::tests::checked_recovery::capi_checked_mount_flush_and_finish`.
+Require it once in each unit and whole suite, with the `45564fc`
+baseline results retained. Inspect the checksum-v3 focused run and
+keep the existing floors and output limits. Then prepare the Windows
+VM regular-image lifecycle check. Casefold writes stay blocked.
+[C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
 
-Keep the preceding provenance-repair run **45094552396** for the
-baseline audit. Eight jobs passed, including all three previously
-blocked jobs. Its native **137432090878** and guest **137432090842**
-jobs were still running at publication of the recovery change.
-Verify their exact test occurrence, floors and final aggregate when
-they finish. The recovery change has its own run keyed to its commit.
-Casefold writes stay blocked.
-[Provenance-repair CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45094552396)
+### Checked recovery and release exposed to C for regular images — 2026-11-22
+
+`fs_ext4_mount_recovering` opens a regular image and uses the checked
+Rust lifecycle. The caller holds exclusive image ownership from
+before mount through release. `fs_ext4_finish` requires quiesced calls,
+consumes the handle on either outcome and reports release failures
+through the existing thread-local error API. Checked release clears
+RECOVER after the durability and journal checks.
+
+A C11 program linked with the header and static library reads the
+committed payload on audited checksum-v3 fixture **14783638869**.
+It sees RECOVER survive live flush and clear after finish. The
+finished bytes agree with Linux outside the filesystem superblock.
+The damaged copy returns the checksum error and is byte-identical
+after refusal. The ordinary-image unit test creates a file through
+the C handle, verifies both on-disk states and reopens the file.
+An injected release I/O error returns `-1` and `EIO`, frees the
+mount's device reference and preserves RECOVER.
+
+All six local checked-recovery controls, both C header checks and
+all 87 CI profile checks pass. Native receipts are
+`checked-v3-capi-*.log` in the saved evidence directory.
+Exact-source full CI and Windows adapter integration are pending.
+[Public header](../include/fs_ext4.h) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Checked recovery full CI verified — 2026-11-22
+
+Exact source `45564fc` passed all **11** full CI jobs, including
+aggregate **137469181564**. The native **14787801286** and guest
+**14786449314** archives match the API run, source, size and SHA-256
+and pass ZIP CRC. The two whole suites each pass **2,571** tests at
+floor **1,060**. Both fully retain the `6d7b974` test-name and
+outcome multisets, including one existing ignored fuzz test.
+
+The strengthened plain-JBD2 interruption test passes in both whole
+suites and in the native oracle tier. Its oracle log reports **14**
+write and flush boundaries in each durability model. At every failed
+mount the test requires RECOVER to remain set, including while replaying
+a superblock whose logged copy lacks the flag. The pinned Linux VM
+then recovers every cut. The checksum-v3 test also passes in both
+whole suites and the native oracle tier.
+
+The native and guest whole wrappers used **4,030 lines and 249,343
+bytes** and **4,197 lines and 258,764 bytes** respectively under the
+existing limits. Native reports 226 oracle tests, 20 passing shell
+checks, 159 CLI checks and **4,709** test executions. Both VMs stopped
+cleanly. The checks qualify the tested ordinary-volume recovery
+profiles. Windows checked ownership and release remain later
+checkpoints.
+[Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304842) · [Native archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304842/artifacts/14787801286) · [Guest archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304842/artifacts/14786449314)
+
+### Recovery source standalone and aarch64 archives verified — 2026-11-22
+
+The `45564fc` standalone **14784321675** and aarch64 **14784781659**
+archives match the API run, source, size and SHA-256 and pass ZIP CRC.
+Both retain all **1,708** unit results at floor **440**, including each
+of the five checked recovery controls and the casefold refusal
+controls. The aarch64 image tier retains all **527** successes at
+floor **450** and its one existing ignored result. All test names and
+outcomes in these tiers match `6d7b974`. The Stage 0 workflow passes
+all **27** jobs on this exact source.
+
+The archive receipt is `audit-recovery-current-available-tiers.log`.
+Both whole suites and the aggregate are pending. The strengthened
+plain-JBD2 interruption test runs in both whole suites.
+[Standalone archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304842/artifacts/14784321675) · [Aarch64 archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304842/artifacts/14784781659) · [Stage 0](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304834)
+
+### Provenance-repair full CI baseline verified — 2026-11-22
+
+Source `6d7b974` passed all **11** jobs, including the three jobs
+blocked in the original CI and aggregate **137454226397**.
+The guest also passed **2,571** tests at floor **1,060** and stopped
+cleanly. Archive **14785430612** retains every earlier guest result,
+including the one ignored fuzz test, and adds exactly one success for
+the checksum-v3 Linux reference. All five checked-recovery unit
+controls and all five journal lifecycle tests are present once.
+The guest wrapper used 4,196 lines and 258,649 bytes within the
+unchanged limits of 4,200 lines and 259,000 bytes.
+
+Standalone **14782778011** and aarch64 **14782244542** retain their
+exact preceding test-name and outcome counts. Each passes **1,708**
+unit tests at floor **440**. Aarch64 passes **527** image tests at floor
+**450**. The three archives match the API run, source, size and SHA-256
+and pass ZIP CRC.
+
+Native job **137432090878** also passes. Archive **14785014964**
+matches the API run, source, size and SHA-256 and passes ZIP CRC.
+Its **2,571** whole-suite results and **226** oracle-tier results
+each preserve the preceding test-name and outcome counts and add
+one occurrence of the checksum-v3 Linux reference. Unit, kernel and
+lwext4 counts are unchanged. All five checked recovery unit controls,
+five journal lifecycle tests and the one existing ignored fuzz test
+are present in the whole suite. The native whole wrapper used 4,031
+lines and 249,507 bytes under its unchanged 4,040 / 250,000 limits.
+All 20 shell checks and 159 CLI checks pass. The native wrapper
+reports **4,709** total test executions and the VM stopped cleanly.
+
+The receipts and comparison scripts are under
+`/workspace/work/casefold-evidence/checked-recovery-admission`.
+[Native job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45094552396/job/137432090878) · [Native archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45094552396/artifacts/14785014964) · [Guest archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45094552396/artifacts/14785430612)
+
+### Linux checksum-v3 checked replay and release pass focused VM audit — 2026-11-22
+
+Exact source `45564fc` passed Linux job **137443005636** in run
+**45098304862**. The exact test executed once, floor one, with zero
+ignored tests, 119 lines and 5,504 bytes. The 348,426-byte archive
+**14783638869** matches the API run, source and SHA-256
+`6dfd138accfaf95fb7a6201f5cad823ef9724783ab95f056b4c426abcc4d6d37`.
+All 20 ZIP members and 149 source hashes passed. The Stage 0 and
+compatibility workflows for this commit also passed.
+[Focused Linux job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304862/job/137443005636) · [Archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45098304862/artifacts/14783638869)
+
+The input has RECOVER set with the journal at cursor 1 and sequence 1.
+Its ext4 and journal superblock checksums and the committed descriptor,
+tag and commit checksums verify. The checked live copy has RECOVER set
+and an unclean filesystem state after flush. Its journal has cursor 0,
+sequence 3 and checksum `0xb1f60066`, matching Linux. After `finish`
+the checked copy has RECOVER clear and a clean filesystem state.
+It agrees byte for byte with the Linux recovered copy outside the
+filesystem superblock. Within that superblock only byte `0x178` and
+the checksum bytes differ. Both final images pass all five Linux check
+phases. The independent cold read matches the committed `/oracle`
+payload at inode 12 and block 2065.
+
+The refused copy differs from the input only at the injected bit in the
+stored journal superblock checksum. It returned the journal checksum
+error with zero writes and zero flushes. Both raw checks and retained VM
+results are recorded in `audit-checked-v3-published.log` under
+`/workspace/work/casefold-evidence/checked-recovery-admission`. This
+qualified one ordinary 4 KiB, 64-bit checksum-v3 fixture. Full CI and
+its interruption checks remain pending.
 
 ### Checked replay retains RECOVER through checkpoint and recount — 2026-11-22
 

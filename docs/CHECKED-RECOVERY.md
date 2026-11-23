@@ -5,6 +5,12 @@ recovers committed journal records and supported orphan operations, and returns
 fresh superblock/group metadata. Call `finish(self)` before releasing it to
 another owner. Dropping a handle does not claim a clean release.
 
+C callers can use `fs_ext4_mount_recovering` with a regular image file.
+Obtain exclusive ownership before mounting and hold it through
+`fs_ext4_finish`. A live `fs_ext4_flush` preserves RECOVER. Stop all other
+calls on the handle before finish, which consumes it on success or failure.
+On error, read the thread-local diagnostics and reopen under fresh ownership.
+
 The ext4 `RECOVER` / `needs_recovery` flag is expected while a journaled filesystem
 is mounted. Its presence alone is neither filesystem damage nor a requirement to
 format. A writable mount may change storage before the first requested file

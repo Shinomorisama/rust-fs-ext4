@@ -14870,6 +14870,60 @@ mod tests {
         }
 
         #[test]
+        fn capi_checked_mount_flush_and_finish() {
+            use crate::block_io::FileDevice;
+            use crate::capi::*;
+            use crate::error::errno::{EINVAL, EIO};
+            use std::ffi::{CStr, CString};
+
+            let image =
+                fs_ext4_test_support::temp_path!("fs_ext4_capi_checked_{}.img", std::process::id());
+            let prepared = journalled();
+            std::fs::write(&image, &*prepared.bytes.lock().unwrap()).unwrap();
+            let path = CString::new(image.as_str()).unwrap();
+            let name = CString::new("/checked").unwrap();
+            let error = || {
+                unsafe { CStr::from_ptr(fs_ext4_last_error()) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            let disk_state =
+                || Superblock::read(&FileDevice::open(image.as_str()).unwrap()).unwrap();
+            let recover = features::Incompat::RECOVER.bits();
+
+            assert!(unsafe { fs_ext4_mount_recovering(std::ptr::null()) }.is_null());
+            assert_eq!(fs_ext4_last_errno(), EINVAL);
+            assert_eq!(unsafe { fs_ext4_finish(std::ptr::null_mut()) }, -1);
+            assert_eq!(fs_ext4_last_errno(), EINVAL);
+
+            let handle = unsafe { fs_ext4_mount_recovering(path.as_ptr()) };
+            assert!(!handle.is_null(), "{}", error());
+            assert_eq!(fs_ext4_last_errno(), 0);
+            let ino = unsafe { fs_ext4_create(handle, name.as_ptr(), 0o644) };
+            assert_ne!(ino, 0, "{}", error());
+            assert_eq!(unsafe { fs_ext4_flush(handle) }, 0, "{}", error());
+            assert_ne!(disk_state().feature_incompat & recover, 0);
+            assert_eq!(unsafe { fs_ext4_finish(handle) }, 0, "{}", error());
+            assert_eq!(disk_state().feature_incompat & recover, 0);
+            assert_ne!(disk_state().state & crate::superblock::EXT4_VALID_FS, 0);
+            let reader = Arc::new(FileDevice::open(image.as_str()).unwrap());
+            let reader = Filesystem::mount(reader).unwrap();
+            assert_eq!(reader.lookup_path_bytes(name.as_bytes()).unwrap(), ino);
+
+            let image = journalled();
+            let failing = Arc::new(Failing::new(image.clone(), usize::MAX));
+            let fs = Filesystem::mount_recovering(failing.clone()).unwrap();
+            failing
+                .fail_at
+                .store(failing.events.load(Ordering::SeqCst), Ordering::SeqCst);
+            assert_eq!(finish_test_mount(fs), -1);
+            assert_eq!(fs_ext4_last_errno(), EIO);
+            assert!(error().contains("injected I/O failure"), "{}", error());
+            assert_eq!(Arc::strong_count(&failing), 1, "finish retained the device");
+            assert!(needs_recovery(&image), "failed finish cleared RECOVER");
+        }
+
+        #[test]
         fn unsupported_checksum_v3_journal_is_refused_without_device_io() {
             use crate::jbd2::{self, JbdIncompat, JournalSuperblock};
 

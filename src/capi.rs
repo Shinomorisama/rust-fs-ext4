@@ -21,6 +21,8 @@
 //!
 //! Phase 4 (write path, in progress):
 //! - fs_ext4_mount_rw(device_path) -> *mut fs_ext4_fs_t
+//! - fs_ext4_mount_recovering(image_path) -> *mut fs_ext4_fs_t
+//! - fs_ext4_finish(fs) -> int
 //! - fs_ext4_mount_rw_with_callbacks(cfg) -> *mut fs_ext4_fs_t  (RW via FSKit-style read+write callbacks)
 //! - fs_ext4_truncate(fs, path, new_size) -> int (shrink + sparse grow)
 //! - fs_ext4_symlink(fs, target, linkpath) -> u32 inode (fast + slow path)
@@ -32,8 +34,9 @@
 //! - fs_ext4_set_volume_label(fs, label) -> int
 //!
 //! Memory ownership rules (from ntfsbridge precedent, documented in docs/ext4-rs-capi.md):
-//! - `fs_ext4_fs_t*` is owned by the caller. Freed via `fs_ext4_umount`
-//!   (use for both `mount`, `mount_with_callbacks`, and `mount_rw` handles).
+//! - `fs_ext4_fs_t*` is owned by the caller. `fs_ext4_umount` frees a
+//!   handle. `fs_ext4_finish` frees a handle and reports release errors.
+//!   Callers must stop other calls before either release.
 //! - `fs_ext4_dir_iter_t*` is owned by the caller. Freed via `fs_ext4_dir_close`.
 //! - `fs_ext4_dir_next` returns a pointer into the iterator's internal buffer;
 //!   valid until the next `fs_ext4_dir_next` or `fs_ext4_dir_close` call.
@@ -348,6 +351,13 @@ pub(crate) fn unmount_test_mount(fs: Filesystem) {
     let handle = Box::into_raw(Box::new(fs_ext4_fs_t { fs }));
     // The fresh handle is owned here, and the exported close consumes it once.
     unsafe { fs_ext4_umount(handle) };
+}
+
+/// Exercise fallible release with an owned test mount and no live borrows.
+#[cfg(test)]
+pub(crate) fn finish_test_mount(fs: Filesystem) -> c_int {
+    let handle = Box::into_raw(Box::new(fs_ext4_fs_t { fs }));
+    unsafe { fs_ext4_finish(handle) }
 }
 
 /// Opaque directory iterator handle. The caller treats this as `fs_ext4_dir_iter_t*`.
@@ -1037,6 +1047,32 @@ pub unsafe extern "C" fn fs_ext4_umount(fs: *mut fs_ext4_fs_t) {
         AssertUnwindSafe(|| {
             if !fs.is_null() {
                 drop(Box::from_raw(fs));
+            }
+        }),
+    )
+}
+
+/// Finish and free an owned filesystem handle. The caller must stop all
+/// other calls on the handle and retain exclusive image ownership through
+/// return. Returns 0 on success or -1 with thread-local error details.
+/// The handle is consumed even on failure.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_finish(fs: *mut fs_ext4_fs_t) -> c_int {
+    ffi_guard(
+        -1,
+        AssertUnwindSafe(|| {
+            clear_last_error();
+            if fs.is_null() {
+                set_err_msg("null fs handle", EINVAL);
+                return -1;
+            }
+            let fs_ext4_fs_t { fs } = *Box::from_raw(fs);
+            match fs.finish() {
+                Ok(()) => 0,
+                Err(e) => {
+                    set_err_from(&e, "finish");
+                    -1
+                }
             }
         }),
     )
@@ -2018,6 +2054,34 @@ pub unsafe extern "C" fn fs_ext4_mount_rw(device_path: *const c_char) -> *mut fs
                 Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
                 Err(e) => {
                     set_err_from(&e, &format!("mount_rw {path}"));
+                    std::ptr::null_mut()
+                }
+            }
+        }),
+    )
+}
+
+/// Open a regular image read-write with checked journal recovery. The
+/// caller must already own the image exclusively and retain ownership
+/// through `fs_ext4_finish`. Returns NULL with thread-local error details
+/// on failure.
+#[no_mangle]
+pub unsafe extern "C" fn fs_ext4_mount_recovering(image_path: *const c_char) -> *mut fs_ext4_fs_t {
+    ffi_guard(
+        std::ptr::null_mut(),
+        AssertUnwindSafe(|| {
+            clear_last_error();
+            let path = cstr_to_str(image_path);
+            if path.is_empty() {
+                set_err_msg("image_path must be a non-empty UTF-8 path", EINVAL);
+                return std::ptr::null_mut();
+            }
+            let mounted = FileDevice::open_image_rw(path)
+                .and_then(|dev| Filesystem::mount_recovering(Arc::new(dev)));
+            match mounted {
+                Ok(fs) => Box::into_raw(Box::new(fs_ext4_fs_t { fs })),
+                Err(e) => {
+                    set_err_from(&e, &format!("mount_recovering {path}"));
                     std::ptr::null_mut()
                 }
             }

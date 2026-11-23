@@ -106,11 +106,24 @@ impl FileDevice {
     /// Open read-write by a path that need not be UTF-8; see
     /// [`FileDevice::open_path`].
     pub fn open_path_rw(path: &Path) -> Result<Self> {
+        Self::open_writable(path, false)
+    }
+
+    pub(crate) fn open_image_rw(path: &str) -> Result<Self> {
+        Self::open_writable(Path::new(path), true)
+    }
+
+    fn open_writable(path: &Path, image_only: bool) -> Result<Self> {
         let file = OpenOptions::new().read(true).write(true).open(path)?;
-        let size = file.metadata()?.len();
+        let metadata = file.metadata()?;
+        if image_only && !metadata.is_file() {
+            return Err(Error::InvalidArgument(
+                "checked mount requires a regular image file",
+            ));
+        }
         Ok(Self {
             file: Mutex::new(file),
-            size,
+            size: metadata.len(),
             writable: true,
         })
     }
