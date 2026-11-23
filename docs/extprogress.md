@@ -12,12 +12,13 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Verify the focused Windows
-checked-casefold run and audit the retained source, refusal reason,
-read-only listing and alias payload, clean release, and image digest.
-Also close cold Linux retry **45147906386** and interruption-fixture
-storage CI **45143481078** when their reports arrive. Casefold writes
-stay blocked.
+**Next `do next` (set 2026-11-23).** Audit Windows checked-casefold
+run **45148715539**, job **137604361057**, on source `7f54ad3`.
+Verify the retained source, refusal reason, read-only listing and alias
+payload, clean release, and unchanged image. If the job fails, use its
+logs and retained files to correct the first failure before rerunning.
+Interruption-fixture storage CI **45143481078** still has native and
+guest tiers in progress. Casefold writes stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
 
 ### Windows checked casefold refusal probe — 2026-11-23
@@ -31,7 +32,24 @@ The same binary then mounts read-only, lists `ReadMe`, opens
 the drive without changing the image. The workflow retains
 the image, both transcripts, the names, and the alias payload.
 The ordinary-image mode remains the dispatch default.
+Source `7f54ad3` passed Actionlint, provenance, Python compilation,
+local pinned fixture extraction, and a simulated verdict check that
+rejects success, a wrong reason, and a ready mount after refusal.
+The push syntax workflow **45148695263** passed. Windows dispatch
+**45148715539** started, and the VM result is pending.
 [Workflow](../.github/workflows/casefold-winfsp-checked.yml) · [Probe](../tests/c_smoke/winfsp_checked.py)
+[Windows run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45148715539/job/137604361057)
+
+### Cold Linux rerun and shutdown verified — 2026-11-23
+
+Exact source `157ea30` passed focused run **45147906386**, job
+**137601659406**, including the stopped-VM status step. Verified
+archive **14805810971** has 18 valid ZIP members and SHA-256
+`cacce340156634eafe9c4cbef55a8a038c88d1bf31dbb1b9ea3d547fa996a720`.
+Both cold reads again match the source payloads, the checker is clean,
+and the image is byte-identical to the Windows export. The archive
+includes the exact stopped-VM report.
+[Cold Linux rerun](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45147906386/job/137601659406) · [Verified archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45147906386/artifacts/14805810971)
 
 ### Windows release image passes cold Linux read and checker — 2026-11-23
 
