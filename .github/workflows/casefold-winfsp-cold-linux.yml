@@ -81,7 +81,13 @@ jobs:
           exit "$status"
 
       - name: Verify VM shutdown
-        run: chore vm:status
+        run: |
+          set -euo pipefail
+          status=0
+          chore vm:status > tmp/winfsp-cold-linux/vm-status.log 2>&1 || status=$?
+          cat tmp/winfsp-cold-linux/vm-status.log
+          test "$status" -eq 1
+          grep -Fxq 'vm: rust-fs-ext4 is not running (stopped)' tmp/winfsp-cold-linux/vm-status.log
 
       - name: Retain the Linux reports and checked image
         if: always() && steps.prepare.outcome != 'skipped'

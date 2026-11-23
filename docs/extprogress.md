@@ -12,12 +12,34 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Verify the WinFsp cold Linux
-workflow for this source. Audit the exact Windows image hash,
-both Linux file dumps, the non-repairing checker verdict, and VM
-shutdown. Also verify interruption-fixture storage repair CI
-**45143481078** as it completes. Casefold writes stay blocked.
+**Next `do next` (set 2026-11-23).** Verify the cold Linux
+workflow's corrected VM shutdown step. Both cold reads and the
+non-repairing check already pass on the exact Windows image below.
+The next independent Windows checkpoint is a checked mount refusal
+on the audited casefold image, with the prior read-only alias check
+and untouched image bytes. Also verify interruption-fixture storage
+repair CI **45143481078** as it completes. Casefold writes stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Windows release image passes cold Linux read and checker — 2026-11-23
+
+Exact source `5d532d7`, run **45146789023**, job **137597939135**,
+cold-read the audited WinFsp release image in the pinned Linux VM.
+`/oracle` matches the **4,096-byte** Linux reference payload.
+`/winfsp-checked.bin` matches all **5,123 bytes** written through
+WinFsp. The non-repairing checker ran all five passes, returned
+zero and reported clean. The finished image bytes equal the
+Windows input byte for byte before and after Linux.
+
+Verified archive **14805315721** has 17 valid ZIP members, exact
+run and source, and SHA-256
+`e2b4a733b380efc7c1a2337376ab7f5c29c012ba2cc687d92b29255bb2ee44a7`.
+The job was marked failed by its last status step. The harness
+reported a stopped VM with its normal exit code 1. The corrected
+step requires both code 1 and the exact stopped message, and
+retains the status report. This is one ordinary checksum-v3 image
+round trip across Windows and Linux.
+[Cold Linux job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45146789023/job/137597939135) · [Cold Linux archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45146789023/artifacts/14805315721)
 
 ### WinFsp cold Linux checker prepared — 2026-11-23
 
