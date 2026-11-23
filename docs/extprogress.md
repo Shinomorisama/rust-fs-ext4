@@ -12,17 +12,57 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Establish one I/O-count baseline
-for checked mount, first file create and finish on an ordinary
-4 KiB checksum-v3 image. Reuse the counting-device pattern in
-`tests/read_path_cost.rs` and a disposable copy of the audited
-ordinary Linux fixture. Record calls and bytes separately for each
-phase. Identify work that scales with block groups or allocated
-inodes so the next larger fixture can test the estimate for a
-1.5 TB card. Use test code and ordinary images for this measurement.
-Check interruption-fixture storage CI **45143481078**
-when its native and guest reports arrive.
+**Next `do next` (set 2026-11-23).** Use the pinned Linux VM to
+prepare an ordinary sparse 9 GiB 4 KiB checksum-v3 fixture with
+72 block groups, crossing from one descriptor-table block to two
+at 64 bytes per descriptor. Repeat the checked mount, first create and finish I/O
+measurement with the same small root directory and local free inodes.
+Keep large sparse images in VM scratch and retain the geometry,
+oracle reports and counts. Check interruption-fixture storage CI
+**45143481078** when its native and guest reports arrive.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Checked lifecycle I/O baseline — 2026-11-23
+
+The opt-in example measures the Rust block-device boundary below the
+driver cache. It opens the input read-only, makes a new working copy,
+and measures checked mount, creation of one empty regular file in the
+root directory, and checked finish. It verifies the inode and clean
+journal after reopening. Copying and readback are outside the counts.
+
+Two native runs using library source `2b4b5f7` matched exactly on
+the Linux-recovered `*.img.linux.img` in artifact **14789346547**.
+The fixture has 64 MiB, one block group, 32,768 blocks per group,
+64-byte descriptors, and 12 allocated inodes. Its input SHA-256
+`bb5720afbb73bf5839e1e89c9bc05d2173448582adce329bb1fc9380f4c11614`
+verified again after both runs. Attempting to reuse the output path
+was refused and its hash held.
+
+| Phase | Reads | Bytes read | Writes | Bytes written | Flushes |
+|---|---:|---:|---:|---:|---:|
+| Checked mount | 9 | 33,792 | 3 | 3,072 | 3 |
+| First empty-file create | 2 | 8,192 | 15 | 58,368 | 4 |
+| Checked finish | 2 | 8,192 | 2 | 2,048 | 3 |
+
+The clean-input mount and finish reread and validate the group
+descriptors. Mount also sums their free-space and free-inode counts
+after setting RECOVER. That work scales with group count, with cache
+hits reducing backing reads. Regular-file allocation starts in the
+parent's group and may examine more groups if the local inode bitmap
+has no free entry. There is no allocated-inode inventory in the measured
+ordinary mount and empty-file create paths.
+
+At 4 KiB and 32,768 blocks per group, a 1.5 TB volume would have
+roughly 11,176 groups. With 64-byte descriptors, the primary table
+would occupy about 175 blocks per traversal before cache effects.
+This is a geometry estimate. The measurements cover one clean,
+lightly populated image and record requests rather than latency.
+
+```sh
+cargo run --release --locked --example checked_recovery_io -- INPUT NEW_COPY
+```
+
+[Example](../examples/checked_recovery_io.rs) · [Linux fixture archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907490/artifacts/14789346547)
 
 ### Windows checked casefold refusal verified — 2026-11-23
 
