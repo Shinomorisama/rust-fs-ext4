@@ -12,14 +12,50 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Verify the focused WinFsp
-checked-image job and its retained evidence. Exercise checked
-replay, a WinFsp write and flush, and successful release of the
-disposable ordinary image. Use the resulting image for a cold
-Linux read and checker run. Verify interruption-fixture storage
-repair CI **45143481078** as it completes. Casefold writes stay
-blocked.
+**Next `do next` (set 2026-11-23).** Verify the WinFsp cold Linux
+workflow for this source. Audit the exact Windows image hash,
+both Linux file dumps, the non-repairing checker verdict, and VM
+shutdown. Also verify interruption-fixture storage repair CI
+**45143481078** as it completes. Casefold writes stay blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### WinFsp cold Linux checker prepared — 2026-11-23
+
+The workflow checks the digests of Windows artifact **14803971622**
+and reference archive **14789346547** before opening the image in
+the pinned Linux VM. It cold-reads `/oracle` and
+`/winfsp-checked.bin`, then judges the non-repairing check using the
+suite's existing report reader. The expected payload sizes are
+4,096 and 5,123 bytes. The workflow requires identical image bytes
+after the check, retains the three reports, both dumps and their
+inputs, and verifies VM teardown.
+
+Local rehearsal verified extraction, report and byte checks.
+It rejected a skipped checker that returned zero and a mismatched
+payload. Actionlint and provenance passed. The Linux VM itself
+still needs to execute the workflow.
+[Cold Linux workflow](../.github/workflows/casefold-winfsp-cold-linux.yml) · [Verifier](../scripts/winfsp-cold-linux.rs)
+
+### WinFsp checked replay, write and release pass Windows VM — 2026-11-23
+
+Exact source `018f82f` passed run **45144727105**, job
+**137591076177**, using adapter `393665e`, patch digest
+`ffbe8674b30cc91fc24aae70d43eecdf61e307be53197e30a4457c852bbfe9ab`
+and shared core `f62c117`. Windows compiled and mounted the
+disposable ordinary image. The test checked exclusive backing
+access, read the replayed payload, wrote and flushed **5,123**
+bytes through WinFsp, and read them back. Ctrl-C returned success
+and the drive disappeared.
+
+Archive **14803971622** matches the exact run, source and SHA-256
+`c2115d5c0714046fe99f25814266fd418bfe003cd8e0d614f3ce41f8bd028052`.
+All six ZIP members pass CRC. The audited finished image SHA-256
+is `86d1e41e35d8c89bf3f227d928a880be62c0586fcf2bd45406a15e66c4025cf6`.
+Its ext4 superblock has RECOVER clear with clean state. Journal
+cursor is zero and sequence is five. Both stored checksums verify,
+and the archived replay payload matches raw data at block 2065.
+The newly written file's cold Linux read and checker remain pending.
+[Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45144727105/job/137591076177) · [Evidence](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45144727105/artifacts/14803971622)
 
 ### WinFsp build exposed missing Windows imports — 2026-11-23
 

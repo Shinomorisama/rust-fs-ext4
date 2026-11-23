@@ -1,0 +1,93 @@
+name: WinFsp image cold Linux check
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-winfsp-cold-linux.yml
+      - scripts/winfsp-cold-linux.rs
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+
+jobs:
+  cold-linux:
+    name: Cold Linux reads after WinFsp release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned harness
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+
+      - name: Retrieve and verify the Windows image and reference payloads
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/winfsp-cold-linux
+          git rev-parse HEAD > tmp/winfsp-cold-linux/source-commit.txt
+          gh api repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14803971622/zip > tmp/winfsp-image.zip
+          gh api repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14789346547/zip > tmp/winfsp-reference.zip
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          from zipfile import ZipFile
+          import re
+
+          evidence = Path("tmp/winfsp-cold-linux")
+          image_archive = Path("tmp/winfsp-image.zip")
+          reference_archive = Path("tmp/winfsp-reference.zip")
+          assert sha256(image_archive.read_bytes()).hexdigest() == "c2115d5c0714046fe99f25814266fd418bfe003cd8e0d614f3ce41f8bd028052"
+          assert sha256(reference_archive.read_bytes()).hexdigest() == "b484c04c149d6604a8ee674ffb678ca85f4b5fb0df7ad5c0f7ea9d38e897b4e1"
+          with ZipFile(image_archive) as windows, ZipFile(reference_archive) as linux:
+              image = windows.read("checked.img")
+              written = windows.read("winfsp-checked.bin")
+              base, = (path for path in linux.namelist() if re.search(r"_input_\d+\.img$", path))
+              replayed = linux.read(base + ".payload.bin")
+          digest = "86d1e41e35d8c89bf3f227d928a880be62c0586fcf2bd45406a15e66c4025cf6"
+          assert len(image) == 64 * 1024 * 1024 and sha256(image).hexdigest() == digest
+          assert len(written) == 5123 and sha256(written).hexdigest() == "7cb10fb492003e9df9b72e6a8a1cb24fee7bff9b9bbe194443695f8cb3275939"
+          assert len(replayed) == 4096 and sha256(replayed).hexdigest() == "bb2466d99866f7a74a99906cd68adcf888ee431820f39b7612ef3b9a9b7e4b8e"
+          (evidence / "checked.img").write_bytes(image)
+          (evidence / "expected-winfsp.bin").write_bytes(written)
+          (evidence / "expected-oracle.bin").write_bytes(replayed)
+          (evidence / "image.sha256").write_text(f"{digest}  {evidence / 'checked.img'}\n")
+          PY
+
+      - name: Exercise the Linux tools in the harness VM
+        run: |
+          set -euo pipefail
+          rustc --edition=2021 scripts/winfsp-cold-linux.rs -o tmp/winfsp-cold-linux-check
+          status=0
+          ../fs-linux-test-harness/scripts/vm.sh session "$PWD/tmp/winfsp-cold-linux-check" \
+            2>&1 | tee tmp/winfsp-cold-linux/session.log || status=$?
+          sha256sum -c tmp/winfsp-cold-linux/image.sha256
+          exit "$status"
+
+      - name: Verify VM shutdown
+        run: chore vm:status
+
+      - name: Retain the Linux reports and checked image
+        if: always() && steps.prepare.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: winfsp-cold-linux-evidence
+          path: tmp/winfsp-cold-linux/
+          if-no-files-found: error
+          retention-days: 30
