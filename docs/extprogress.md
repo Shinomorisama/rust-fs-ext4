@@ -12,14 +12,83 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-22).** Verify full CI for the narrow
-provenance-check repair. Check the three previously blocked jobs, the
-new exact recovery-test occurrence in both whole suites, the executed
-floors and the aggregate. The focused checksum-v3 reference and image
-audit are complete below. Once full CI passes, the next bounded write
-prerequisite is checked replay and finish for this 64-bit checksum-v3
-profile on ordinary volumes. Keep casefold writes blocked.
+**Next `do next` (set 2026-11-22).** On this source, verify the focused
+Linux checksum-v3 run and its exact test floor and evidence archive.
+Check the input, Linux replay, checked live and finished images,
+damaged refusal and cold Linux read and consistency report. Full CI
+also runs the strengthened plain-JBD2 interruption test.
 [Linux reference workflow](../.github/workflows/casefold-checked-recovery.yml)
+
+Keep the preceding provenance-repair run **45094552396** for the
+baseline audit. Eight jobs passed, including all three previously
+blocked jobs. Its native **137432090878** and guest **137432090842**
+jobs were still running at publication of the recovery change.
+Verify their exact test occurrence, floors and final aggregate when
+they finish. The recovery change has its own run keyed to its commit.
+Casefold writes stay blocked.
+[Provenance-repair CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45094552396)
+
+### Checked replay retains RECOVER through checkpoint and recount — 2026-11-22
+
+The checked recovery path holds RECOVER when checkpointing a logged
+primary superblock, while reconciling free counts and through an
+explicit replay call on a checked handle. The checked mount skips
+the former clear and re-set pair. The existing plain-journal Linux
+interruption test now includes a logged superblock with RECOVER
+clear and checks the on-disk flag after every failed mount.
+
+The previous checksum-v3 probe recorded four gaps in 30 cuts.
+The updated candidate passes the strict probe with no gap across
+all 26 remaining write and flush events in the same two durability
+models. Every cut reopens to the expected payload and journal state.
+A separate checksum-v3 probe places an older superblock in the journal.
+At the cut before the clean cursor write, both models preserve the
+replayed label, valid checksums, the live cursor and RECOVER. A fresh
+reopen and finish succeeds in both models.
+
+The tested seven-file source patch `checked-v3-marker-candidate.patch`
+has SHA-256
+`bc81a1d391d82c2816b66c1b5c11a0cc36032f6c5f111baa611d65128ebc68a7`
+and applies to `6d7b974`. The earlier patch and red reproduction
+remain available. The green log is
+`checked-v3-interruption-marker-green.log` in the same evidence directory.
+All five native checked-recovery controls and 13 replay controls pass,
+along with lint and Actionlint. Both Linux targets compile and the
+exact filters select one test each. The checksum-v3 assertions pass
+against the archived images. The updated Linux tests still need fresh
+VM runs.
+
+### Checked checksum-v3 replay retries and marker gap — 2026-11-22
+
+The initial 4 KiB, 64-bit checksum-v3 candidate was prepared at
+`6d7b974` in `/workspace/work/casefold-checked-v3`. The complete
+five-file patch is `checked-v3-linux-candidate.patch`, SHA-256
+`389b76628b236010a1868a2b0fbfb7a433083cd205052d2092c6f88664b75d21`.
+Local lint, all five checked-recovery unit controls and the focused
+test's assertions against archived images passed. The candidate
+still needs the fresh focused Linux VM run.
+
+The archived Linux input exercised 15 write and flush events under
+each of the existing immediate and flush-dependent durability models.
+All 30 cuts returned the injected error. A fresh checked reopen and
+finish recovered the Linux payload and journal state in all 30 cases,
+with valid checksums and byte agreement outside the filesystem
+superblock. Reopen preserves the clean-state bit it finds.
+
+Four cuts left RECOVER clear during failed mount before any handle
+was returned. Replay had flushed the committed payload and clean
+journal cursor. The summary recount then cleared RECOVER before the
+checked mount's next write would set it again. The filesystem state
+remained unclean in those four cases. The strict marker regression
+fails at exit 101 with four occurrences. All four saved cut images
+have raw SHA-256
+`b89065d673fb75f7941d88463661a277e240f85c5b8f1af566adb7767ef3ee1d`.
+The probe, logs and compressed images are in
+`/workspace/work/casefold-evidence/checked-recovery-admission`, named
+`checked-v3-interruption*` and `marker-gap-*.img.gz`. Run the probe
+with `CHECKED_V3_REQUIRE_CONTINUOUS_RECOVERY_MARKER=1` to check a fix.
+The interruptions used a native simulated device. Independent Linux
+checks of the cut images are pending.
 
 ### Linux checksum-v3 evidence audited; provenance repaired — 2026-11-22
 

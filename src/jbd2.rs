@@ -110,7 +110,7 @@ pub struct JournalSuperblock {
 }
 
 impl JournalSuperblock {
-    /// The journal format supported by the checked recovery/write lifecycle.
+    /// Validate the plain JBD2 profile for checked recovery.
     /// Feature refusal is a dependency capability boundary, not filesystem damage.
     pub fn validate_plain_recovery(&self, block_size: u32, blocks_count: u64) -> Result<()> {
         let supported = JbdIncompat::REVOKE.bits() | JbdIncompat::BIT64.bits();
@@ -120,6 +120,10 @@ impl JournalSuperblock {
         {
             return Err(Error::Unsupported("checked lifecycle supports plain JBD2 only; checksummed/async/fast-commit journals need separate qualification"));
         }
+        self.validate_recovery_geometry(block_size, blocks_count)
+    }
+
+    fn validate_recovery_geometry(&self, block_size: u32, blocks_count: u64) -> Result<()> {
         if self.block_type != JBD2_SUPERBLOCK_V2
             || self.block_size != block_size
             || self.first != 1
@@ -395,6 +399,50 @@ pub fn journal_block_to_physical(
 ///
 /// Returns `Ok(None)` if `sb.journal_inode == 0` (filesystem lacks a journal).
 pub fn read_superblock(fs: &Filesystem) -> Result<Option<JournalSuperblock>> {
+    read_superblock_bytes(fs)?
+        .as_deref()
+        .map(JournalSuperblock::parse)
+        .transpose()
+}
+
+pub(crate) fn read_checked_recovery_superblock(
+    fs: &Filesystem,
+) -> Result<Option<JournalSuperblock>> {
+    let Some(mut raw) = read_superblock_bytes(fs)? else {
+        return Ok(None);
+    };
+    let journal = JournalSuperblock::parse(&raw)?;
+    let block_size = fs.sb.block_size();
+    let blocks_count = fs.sb.blocks_count;
+    if !journal.uses_csum_v3() {
+        journal.validate_plain_recovery(block_size, blocks_count)?;
+        return Ok(Some(journal));
+    }
+    let supported = (JbdIncompat::REVOKE | JbdIncompat::BIT64 | JbdIncompat::CSUM_V3).bits();
+    if block_size != 4096
+        || !journal.uses_64bit()
+        || journal.feature_compat != 0
+        || journal.feature_ro_compat != 0
+        || journal.feature_incompat & !supported != 0
+    {
+        return Err(Error::Unsupported(
+            "checked checksum-v3 recovery requires a 4 KiB, 64-bit journal with supported features",
+        ));
+    }
+    journal.validate_recovery_geometry(block_size, blocks_count)?;
+    if let Some(reason) = journal.checksum_declaration_error() {
+        return Err(Error::Corrupt(reason));
+    }
+    raw[0xfc..0x100].fill(0);
+    if crate::checksum::linux_crc32c(!0, &raw[..1024]) != journal.checksum {
+        return Err(Error::BadChecksum {
+            what: "journal superblock",
+        });
+    }
+    Ok(Some(journal))
+}
+
+fn read_superblock_bytes(fs: &Filesystem) -> Result<Option<Vec<u8>>> {
     let jino_num = fs.sb.journal_inode;
     if jino_num == 0 {
         return Ok(None);
@@ -409,7 +457,7 @@ pub fn read_superblock(fs: &Filesystem) -> Result<Option<JournalSuperblock>> {
     let block_size = fs.sb.block_size() as u64;
     let mut buf = vec![0u8; block_size as usize];
     fs.dev.read_at(phys * block_size, &mut buf)?;
-    Ok(Some(JournalSuperblock::parse(&buf)?))
+    Ok(Some(buf))
 }
 
 #[cfg(test)]

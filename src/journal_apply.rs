@@ -19,25 +19,24 @@
 //!      into the buffer cache instead ([`replay_into_cache`], #72).
 //!   2. Parse the JBD2 superblock via jbd2::read_superblock.
 //!   3. Refuse a volume with a write-breaking INCOMPAT bit.
-//!   4. If clean, clear a leftover needs_recovery and return; otherwise
+//!   4. If clean, reconcile a leftover needs_recovery and return; otherwise
 //!      plan = journal::walk(&fs, &jsb)?; journal_apply::apply(&fs, &plan)?
-//!   5. Mark the journal clean, then clear needs_recovery.
+//!   5. Mark the journal clean, then update the filesystem superblock.
 //!   6. The mount continues, read-write.
 //! ```
 //!
 //! Once the writes are flushed, the journal superblock gets `s_start = 0`
-//! and the sequence one past the first uncommitted transaction, and the ext4
-//! superblock loses `needs_recovery` (#228). Left dirty, every later mount
-//! replayed the same log again and `e2fsck` reported a journal with data
-//! in it. The order matters: a crash between the two leaves a clean
-//! journal flagged for recovery, which recovers nothing; the reverse would
-//! be a live journal Linux wipes.
+//! and the sequence one past the first uncommitted transaction. Ordinary
+//! mounts then clear `needs_recovery`; checked mounts keep it set until
+//! release. The flag must stay set until the journal cursor is clean so
+//! Linux can replay the log if recovery is interrupted (#228).
 
 use crate::error::{Error, Result};
 use crate::fs::Filesystem;
 use crate::inode::Inode;
 use crate::jbd2::{self, JournalSuperblock};
 use crate::journal::ReplayPlan;
+use crate::superblock::{SUPERBLOCK_OFFSET, SUPERBLOCK_SIZE};
 
 /// Set or clear `INCOMPAT_RECOVER` (`needs_recovery`) in a 1024-byte
 /// superblock image, redoing its checksum under `metadata_csum`.
@@ -67,9 +66,9 @@ pub(crate) fn write_needs_recovery(dev: &dyn crate::block_io::BlockDevice, on: b
     dev.write_at(at, &sb)
 }
 
-/// Clear `needs_recovery` in the primary superblock, and in the same write
-/// set its free block and inode counts to the sums over the group
-/// descriptors.
+/// Reconcile the primary superblock after replay. Update `needs_recovery`
+/// according to the mount lifecycle and set the free block and inode
+/// counts to the sums over the group descriptors in the same write.
 ///
 /// Those two summary counts are the one part of a crashed volume the
 /// descriptors do not vouch for. The kernel keeps them in memory and writes
@@ -96,8 +95,8 @@ fn finish_recovery(fs: &Filesystem) -> Result<()> {
         raw[0x158..0x15C].copy_from_slice(&((free_blocks >> 32) as u32).to_le_bytes());
     }
     raw[0x10..0x14].copy_from_slice(&free_inodes.to_le_bytes());
-    // Clearing the flag re-stamps the checksum over the counts as well.
-    set_needs_recovery_in(&mut raw, false);
+    // Updating the flag re-stamps the checksum over the counts as well.
+    set_needs_recovery_in(&mut raw, fs.managed_recovery);
     fs.dev.write_at(at, &raw)
 }
 
@@ -215,6 +214,8 @@ pub fn apply(fs: &Filesystem, plan: &ReplayPlan) -> Result<usize> {
     }
 
     let block_size = fs.sb.block_size() as u64;
+    let superblock_block = SUPERBLOCK_OFFSET / block_size;
+    let superblock_offset = (SUPERBLOCK_OFFSET % block_size) as usize;
 
     // EVERY ENTRY IS RESOLVED BEFORE ANY IS WRITTEN. Checked inside the
     // write loop, a bad destination was found after the entries before it
@@ -236,6 +237,13 @@ pub fn apply(fs: &Filesystem, plan: &ReplayPlan) -> Result<usize> {
         // JBD2 magic. Restore them to the magic before writing to final.
         if w.flags & crate::journal::TAG_ESCAPED != 0 {
             buf[0..4].copy_from_slice(&crate::jbd2::JBD2_MAGIC_NUMBER.to_be_bytes());
+        }
+
+        if fs.managed_recovery && w.fs_block == superblock_block {
+            // The logged copy may predate writable ownership. Keep the flag
+            // even if this write reaches disk before the cursor is cleared.
+            let sb = &mut buf[superblock_offset..superblock_offset + SUPERBLOCK_SIZE];
+            set_needs_recovery_in(sb, true);
         }
 
         fs.dev.write_at(destination, &buf)?;
@@ -326,8 +334,8 @@ pub fn replay_if_dirty(fs: &Filesystem) -> Result<usize> {
     let Some(jsb) = jbd2::read_superblock(fs)? else {
         return Ok(0); // no journal inode → nothing to replay
     };
-    // Even an empty journal can require a superblock write to clear the
-    // recovery marker. Refuse before either kind of write, including when
+    // Even an empty journal can require a filesystem superblock update.
+    // Refuse before either kind of write, including when
     // a device became writable after a read-only lazy mount.
     let write_breaking = crate::features::write_breaking_incompat(fs.sb.feature_incompat);
     if write_breaking != 0 {

@@ -12,20 +12,21 @@ operation. Applications requiring a backup must save and independently reopen it
 **before** calling this API. A read-only mount does not replay anything.
 
 The checked lifecycle currently accepts an internal JBD2 v2 journal with matching
-block size, first log block 1, one user, no compatibility/read-only flags and only
-REVOKE/64BIT incompatibility flags. It checks the initial journal profile and
-outstanding filesystem errors before the first device write or flush.
-Checksummed, async-commit, fast-commit and unknown journal formats remain
-unsupported in this API. The older `mount` interface remains available and
-replays checksummed journals too; that path is qualified by its own tests, not by
-these. Ext4 metadata checksums are distinct from JBD2 transaction checksums.
+block size, first log block 1, one user and no compatibility or read-only flags.
+Plain journals may declare REVOKE and 64BIT. The checksum-v3 profile requires
+4 KiB blocks and 64BIT and also permits REVOKE. It validates the journal
+superblock checksum before the first device write or flush and again after
+replay. Admission also checks for outstanding filesystem and journal errors.
+Checksum-v2, async-commit, fast-commit and unknown journal formats remain
+unsupported in this API. The older `mount` interface has separate replay
+coverage. Ext4 metadata checksums are distinct from JBD2 transaction checksums.
 
 Recovery collects descriptor writes and revoke records only after their commit
 block. Incomplete final transactions, including their revokes, are discarded.
 Transaction comparisons wrap as JBD2 sequence numbers do. Replay writes are
-flushed before the journal's clean cursor is written and flushed. The filesystem
-RECOVER bit remains set throughout writable ownership; `finish` clears it only
-after flush, a clean journal and an empty orphan chain.
+flushed before the journal's clean cursor is written and flushed. Checked replay
+keeps RECOVER in any replayed primary superblock and through the summary recount.
+`finish` clears it after flush, a clean journal and an empty orphan chain.
 
 Any write/flush failure is an error. Failed journal writers cannot accept another
 transaction. Release the failed handle and reopen under fresh ownership. A failure

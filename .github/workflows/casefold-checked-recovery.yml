@@ -44,7 +44,7 @@ jobs:
           git ls-files -z src tests/support tests/jbd2_checksums_oracle.rs Cargo.toml Cargo.lock \
             .github/workflows/casefold-checked-recovery.yml | xargs -0 sha256sum \
             > tmp/checked-recovery-reference/source-sha256.txt
-      - name: Verify Linux replay and checked refusal on identical input
+      - name: Compare checked replay and finish with Linux, and verify checksum refusal
         id: reference
         env:
           FS_EXT4_TEST_TMPDIR: ${{ github.workspace }}/tmp/checked-recovery-reference
@@ -53,7 +53,7 @@ jobs:
             -- scripts/test.sh --locked --release --test jbd2_checksums_oracle \
             linux_reference_for_checked_csum_v3_replay -- --exact --show-output
           bash scripts/core.sh test-floor --refuse-ignored checked-recovery-reference 1
-      - name: Save original, Linux replay, and checked refusal evidence
+      - name: Save original, Linux replay, checked live and finished, and refusal evidence
         if: always() && steps.reference.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:

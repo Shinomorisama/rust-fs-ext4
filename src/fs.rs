@@ -575,7 +575,7 @@ pub struct Filesystem {
     /// Sticky across refresh/control replacement, including early marker faults.
     operation_failed: std::sync::atomic::AtomicBool,
     runtime: Arc<dyn crate::runtime::Runtime>,
-    managed_recovery: bool,
+    pub(crate) managed_recovery: bool,
     /// The buffer cache `dev` routes through, kept typed for its statistics.
     cache: Arc<crate::block_cache::CachedDevice>,
     pub dev: Arc<dyn BlockDevice>,
@@ -715,8 +715,8 @@ pub const DEFAULT_CACHE_BLOCKS: usize = 256;
 impl Filesystem {
     /// Open an exclusively owned, backed-up device with checked journal recovery.
     /// Opening this writable handle is already a mutation: retain an external
-    /// backup before calling. Only plain JBD2 (no transaction checksums, fast
-    /// commit or async commit) is currently qualified by this lifecycle.
+    /// backup before calling. Supports plain JBD2 and 64-bit checksum-v3
+    /// journals with 4 KiB blocks. Fast commit and async commit are refused.
     pub fn mount_recovering(dev: Arc<dyn BlockDevice>) -> Result<Self> {
         let mut fs = Self::mount_lazy(dev)?;
         // This lifecycle replays the journal itself, below, with the live
@@ -724,28 +724,25 @@ impl Filesystem {
         fs.replay_pending
             .store(false, std::sync::atomic::Ordering::SeqCst);
         fs.write_refusal()?;
-        let jsb = crate::jbd2::read_superblock(&fs)?.ok_or(Error::Unsupported(
+        crate::jbd2::read_checked_recovery_superblock(&fs)?.ok_or(Error::Unsupported(
             "checked recovery requires an internal journal",
         ))?;
-        jsb.validate_plain_recovery(fs.sb.block_size(), fs.sb.blocks_count)?;
         if fs.sb.state & crate::superblock::EXT4_ERROR_FS != 0 {
             return Err(Error::Corrupt("filesystem records an outstanding error"));
         }
+        fs.managed_recovery = true;
         fs.mark_not_clean_once()?;
         fs.journal = None;
         fs.set_recovery_marker(true)?;
         crate::journal_apply::replay_if_dirty(&fs)?;
         fs.refresh_metadata()?;
         fs.refuse_write()?;
-        crate::jbd2::read_superblock(&fs)?
-            .ok_or(Error::Corrupt("journal disappeared"))?
-            .validate_plain_recovery(fs.sb.block_size(), fs.sb.blocks_count)?;
-        fs.set_recovery_marker(true)?;
+        crate::jbd2::read_checked_recovery_superblock(&fs)?
+            .ok_or(Error::Corrupt("journal disappeared"))?;
         fs.journal = crate::journal_writer::JournalWriter::open(&fs)?
             .map(|w| Mutex::new(w.holding_needs_recovery()));
         fs.recover_orphans()?;
         fs.refresh_metadata()?;
-        fs.managed_recovery = true;
         Ok(fs)
     }
 
@@ -1371,7 +1368,13 @@ impl Filesystem {
             .as_ref()
             .is_some_and(|w| w.lock().map_or(true, |w| !w.is_healthy()));
         if (dirty || self.journal.is_none()) && !failed && self.write_refusal().is_ok() {
-            self.journal = crate::journal_writer::JournalWriter::open(self)?.map(Mutex::new);
+            self.journal = crate::journal_writer::JournalWriter::open(self)?.map(|writer| {
+                Mutex::new(if self.managed_recovery {
+                    writer.holding_needs_recovery()
+                } else {
+                    writer
+                })
+            });
         }
         Ok(n)
     }
@@ -14785,7 +14788,12 @@ mod tests {
         #[test]
         fn needs_recovery_stays_set_across_commits_until_finish() {
             let dev = journalled();
-            let fs = Filesystem::mount_recovering(dev.clone()).expect("checked mount");
+            let mut fs = Filesystem::mount_recovering(dev.clone()).expect("checked mount");
+            assert_eq!(fs.replay_journal_if_dirty().expect("clean journal"), 0);
+            assert!(
+                needs_recovery(&dev),
+                "explicit replay cleared needs_recovery"
+            );
             fs.apply_create("/a", 0o644).expect("create");
             assert!(
                 needs_recovery(&dev),
@@ -14897,7 +14905,7 @@ mod tests {
             let dev = std::sync::Arc::new(Failing::new(image.clone(), usize::MAX));
             let refusal = Filesystem::mount_recovering(dev.clone());
             assert!(
-                matches!(refusal, Err(Error::Unsupported(msg)) if msg.starts_with("checked lifecycle supports plain JBD2 only")),
+                matches!(refusal, Err(Error::Unsupported(msg)) if msg.starts_with("checked checksum-v3 recovery requires")),
                 "expected the checked lifecycle to refuse this journal, got {:?}",
                 refusal.err()
             );

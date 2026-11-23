@@ -67,6 +67,7 @@ struct Fixture {
     inode_block: usize,
     inode_offset: usize,
     journal_block: usize,
+    logged_superblock: usize,
 }
 
 impl Fixture {
@@ -201,6 +202,7 @@ impl Fixture {
             inode_block,
             inode_offset,
             journal_block: journal[0],
+            logged_superblock: journal[3],
         }
     }
 
@@ -390,7 +392,7 @@ impl BlockDevice for InterruptedDevice {
     }
 }
 
-fn interrupted_mount(path: &Path, fail_at: usize, writeback: bool) -> (bool, usize) {
+fn interrupted_mount(path: &Path, fail_at: usize, writeback: bool) -> (bool, usize, bool) {
     let device = Arc::new(InterruptedDevice {
         inner: FileDevice::open_rw(path.to_str().unwrap()).unwrap(),
         fail_at: AtomicUsize::new(fail_at),
@@ -399,28 +401,58 @@ fn interrupted_mount(path: &Path, fail_at: usize, writeback: bool) -> (bool, usi
         writeback,
         pending: Mutex::new(Vec::new()),
     });
-    let result = Filesystem::mount_recovering(device.clone()).and_then(|mounted| mounted.finish());
+    let mut mount_completed = false;
+    let result = Filesystem::mount_recovering(device.clone()).and_then(|mounted| {
+        mount_completed = true;
+        mounted.finish()
+    });
     let events = device.event.load(Ordering::SeqCst);
-    (result.is_ok(), events)
+    (result.is_ok(), events, mount_completed)
 }
 
 #[test]
 fn linux_recovers_every_checked_replay_write_and_flush_interruption() {
     let fixture = Fixture::new(true);
+    // A committed superblock copy can predate the current recovery marker.
+    // Keep the live marker durable even while this block is checkpointed.
+    let device = FileDevice::open_path_rw(&fixture.pending).unwrap();
+    let offset = (fixture.logged_superblock * BLOCK + 1024 + 0x60) as u64;
+    let mut feature = [0; 4];
+    device.read_at(offset, &mut feature).unwrap();
+    let flags = u32::from_le_bytes(feature);
+    assert_ne!(flags & RECOVER, 0);
+    device
+        .write_at(offset, &(flags & !RECOVER).to_le_bytes())
+        .unwrap();
+    device.flush().unwrap();
+    drop(device);
+
     for writeback in [false, true] {
         let baseline = fixture.copy(&format!("baseline-{writeback}"));
-        let (success, events) = interrupted_mount(&baseline, usize::MAX, writeback);
+        let (success, events, _) = interrupted_mount(&baseline, usize::MAX, writeback);
         assert!(success);
         assert!(events >= 4, "must exercise actual writes and flushes");
         fixture.assert_recovered(&baseline);
         fixture.linux_check(&baseline);
         for fail_at in 0..events {
             let image = fixture.copy(&format!("interrupted-{writeback}-{fail_at}"));
-            let (success, _) = interrupted_mount(&image, fail_at, writeback);
+            let (success, _, mount_completed) = interrupted_mount(&image, fail_at, writeback);
             assert!(
                 !success,
                 "I/O failure at event {fail_at} must not claim a clean finish"
             );
+            if !mount_completed {
+                let mut bytes = [0; 4];
+                FileDevice::open_path(&image)
+                    .unwrap()
+                    .read_at(1024 + 0x60, &mut bytes)
+                    .unwrap();
+                assert_ne!(
+                    u32::from_le_bytes(bytes) & RECOVER,
+                    0,
+                    "mount cleared RECOVER at event {fail_at} (writeback={writeback})"
+                );
+            }
             fixture.linux_recover(&image);
         }
         eprintln!(
