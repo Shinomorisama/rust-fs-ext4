@@ -12,14 +12,37 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Audit Windows checked-casefold
-run **45148715539**, job **137604361057**, on source `7f54ad3`.
-Verify the retained source, refusal reason, read-only listing and alias
-payload, clean release, and unchanged image. If the job fails, use its
-logs and retained files to correct the first failure before rerunning.
-Interruption-fixture storage CI **45143481078** still has native and
-guest tiers in progress. Casefold writes stay blocked.
+**Next `do next` (set 2026-11-23).** Establish one I/O-count baseline
+for checked mount, first file create and finish on an ordinary
+4 KiB checksum-v3 image. Reuse the counting-device pattern in
+`tests/read_path_cost.rs` and a disposable copy of the audited
+ordinary Linux fixture. Record calls and bytes separately for each
+phase. Identify work that scales with block groups or allocated
+inodes so the next larger fixture can test the estimate for a
+1.5 TB card. Use test code and ordinary images for this measurement.
+Check interruption-fixture storage CI **45143481078**
+when its native and guest reports arrive.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Windows checked casefold refusal verified — 2026-11-23
+
+Exact source `7f54ad3` passed Windows run **45148715539**, job
+**137604361057**. The patched WinFsp adapter's `--checked` mount
+returned exit 1 with callback admission error
+`unsupported INCOMPAT features: 0x00020000`. The drive was absent
+and the image digest held. Read-only mode listed the exact Linux
+directory names, `Café` and `ReadMe`. Opening `README` returned
+the **23-byte** payload recorded for `ReadMe` in the Linux report.
+Ctrl-C returned zero and the drive disappeared.
+
+The audit verified source, adapter, patch, and shared-core pins,
+all eight ZIP members, and a byte-for-byte match to the 64 MiB
+Linux input. Archive **14804833249** is **151,584 bytes**, SHA-256
+`8dc1384b2c1b2fddc371a9f7589af2259bd71a6fc7944f56f7c6141ac3aa79aa`.
+The archive and reports cover one strict 4 KiB casefold fixture.
+Full CI **45148695265** and the fixture-cleanup native and guest
+jobs **137588688671** and **137588688689** were still running.
+[Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45148715539/job/137604361057) · [Verified archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45148715539/artifacts/14804833249) · [Linux input](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44385603215/artifacts/14466114990)
 
 ### Windows checked casefold refusal probe — 2026-11-23
 
@@ -36,7 +59,7 @@ Source `7f54ad3` passed Actionlint, provenance, Python compilation,
 local pinned fixture extraction, and a simulated verdict check that
 rejects success, a wrong reason, and a ready mount after refusal.
 The push syntax workflow **45148695263** passed. Windows dispatch
-**45148715539** started, and the VM result is pending.
+**45148715539** produced the verified result above.
 [Workflow](../.github/workflows/casefold-winfsp-checked.yml) · [Probe](../tests/c_smoke/winfsp_checked.py)
 [Windows run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45148715539/job/137604361057)
 
@@ -16734,9 +16757,12 @@ Index tests must prove Linux can find entries after driver insertion, collisions
 
 Crash/error tests must establish acceptable pre- or post-operation states, safe recovery in both directions, and correct checksums and allocation accounting. Audit mount, deferred replay, writability transitions, mutation APIs, and repair so relaxing one guard does not expose an unqualified path. Qualify journal/geometry combinations explicitly rather than assuming all ext4 features work.
 
-Windows integration has passed one scoped read-only VM check. The
-writable adapter and mount lifecycle still need qualification. The user
-has no Steam hardware or known final filesystem profile. Do not require
+Windows integration has verified checked refusal and read-only alias
+lookup on one strict casefold fixture. An ordinary checksum-v3 image
+passed checked recovery, file copy and release in WinFsp, then cold
+readback and a non-repairing check in Linux. Casefold writes, writable
+adapter integration and larger-volume behavior still need qualification.
+The user has no Steam hardware or known final filesystem profile. Do not require
 that information to continue independent core work, and do not claim
 SteamOS-device compatibility until tested. Ensure Unicode licensing
 accompanies future redistributed binaries/tables.
