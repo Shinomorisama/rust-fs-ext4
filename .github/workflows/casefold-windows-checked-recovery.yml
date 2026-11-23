@@ -1,0 +1,94 @@
+name: Windows checked image recovery
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-windows-checked-recovery.yml
+      - tests/c_smoke/checked_recovery.c
+      - tests/c_smoke/checked_recovery.py
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  checked-image:
+    name: Checked recovery through the Windows C ABI
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: windows/rust-fs-ext4
+    env:
+      FS_CORE_SHA: 9e900154a7dff2a6c8f136db31def33bed9f09cc
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: windows/rust-fs-ext4
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: antimatter-studios/rust-fs-core
+          ref: ${{ env.FS_CORE_SHA }}
+          path: windows/rust-fs-core
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify source and locate the MSVC toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = git rev-parse HEAD
+          $core = git -C ../rust-fs-core rev-parse HEAD
+          if ($source -ne $env:GITHUB_SHA -or $core -ne $env:FS_CORE_SHA) {
+            throw 'Source or shared core commit mismatch'
+          }
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs -or $LASTEXITCODE -ne 0) { throw 'MSVC x64 tools are missing' }
+          $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+          if (!(Test-Path -LiteralPath $vcvars -PathType Leaf)) { throw 'vcvars64.bat is missing' }
+          "CHECKED_VCVARS=$vcvars" >> $env:GITHUB_ENV
+          Write-Output "ext4 $source; core $core"
+
+      - name: Download the pinned Linux reference archive
+        shell: python {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+
+          archive = Path(os.environ["RUNNER_TEMP"]) / "checked-linux-reference.zip"
+          with archive.open("xb") as output:
+              subprocess.run(
+                  ["gh", "api", "repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14789346547/zip"],
+                  stdout=output,
+                  check=True,
+              )
+
+      - name: Link and run the C image probe
+        id: probe
+        shell: cmd
+        run: |
+          mkdir "%RUNNER_TEMP%\checked-image-evidence" || exit /b 1
+          call "%CHECKED_VCVARS%" || exit /b 1
+          python tests/c_smoke/checked_recovery.py "%RUNNER_TEMP%\checked-linux-reference.zip" "%RUNNER_TEMP%\checked-image-evidence" || exit /b 1
+
+      - name: Retain C and image evidence
+        if: always() && steps.probe.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: checked-windows-image-evidence
+          path: ${{ runner.temp }}/checked-image-evidence/
+          if-no-files-found: error
+          retention-days: 30

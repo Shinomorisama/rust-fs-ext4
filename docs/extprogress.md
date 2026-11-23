@@ -12,14 +12,71 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-22).** Verify the checked C ABI in
-exact-source CI. The only new test is
-`fs::tests::checked_recovery::capi_checked_mount_flush_and_finish`.
-Require it once in each unit and whole suite, with the `45564fc`
-baseline results retained. Inspect the checksum-v3 focused run and
-keep the existing floors and output limits. Then prepare the Windows
-VM regular-image lifecycle check. Casefold writes stay blocked.
-[C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+**Next `do next` (set 2026-11-22).** Verify the Windows checked image
+job on this exact source. Check the C compiler and linker result,
+the pinned archive identity, the payload, the result of checked
+finish and the preserved refused image. Also close `8a06dd4` Linux
+CI **45109907503** once guest **137480478043** finishes. Compare its
+whole suite with **45098304842** and require one new C lifecycle
+test with every baseline result retained. Casefold writes stay blocked.
+[Windows workflow](../.github/workflows/casefold-windows-checked-recovery.yml) · [Full Linux CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907503)
+
+### Windows checked image test ready for runner verification — 2026-11-22
+
+The workflow builds the exact checkout and pinned shared core
+with Rust 1.95.0 for x64 Windows. It links the C probe with MSVC and
+the native libraries reported by Rust. It uses archive **14789346547**
+after checking its digest and source, and exercises only disposable
+regular image copies. The retained evidence includes the result,
+payload and the finished and refused images.
+
+The C probe and archive runner passed locally against the native
+static library. The expected payload was read, the recovery flag
+survived flush and cleared on finish, and the finished image agreed
+with Linux outside block zero. The damaged image stayed byte-identical.
+Actionlint and provenance checks pass. Windows compiler, linker and
+runner execution remain pending at publication.
+[Windows workflow](../.github/workflows/casefold-windows-checked-recovery.yml) · [C probe](../tests/c_smoke/checked_recovery.c)
+
+### Checked C source native archive verified — 2026-11-22
+
+Exact source `8a06dd4` native job **137480478025** passed. Archive
+**14791860540** matches the API run, source, size and SHA-256
+`1c744065f626c55469f5dabdd8374a0b94e8333682100f267a33d2383de804c1`
+and passes ZIP CRC. The native unit and whole suites add only the
+C lifecycle test, with **1,709** and **2,572** passes respectively.
+The oracle, kernel and lwext4 test results match the prior commit.
+The whole wrapper used **4,025 lines** and **248,590 bytes** under
+the existing limits. Native completed all 20 shell checks and 159
+CLI checks, reported **4,711** test executions and stopped its VM.
+The guest and aggregate remained pending.
+[Native job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907503/job/137480478025) · [Native archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907503/artifacts/14791860540)
+
+### Checked C source passes focused Linux and unit archive audits — 2026-11-22
+
+Exact source `8a06dd4` passed focused Linux run **45109907490**,
+job **137479639160**, at floor one with zero ignored tests. Archive
+**14789346547** matches the API run, source and SHA-256
+`b484c04c149d6604a8ee674ffb678ca85f4b5fb0df7ad5c0f7ea9d38e897b4e1`.
+All 20 ZIP members, 149 source hashes and the ext4 and transaction
+checksums verify. The checked live and finished images preserve
+the expected flag states and match Linux outside the filesystem
+superblock. The cold Linux read returns the committed payload.
+The deliberately damaged copy changes only the intended checksum
+bit and records zero writes and flushes during refusal. The linked
+native C program also passes on this exact archived input and
+damaged copy.
+[Focused job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907490/job/137479639160) · [Archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907490/artifacts/14789346547)
+
+The standalone **14789182334** and aarch64 **14790021071** archives
+retain every `45564fc` result and add the C lifecycle test once
+to each unit tier. Both report **1,709** passes at floor **440**.
+Aarch64 retains **527** image passes at floor **450** and one ignored
+result. All **27** Stage 0 jobs and the compatibility job pass.
+The saved run, archive and C-probe receipts are under
+`/workspace/work/casefold-evidence/checked-recovery-admission`.
+Both whole suites remain pending.
+[Stage 0](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907501) · [Compatibility](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45109907517)
 
 ### Checked recovery and release exposed to C for regular images — 2026-11-22
 
