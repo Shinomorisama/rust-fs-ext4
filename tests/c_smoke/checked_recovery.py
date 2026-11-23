@@ -32,9 +32,9 @@ def build_probe(output):
     libs, = re.findall(r"^note: native-static-libs: (.*)$", completed.stdout, re.M)
     executable = output / "checked-recovery.exe"
     subprocess.run(
-        ["cl", "/nologo", "/TC", "/std:c11", "/W4", "/WX", "/D_CRT_SECURE_NO_WARNINGS",
+        ["cl", "/nologo", "/TC", "/std:c11", "/W4", "/WX", "/MD", "/D_CRT_SECURE_NO_WARNINGS",
          f"/I{ROOT / 'include'}", str(Path(__file__).with_suffix(".c").resolve()),
-         f"/Fe:{executable}", str(library), *libs.split()],
+         f"/Fe:{executable}", "/link", str(library), *libs.split()],
         cwd=output,
         check=True,
     )

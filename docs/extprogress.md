@@ -38,6 +38,14 @@ Actionlint and provenance checks pass. Windows compiler, linker and
 runner execution remain pending at publication.
 [Windows workflow](../.github/workflows/casefold-windows-checked-recovery.yml) · [C probe](../tests/c_smoke/checked_recovery.c)
 
+The first Windows job **137498511990** built the Rust library and
+reported its native dependencies. MSVC treated the subsequent
+`.lib` arguments as C source under `/TC`. The compile command now
+passes the library inputs after `/link` and selects the dynamic CRT
+reported by Rust. The corrected command passed a local argument
+check. The Windows retry is pending.
+[Original Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45115885887/job/137498511990)
+
 ### Checked C source native archive verified — 2026-11-22
 
 Exact source `8a06dd4` native job **137480478025** passed. Archive
