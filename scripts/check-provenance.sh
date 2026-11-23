@@ -181,6 +181,8 @@ ALLOW = [
      "this crate's error conversion into fs-core's"),
     ("tests/jbd2_*.rs", r"jbd2_(?:basic|checksums_oracle|layouts_oracle)",
      "this crate's JBD2 test binaries, named for the format they test"),
+    (".github/workflows/casefold-checked-recovery.yml", r"jbd2_checksums_oracle",
+     "this crate's checksum test binary selected by the focused Linux workflow"),
     ("tests/*", r"e2fsck_clean",
      "this crate's test helper that runs `e2fsck -fn` and requires a clean verdict"),
     ("tests/*",

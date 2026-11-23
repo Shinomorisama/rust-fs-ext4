@@ -12,14 +12,47 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-22).** Verify the focused checked-recovery
-reference job and audit its three saved images and source records.
-Check the exact test floor, journal feature bits and checksum, Linux's
-replayed payload, and the checked refusal's zero writes, zero flushes
-and byte equality. If the job stops, diagnose its first failed step
-from the retained evidence. Check full CI separately. Keep the
-casefold write gate closed.
+**Next `do next` (set 2026-11-22).** Verify full CI for the narrow
+provenance-check repair. Check the three previously blocked jobs, the
+new exact recovery-test occurrence in both whole suites, the executed
+floors and the aggregate. The focused checksum-v3 reference and image
+audit are complete below. Once full CI passes, the next bounded write
+prerequisite is checked replay and finish for this 64-bit checksum-v3
+profile on ordinary volumes. Keep casefold writes blocked.
 [Linux reference workflow](../.github/workflows/casefold-checked-recovery.yml)
+
+### Linux checksum-v3 evidence audited; provenance repaired — 2026-11-22
+
+Source `655c5a3` passed focused job **137214847352** at floor one,
+with 117 lines and 5,018 bytes. Artifact **14754658111** matches the
+run and source, 212,357 bytes and SHA-256
+`e9934c85a42e36af85f52ec7e6d4bde97609288bb090d851d6054cc77cc27abb`.
+All 13 ZIP members and 149 tracked source hashes passed. The raw
+audit found `/oracle` at inode 12 and allocated data block 2065.
+Journal inode 8 maps logical block zero to block 15. The journal
+feature mask is `0x12`. The superblock CRCs and the committed
+transaction's descriptor, data tag and commit CRCs verify.
+
+Linux clears the ext4 recovery flag, advances sequence 1 to 3 and
+sets the journal cursor to zero. The stored journal CRC changes from
+`0x5a43e526` to `0x37772558`. Only blocks 0, 15 and 2065 change.
+The replayed data matches the committed payload and both Linux reports
+contain all five passes. The checked refusal emits the expected
+unsupported-journal error, records zero writes and flushes and leaves
+the complete image identical to the input. The raw audit and receipt
+are under `/workspace/work/casefold-evidence/checked-recovery-admission`.
+[Focused job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45024629637/job/137214847352) · [Archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45024629637/artifacts/14754658111)
+
+Full CI **45024629668** fails provenance and the native and aarch64
+lint steps. The checker flags the bare name of this repository's own
+checksum test target in the new workflow. The guest suite passes
+**2,571** tests, floor **1,060**, and the verified guest archive
+**14756592944** retains the preceding exact test multiset plus the new
+reference. Its wrapper reaches 4,200 lines and 258,841 bytes under
+the existing limits. The provenance failure reproduces locally.
+Allowing that exact test target in that exact workflow passes the
+checker and its self-test. Full CI for the repair is pending.
+[Original full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45024629668) · [Guard](../scripts/check-provenance.sh)
 
 ### Linux checksum-v3 recovery reference prepared — 2026-11-22
 
