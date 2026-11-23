@@ -21,6 +21,22 @@ repair CI **45143481078** as it completes. Casefold writes stay
 blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
 
+### WinFsp build exposed missing Windows imports — 2026-11-23
+
+The first Windows VM job **137589008427** verified and applied the
+saved adapter patch, then failed compilation because the WinFsp
+module lacked its own `Arc` and atomic `Ordering` imports. Its
+build-log archive is **14803641544**. The disposable image probe
+was skipped after the compile failure.
+
+The corrected scratch patch `winfsp-checked-image-imports.patch`
+adds those two imports and has SHA-256
+`ffbe8674b30cc91fc24aae70d43eecdf61e307be53197e30a4457c852bbfe9ab`.
+The runner now verifies that digest. Formatting and patch checks
+pass. The Windows retry will verify compilation and then run the
+image lifecycle test.
+[First Windows job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45144103545/job/137589008427)
+
 ### Focused WinFsp checked-image runner prepared — 2026-11-23
 
 The Windows workflow uses the read-only job's pinned adapter and

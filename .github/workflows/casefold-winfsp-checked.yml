@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 25
     env:
       ADAPTER_SHA: 393665e6cf7277422385154deeb8d2e4401dfa93
-      PATCH_SHA: 00f65c6df5a713a73e3c2165e726f3db8671cca9d3820360fcced622f613555b
+      PATCH_SHA: ffbe8674b30cc91fc24aae70d43eecdf61e307be53197e30a4457c852bbfe9ab
       CORE_SHA: f62c1173141ab21f37eec8708682009e2aa6e760
     steps:
       - uses: actions/checkout@v4
