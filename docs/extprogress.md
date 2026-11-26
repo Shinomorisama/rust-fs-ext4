@@ -12,13 +12,54 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-26).** Verify focused Linux run
-**45788314828**, job **139800647253**, on source `f793f11` for the
-64 MiB and sparse 9 GiB comparison. Confirm both geometries, identical
-initial root listings, the four non-repairing checker verdicts,
-both retained payloads, and the request counts for mount, create
-and release. Casefold writes remain blocked.
+**Next `do next` (set 2026-11-26).** Trace first regular-file
+creation in the existing healthy linear directory on the strict
+4 KiB casefold reference. Follow checked mount admission,
+equivalent-name exclusion, original spelling, allocation ownership,
+and the transaction through release. Match each step to the
+existing Linux and guarded-create evidence, then choose the first
+missing proof as the next implementation checkpoint. Keep casefold
+writes blocked. Check the second attempt of full CI **45788314811**,
+guest job **139839514313**, for completion.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Sparse Linux I/O comparison verified — 2026-11-26
+
+Focused run **45788314828**, job **139800647253**, passed on
+`f793f11`. The 64 MiB and 9 GiB fixtures start with identical
+root listings and 12 allocated inodes. Both create the same empty
+regular file at inode 13 and preserve the 4,096-byte reference file.
+All four non-repairing Linux checks passed. The resized image has
+72 groups and two descriptor-table blocks. It occupied 249,856
+bytes in guest scratch before the probe and 266,240 after it.
+
+| Phase | Reads, 64 MiB → 9 GiB | Bytes read, 64 MiB → 9 GiB | Writes on each | Bytes written on each | Flushes on each |
+|---|---:|---:|---:|---:|---:|
+| Checked mount | 9 → 11 | 33,792 → 41,984 | 3 | 3,072 | 3 |
+| First empty-file create | 2 → 2 | 8,192 → 8,192 | 15 | 58,368 | 4 |
+| Checked release | 2 → 2 | 8,192 → 8,192 | 2 | 2,048 | 3 |
+
+The extra mount requests are consistent with reading the added
+descriptor-table block before and after the cache is installed.
+The experiment holds local free inodes and the small root directory
+constant. A populated card, high occupancy, and physical-device
+latency remain unmeasured.
+
+Verified archive **15101288957** has 63 valid ZIP members, matches
+the exact source, and has SHA-256
+`d03711f5a28358628a4f520bd68a241c98661d06c0a366be70139bb7e0d733bd`.
+It retains the clean reports, both matching payloads, and the
+confirmed stopped-VM status.
+[Focused job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314828/job/139800647253) · [Verified archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314828/artifacts/15101288957)
+
+On the same source, full CI **45788314811** passed nine jobs and
+failed the guest suite and aggregate. Archive **15105192026** stops
+during `htree_split_write_cut` with Vagrant reporting an unavailable
+SSH guest. It retains 2,159 passes, the existing ignored test, and
+zero completed test failures. The runner returned 255. The exact
+commit's failed-job retry started as guest job **139839514313**.
+The cause of the guest's SSH failure is still unknown.
+[First attempt](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314811/attempts/1) · [Retry](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314811/attempts/2)
 
 ### Sparse checked I/O comparison prepared — 2026-11-26
 
