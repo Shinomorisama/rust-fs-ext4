@@ -2,6 +2,8 @@
 //!
 //! Run with `cargo run --release --locked --example checked_recovery_io -- INPUT NEW_COPY`.
 //! The input image is read-only. NEW_COPY must not already exist.
+//! Use `--working-copy COPY` to measure a disposable copy prepared separately,
+//! for example with `cp --sparse=always`. This mode modifies COPY in place.
 //! The counts exclude copying the input and reopening the result for readback.
 
 use fs_ext4::block_io::{BlockDevice, FileDevice};
@@ -72,11 +74,11 @@ impl BlockDevice for Counted {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let [input, copy] = args.as_slice() else {
-        return Err("usage: checked_recovery_io INPUT NEW_COPY".into());
+    let (input, copy) = match args.as_slice() {
+        [flag, path] if flag == "--working-copy" => (Path::new(path), None),
+        [input, copy] => (Path::new(input), Some(Path::new(copy))),
+        _ => return Err("usage: checked_recovery_io INPUT NEW_COPY | --working-copy COPY".into()),
     };
-    let input = Path::new(input);
-    let copy = Path::new(copy);
     if !input.is_file() {
         return Err("INPUT must be a regular image".into());
     }
@@ -103,14 +105,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         allocated_inodes
     );
     drop(original);
-    {
+    let working = if let Some(copy) = copy {
         let mut source = File::open(input)?;
         let mut working = File::create_new(copy)?;
         std::io::copy(&mut source, &mut working)?;
         working.sync_all()?;
-    }
+        copy
+    } else {
+        input
+    };
     let counted = Arc::new(Counted {
-        file: FileDevice::open_path_rw(copy)?,
+        file: FileDevice::open_path_rw(working)?,
         counts: Mutex::default(),
     });
     let fs = Filesystem::mount_recovering(counted.clone())?;
@@ -121,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     counted.report_and_reset("finish");
     drop(counted);
 
-    let reopened = Filesystem::mount(Arc::new(FileDevice::open_path(copy)?))?;
+    let reopened = Filesystem::mount(Arc::new(FileDevice::open_path(working)?))?;
     let found = reopened.lookup_path_bytes(CREATED_PATH.as_bytes())?;
     let (created, _) = reopened.read_inode_verified(found)?;
     let journal = fs_ext4::jbd2::read_superblock(&reopened)?;

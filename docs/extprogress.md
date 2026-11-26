@@ -12,15 +12,37 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-23).** Use the pinned Linux VM to
-prepare an ordinary sparse 9 GiB 4 KiB checksum-v3 fixture with
-72 block groups, crossing from one descriptor-table block to two
-at 64 bytes per descriptor. Repeat the checked mount, first create and finish I/O
-measurement with the same small root directory and local free inodes.
-Keep large sparse images in VM scratch and retain the geometry,
-oracle reports and counts. Check interruption-fixture storage CI
-**45143481078** when its native and guest reports arrive.
+**Next `do next` (set 2026-11-26).** Verify the focused Linux
+checked I/O workflow's artifact for the 64 MiB and sparse 9 GiB
+comparison. Confirm the exact source, both geometries, identical
+initial root listings, the four non-repairing checker verdicts,
+both retained payloads, and the request counts for mount, create
+and release. Casefold writes remain blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Sparse checked I/O comparison prepared — 2026-11-26
+
+The focused workflow verifies the pinned checksum-v3 reference,
+makes two copies inside the Linux guest, and grows one to 9 GiB
+using offline resize. The goal is to compare one group with 72
+groups on the same small namespace, crossing from one group
+descriptor block to two. Both copies are checked before and
+after the benchmark. The workflow compares the initial root
+listings, reopens the created inode and compares the original
+payload with the Linux reference. It retains text reports,
+geometry, counts and payload evidence. Images remain in guest scratch.
+
+The example can measure an explicitly supplied working copy in place,
+so the guest can prepare each copy with sparse allocation. Both example
+modes reproduced the one-group baseline locally with the static binary.
+The workflow syntax, reference extraction and verifier compile also passed.
+[Workflow](../.github/workflows/casefold-checked-io.yml) · [VM verifier](../scripts/checked-recovery-io-vm.rs)
+
+Exact fixture-cleanup source `bd0614c` passed native and guest jobs
+**137588688671** and **137588688689** and the full aggregate
+**137630286509**. The baseline source `e160917` also passed its
+full CI.
+[Fixture cleanup CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45143481078) · [Baseline CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45152126489)
 
 ### Checked lifecycle I/O baseline — 2026-11-23
 

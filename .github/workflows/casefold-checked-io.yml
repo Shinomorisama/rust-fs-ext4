@@ -1,0 +1,94 @@
+name: Checked lifecycle I/O in Linux
+
+on:
+  push:
+    branches: [casefold-rw]
+    paths:
+      - .github/workflows/casefold-checked-io.yml
+      - examples/checked_recovery_io.rs
+      - scripts/checked-recovery-io-vm.rs
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  CHORE_VERSION: "0.11.0"
+
+jobs:
+  checked-io:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: scripts/ci-install-chore.sh
+      - run: chore siblings
+      - name: Verify pinned dependencies
+        run: |
+          test "$(git -C ../rust-fs-core rev-parse HEAD)" = 9e900154a7dff2a6c8f136db31def33bed9f09cc
+          test "$(git -C ../fs-linux-test-harness rev-parse HEAD)" = 7e0a84291c76fe4c762143f6f6d5787cc11749e7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+
+      - name: Verify and extract the Linux reference
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/checked-io-reports
+          git rev-parse HEAD > tmp/checked-io-reports/source-commit.txt
+          gh api repos/Shinomorisama/rust-fs-ext4/actions/artifacts/14789346547/zip > tmp/checked-io-input.zip
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          from zipfile import ZipFile
+          import re
+
+          archive = Path("tmp/checked-io-input.zip")
+          assert sha256(archive.read_bytes()).hexdigest() == "b484c04c149d6604a8ee674ffb678ca85f4b5fb0df7ad5c0f7ea9d38e897b4e1"
+          with ZipFile(archive) as saved:
+              base, = (name for name in saved.namelist() if re.search(r"_input_\d+\.img$", name))
+              image = saved.read(base + ".linux.img")
+              payload = saved.read(base + ".payload.bin")
+          assert sha256(image).hexdigest() == "bb5720afbb73bf5839e1e89c9bc05d2173448582adce329bb1fc9380f4c11614"
+          assert sha256(payload).hexdigest() == "bb2466d99866f7a74a99906cd68adcf888ee431820f39b7612ef3b9a9b7e4b8e"
+          Path("tmp/checked-io-input.img").write_bytes(image)
+          Path("tmp/checked-io-reports/expected-oracle.bin").write_bytes(payload)
+          PY
+
+      - name: Build the probe and compare both images in Linux
+        id: measure
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --target x86_64-unknown-linux-gnu --example checked_recovery_io
+          install target/x86_64-unknown-linux-gnu/release/examples/checked_recovery_io tmp/checked-io-probe
+          readelf -W -l tmp/checked-io-probe | awk '/INTERP/ {exit 1}'
+          rustc --edition=2021 -D warnings scripts/checked-recovery-io-vm.rs -o tmp/checked-io-vm
+          ../fs-linux-test-harness/scripts/vm.sh session "$PWD/tmp/checked-io-vm" \
+            2>&1 | tee tmp/checked-io-reports/session.log
+
+      - name: Verify VM shutdown
+        if: always() && steps.measure.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          status=0
+          chore vm:status > tmp/checked-io-reports/vm-status.log 2>&1 || status=$?
+          cat tmp/checked-io-reports/vm-status.log
+          test "$status" -eq 1
+          grep -Fxq 'vm: rust-fs-ext4 is not running (stopped)' tmp/checked-io-reports/vm-status.log
+
+      - name: Retain source identity, I/O counts and Linux reports
+        if: always() && steps.prepare.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: checked-io-linux-reports
+          path: tmp/checked-io-reports/
+          if-no-files-found: error
+          retention-days: 30
