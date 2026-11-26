@@ -12,9 +12,9 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-26).** Verify the focused Linux
-checked I/O workflow's artifact for the 64 MiB and sparse 9 GiB
-comparison. Confirm the exact source, both geometries, identical
+**Next `do next` (set 2026-11-26).** Verify focused Linux run
+**45788314828**, job **139800647253**, on source `f793f11` for the
+64 MiB and sparse 9 GiB comparison. Confirm both geometries, identical
 initial root listings, the four non-repairing checker verdicts,
 both retained payloads, and the request counts for mount, create
 and release. Casefold writes remain blocked.
@@ -36,12 +36,16 @@ The example can measure an explicitly supplied working copy in place,
 so the guest can prepare each copy with sparse allocation. Both example
 modes reproduced the one-group baseline locally with the static binary.
 The workflow syntax, reference extraction and verifier compile also passed.
-[Workflow](../.github/workflows/casefold-checked-io.yml) · [VM verifier](../scripts/checked-recovery-io-vm.rs)
+Focused run **45788314828** and full CI **45788314811** started on
+`f793f11`.
+[Workflow](../.github/workflows/casefold-checked-io.yml) · [VM verifier](../scripts/checked-recovery-io-vm.rs) · [Focused run](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314828)
 
 Exact fixture-cleanup source `bd0614c` passed native and guest jobs
 **137588688671** and **137588688689** and the full aggregate
-**137630286509**. The baseline source `e160917` also passed its
-full CI.
+**137630286509**. Verified archives **14807264337** and
+**14806877032** each retain all 2,573 successful whole-suite
+tests and the existing ignored test from `a95679f`. Both VMs
+stopped. The baseline source `e160917` also passed its full CI.
 [Fixture cleanup CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45143481078) · [Baseline CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45152126489)
 
 ### Checked lifecycle I/O baseline — 2026-11-23
