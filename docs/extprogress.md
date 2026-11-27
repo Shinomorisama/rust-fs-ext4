@@ -12,10 +12,11 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-27).** Verify the focused Linux
-ownership job and its retained six-profile reports on the live-view
-source. Check the full Linux suite and the 4 KiB journaled copy's
-post-release checker, ownership equality, and unmanaged refusal.
+**Next `do next` (set 2026-11-27).** Verify the Linux ownership
+job and its retained six-profile reports in Stage 0 run
+**46057331197** on `6620821`. Check the full suite **46057251134**
+and the 4 KiB journaled copy's post-release checker, ownership
+equality and unmanaged refusal.
 Then identify how a single regular-file create can use the private
 proof under an already-held operation context. Keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
@@ -44,11 +45,17 @@ the clean image bytes. All 18 existing owner controls passed.
 
 The lifecycle control passed locally with both replay-pending and
 unmanaged refusals. Library Clippy passed. The Linux ownership
-test now also runs the live scan on a disposable copy of its 4 KiB journaled fixture,
+test also runs the live scan on a disposable copy of its 4 KiB
+journaled fixture,
 compares all owner records and claims, and checks the released
 image without repair. It then tests an unmanaged marked view.
 The original six archived fixtures and test selection are retained.
 [Owner builder](../src/ownership.rs) · [Checked mount guards](../src/fs.rs) · [Journal checkpoint](../src/journal_writer.rs)
+
+Exact source `6620821` has Stage 0 **46057331197**, full CI
+**46057251134**, checked recovery **46057251116** and compatibility
+**46057251077** in progress or queued.
+[Stage 0](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057331197) · [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057251134)
 
 ### Live checked ownership refusal reproduced — 2026-11-27
 
