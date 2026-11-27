@@ -72,6 +72,23 @@ pub(crate) struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     pub fn new(fs: &'a Filesystem, buf: &'a BlockBuffer, limits: Limits) -> Result<Self> {
+        Self::new_with_profile(fs, buf, limits, 0)
+    }
+
+    pub(crate) fn from_owner_view(
+        view: &'a crate::ownership::View<'_>,
+        limits: Limits,
+    ) -> Result<Self> {
+        let (fs, buf, allowed) = view.metadata();
+        Self::new_with_profile(fs, buf, limits, allowed)
+    }
+
+    fn new_with_profile(
+        fs: &'a Filesystem,
+        buf: &'a BlockBuffer,
+        limits: Limits,
+        allowed: u32,
+    ) -> Result<Self> {
         let sb = &fs.sb;
         let compat = Compat::HAS_JOURNAL.bits()
             | Compat::EXT_ATTR.bits()
@@ -82,7 +99,8 @@ impl<'a> Reader<'a> {
             | Incompat::BIT64.bits()
             | Incompat::FLEX_BG.bits()
             | Incompat::CSUM_SEED.bits()
-            | Incompat::CASEFOLD.bits();
+            | Incompat::CASEFOLD.bits()
+            | allowed;
         let ro = RoCompat::SPARSE_SUPER.bits()
             | RoCompat::LARGE_FILE.bits()
             | RoCompat::HUGE_FILE.bits()

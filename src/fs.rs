@@ -568,6 +568,11 @@ pub(crate) enum DirBlockRole {
     Entries,
 }
 
+pub(crate) struct CheckedOwnership<'a> {
+    _journal: std::sync::MutexGuard<'a, crate::journal_writer::JournalWriter>,
+    _operation: crate::operation::Operation<'a>,
+}
+
 pub struct Filesystem {
     /// Shared by guarded metadata, unlink and rmdir dispatch. Other writers
     /// still need caller exclusion; this publishes no ownership readiness.
@@ -836,6 +841,45 @@ impl Filesystem {
     /// a writable mount checkpoints every commit, so it pins nothing.
     pub fn cache_pinned_blocks(&self) -> usize {
         self.cache.pinned_blocks()
+    }
+
+    /// The caller must exclude external handles and unguarded mutations.
+    /// The returned guard excludes guarded operations and journal commits.
+    pub(crate) fn checked_ownership(&self) -> Result<CheckedOwnership<'_>> {
+        use std::sync::atomic::Ordering::SeqCst;
+        let operation = self.operation.try_enter()?;
+        if !self.managed_recovery
+            || !self.marked_not_clean.load(SeqCst)
+            || self.replay_pending.load(SeqCst)
+            || self.operation_failed.load(SeqCst)
+            || self.direct_commit_failed.load(SeqCst)
+            || !self.dev.is_writable()
+            || self.sb.feature_incompat & features::Incompat::RECOVER.bits() == 0
+            || self.sb.is_clean()
+            || self.sb.state & crate::superblock::EXT4_ERROR_FS != 0
+            || self.sb.last_orphan != 0
+            || self.cache_pinned_blocks() != 0
+        {
+            return Err(Error::Unsupported(
+                "ownership requires a checked post-replay view",
+            ));
+        }
+        let journal = self
+            .journal
+            .as_ref()
+            .ok_or(Error::Corrupt("checked journal writer is absent"))?
+            .try_lock()
+            .map_err(|error| match error {
+                std::sync::TryLockError::WouldBlock => {
+                    Error::Unsupported("journal writer is active")
+                }
+                std::sync::TryLockError::Poisoned(_) => Error::Corrupt("journal writer poisoned"),
+            })?;
+        journal.verify_checked_checkpoint(self.dev.as_ref())?;
+        Ok(CheckedOwnership {
+            _journal: journal,
+            _operation: operation,
+        })
     }
 
     /// Flush and discard checkpointed read caches before physical readback.
@@ -14794,13 +14838,32 @@ mod tests {
                 needs_recovery(&dev),
                 "explicit replay cleared needs_recovery"
             );
+            fs.checked_ownership().expect("post-replay ownership view");
+            fs.replay_pending.store(true, Ordering::SeqCst);
+            assert!(matches!(
+                fs.checked_ownership(),
+                Err(Error::Unsupported(
+                    "ownership requires a checked post-replay view"
+                ))
+            ));
+            fs.replay_pending.store(false, Ordering::SeqCst);
             fs.apply_create("/a", 0o644).expect("create");
             assert!(
                 needs_recovery(&dev),
                 "a commit on a checked mount cleared needs_recovery before finish"
             );
+            fs.checked_ownership().expect("checkpointed ownership view");
             fs.finish().expect("finish");
             assert!(!needs_recovery(&dev), "finish left needs_recovery set");
+
+            crate::journal_apply::write_needs_recovery(dev.as_ref(), true).unwrap();
+            let unmanaged = Filesystem::mount_lazy(dev).unwrap();
+            assert!(matches!(
+                unmanaged.checked_ownership(),
+                Err(Error::Unsupported(
+                    "ownership requires a checked post-replay view"
+                ))
+            ));
         }
 
         /// A checked mount marks the volume not clean on the way in; its

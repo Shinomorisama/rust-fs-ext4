@@ -408,15 +408,22 @@ pub fn read_superblock(fs: &Filesystem) -> Result<Option<JournalSuperblock>> {
 pub(crate) fn read_checked_recovery_superblock(
     fs: &Filesystem,
 ) -> Result<Option<JournalSuperblock>> {
-    let Some(mut raw) = read_superblock_bytes(fs)? else {
-        return Ok(None);
-    };
+    read_superblock_bytes(fs)?
+        .map(|raw| {
+            validate_checked_recovery_superblock(raw, fs.sb.block_size(), fs.sb.blocks_count)
+        })
+        .transpose()
+}
+
+pub(crate) fn validate_checked_recovery_superblock(
+    mut raw: Vec<u8>,
+    block_size: u32,
+    blocks_count: u64,
+) -> Result<JournalSuperblock> {
     let journal = JournalSuperblock::parse(&raw)?;
-    let block_size = fs.sb.block_size();
-    let blocks_count = fs.sb.blocks_count;
     if !journal.uses_csum_v3() {
         journal.validate_plain_recovery(block_size, blocks_count)?;
-        return Ok(Some(journal));
+        return Ok(journal);
     }
     let supported = (JbdIncompat::REVOKE | JbdIncompat::BIT64 | JbdIncompat::CSUM_V3).bits();
     if block_size != 4096
@@ -439,7 +446,7 @@ pub(crate) fn read_checked_recovery_superblock(
             what: "journal superblock",
         });
     }
-    Ok(Some(journal))
+    Ok(journal)
 }
 
 fn read_superblock_bytes(fs: &Filesystem) -> Result<Option<Vec<u8>>> {

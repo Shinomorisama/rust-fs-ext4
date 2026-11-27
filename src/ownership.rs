@@ -5,8 +5,9 @@ use crate::block_allocation;
 use crate::block_io::BlockDevice;
 use crate::error::{Error, Result};
 use crate::extent::{ownership as tree, ExtentVerifyCtx};
+use crate::features::Incompat;
 use crate::fixed_metadata;
-use crate::fs::{BlockBuffer, Filesystem};
+use crate::fs::{BlockBuffer, CheckedOwnership, Filesystem};
 use crate::inode_inventory;
 use crate::inode_roles::{self, Role, Storage};
 
@@ -109,10 +110,22 @@ fn reserved<T>(count: usize) -> Result<Vec<T>> {
 
 /// Aligned full-node staged precedence, with exact size and filesystem bounds.
 /// The tree walker debits its fetch before reaching this adapter, including errors.
-struct View<'a> {
+pub(crate) struct View<'a> {
     fs: &'a Filesystem,
     buf: &'a BlockBuffer,
     end: u64,
+    checked: Option<&'a CheckedOwnership<'a>>,
+}
+
+impl View<'_> {
+    pub(crate) fn metadata(&self) -> (&Filesystem, &BlockBuffer, u32) {
+        let allowed = if self.checked.is_some() {
+            Incompat::RECOVER.bits()
+        } else {
+            0
+        };
+        (self.fs, self.buf, allowed)
+    }
 }
 impl BlockDevice for View<'_> {
     fn read_at(&self, at: u64, out: &mut [u8]) -> Result<()> {
@@ -161,20 +174,30 @@ pub(crate) fn build(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Resul
         .reads
         .checked_sub(fixed_reads + 2 * bitmap_reads)
         .ok_or(LIMIT)?;
-    let mut records_left = limits.tree_records;
-    // Establish the strict common inode/feature profile before layout traversal.
-    let mut roles = inode_roles::Reader::new(
+    let checked = if fs.sb.feature_incompat & Incompat::RECOVER.bits() != 0 {
+        reads_left = reads_left.checked_sub(1).ok_or(LIMIT)?;
+        Some(fs.checked_ownership()?)
+    } else {
+        None
+    };
+    let view = View {
         fs,
         buf,
+        end: fs.sb.blocks_count.checked_mul(bs as u64).ok_or(LIMIT)?,
+        checked: checked.as_ref(),
+    };
+    let mut records_left = limits.tree_records;
+    // Establish the strict common inode/feature profile before layout traversal.
+    let mut roles = inode_roles::Reader::from_owner_view(
+        &view,
         inode_roles::Limits {
             records: limits.inodes as u64,
             reads: limits.inodes as u64,
             scratch_bytes: bs + 256,
         },
     )?;
-    let fixed = fixed_metadata::collect(
-        fs,
-        buf,
+    let fixed = fixed_metadata::collect_owner_view(
+        &view,
         fixed_metadata::Limits {
             groups,
             reads: fixed_reads,
@@ -212,11 +235,6 @@ pub(crate) fn build(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Resul
             },
         });
     }
-    let view = View {
-        fs,
-        buf,
-        end: fs.sb.blocks_count.checked_mul(bs as u64).ok_or(LIMIT)?,
-    };
     let mut root_seen = false;
     let mut journal_seen = false;
     for ino in inventory.inodes {
@@ -304,9 +322,8 @@ pub(crate) fn build(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Resul
             end: claim.end,
         });
     }
-    block_allocation::verify(
-        fs,
-        buf,
+    block_allocation::verify_owner_view(
+        &view,
         &allocation,
         block_allocation::Limits {
             ranges: limits.claims,
@@ -618,22 +635,18 @@ mod needs_host {
                 }
                 assert_eq!(groups, [0, 1].into());
                 expected.sort_unstable_by_key(|c| (c.start, c.end));
-                let got = build(
-                    &fs,
-                    &BlockBuffer::new(bs),
-                    Limits {
-                        groups: 6,
-                        inode_bits: 2 * u64::from(bs) * 8,
-                        inodes: 64,
-                        claims: 512,
-                        tree_claims: 128,
-                        reads: 4096,
-                        tree_records: 4096,
-                        bitmap_bytes: 128 * u64::from(bs),
-                        memory_bytes: 256 * 1024,
-                    },
-                )
-                .unwrap();
+                let limits = Limits {
+                    groups: 6,
+                    inode_bits: 2 * u64::from(bs) * 8,
+                    inodes: 64,
+                    claims: 512,
+                    tree_claims: 128,
+                    reads: 4096,
+                    tree_records: 4096,
+                    bitmap_bytes: 128 * u64::from(bs),
+                    memory_bytes: 256 * 1024,
+                };
+                let got = build(&fs, &BlockBuffer::new(bs), limits).unwrap();
                 assert_eq!(got.inodes.iter().map(|r| r.ino).collect::<Vec<_>>(), ids);
                 assert_eq!(
                     got.claims, expected,
@@ -688,6 +701,34 @@ mod needs_host {
                     used,
                     fs.sb.blocks_count - u64::from(fs.sb.first_data_block) - free_count.unwrap()
                 );
+                if bs == 4096 && journal {
+                    let working =
+                        fs_ext4_test_support::temp_dir().join("ownership-checked-copy.img");
+                    std::fs::copy(&image, &working).unwrap();
+                    let live = Filesystem::mount_recovering(Arc::new(
+                        FileDevice::open_path_rw(&working).unwrap(),
+                    ))
+                    .unwrap();
+                    assert_ne!(live.sb.feature_incompat & Incompat::RECOVER.bits(), 0);
+                    let view = build(&live, &BlockBuffer::new(bs), limits).unwrap();
+                    assert_eq!(view.inodes, got.inodes);
+                    assert_eq!(view.claims, got.claims);
+                    assert_eq!(view.charged_reads, got.charged_reads + 1);
+                    live.finish().unwrap();
+                    assert_e2fsck_clean(working.to_str().unwrap(), "Linux checked ownership");
+                    let device = Arc::new(FileDevice::open_path_rw(&working).unwrap());
+                    crate::journal_apply::write_needs_recovery(device.as_ref(), true).unwrap();
+                    let unmanaged = Filesystem::mount_lazy(device).unwrap();
+                    assert_ne!(unmanaged.sb.feature_incompat & Incompat::RECOVER.bits(), 0);
+                    assert!(matches!(
+                        build(&unmanaged, &BlockBuffer::new(bs), limits),
+                        Err(Error::Unsupported(
+                            "ownership requires a checked post-replay view"
+                        ))
+                    ));
+                    drop(unmanaged);
+                    std::fs::remove_file(working).unwrap();
+                }
                 std::fs::write(base.with_extension("summary.txt"), format!("block_size={bs} descriptor={descriptor} journal={journal} inodes={} claims={} used={used} charged_reads={} tree_records={}\n", got.inodes.len(), got.claims.len(), got.charged_reads, got.tree_records)).unwrap();
             }
         }

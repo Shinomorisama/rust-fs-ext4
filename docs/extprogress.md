@@ -12,14 +12,43 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-27).** Make the saved ownership
-reproduction pass at the private read-only validation boundary.
-Require a coherent, quiescent checked-mount view after replay,
-and retain refusal for unmanaged or replay-pending RECOVER views.
-Match all 37 inode records and 36 claims across the clean, live
-and released views, with zero owner-scan writes and flushes.
-Keep casefold writes blocked.
+**Next `do next` (set 2026-11-27).** Verify the focused Linux
+ownership job and its retained six-profile reports on the live-view
+source. Check the full Linux suite and the 4 KiB journaled copy's
+post-release checker, ownership equality, and unmanaged refusal.
+Then identify how a single regular-file create can use the private
+proof under an already-held operation context. Keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Private live ownership validation — 2026-11-27
+
+The complete ownership builder can read a managed checked mount
+while RECOVER is set. It acquires the existing operation and
+journal writer locks and requires a healthy post-replay mount
+with no pending orphans or pinned replay data. While holding
+both locks, it verifies the current journal header, checkpoint
+sequence, identity and supported feature declaration. That
+check adds one charged read before traversing owner metadata.
+
+Only the complete ownership scan carries that permission into
+the inode roles, fixed metadata and allocation readers. The
+standalone readers still apply their original format masks.
+Callers must continue to provide exclusive device ownership
+and exclude unguarded mutations. The result is a read-only
+snapshot with no write permission or retained ownership state.
+
+The saved checksum-v3 reproduction passes with all 37 inode
+records and 36 claims equal across clean, live and released views.
+Each scan issued zero writes and flushes, and release restored
+the clean image bytes. All 18 existing owner controls passed.
+
+The lifecycle control passed locally with both replay-pending and
+unmanaged refusals. Library Clippy passed. The Linux ownership
+test now also runs the live scan on a disposable copy of its 4 KiB journaled fixture,
+compares all owner records and claims, and checks the released
+image without repair. It then tests an unmanaged marked view.
+The original six archived fixtures and test selection are retained.
+[Owner builder](../src/ownership.rs) · [Checked mount guards](../src/fs.rs) · [Journal checkpoint](../src/journal_writer.rs)
 
 ### Live checked ownership refusal reproduced — 2026-11-27
 

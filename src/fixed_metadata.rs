@@ -106,6 +106,23 @@ fn push(
 /// No bitmap contents, inode bodies or journal storage are read. Known uninit
 /// flags do not remove physical reservations. No snapshot/epoch is published.
 pub(crate) fn collect(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Result<Layout> {
+    collect_with_profile(fs, buf, limits, 0)
+}
+
+pub(crate) fn collect_owner_view(
+    view: &crate::ownership::View<'_>,
+    limits: Limits,
+) -> Result<Layout> {
+    let (fs, buf, allowed) = view.metadata();
+    collect_with_profile(fs, buf, limits, allowed)
+}
+
+fn collect_with_profile(
+    fs: &Filesystem,
+    buf: &BlockBuffer,
+    limits: Limits,
+    allowed: u32,
+) -> Result<Layout> {
     let sb = &fs.sb;
     let bs = sb.block_size() as usize;
     let compat = Compat::HAS_JOURNAL.bits()
@@ -118,7 +135,8 @@ pub(crate) fn collect(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Res
         | Incompat::BIT64.bits()
         | Incompat::FLEX_BG.bits()
         | Incompat::CSUM_SEED.bits()
-        | Incompat::CASEFOLD.bits();
+        | Incompat::CASEFOLD.bits()
+        | allowed;
     let ro = RoCompat::SPARSE_SUPER.bits()
         | RoCompat::LARGE_FILE.bits()
         | RoCompat::HUGE_FILE.bits()

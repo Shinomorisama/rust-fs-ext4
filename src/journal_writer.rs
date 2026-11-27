@@ -258,6 +258,38 @@ impl JournalWriter {
         self.healthy
     }
 
+    /// Check the current header under the writer lock before a read-only scan.
+    pub(crate) fn verify_checked_checkpoint(&self, dev: &dyn BlockDevice) -> Result<()> {
+        if !self.hold_needs_recovery || !self.is_healthy() || !self.jsb.is_clean() {
+            return Err(Error::Unsupported(
+                "ownership requires a checked journal checkpoint",
+            ));
+        }
+        let block = *self
+            .physical_map
+            .first()
+            .ok_or(Error::Corrupt("journal superblock is unmapped"))?;
+        let at = crate::journal_apply::byte_offset_in(
+            block,
+            self.blocks_count,
+            self.block_size,
+            dev.size_bytes(),
+        )?;
+        let mut raw = vec![0; self.block_size as usize];
+        dev.read_at(at, &mut raw)?;
+        let now =
+            jbd2::validate_checked_recovery_superblock(raw, self.block_size, self.blocks_count)?;
+        if !now.is_clean()
+            || now.sequence != self.jsb.sequence
+            || now.uuid != self.jsb.uuid
+            || now.max_len != self.jsb.max_len
+            || now.feature_incompat != self.jsb.feature_incompat
+        {
+            return Err(Error::Corrupt("journal is not at the checked checkpoint"));
+        }
+        Ok(())
+    }
+
     fn commit_inner(&mut self, dev: &dyn BlockDevice, tx: &Transaction) -> Result<()> {
         if !dev.is_writable() {
             return Err(Error::ReadOnly);
