@@ -12,14 +12,62 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-27).** Verify the Linux ownership
-job and its retained six-profile reports in Stage 0 run
-**46057331197** on `6620821`. Check the full suite **46057251134**
-and the 4 KiB journaled copy's post-release checker, ownership
-equality and unmanaged refusal.
-Then identify how a single regular-file create can use the private
-proof under an already-held operation context. Keep casefold writes blocked.
+**Next `do next` (set 2026-11-27).** Add a private read-only
+ownership entry that borrows and validates the current mount's
+already-held operation context. On the saved ordinary checked
+fixture, show that the existing entry refuses nested acquisition
+and the borrowed entry returns the same 37 inode records and 36
+claims with zero writes or flushes. Check a foreign context and the
+recovery refusals. Run this as a private control before connecting it
+to any creation path. Check full CI **46057251134** and Stage 0
+retry **46057331197**. Keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Live ownership Linux audit and guarded-create trace — 2026-11-27
+
+Stage 0 ownership passed on `6620821`, run **46057331197**,
+fixtures job **140702891243**. The retained log has 54 lines and
+6,741 bytes, one passing test, and a stopped VM. Its six original
+profiles pass the Linux reference checks. The 4 KiB journaled copy
+also matches the baseline's 37 inode records and 36 claims during
+checked mount, passes the non-repairing checker after release and
+refuses the unmanaged marked view. The test removes that working
+copy after checking it. Its result is in the log.
+
+Archive **15227753295** matches the exact source and run, has
+1,823 valid ZIP members and SHA-256
+`895ed3e3946d79a7ec1c1471788d10903dc22ce442eef85326482106d8179e9d`.
+The six 16 MiB source images agree with their Linux inode inventories
+and block/inode free lists. Primary, descriptor and bitmap checksums,
+padding and all six unchanged count summaries verify.
+[Ownership job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057331197/job/140702891243) · [Verified archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057331197/artifacts/15227753295)
+
+The separate rmdir job **140702891262** stopped in runner setup
+when Ubuntu's configured Microsoft package feed returned HTTP 403.
+The rmdir test never ran. The exact-source failed-job retry is
+**140734450756**. Full CI **46057251134** still has native job
+**140703678855** running. Verified guest archive **15230228083**
+retains all 2,573 passes and one unchanged ignored test, with
+4,198 lines and 258,832 bytes. Guest shutdown, focused checked
+recovery and compatibility passed.
+[Stage 0 retry](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057331197/attempts/2) · [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057251134) · [Guest archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057251134/artifacts/15230228083)
+
+Guarded create already holds `MountOperation` from path resolution
+through planning, commit and optional C readback. The current checked
+owner entry uses `operation.try_enter()` again and would refuse
+nested entry. Borrow and validate the held context, retain the journal
+lock during the scan, and drop that lock before commit takes it.
+Keep the operation context held through the entire create.
+
+The future create-specific validation point is after
+`prepare_create_buffer` and before the first device effect. It needs
+the parent identity and its existing directory block, the new empty
+inode, and the exact bitmap and counter changes in the completed plan.
+Compare the base and staged views while the operation is held.
+Equality of a standalone ownership report alone does not establish
+those create-specific effects. Keep this next control outside public
+create while the proof and scope are verified.
+[Guarded create and operation context](../src/fs/guarded_chmod.rs) · [Checked ownership entry](../src/fs.rs) · [Ownership builder](../src/ownership.rs)
 
 ### Private live ownership validation — 2026-11-27
 
