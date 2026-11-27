@@ -12,16 +12,60 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-26).** Trace first regular-file
-creation in the existing healthy linear directory on the strict
-4 KiB casefold reference. Follow checked mount admission,
-equivalent-name exclusion, original spelling, allocation ownership,
-and the transaction through release. Match each step to the
-existing Linux and guarded-create evidence, then choose the first
-missing proof as the next implementation checkpoint. Keep casefold
-writes blocked. Check the second attempt of full CI **45788314811**,
-guest job **139839514313**, for completion.
+**Next `do next` (set 2026-11-26).** Reproduce the live ownership
+refusal with a focused test on an ordinary 4 KiB checksum-v3 fixture.
+Start from the 64-byte-descriptor journaled ownership recipe and
+reuse the checked-recovery checksum helper. Run the private builder
+on the clean view, during a real checked mount with RECOVER set, and
+after checked finish. Record the first refusal and the owners and
+ranges a subsequent fix must preserve. Save the failing reproduction
+outside the active suite. Keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### First strict casefold create trace — 2026-11-26
+
+Reviewed source `2032b04` against the saved strict UTF-8 12.1
+image from Linux archive **14466114990**. The image has 4 KiB
+blocks, 256-byte inodes, 64-byte descriptors, metadata checksums
+and an internal checksum-v3 journal. `/fold_small` is inode 13,
+with one extent-backed directory block and the saved names
+`Café` and `ReadMe`. The retained Linux cold-create reports
+show a successful first ASCII spelling followed by EEXIST for its
+equivalent in a small casefold directory. Strict malformed-name
+creates in that report return EINVAL.
+[Linux fixture archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/44385603215/artifacts/14466114990) · [Linux name semantics](CASEFOLD-BEHAVIOR.md)
+
+| Boundary | Current path and evidence |
+|---|---|
+| Checked admission | `mount_recovering` calls `write_refusal` before any marker write or replay. `WRITE_BREAKING_INCOMPAT` includes CASEFOLD, and the Windows checked refusal on the exact fixture left the bytes unchanged. |
+| Name and parent | Rust and C regular-file create share guarded dispatch. The operation context spans path resolution through commit. The planner checks the live parent, calls the shared Unicode lookup through `entry_exists`, and treats only `NotFound` as absence. Malformed or ambiguous lookup errors propagate. |
+| Inode and stored name | The planner allocates one inode, stages the inode bitmap and group and superblock counter debits, and supplies the caller's original name bytes to the linear entry writer. The ordinary create matrix verified that accounting and spelling flow on healthy, non-growing parents. The casefold fixture requires its own staged and emitted-byte proof. |
+| Block ownership | The private owner builder can validate a coherent disk and staged view. The regular-file create path has no owner check between planning and journal effects. A bitmap debit and directory checksum alone leave the identity of the blocks being modified unproven. |
+| Commit and release | `commit_create_in` holds the operation context through the journal commit and allocation publication. Checked finish flushes, checks the journal and clears RECOVER at the release boundary. The existing checked recovery and WinFsp round-trip evidence cover ordinary images. |
+
+The first missing ownership proof is concrete in current source.
+`ownership::build` calls the inode-role and fixed-metadata readers.
+Both permit CASEFOLD in their narrow profile masks, and both
+exclude RECOVER. A verified checked mount holds RECOVER set
+while it is writable, even after replay has completed. The
+standalone owner reader therefore cannot currently certify that
+live metadata view. The focused test should establish the exact
+failure on a supported ordinary checked fixture before changing
+the private owner contract. A future proof needs to distinguish
+a checked, quiescent, exclusively owned view from a volume still
+awaiting replay. Use a fixture that already passes the clean ownership
+profile. The sparse I/O input has RESIZE_INODE, which the inode-role
+profile excludes and would mask the RECOVER-specific failure.
+Casefold admission and owner integration still need qualification.
+[Checked mount and create planner](../src/fs.rs) · [Guarded create](../src/fs/guarded_chmod.rs) · [Owner builder](../src/ownership.rs) · [Inode roles](../src/inode_roles.rs) · [Fixed metadata](../src/fixed_metadata.rs) · [Ordinary create evidence](CASEFOLD-INDEX-REVIEW.md#independent-create-emission-and-saved-byte-audit--2026-10-24)
+
+Full CI **45788314811** attempt 2 passed all 11 jobs on
+`f793f11`. Guest job **139839514313** passed along with aggregate
+**139875648714**. The exact-source guest archive **15113185049**
+retains 2,573 passes and the existing ignored test with identical
+test names. Its 4,199 lines and 258,945 bytes fit the existing
+limits, and VM shutdown passed.
+[Full CI retry](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314811/attempts/2) · [Guest archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/45788314811/artifacts/15113185049)
 
 ### Sparse Linux I/O comparison verified — 2026-11-26
 
