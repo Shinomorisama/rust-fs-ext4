@@ -1,0 +1,117 @@
+diff --git a/src/fs.rs b/src/fs.rs
+index 978007a..54b1ccf 100644
+--- a/src/fs.rs
++++ b/src/fs.rs
+@@ -14872,6 +14872,112 @@ mod tests {
+             }
+         }
+
++        #[test]
++        fn complete_ownership_on_a_live_checked_mount_matches_clean_views() {
++            use crate::jbd2::{self, JbdIncompat};
++
++            // Use the verified Linux 4 KiB, 64-byte-descriptor ownership fixture.
++            let fixture = std::env::var_os("FS_EXT4_OWNERSHIP_LIVE_FIXTURE")
++                .expect("set FS_EXT4_OWNERSHIP_LIVE_FIXTURE to the saved owner image");
++            let bytes = std::fs::read(fixture).unwrap();
++            assert_eq!(bytes.len(), 16 * 1024 * 1024);
++            let inner = MemDev::new(bytes.len() as u64);
++            inner.write_at(0, &bytes).unwrap();
++
++            let clean = Filesystem::mount_lazy(inner.clone()).unwrap();
++            assert_eq!((clean.sb.block_size(), clean.sb.desc_size), (4096, 64));
++            assert_eq!(
++                clean.sb.feature_incompat & features::Incompat::CASEFOLD.bits(),
++                0
++            );
++            assert!(clean.sb.is_clean() && !needs_recovery(&inner));
++            let jino =
++                Inode::parse(&clean.read_inode_raw(clean.sb.journal_inode).unwrap()).unwrap();
++            let at = jbd2::journal_block_to_physical(&clean, &jino, 0)
++                .unwrap()
++                .unwrap()
++                * u64::from(BS);
++            drop(clean);
++
++            // Use the checked recovery test's checksum-v3 declaration and CRC.
++            let mut raw = [0; 1024];
++            inner.read_at(at, &mut raw).unwrap();
++            assert!(jbd2::JournalSuperblock::parse(&raw).unwrap().is_clean());
++            let bits = u32::from_be_bytes(raw[0x28..0x2c].try_into().unwrap());
++            let bits = bits | (JbdIncompat::BIT64 | JbdIncompat::CSUM_V3).bits();
++            raw[0x28..0x2c].copy_from_slice(&bits.to_be_bytes());
++            raw[0x50] = jbd2::JBD2_CRC32C_CHKSUM;
++            raw[0xfc..0x100].fill(0);
++            let crc = crate::checksum::linux_crc32c(!0, &raw);
++            raw[0xfc..0x100].copy_from_slice(&crc.to_be_bytes());
++            inner.write_at(at, &raw).unwrap();
++            let clean_bytes = inner.bytes.lock().unwrap().clone();
++
++            let counted = Arc::new(Failing::new(inner.clone(), usize::MAX));
++            let collect = |fs: &Filesystem| {
++                let events = counted.events.load(Ordering::SeqCst);
++                let result = owner_unchanged(&inner, fs, &BlockBuffer::new(BS), owner_limits(fs));
++                assert_eq!(
++                    counted.events.load(Ordering::SeqCst),
++                    events,
++                    "owner changed device"
++                );
++                result
++            };
++            let fs = Filesystem::mount_lazy(counted.clone()).unwrap();
++            let journal = jbd2::read_checked_recovery_superblock(&fs)
++                .unwrap()
++                .unwrap();
++            assert!(journal.is_clean() && journal.uses_csum_v3() && journal.uses_64bit());
++            let before = collect(&fs).expect("clean owner view");
++            assert_eq!((before.inodes.len(), before.claims.len()), (37, 36));
++            eprintln!(
++                "clean: 37 inodes, 36 claims, {} charged reads, {} tree records",
++                before.charged_reads, before.tree_records
++            );
++            for record in &before.inodes {
++                eprintln!("inode {record:?}");
++            }
++            for claim in &before.claims {
++                eprintln!("claim {claim:?}");
++            }
++            drop(fs);
++
++            let fs = Filesystem::mount_recovering(counted.clone()).expect("checked mount");
++            assert!(fs.managed_recovery && needs_recovery(&inner) && !on_disk(&inner).is_clean());
++            let journal = jbd2::read_checked_recovery_superblock(&fs)
++                .unwrap()
++                .unwrap();
++            assert!(journal.is_clean() && journal.uses_csum_v3() && journal.uses_64bit());
++            let during = collect(&fs);
++            eprintln!(
++                "live: RECOVER set, journal empty, ownership {:?}",
++                during.as_ref().err()
++            );
++            let fixed =
++                crate::fixed_metadata::collect(&fs, &BlockBuffer::new(BS), fixed_limits(&fs));
++            eprintln!("live fixed metadata: {:?}", fixed.as_ref().err());
++            fs.finish().expect("checked finish");
++            assert!(!needs_recovery(&inner) && on_disk(&inner).is_clean());
++            assert!(
++                *inner.bytes.lock().unwrap() == clean_bytes,
++                "checked lifecycle changed clean bytes"
++            );
++
++            let fs = Filesystem::mount_lazy(counted.clone()).unwrap();
++            let after = collect(&fs).expect("released owner view");
++            assert_eq!(before.inodes, after.inodes);
++            assert_eq!(before.claims, after.claims);
++            eprintln!(
++                "released: 37 inode records and 36 typed claims exactly match the clean view"
++            );
++
++            let during =
++                during.expect("healthy checked mount should expose a complete ownership view");
++            assert_eq!(before.inodes, during.inodes);
++            assert_eq!(before.claims, during.claims);
++        }
++
+         #[test]
+         fn capi_checked_callbacks_require_flush_and_report_release_errors() {
+             use crate::capi::*;

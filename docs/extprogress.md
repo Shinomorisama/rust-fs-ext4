@@ -12,15 +12,55 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-26).** Reproduce the live ownership
-refusal with a focused test on an ordinary 4 KiB checksum-v3 fixture.
-Start from the 64-byte-descriptor journaled ownership recipe and
-reuse the checked-recovery checksum helper. Run the private builder
-on the clean view, during a real checked mount with RECOVER set, and
-after checked finish. Record the first refusal and the owners and
-ranges a subsequent fix must preserve. Save the failing reproduction
-outside the active suite. Keep casefold writes blocked.
+**Next `do next` (set 2026-11-27).** Make the saved ownership
+reproduction pass at the private read-only validation boundary.
+Require a coherent, quiescent checked-mount view after replay,
+and retain refusal for unmanaged or replay-pending RECOVER views.
+Match all 37 inode records and 36 claims across the clean, live
+and released views, with zero owner-scan writes and flushes.
+Keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Live checked ownership refusal reproduced — 2026-11-27
+
+Source `523fb8d` reproduced the failure twice on the 16 MiB
+ordinary 4 KiB ownership fixture from archive **12248714200**.
+The saved archive matched its size, SHA-256, source and run, and
+passed ZIP CRC checks. The image SHA-256 is
+`746051b37a80c734e1cdfce31f6bdce2e77c2c2fd2fa87ddc7f5a587187dadb9`.
+The test declared a 64-bit checksum-v3 journal and regenerated
+its CRC in memory. The retained input file kept its hash.
+
+| View | Observed result |
+|---|---|
+| Clean before checked mount | 37 inode records and 36 disjoint claims covering 3,623 blocks. The scan charged 48 reads and 26 tree records. |
+| Live after checked mount | The journal is empty and RECOVER is set. Ownership first returns `Unsupported("inode role profile")`. A separate fixed-metadata call returns `Unsupported("fixed metadata layout profile")`. |
+| After checked finish | RECOVER clears. The 37 inode records, 36 claims and image bytes match the clean checksum-v3 view exactly. |
+
+The clean claims include 10 fixed metadata, 25 inode data and
+one mapping range. The journal is inode 8 and occupies blocks
+`[2054, 3078)`. Each ownership scan made zero writes or flushes.
+The 18 existing owner controls and the checked marker lifecycle
+control passed. The test ran on a disposable in-memory copy in a
+detached worktree and exited 101 at the expected live-view assertion.
+The worktree was removed after saving the reproduction patch.
+[Linux source job](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/39388402696/job/118513743864) · [Reproduction patch](CHECKED-OWNERSHIP-LIVE-RED.patch)
+
+To repeat in a clean scratch checkout, supply the saved
+`ownership/ownership-4096-64-true.img` from the archive. The local
+evidence directory `checked-recovery-admission/live-owner-red`
+holds that fixture and the two matching claim logs. The diagnostic
+patch applies to `523fb8d` and has SHA-256
+`86b50a2f13ff858b72cf224fc9b561aa39ad1b2556051f81ee44a06fe3b4962f`.
+
+```sh
+git apply --check docs/CHECKED-OWNERSHIP-LIVE-RED.patch
+git apply docs/CHECKED-OWNERSHIP-LIVE-RED.patch
+FS_EXT4_OWNERSHIP_LIVE_FIXTURE=/path/to/ownership-4096-64-true.img \
+  cargo test --release --locked --lib \
+  fs::tests::checked_recovery::complete_ownership_on_a_live_checked_mount_matches_clean_views \
+  -- --exact --nocapture
+```
 
 ### First strict casefold create trace — 2026-11-26
 
