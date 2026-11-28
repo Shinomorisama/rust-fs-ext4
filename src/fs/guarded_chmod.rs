@@ -559,7 +559,7 @@ impl Filesystem {
         if self.operation_failed.load(Ordering::SeqCst) {
             return Err(Error::ReadOnly);
         }
-        match self.operation.try_enter() {
+        match self.try_enter_operation() {
             Ok(operation) => Ok(MountOperation {
                 fs: self,
                 operation,

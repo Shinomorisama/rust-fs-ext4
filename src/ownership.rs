@@ -153,6 +153,25 @@ impl BlockDevice for View<'_> {
 /// Returns a local complete result or nothing; no cache, epoch, dependencies,
 /// transaction overlay or admission is published. No caller/device bytes change.
 pub(crate) fn build(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Result<Ownership> {
+    build_with_operation(fs, buf, limits, None)
+}
+
+/// Validate a checked view while the caller retains its operation context.
+pub(crate) fn build_in_operation(
+    fs: &Filesystem,
+    buf: &BlockBuffer,
+    limits: Limits,
+    held: &crate::operation::Operation<'_>,
+) -> Result<Ownership> {
+    build_with_operation(fs, buf, limits, Some(held))
+}
+
+fn build_with_operation(
+    fs: &Filesystem,
+    buf: &BlockBuffer,
+    limits: Limits,
+    held: Option<&crate::operation::Operation<'_>>,
+) -> Result<Ownership> {
     let bs = fs.sb.block_size() as usize;
     let groups = fs.groups.len() as u64;
     if !matches!(bs, 1024 | 4096)
@@ -174,9 +193,9 @@ pub(crate) fn build(fs: &Filesystem, buf: &BlockBuffer, limits: Limits) -> Resul
         .reads
         .checked_sub(fixed_reads + 2 * bitmap_reads)
         .ok_or(LIMIT)?;
-    let checked = if fs.sb.feature_incompat & Incompat::RECOVER.bits() != 0 {
+    let checked = if held.is_some() || fs.sb.feature_incompat & Incompat::RECOVER.bits() != 0 {
         reads_left = reads_left.checked_sub(1).ok_or(LIMIT)?;
-        Some(fs.checked_ownership()?)
+        Some(fs.checked_ownership(held)?)
     } else {
         None
     };
@@ -714,6 +733,27 @@ mod needs_host {
                     assert_eq!(view.inodes, got.inodes);
                     assert_eq!(view.claims, got.claims);
                     assert_eq!(view.charged_reads, got.charged_reads + 1);
+                    let buffer = BlockBuffer::new(bs);
+                    let held = live.try_enter_operation().unwrap();
+                    let stamp = held.stamp().unwrap();
+                    assert!(matches!(
+                        build(&live, &buffer, limits),
+                        Err(Error::Unsupported("filesystem operation already active"))
+                    ));
+                    let foreign = fs.try_enter_operation().unwrap();
+                    assert!(matches!(
+                        build_in_operation(&live, &buffer, limits, &foreign),
+                        Err(Error::Stale)
+                    ));
+                    drop(foreign);
+                    let borrowed = build_in_operation(&live, &buffer, limits, &held).unwrap();
+                    assert_eq!(borrowed.inodes, view.inodes);
+                    assert_eq!(borrowed.claims, view.claims);
+                    assert_eq!(borrowed.charged_reads, view.charged_reads);
+                    held.check(stamp).unwrap();
+                    assert!(live.try_enter_operation().is_err());
+                    assert!(live.journal.as_ref().unwrap().try_lock().is_ok());
+                    drop(held);
                     live.finish().unwrap();
                     assert_e2fsck_clean(working.to_str().unwrap(), "Linux checked ownership");
                     let device = Arc::new(FileDevice::open_path_rw(&working).unwrap());
@@ -726,6 +766,14 @@ mod needs_host {
                             "ownership requires a checked post-replay view"
                         ))
                     ));
+                    let held = unmanaged.try_enter_operation().unwrap();
+                    assert!(matches!(
+                        build_in_operation(&unmanaged, &buffer, limits, &held),
+                        Err(Error::Unsupported(
+                            "ownership requires a checked post-replay view"
+                        ))
+                    ));
+                    drop(held);
                     drop(unmanaged);
                     std::fs::remove_file(working).unwrap();
                 }

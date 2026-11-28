@@ -81,6 +81,13 @@ impl Control {
         op.healthy()?;
         Ok(op)
     }
+
+    pub fn check_operation(&self, operation: &Operation<'_>) -> Result<()> {
+        if !std::ptr::eq(self, operation.owner) {
+            return Err(Error::Stale);
+        }
+        operation.healthy()
+    }
 }
 
 impl<'a> Operation<'a> {

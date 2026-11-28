@@ -570,7 +570,7 @@ pub(crate) enum DirBlockRole {
 
 pub(crate) struct CheckedOwnership<'a> {
     _journal: std::sync::MutexGuard<'a, crate::journal_writer::JournalWriter>,
-    _operation: crate::operation::Operation<'a>,
+    _operation: Option<crate::operation::Operation<'a>>,
 }
 
 pub struct Filesystem {
@@ -843,11 +843,23 @@ impl Filesystem {
         self.cache.pinned_blocks()
     }
 
+    pub(crate) fn try_enter_operation(&self) -> Result<crate::operation::Operation<'_>> {
+        self.operation.try_enter()
+    }
+
     /// The caller must exclude external handles and unguarded mutations.
-    /// The returned guard excludes guarded operations and journal commits.
-    pub(crate) fn checked_ownership(&self) -> Result<CheckedOwnership<'_>> {
+    /// The guard holds the journal lock and owns or borrows the operation.
+    pub(crate) fn checked_ownership<'a>(
+        &'a self,
+        held: Option<&'a crate::operation::Operation<'_>>,
+    ) -> Result<CheckedOwnership<'a>> {
         use std::sync::atomic::Ordering::SeqCst;
-        let operation = self.operation.try_enter()?;
+        let operation = if let Some(held) = held {
+            self.operation.check_operation(held)?;
+            None
+        } else {
+            Some(self.try_enter_operation()?)
+        };
         if !self.managed_recovery
             || !self.marked_not_clean.load(SeqCst)
             || self.replay_pending.load(SeqCst)
@@ -14838,28 +14850,32 @@ mod tests {
                 needs_recovery(&dev),
                 "explicit replay cleared needs_recovery"
             );
-            fs.checked_ownership().expect("post-replay ownership view");
+            fs.checked_ownership(None)
+                .expect("post-replay ownership view");
             fs.replay_pending.store(true, Ordering::SeqCst);
+            let held = fs.try_enter_operation().unwrap();
             assert!(matches!(
-                fs.checked_ownership(),
+                fs.checked_ownership(Some(&held)),
                 Err(Error::Unsupported(
                     "ownership requires a checked post-replay view"
                 ))
             ));
+            drop(held);
             fs.replay_pending.store(false, Ordering::SeqCst);
             fs.apply_create("/a", 0o644).expect("create");
             assert!(
                 needs_recovery(&dev),
                 "a commit on a checked mount cleared needs_recovery before finish"
             );
-            fs.checked_ownership().expect("checkpointed ownership view");
+            fs.checked_ownership(None)
+                .expect("checkpointed ownership view");
             fs.finish().expect("finish");
             assert!(!needs_recovery(&dev), "finish left needs_recovery set");
 
             crate::journal_apply::write_needs_recovery(dev.as_ref(), true).unwrap();
             let unmanaged = Filesystem::mount_lazy(dev).unwrap();
             assert!(matches!(
-                unmanaged.checked_ownership(),
+                unmanaged.checked_ownership(None),
                 Err(Error::Unsupported(
                     "ownership requires a checked post-replay view"
                 ))

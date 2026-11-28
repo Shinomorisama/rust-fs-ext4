@@ -12,16 +12,48 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-27).** Add a private read-only
-ownership entry that borrows and validates the current mount's
-already-held operation context. On the saved ordinary checked
-fixture, show that the existing entry refuses nested acquisition
-and the borrowed entry returns the same 37 inode records and 36
-claims with zero writes or flushes. Check a foreign context and the
-recovery refusals. Run this as a private control before connecting it
-to any creation path. Check full CI **46057251134** and Stage 0
-retry **46057331197**. Keep casefold writes blocked.
+**Next `do next` (set 2026-11-27).** Run a private pre-commit
+control for one non-growing regular-file create on the saved ordinary
+checked fixture. Under one operation context, build the base owner
+view, stage and prepare the real create plan, and inspect the staged
+owner view. Compare the exact empty inode allocation, parent identity
+and block ranges, and bitmap/counter debits. Stop before device
+effects. Verify the borrowed-context source's CI and keep casefold
+writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Ownership scan under the caller's operation context — 2026-11-27
+
+The private checked ownership entry can use an existing operation
+context. It verifies that the context belongs to the current mount
+and is healthy, then takes the journal lock and checks the current
+checkpoint. The operation remains held across the scan. The scan
+releases the journal lock before returning to its caller.
+
+On the saved ordinary 4 KiB checksum-v3 fixture, the borrowed
+entry matched all 37 inode records and 36 claims, and charged 49
+reads. The scan issued zero writes or flushes. The foreign-context
+refusal issued no device reads. The standalone entry refused a
+nested acquisition, and pending replay and unmanaged marked views
+were refused. The operation stamp stayed valid and the journal
+lock was available again. All 18 existing owner controls, the
+lifecycle control, and library Clippy passed.
+
+The Linux ownership test now exercises the existing entry's nested
+refusal, the borrowed entry's foreign-context refusal and successful
+same-mount scan, and the unmanaged marked refusal. It checks that
+the borrow leaves the original operation stamp valid and its lock
+held, and that the journal lock is available again. Public create
+continues to use its existing dispatch.
+[Ownership entries](../src/ownership.rs) · [Operation validation](../src/operation.rs) · [Journal guard](../src/fs.rs)
+
+The preceding exact source `6620821` passed all 11 full CI jobs.
+Native archive **15231875498** retains all 2,573 whole-suite passes
+and the existing ignored test, with exact test names and successful
+VM shutdown. The Stage 0 rmdir retry **140734450756** passed.
+Verified archive **15232050153** has 561 valid ZIP members and
+matches its run, source and SHA-256.
+[Prior full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057251134) · [Prior Stage 0 retry](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46057331197/attempts/2)
 
 ### Live ownership Linux audit and guarded-create trace — 2026-11-27
 
