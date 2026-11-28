@@ -18,8 +18,8 @@ checked fixture. Under one operation context, build the base owner
 view, stage and prepare the real create plan, and inspect the staged
 owner view. Compare the exact empty inode allocation, parent identity
 and block ranges, and bitmap/counter debits. Stop before device
-effects. Verify the borrowed-context source's CI and keep casefold
-writes blocked.
+effects. Verify Stage 0 **46086465899** and full CI **46086465933**
+on borrowed-context source `a6e9862`. Keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
 
 ### Ownership scan under the caller's operation context — 2026-11-27
@@ -46,6 +46,11 @@ the borrow leaves the original operation stamp valid and its lock
 held, and that the journal lock is available again. Public create
 continues to use its existing dispatch.
 [Ownership entries](../src/ownership.rs) · [Operation validation](../src/operation.rs) · [Journal guard](../src/fs.rs)
+
+Exact source `a6e9862` has Stage 0 **46086465899**, full CI
+**46086465933**, checked recovery **46086465961**, and compatibility
+**46086465901** queued or running.
+[Stage 0](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46086465899) · [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46086465933)
 
 The preceding exact source `6620821` passed all 11 full CI jobs.
 Native archive **15231875498** retains all 2,573 whole-suite passes
