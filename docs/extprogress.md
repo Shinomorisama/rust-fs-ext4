@@ -12,15 +12,68 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-27).** Run a private pre-commit
-control for one non-growing regular-file create on the saved ordinary
-checked fixture. Under one operation context, build the base owner
-view, stage and prepare the real create plan, and inspect the staged
-owner view. Compare the exact empty inode allocation, parent identity
-and block ranges, and bitmap/counter debits. Stop before device
-effects. Verify Stage 0 **46086465899** and full CI **46086465933**
-on borrowed-context source `a6e9862`. Keep casefold writes blocked.
+**Next `do next` (set 2026-11-27).** Use the saved staged-create
+probe to test a create-specific name check before commit. In a copy
+of the staged directory block, substitute a different same-length
+name and recompute the directory checksum. Verify that the generic
+owner view still matches and that a private check tied to the requested
+name and child inode refuses the substitution. Keep the positive
+control and zero device effects. Check full CI **46086465933** and
+keep casefold writes blocked.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### One regular-file create verified before commit — 2026-11-27
+
+The dormant control ran twice on source `2549923` with the saved
+ordinary 4 KiB ownership image from archive **12248714200**. It
+prepared an in-memory checksum-v3 copy and held one real guarded
+operation across both owner scans and the actual create planner.
+The plan would add `Plan-É` as empty regular inode 43, mode
+`0640`, under directory inode 33. The name's original bytes,
+existing entries, and directory checksum all verify in the staged
+block. The parent keeps its generation, extent map, size and link
+count.
+
+| Item | Observed change |
+|---|---|
+| Inode records | 37 to 38. The only new record is inode 43, with one link and zero data sectors. |
+| Block-range claims | All 36 unchanged. |
+| Allocation | Group 1 inode bitmap sets one bit. Group and superblock free inode counts each decrease by one. Free blocks and used-directory count are unchanged. |
+| Staged device blocks | 0 (superblock), 1 (descriptors), 2051 (inode bitmap), 2052 (shared inode table), and 3601 (existing directory block). |
+| Scan work | 49 charged reads in the base view and 50 in the staged view. |
+
+The control discards the plan with zero device writes and flushes,
+the name absent from the live directory and all live image bytes
+unchanged. Checked release afterward restores the clean in-memory
+fixture byte for byte. All **81** existing create controls passed.
+The saved input file kept its SHA-256. The diagnostic remains
+outside the active suite.
+[Reproduction patch](CHECKED-CREATE-PLAN-PROBE.patch) · [Fixture provenance](#live-checked-ownership-refusal-reproduced--2026-11-27)
+
+The patch has SHA-256
+`df0c2e92a3c23485b9a2a4559db74db29b6492183f6417398298c03aeaef641d`.
+Apply it in a clean scratch checkout and use the saved
+`ownership-4096-64-true.img` with SHA-256
+`746051b37a80c734e1cdfce31f6bdce2e77c2c2fd2fa87ddc7f5a587187dadb9`.
+
+```sh
+git apply --check docs/CHECKED-CREATE-PLAN-PROBE.patch
+git apply docs/CHECKED-CREATE-PLAN-PROBE.patch
+FS_EXT4_OWNERSHIP_LIVE_FIXTURE=/path/to/ownership-4096-64-true.img \
+  cargo test --release --locked --lib \
+  fs::guarded_chmod::tests::create_calls::precommit_create_keeps_parent_storage_and_allocates_only_empty_inode \
+  -- --exact --nocapture
+```
+
+On `a6e9862`, Stage 0 **46086465899** passed, including ownership
+fixtures job **140797074048**. Archive **15239921508** matches its
+run and source, has 1,823 valid ZIP members, and all six images
+agree with their Linux inode and free-space reports. The checked
+copy passed the seventh non-repairing check, and the VM stopped.
+Checked recovery and compatibility also passed. Native and guest
+jobs **140798867325** and **140798867307** were still running in
+full CI **46086465933**.
+[Stage 0 archive](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46086465899/artifacts/15239921508) · [Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46086465933)
 
 ### Ownership scan under the caller's operation context — 2026-11-27
 

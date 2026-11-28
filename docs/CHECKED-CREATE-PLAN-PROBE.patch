@@ -1,0 +1,231 @@
+diff --git a/src/fs/guarded_chmod/tests/create_calls.rs b/src/fs/guarded_chmod/tests/create_calls.rs
+index dcd7282..7a7e0b1 100644
+--- a/src/fs/guarded_chmod/tests/create_calls.rs
++++ b/src/fs/guarded_chmod/tests/create_calls.rs
+@@ -2100,3 +2100,226 @@ fn create_flush_unwind_latches_while_context_is_retained() {
+         }
+     }
+ }
++
++#[test]
++fn precommit_create_keeps_parent_storage_and_allocates_only_empty_inode() {
++    use crate::inode_roles::{Role, Storage};
++    use crate::jbd2::{self, JbdIncompat};
++    use crate::ownership::{build_in_operation, Limits};
++    use std::collections::BTreeSet;
++
++    const BS: u32 = 4096;
++    let fixture = std::env::var_os("FS_EXT4_OWNERSHIP_LIVE_FIXTURE")
++        .expect("supply the verified ownership fixture");
++    let bytes = std::fs::read(fixture).unwrap();
++    assert_eq!(bytes.len(), 16 * 1024 * 1024);
++    let dev = Arc::new(Device {
++        bytes: Mutex::new(bytes),
++        calls: std::array::from_fn(|_| AtomicUsize::new(0)),
++        fail_write: AtomicUsize::new(0),
++        fail_flush: AtomicUsize::new(0),
++        panic_flush: AtomicUsize::new(0),
++        writable: AtomicBool::new(true),
++    });
++    let clean = Filesystem::mount_lazy(dev.clone()).unwrap();
++    assert_eq!((clean.sb.block_size(), clean.sb.desc_size), (BS, 64));
++    assert_eq!(
++        clean.sb.feature_incompat
++            & (features::Incompat::CASEFOLD | features::Incompat::RECOVER).bits(),
++        0
++    );
++    assert!(clean.sb.is_clean());
++    let inode = Inode::parse(&clean.read_inode_raw(clean.sb.journal_inode).unwrap()).unwrap();
++    let journal_block = jbd2::journal_block_to_physical(&clean, &inode, 0)
++        .unwrap()
++        .unwrap();
++    drop(clean);
++
++    let mut header = [0; 1024];
++    let at = journal_block * u64::from(BS);
++    dev.read_at(at, &mut header).unwrap();
++    assert!(jbd2::JournalSuperblock::parse(&header).unwrap().is_clean());
++    let mask = u32::from_be_bytes(header[0x28..0x2c].try_into().unwrap());
++    let mask = mask | (JbdIncompat::BIT64 | JbdIncompat::CSUM_V3).bits();
++    header[0x28..0x2c].copy_from_slice(&mask.to_be_bytes());
++    header[0x50] = jbd2::JBD2_CRC32C_CHKSUM;
++    header[0xfc..0x100].fill(0);
++    let crc = crate::checksum::linux_crc32c(!0, &header);
++    header[0xfc..0x100].copy_from_slice(&crc.to_be_bytes());
++    dev.write_at(at, &header).unwrap();
++    let clean_bytes = dev.bytes();
++
++    let fs = Filesystem::mount_recovering(dev.clone()).unwrap();
++    let checked = jbd2::read_checked_recovery_superblock(&fs)
++        .unwrap()
++        .unwrap();
++    assert!(checked.is_clean() && checked.uses_csum_v3() && checked.uses_64bit());
++    assert_ne!(
++        fs.sb.feature_incompat & features::Incompat::RECOVER.bits(),
++        0
++    );
++    let live_bytes = dev.bytes();
++    dev.reset();
++
++    let context = fs.chmod_operation().unwrap();
++    let stamp = context.operation.stamp().unwrap();
++    fs.check_chmod_context(&context).unwrap();
++    fs.write_refusal().unwrap();
++    let limits = Limits {
++        groups: 6,
++        inode_bits: 2 * u64::from(BS) * 8,
++        inodes: 64,
++        claims: 512,
++        tree_claims: 128,
++        reads: 4096,
++        tree_records: 4096,
++        bitmap_bytes: 128 * u64::from(BS),
++        memory_bytes: 256 * 1024,
++    };
++    let base = build_in_operation(&fs, &BlockBuffer::new(BS), limits, &context.operation).unwrap();
++    assert_eq!(
++        (base.inodes.len(), base.claims.len(), base.charged_reads),
++        (37, 36, 49)
++    );
++
++    let name = "Plan-É".as_bytes();
++    let parent = fs.lookup_path_bytes(b"/directory").unwrap();
++    let (parent_before, _) = fs.read_inode_verified(parent).unwrap();
++    assert_eq!(parent_before.size, u64::from(BS));
++    assert_ne!(parent_before.generation, 0);
++    assert_eq!(
++        parent_before.flags & crate::inode::InodeFlags::INDEX.bits(),
++        0
++    );
++    let parent_data = fs.map_inode_logical(&parent_before, 0).unwrap().unwrap();
++    let mut plan = fs
++        .plan_create_at(InodeRef::new(parent, parent_before.generation), name, 0o640)
++        .unwrap();
++    fs.prepare_create_buffer(&mut plan.buf).unwrap();
++    fs.check_chmod_context(&context).unwrap();
++
++    let (new, _) = fs.buffered_inode_verified(&plan.buf, plan.ino).unwrap();
++    assert!(new.is_file() && new.has_extents());
++    assert_eq!(
++        (new.size, new.blocks, new.links_count, new.mode & 0o777),
++        (0, 0, 1, 0o640)
++    );
++    let (parent_now, _) = fs.buffered_inode_verified(&plan.buf, parent).unwrap();
++    assert_eq!(parent_now.block, parent_before.block);
++    assert_eq!(
++        (
++            parent_now.generation,
++            parent_now.size,
++            parent_now.blocks,
++            parent_now.links_count,
++            parent_now.flags
++        ),
++        (
++            parent_before.generation,
++            parent_before.size,
++            parent_before.blocks,
++            parent_before.links_count,
++            parent_before.flags
++        )
++    );
++    let directory_before = fs.read_block(parent_data).unwrap();
++    let directory_after = &plan.buf.dirty[&parent_data];
++    let entries = |block: &[u8]| {
++        assert!(crate::dir::has_csum_tail(block));
++        let entries = crate::dir::parse_block_verified(
++            block,
++            true,
++            parent,
++            parent_before.generation,
++            &fs.csum,
++        )
++        .unwrap();
++        let count = entries.len();
++        let entries: BTreeMap<_, _> = entries
++            .into_iter()
++            .map(|entry| (entry.name, (entry.inode, entry.file_type)))
++            .collect();
++        assert_eq!(entries.len(), count);
++        entries
++    };
++    let mut after = entries(directory_after);
++    assert_eq!(
++        after.remove(name),
++        Some((plan.ino, crate::dir::DirEntryType::RegFile))
++    );
++    assert_eq!(after, entries(&directory_before));
++
++    let group = (plan.ino - 1) / fs.sb.inodes_per_group;
++    let index = (plan.ino - 1) % fs.sb.inodes_per_group;
++    let old_group = &fs.groups[group as usize];
++    let (gd_block, gd_offset) = fs.sb.descriptor_location(u64::from(group));
++    let inode_map = old_group.inode_bitmap;
++    let mut expected_bits = fs.read_block(inode_map).unwrap();
++    assert!(!crate::alloc::bit_is_set(&expected_bits, index));
++    expected_bits[index as usize / 8] |= 1 << (index % 8);
++    assert_eq!(plan.buf.dirty[&inode_map], expected_bits);
++    let after_gd =
++        BlockGroupDescriptor::parse(&plan.buf.dirty[&gd_block][gd_offset..gd_offset + 64], 64)
++            .unwrap();
++    assert_eq!(after_gd.free_inodes_count + 1, old_group.free_inodes_count);
++    assert_eq!(after_gd.free_blocks_count, old_group.free_blocks_count);
++    assert_eq!(after_gd.used_dirs_count, old_group.used_dirs_count);
++    let after_sb = Superblock::parse(plan.buf.dirty[&0][1024..2048].to_vec()).unwrap();
++    assert_eq!(after_sb.free_inodes_count + 1, fs.sb.free_inodes_count);
++    assert_eq!(after_sb.free_blocks_count, fs.sb.free_blocks_count);
++    assert_eq!(after_sb.feature_incompat, fs.sb.feature_incompat);
++    let (parent_table, _) = bgd::locate_inode(&fs.sb, &fs.groups, parent).unwrap();
++    let (new_table, _) = bgd::locate_inode(&fs.sb, &fs.groups, plan.ino).unwrap();
++    let write_set = BTreeSet::from([0, gd_block, inode_map, parent_table, new_table, parent_data]);
++    assert_eq!(
++        plan.buf.dirty.keys().copied().collect::<BTreeSet<_>>(),
++        write_set
++    );
++    assert!(plan.buf.uninit_cleared.is_empty());
++    eprintln!("create plan: parent {parent}, block {parent_data}, child {}, group {group}, staged {write_set:?}", plan.ino);
++    eprintln!("inode bitmap +1; superblock/group free inodes -1; free blocks and directory count unchanged");
++
++    let staged = build_in_operation(&fs, &plan.buf, limits, &context.operation);
++    let [_, writes, flushes, _] = dev.counts();
++    assert_eq!((writes, flushes), (0, 0));
++    assert!(dev.bytes() == live_bytes);
++    context.operation.check(stamp).unwrap();
++    assert!(matches!(fs.lookup_at(parent, name), Err(Error::NotFound)));
++    eprintln!(
++        "pre-commit: {writes} writes, {flushes} flushes; original directory and device retained"
++    );
++    let staged = staged.expect("completed create plan must have a coherent staged owner view");
++    assert_eq!(staged.claims, base.claims);
++    assert_eq!(staged.inodes.len(), base.inodes.len() + 1);
++    let created = staged
++        .inodes
++        .iter()
++        .find(|owner| owner.ino == plan.ino)
++        .unwrap();
++    assert_eq!(created.generation, new.generation);
++    assert_eq!(
++        (created.role, created.storage),
++        (Role::Regular, Storage::Extents { depth: 0 })
++    );
++    assert_eq!((created.size, created.sectors, created.links), (0, 0, 1));
++    assert!(staged
++        .inodes
++        .iter()
++        .filter(|owner| owner.ino != plan.ino)
++        .eq(&base.inodes));
++    eprintln!(
++        "owner views: {} to {} inode records, {} unchanged claims, {} to {} charged reads",
++        base.inodes.len(),
++        staged.inodes.len(),
++        base.claims.len(),
++        base.charged_reads,
++        staged.charged_reads
++    );
++
++    drop(context);
++    fs.finish().unwrap();
++    assert!(
++        dev.bytes() == clean_bytes,
++        "release changed the clean pre-plan bytes"
++    );
++}
