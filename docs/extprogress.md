@@ -12,15 +12,47 @@ The goal is a working implementation. Documentation, unit tests, and independent
 
 ## Sol's next batch
 
-**Next `do next` (set 2026-11-27).** Use the saved staged-create
-probe to test a create-specific name check before commit. In a copy
-of the staged directory block, substitute a different same-length
-name and recompute the directory checksum. Verify that the generic
-owner view still matches and that a private check tied to the requested
-name and child inode refuses the substitution. Keep the positive
-control and zero device effects. Check full CI **46086465933** and
-keep casefold writes blocked.
+**Next `do next` (set 2026-11-27).** Implement a private check for
+the exact directory-entry change in one non-growing regular-file
+create plan. Bind the requested bytes, parent identity, and allocated
+child to the completed plan. Compare the base directory entries with
+the staged entries so exactly one requested regular-file entry may
+be added. Use the saved positive and substituted-name controls and
+add a wrong-child control. Run before device effects on the ordinary
+fixture. Keep casefold writes blocked and check full CI **46086465933**.
 [C ABI](../src/capi.rs) · [Checked recovery contract](CHECKED-RECOVERY.md)
+
+### Staged directory name substitution reproduced and refused — 2026-11-27
+
+On source `dd9d139`, the private diagnostic builds the same
+uncommitted `Plan-É` create as the preceding control. A copy of
+the staged directory block replaces the UTF-8 name with
+`Plan-Ö`, which occupies the same number of bytes. It then
+recomputes the directory checksum for parent inode 33 and its
+generation. The original and substituted blocks both pass the
+checksum and directory parser. In both, the staged entry points
+to the same new inode 43.
+
+The complete owner scan returns the same **38 inode records and
+36 block-range claims** for both plans. Charged reads and tree
+record counts also match. The check bound to the requested bytes,
+child inode and regular-file entry type accepts the original and
+refuses the substituted name. Both scans and the refusal run under
+the same operation context with zero device writes or flushes.
+The live image bytes and operation stamp remain intact. The
+control stops before consuming either plan. Checked release then
+restores the clean test image. The exact diagnostic repeated with
+the same result, and all 81 existing create controls passed.
+[Name diagnostic](CHECKED-CREATE-NAME-PROBE.patch) · [Original plan control](CHECKED-CREATE-PLAN-PROBE.patch)
+
+Apply the name diagnostic after the original plan control in a
+clean scratch checkout. Both patches exercise the same exact
+test and use the same archived image and command below. The name
+patch SHA-256 is
+`d1c6c98fe8b509be6beb3a0b35f6c9750145a026fbb7da59a2fe0f9d4680a47b`.
+Full CI **46086465933** on `a6e9862` still had its native and
+guest suites running.
+[Full CI](https://github.com/Shinomorisama/rust-fs-ext4/actions/runs/46086465933)
 
 ### One regular-file create verified before commit — 2026-11-27
 

@@ -1,0 +1,95 @@
+diff --git a/src/fs/guarded_chmod/tests/create_calls.rs b/src/fs/guarded_chmod/tests/create_calls.rs
+index 7a7e0b1..d67f311 100644
+--- a/src/fs/guarded_chmod/tests/create_calls.rs
++++ b/src/fs/guarded_chmod/tests/create_calls.rs
+@@ -2316,6 +2316,90 @@ fn precommit_create_keeps_parent_storage_and_allocates_only_empty_inode() {
+         staged.charged_reads
+     );
+
++    let verify_requested_entry = |block: &[u8]| -> Result<()> {
++        if !fs.csum.enabled || !crate::dir::has_csum_tail(block) {
++            return Err(Error::BadChecksum {
++                what: "directory block",
++            });
++        }
++        let entries = crate::dir::parse_block_verified(
++            block,
++            true,
++            parent,
++            parent_before.generation,
++            &fs.csum,
++        )?;
++        let mut candidates = entries
++            .iter()
++            .filter(|entry| entry.name == name || entry.inode == plan.ino);
++        if candidates.next().is_some_and(|entry| {
++            entry.name == name
++                && entry.inode == plan.ino
++                && entry.file_type == crate::dir::DirEntryType::RegFile
++        }) && candidates.next().is_none()
++        {
++            Ok(())
++        } else {
++            Err(Error::CorruptDirEntry(
++                "staged create entry differs from its request",
++            ))
++        }
++    };
++    verify_requested_entry(directory_after).expect("the original plan matches the request");
++
++    let replacement = "Plan-Ö".as_bytes();
++    assert_ne!(replacement, name);
++    assert_eq!(replacement.len(), name.len());
++    let mut substituted = BlockBuffer {
++        dirty: plan.buf.dirty.clone(),
++        uninit_cleared: plan.buf.uninit_cleared.clone(),
++    };
++    let changed = substituted.dirty.get_mut(&parent_data).unwrap();
++    let matches: Vec<_> = changed
++        .windows(name.len())
++        .enumerate()
++        .filter_map(|(offset, bytes)| (bytes == name).then_some(offset))
++        .collect();
++    let &[offset] = matches.as_slice() else {
++        panic!("the staged name must have exactly one byte occurrence");
++    };
++    let end = offset + name.len();
++    changed[offset..end].copy_from_slice(replacement);
++    assert!(fs
++        .csum
++        .patch_dir_entry_tail(parent, parent_before.generation, changed));
++    assert_eq!(changed[..offset], directory_after[..offset]);
++    let checksum = changed.len() - 4;
++    assert_eq!(changed[end..checksum], directory_after[end..checksum]);
++    let mut renamed_entries = entries(changed);
++    assert_eq!(
++        renamed_entries.remove(replacement),
++        Some((plan.ino, crate::dir::DirEntryType::RegFile))
++    );
++    assert_eq!(renamed_entries, entries(&directory_before));
++    assert!(matches!(
++        verify_requested_entry(changed),
++        Err(Error::CorruptDirEntry(
++            "staged create entry differs from its request"
++        ))
++    ));
++
++    let changed_owners = build_in_operation(&fs, &substituted, limits, &context.operation).unwrap();
++    assert_eq!(changed_owners.inodes, staged.inodes);
++    assert_eq!(changed_owners.claims, staged.claims);
++    assert_eq!(changed_owners.charged_reads, staged.charged_reads);
++    assert_eq!(changed_owners.tree_records, staged.tree_records);
++    assert_eq!(dev.counts()[1..3], [0, 0]);
++    assert!(dev.bytes() == live_bytes);
++    context.operation.check(stamp).unwrap();
++    eprintln!(
++        "staged-name control: original Plan-É accepted; Plan-Ö refused; both directory checksums valid"
++    );
++    eprintln!(
++        "substituted name: inode {}, {} identical inode records, {} identical claims, zero writes and flushes",
++        plan.ino, changed_owners.inodes.len(), changed_owners.claims.len()
++    );
++
+     drop(context);
+     fs.finish().unwrap();
+     assert!(
